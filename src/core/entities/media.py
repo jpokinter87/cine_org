@@ -1,8 +1,8 @@
 """
-Media metadata entities.
+Entités métadonnées média.
 
-Entities representing movies and TV shows with their metadata
-from external APIs (TMDB, TVDB).
+Entités représentant les films et séries TV avec leurs métadonnées
+provenant des APIs externes (TMDB, TVDB).
 """
 
 from dataclasses import dataclass
@@ -13,20 +13,20 @@ from typing import Optional
 @dataclass
 class Movie:
     """
-    Movie metadata from TMDB.
+    Métadonnées d'un film depuis TMDB.
 
-    Represents enriched movie information retrieved from The Movie Database API.
+    Représente les informations enrichies d'un film récupérées depuis l'API The Movie Database.
 
-    Attributes:
-        id: Internal database ID
-        tmdb_id: The Movie Database ID
-        title: Localized title (French for this application)
-        original_title: Original language title
-        year: Release year
-        genres: Tuple of genre names (French, in hierarchy order)
-        duration_seconds: Runtime in seconds
-        overview: Plot summary
-        poster_path: Path to poster image on TMDB CDN
+    Attributs :
+        id : ID interne base de données
+        tmdb_id : ID The Movie Database
+        title : Titre localisé (français pour cette application)
+        original_title : Titre en langue originale
+        year : Année de sortie
+        genres : Tuple des noms de genre (français, dans l'ordre hiérarchique)
+        duration_seconds : Durée en secondes
+        overview : Résumé de l'intrigue
+        poster_path : Chemin vers l'image poster sur le CDN TMDB
     """
 
     id: Optional[str] = None
@@ -43,19 +43,19 @@ class Movie:
 @dataclass
 class Series:
     """
-    TV series metadata from TVDB.
+    Métadonnées d'une série TV depuis TVDB.
 
-    Represents enriched series information retrieved from TheTVDB API.
+    Représente les informations enrichies d'une série récupérées depuis l'API TheTVDB.
 
-    Attributes:
-        id: Internal database ID
-        tvdb_id: TheTVDB ID
-        title: Localized title
-        original_title: Original language title
-        year: First air date year
-        genres: Tuple of genre names
-        overview: Series description
-        poster_path: Path to poster image
+    Attributs :
+        id : ID interne base de données
+        tvdb_id : ID TheTVDB
+        title : Titre localisé
+        original_title : Titre en langue originale
+        year : Année de première diffusion
+        genres : Tuple des noms de genre
+        overview : Description de la série
+        poster_path : Chemin vers l'image poster
     """
 
     id: Optional[str] = None
@@ -71,17 +71,17 @@ class Series:
 @dataclass
 class Episode:
     """
-    Individual episode of a TV series.
+    Épisode individuel d'une série TV.
 
-    Attributes:
-        id: Internal database ID
-        series_id: Reference to parent Series
-        season_number: Season number (1-indexed)
-        episode_number: Episode number within season (1-indexed)
-        title: Episode title
-        air_date: Original air date
-        duration_seconds: Episode runtime in seconds
-        overview: Episode description
+    Attributs :
+        id : ID interne base de données
+        series_id : Référence vers la série parente
+        season_number : Numéro de saison (commence à 1)
+        episode_number : Numéro d'épisode dans la saison (commence à 1)
+        title : Titre de l'épisode
+        air_date : Date de première diffusion
+        duration_seconds : Durée de l'épisode en secondes
+        overview : Description de l'épisode
     """
 
     id: Optional[str] = None

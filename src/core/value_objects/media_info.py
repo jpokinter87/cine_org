@@ -1,8 +1,8 @@
 """
-Media information value objects.
+Objets valeur pour les informations média.
 
-Immutable value objects representing technical information about video files.
-All value objects use @dataclass(frozen=True) to guarantee immutability.
+Objets valeur immutables représentant les informations techniques des fichiers vidéo.
+Tous les objets valeur utilisent @dataclass(frozen=True) pour garantir l'immutabilité.
 """
 
 from dataclasses import dataclass
@@ -12,14 +12,14 @@ from typing import Optional
 @dataclass(frozen=True)
 class Resolution:
     """
-    Video resolution (width x height).
+    Résolution vidéo (largeur x hauteur).
 
-    Attributes:
-        width: Horizontal resolution in pixels
-        height: Vertical resolution in pixels
+    Attributs :
+        width : Résolution horizontale en pixels
+        height : Résolution verticale en pixels
 
-    Properties:
-        label: Human-readable label (4K, 1080p, 720p, SD)
+    Propriétés :
+        label : Libellé lisible (4K, 1080p, 720p, SD)
     """
 
     width: int
@@ -27,7 +27,7 @@ class Resolution:
 
     @property
     def label(self) -> str:
-        """Return human-readable resolution label based on height."""
+        """Retourne le libellé de résolution basé sur la hauteur."""
         if self.height >= 2160:
             return "4K"
         elif self.height >= 1080:
@@ -41,11 +41,11 @@ class Resolution:
 @dataclass(frozen=True)
 class VideoCodec:
     """
-    Video codec information.
+    Informations sur le codec vidéo.
 
-    Attributes:
-        name: Codec name (e.g., "HEVC", "H.264", "AV1")
-        profile: Optional codec profile (e.g., "Main 10", "High")
+    Attributs :
+        name : Nom du codec (ex: "HEVC", "H.264", "AV1")
+        profile : Profil optionnel du codec (ex: "Main 10", "High")
     """
 
     name: str
@@ -55,11 +55,11 @@ class VideoCodec:
 @dataclass(frozen=True)
 class AudioCodec:
     """
-    Audio codec information with channel configuration.
+    Informations sur le codec audio avec configuration des canaux.
 
-    Attributes:
-        name: Codec name (e.g., "AAC", "DTS-HD", "TrueHD")
-        channels: Optional channel configuration (e.g., "5.1", "7.1", "2.0")
+    Attributs :
+        name : Nom du codec (ex: "AAC", "DTS-HD", "TrueHD")
+        channels : Configuration optionnelle des canaux (ex: "5.1", "7.1", "2.0")
     """
 
     name: str
@@ -69,11 +69,11 @@ class AudioCodec:
 @dataclass(frozen=True)
 class Language:
     """
-    Language with ISO 639-1 code and full name.
+    Langue avec code ISO 639-1 et nom complet.
 
-    Attributes:
-        code: ISO 639-1 language code (e.g., "fr", "en")
-        name: Full language name (e.g., "French", "English")
+    Attributs :
+        code : Code de langue ISO 639-1 (ex: "fr", "en")
+        name : Nom complet de la langue (ex: "Français", "Anglais")
     """
 
     code: str
@@ -83,17 +83,17 @@ class Language:
 @dataclass(frozen=True)
 class MediaInfo:
     """
-    Composite value object containing all technical media information.
+    Objet valeur composite contenant toutes les informations techniques média.
 
-    Aggregates resolution, codecs, languages, and duration extracted
-    from a video file via mediainfo.
+    Agrège résolution, codecs, langues et durée extraits
+    d'un fichier vidéo via mediainfo.
 
-    Attributes:
-        resolution: Video resolution (width x height)
-        video_codec: Video codec information
-        audio_codecs: Tuple of audio codecs (tuple for immutability)
-        audio_languages: Tuple of audio languages
-        duration_seconds: Duration in seconds
+    Attributs :
+        resolution : Résolution vidéo (largeur x hauteur)
+        video_codec : Informations sur le codec vidéo
+        audio_codecs : Tuple des codecs audio (tuple pour l'immutabilité)
+        audio_languages : Tuple des langues audio
+        duration_seconds : Durée en secondes
     """
 
     resolution: Optional[Resolution] = None

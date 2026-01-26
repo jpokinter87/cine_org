@@ -1,8 +1,8 @@
 """
-Dependency Injection container using dependency-injector.
+Container d'injection de dépendances via dependency-injector.
 
-Provides centralized dependency management for both CLI and Web interfaces.
-Repositories and API clients are added in later phases.
+Fournit une gestion centralisée des dépendances pour les interfaces CLI et Web.
+Les repositories et clients API sont ajoutés dans les phases ultérieures.
 """
 
 from dependency_injector import containers, providers
@@ -11,34 +11,34 @@ from .config import Settings
 
 
 class Container(containers.DeclarativeContainer):
-    """Application DI container.
+    """Container DI de l'application.
 
-    Provides dependency injection for both CLI and Web interfaces.
-    Repositories and API clients are added in later phases.
+    Fournit l'injection de dépendances pour les interfaces CLI et Web.
+    Les repositories et clients API sont ajoutés dans les phases ultérieures.
 
-    Usage:
+    Utilisation :
         container = Container()
         container.wire(modules=[__name__])
         settings = container.config()
     """
 
-    # Wiring is done explicitly in main.py to avoid import issues
-    # Modules to wire:
-    # - src.main (CLI entry point)
-    # - src.adapters.cli.commands (added later)
-    # - src.adapters.web.routes.* (added later)
+    # Le wiring est fait explicitement dans main.py pour éviter les problèmes d'import
+    # Modules à wirer :
+    # - src.main (point d'entrée CLI)
+    # - src.adapters.cli.commands (ajouté plus tard)
+    # - src.adapters.web.routes.* (ajouté plus tard)
 
-    # Configuration - singleton loaded once
+    # Configuration - singleton chargé une seule fois
     config = providers.Singleton(Settings)
 
-    # Repositories - to be implemented in Phase 4
+    # Repositories - à implémenter en Phase 4
     # video_repository = providers.Singleton(...)
     # movie_repository = providers.Singleton(...)
 
-    # API Clients - to be implemented in Phase 3
+    # Clients API - à implémenter en Phase 3
     # tmdb_client = providers.Factory(...)
     # tvdb_client = providers.Factory(...)
 
-    # Services - to be implemented in later phases
+    # Services - à implémenter dans les phases ultérieures
     # scanner = providers.Factory(...)
     # matcher = providers.Factory(...)

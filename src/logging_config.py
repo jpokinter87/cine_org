@@ -1,9 +1,9 @@
 """
-Application logging configuration using loguru.
+Configuration du logging de l'application via loguru.
 
-Provides structured logging with:
-- Console output: human-readable, colored, for real-time monitoring
-- File output: JSON serialized, rotated, for historical analysis
+Fournit un logging structuré avec :
+- Sortie console : lisible par l'humain, colorée, pour la surveillance en temps réel
+- Sortie fichier : sérialisée en JSON, avec rotation, pour l'analyse historique
 """
 
 import sys
@@ -18,21 +18,21 @@ def configure_logging(
     rotation_size: str = "10 MB",
     retention_count: int = 5,
 ) -> None:
-    """Configure application logging.
+    """Configure le logging de l'application.
 
-    Args:
-        log_level: Minimum log level for console output (DEBUG, INFO, WARNING, ERROR)
-        log_file: Path to the log file
-        rotation_size: Maximum file size before rotation (e.g., "10 MB", "1 GB")
-        retention_count: Number of rotated files to keep
+    Args :
+        log_level : Niveau de log minimum pour la sortie console (DEBUG, INFO, WARNING, ERROR)
+        log_file : Chemin vers le fichier de log
+        rotation_size : Taille maximale du fichier avant rotation (ex: "10 MB", "1 GB")
+        retention_count : Nombre de fichiers rotatifs à conserver
 
-    Console handler outputs human-readable colored logs for real-time monitoring.
-    File handler outputs JSON-serialized logs with rotation for historical analysis.
+    Le handler console produit des logs colorés lisibles pour la surveillance temps réel.
+    Le handler fichier produit des logs sérialisés JSON avec rotation pour l'analyse historique.
     """
-    # Remove default handler
+    # Supprime le handler par défaut
     logger.remove()
 
-    # Console handler - human readable
+    # Handler console - lisible par l'humain
     logger.add(
         sys.stderr,
         level=log_level,
@@ -45,17 +45,17 @@ def configure_logging(
         colorize=True,
     )
 
-    # File handler - JSON for analysis
+    # Handler fichier - JSON pour l'analyse
     log_file.parent.mkdir(parents=True, exist_ok=True)
     logger.add(
         log_file,
-        level="DEBUG",  # Capture all levels (API logs at DEBUG)
+        level="DEBUG",  # Capture tous les niveaux (logs API en DEBUG)
         format="{message}",
-        serialize=True,  # JSON output
+        serialize=True,  # Sortie JSON
         rotation=rotation_size,
         retention=retention_count,
         compression="zip",
         enqueue=True,  # Thread-safe
     )
 
-    logger.debug("Logging configured", log_file=str(log_file), rotation=rotation_size)
+    logger.debug("Logging configuré", log_file=str(log_file), rotation=rotation_size)

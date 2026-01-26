@@ -1,15 +1,15 @@
 """
-Business entities representing core domain concepts.
+Entités métier représentant les concepts clés du domaine.
 
-Entities are mutable objects with identity that persist over time.
-They encapsulate business rules and behavior.
+Les entités sont des objets mutables avec une identité qui persiste dans le temps.
+Elles encapsulent les règles métier et le comportement.
 
-Exports:
-- VideoFile: Represents a video file with its metadata
-- PendingValidation: A video file awaiting user validation
-- Movie: Movie metadata from TMDB
-- Series: TV series metadata from TVDB
-- Episode: Individual episode of a series
+Exports :
+- VideoFile : Représente un fichier vidéo avec ses métadonnées
+- PendingValidation : Un fichier vidéo en attente de validation utilisateur
+- Movie : Métadonnées d'un film depuis TMDB
+- Series : Métadonnées d'une série TV depuis TVDB
+- Episode : Épisode individuel d'une série
 """
 
 from src.core.entities.video import VideoFile, PendingValidation, ValidationStatus

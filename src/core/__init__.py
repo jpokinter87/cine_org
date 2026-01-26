@@ -1,11 +1,11 @@
 """
-Core domain layer.
+Couche domaine (core).
 
-Contains business entities, ports (abstract interfaces), and value objects.
-This layer has NO dependencies on infrastructure (adapters, frameworks, databases).
+Contient les entités métier, ports (interfaces abstraites), et objets valeur.
+Cette couche n'a AUCUNE dépendance vers l'infrastructure (adapters, frameworks, BDD).
 
-Subpackages:
-- entities/: Business entities (VideoFile, Movie, Series, Episode)
-- ports/: Abstract interfaces defining contracts for adapters
-- value_objects/: Immutable value objects (Resolution, Codec, Language)
+Sous-packages :
+- entities/ : Entités métier (VideoFile, Movie, Series, Episode)
+- ports/ : Interfaces abstraites définissant les contrats pour les adaptateurs
+- value_objects/ : Objets valeur immutables (Resolution, Codec, Language)
 """

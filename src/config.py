@@ -1,10 +1,10 @@
 """
-Application configuration using pydantic-settings.
+Configuration de l'application via pydantic-settings.
 
-Configuration is loaded from environment variables with CINEORG_ prefix,
-and can optionally be provided via a .env file.
+La configuration est chargée depuis les variables d'environnement avec le préfixe CINEORG_,
+et peut optionnellement être fournie via un fichier .env.
 
-API keys (TMDB, TVDB) are optional - features are disabled if not provided.
+Les clés API (TMDB, TVDB) sont optionnelles - les fonctionnalités sont désactivées si non fournies.
 """
 
 from pathlib import Path
@@ -15,12 +15,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Application settings with environment variable support.
+    """Paramètres de l'application avec support des variables d'environnement.
 
-    All settings can be overridden via environment variables with CINEORG_ prefix.
-    Example: CINEORG_LOG_LEVEL=DEBUG
+    Tous les paramètres peuvent être surchargés via des variables d'environnement
+    avec le préfixe CINEORG_.
+    Exemple : CINEORG_LOG_LEVEL=DEBUG
 
-    Paths are automatically expanded (~ -> home directory).
+    Les chemins sont automatiquement étendus (~ -> répertoire home).
     """
 
     model_config = SettingsConfigDict(
@@ -30,24 +31,24 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    # Paths (with ~ expansion)
+    # Chemins (avec expansion ~)
     downloads_dir: Path = Field(default=Path("~/Downloads"))
     storage_dir: Path = Field(default=Path("~/Videos/storage"))
     video_dir: Path = Field(default=Path("~/Videos/video"))
 
-    # Database
+    # Base de données
     database_url: str = Field(default="sqlite:///cineorg.db")
 
-    # API Keys (OPTIONAL - API features disabled if not set)
+    # Clés API (OPTIONNELLES - fonctionnalités API désactivées si non définies)
     tmdb_api_key: Optional[str] = Field(default=None)
     tvdb_api_key: Optional[str] = Field(default=None)
 
-    # Processing
+    # Traitement
     min_file_size_mb: int = Field(default=100, ge=1)
     max_files_per_subdir: int = Field(default=50, ge=1)
     match_score_threshold: int = Field(default=85, ge=0, le=100)
 
-    # Logging (file + stderr, rotation 10MB, 5 files retention)
+    # Logging (fichier + stderr, rotation 10MB, 5 fichiers de rétention)
     log_level: str = Field(default="INFO")
     log_file: Path = Field(default=Path("logs/cineorg.log"))
     log_rotation_size: str = Field(default="10 MB")
@@ -56,15 +57,15 @@ class Settings(BaseSettings):
     @field_validator("downloads_dir", "storage_dir", "video_dir", "log_file", mode="before")
     @classmethod
     def expand_path(cls, v: str | Path) -> Path:
-        """Expand ~ to home directory in paths."""
+        """Étend ~ vers le répertoire home dans les chemins."""
         return Path(v).expanduser()
 
     @property
     def tmdb_enabled(self) -> bool:
-        """Check if TMDB API is configured."""
+        """Vérifie si l'API TMDB est configurée."""
         return self.tmdb_api_key is not None
 
     @property
     def tvdb_enabled(self) -> bool:
-        """Check if TVDB API is configured."""
+        """Vérifie si l'API TVDB est configurée."""
         return self.tvdb_api_key is not None

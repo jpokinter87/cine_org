@@ -1,8 +1,8 @@
 """
-Video file entities.
+Entités fichier vidéo.
 
-Entities representing video files in the system, including their metadata
-and validation status during the matching workflow.
+Entités représentant les fichiers vidéo dans le système, incluant leurs métadonnées
+et leur statut de validation durant le workflow de matching.
 """
 
 from dataclasses import dataclass, field
@@ -15,7 +15,7 @@ from src.core.value_objects import MediaInfo
 
 
 class ValidationStatus(Enum):
-    """Status of a pending validation."""
+    """Statut d'une validation en attente."""
 
     PENDING = "pending"
     VALIDATED = "validated"
@@ -25,20 +25,20 @@ class ValidationStatus(Enum):
 @dataclass
 class VideoFile:
     """
-    Represents a video file with its metadata.
+    Représente un fichier vidéo avec ses métadonnées.
 
-    A VideoFile is the core entity tracked through the entire workflow:
-    scanning, parsing, matching, renaming, and organizing.
+    Un VideoFile est l'entité principale suivie à travers tout le workflow :
+    scan, parsing, matching, renommage et organisation.
 
-    Attributes:
-        id: Unique identifier (UUID or database ID)
-        path: Current file path on disk
-        filename: Original filename (without path)
-        size_bytes: File size in bytes
-        file_hash: Content hash for deduplication (SHA-256)
-        media_info: Technical metadata extracted via mediainfo
-        created_at: When the record was created
-        updated_at: When the record was last updated
+    Attributs :
+        id : Identifiant unique (UUID ou ID base de données)
+        path : Chemin actuel du fichier sur le disque
+        filename : Nom de fichier original (sans le chemin)
+        size_bytes : Taille du fichier en octets
+        file_hash : Hash du contenu pour la déduplication (SHA-256)
+        media_info : Métadonnées techniques extraites via mediainfo
+        created_at : Date de création de l'enregistrement
+        updated_at : Date de dernière modification de l'enregistrement
     """
 
     id: Optional[str] = None
@@ -54,20 +54,20 @@ class VideoFile:
 @dataclass
 class PendingValidation:
     """
-    A video file awaiting user validation.
+    Un fichier vidéo en attente de validation utilisateur.
 
-    When automatic matching doesn't meet the confidence threshold (85%),
-    the file enters a pending validation state where the user must
-    select the correct match from candidates.
+    Quand le matching automatique n'atteint pas le seuil de confiance (85%),
+    le fichier entre dans un état de validation en attente où l'utilisateur
+    doit sélectionner la bonne correspondance parmi les candidats.
 
-    Attributes:
-        id: Unique identifier
-        video_file: The video file being validated
-        candidates: List of potential matches from API searches
-        auto_validated: Whether the system auto-validated (score >= 85%)
-        validation_status: Current status (pending, validated, rejected)
-        selected_candidate_id: ID of the candidate chosen by user
-        created_at: When validation was created
+    Attributs :
+        id : Identifiant unique
+        video_file : Le fichier vidéo en cours de validation
+        candidates : Liste des correspondances potentielles depuis les recherches API
+        auto_validated : Si le système a auto-validé (score >= 85%)
+        validation_status : Statut actuel (pending, validated, rejected)
+        selected_candidate_id : ID du candidat choisi par l'utilisateur
+        created_at : Date de création de la validation
     """
 
     id: Optional[str] = None

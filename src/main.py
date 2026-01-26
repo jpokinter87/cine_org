@@ -1,7 +1,7 @@
 """
-CineOrg CLI entry point.
+Point d'entrée CLI de CineOrg.
 
-Initializes the DI container, configures logging, and provides CLI commands.
+Initialise le container DI, configure le logging et fournit les commandes CLI.
 """
 
 import typer
@@ -13,39 +13,39 @@ from .logging_config import configure_logging
 
 app = typer.Typer(
     name="cineorg",
-    help="Video library management application",
+    help="Application de gestion de vidéothèque",
 )
 container = Container()
 
 
 def get_config() -> Settings:
-    """Get the application settings from the DI container."""
+    """Récupère les paramètres de l'application depuis le container DI."""
     return container.config()
 
 
 @app.command()
 def info() -> None:
-    """Display current configuration."""
+    """Affiche la configuration actuelle."""
     config = get_config()
-    logger.info("CineOrg configuration")
-    typer.echo(f"Downloads: {config.downloads_dir}")
-    typer.echo(f"Storage: {config.storage_dir}")
-    typer.echo(f"Video: {config.video_dir}")
-    typer.echo(f"Database: {config.database_url}")
-    typer.echo(f"TMDB API: {'enabled' if config.tmdb_enabled else 'disabled'}")
-    typer.echo(f"TVDB API: {'enabled' if config.tvdb_enabled else 'disabled'}")
-    typer.echo(f"Log level: {config.log_level}")
+    logger.info("Configuration CineOrg")
+    typer.echo(f"Téléchargements : {config.downloads_dir}")
+    typer.echo(f"Stockage : {config.storage_dir}")
+    typer.echo(f"Vidéo : {config.video_dir}")
+    typer.echo(f"Base de données : {config.database_url}")
+    typer.echo(f"API TMDB : {'activée' if config.tmdb_enabled else 'désactivée'}")
+    typer.echo(f"API TVDB : {'activée' if config.tvdb_enabled else 'désactivée'}")
+    typer.echo(f"Niveau de log : {config.log_level}")
 
 
 @app.command()
 def version() -> None:
-    """Display version information."""
+    """Affiche les informations de version."""
     typer.echo("CineOrg v0.1.0")
 
 
 def main() -> None:
-    """Application entry point."""
-    # Load configuration and setup logging
+    """Point d'entrée de l'application."""
+    # Charge la configuration et configure le logging
     settings = container.config()
     configure_logging(
         log_level=settings.log_level,
@@ -54,9 +54,9 @@ def main() -> None:
         retention_count=settings.log_retention_count,
     )
 
-    logger.info("CineOrg starting", version="0.1.0")
+    logger.info("Démarrage de CineOrg", version="0.1.0")
 
-    # Run CLI
+    # Lance la CLI
     app()
 
 

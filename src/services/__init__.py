@@ -1,15 +1,15 @@
 """
-Application services layer (use cases).
+Couche services applicatifs (cas d'utilisation).
 
-Services orchestrate the domain logic to fulfill application use cases.
-They coordinate between entities, ports, and external systems.
+Les services orchestrent la logique métier pour réaliser les cas d'utilisation.
+Ils coordonnent entre les entités, ports et systèmes externes.
 
-This layer contains:
-- Use case implementations
-- Workflow orchestration
-- Transaction management
-- Application-level error handling
+Cette couche contient :
+- Implémentations des cas d'utilisation
+- Orchestration des workflows
+- Gestion des transactions
+- Gestion des erreurs au niveau applicatif
 
-Services depend on ports (interfaces) from core/, never on concrete
-implementations from adapters/.
+Les services dépendent des ports (interfaces) de core/, jamais des
+implémentations concrètes de adapters/.
 """

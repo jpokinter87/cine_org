@@ -1,11 +1,11 @@
 """
-CineOrg - Personal video library management application.
+CineOrg - Application de gestion de vidéothèque personnelle.
 
-This package provides the core functionality for scanning, identifying,
-renaming, and organizing video files using TMDB and TVDB metadata.
+Ce package fournit les fonctionnalités pour scanner, identifier,
+renommer et organiser les fichiers vidéo en utilisant les métadonnées TMDB et TVDB.
 
-Architecture: Hexagonal (Ports and Adapters)
-- core/: Domain layer (entities, ports, value objects)
-- services/: Application layer (use cases, orchestration)
-- adapters/: Infrastructure layer (CLI, Web, DB, API clients)
+Architecture : Hexagonale (Ports et Adaptateurs)
+- core/ : Couche domaine (entités, ports, objets valeur)
+- services/ : Couche application (cas d'utilisation, orchestration)
+- adapters/ : Couche infrastructure (CLI, Web, BDD, clients API)
 """

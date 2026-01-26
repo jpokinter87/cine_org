@@ -1,16 +1,16 @@
 """
-Infrastructure adapters layer.
+Couche adaptateurs (infrastructure).
 
-Adapters implement the ports defined in core/ports/ and provide
-concrete implementations for external systems.
+Les adaptateurs implémentent les ports définis dans core/ports/ et fournissent
+des implémentations concrètes pour les systèmes externes.
 
-Planned subpackages:
-- cli/: Command-line interface (Typer)
-- web/: Web interface (FastAPI + HTMX)
-- db/: Database access (SQLModel + SQLite)
-- api/: External API clients (TMDB, TVDB)
-- filesystem/: File system operations
+Sous-packages prévus :
+- cli/ : Interface ligne de commande (Typer)
+- web/ : Interface web (FastAPI + HTMX)
+- db/ : Accès base de données (SQLModel + SQLite)
+- api/ : Clients API externes (TMDB, TVDB)
+- filesystem/ : Opérations sur le système de fichiers
 
-Each adapter depends on core/ but core/ never depends on adapters/.
-This allows swapping implementations without affecting business logic.
+Chaque adaptateur dépend de core/ mais core/ ne dépend jamais des adaptateurs.
+Cela permet de changer les implémentations sans affecter la logique métier.
 """

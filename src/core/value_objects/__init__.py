@@ -1,15 +1,15 @@
 """
-Immutable value objects representing domain concepts without identity.
+Objets valeur immutables représentant des concepts du domaine sans identité.
 
-Value objects are defined by their attributes rather than by identity.
-They are immutable and can be freely shared and compared by value.
+Les objets valeur sont définis par leurs attributs plutôt que par une identité.
+Ils sont immutables et peuvent être librement partagés et comparés par valeur.
 
-Exports:
-- Resolution: Video resolution (width x height)
-- VideoCodec: Video codec information (HEVC, H.264, etc.)
-- AudioCodec: Audio codec information with channels
-- Language: Language with ISO code and name
-- MediaInfo: Composite of all technical media information
+Exports :
+- Resolution : Résolution vidéo (largeur x hauteur)
+- VideoCodec : Informations sur le codec vidéo (HEVC, H.264, etc.)
+- AudioCodec : Informations sur le codec audio avec canaux
+- Language : Langue avec code ISO et nom complet
+- MediaInfo : Composite de toutes les informations techniques média
 """
 
 from src.core.value_objects.media_info import (

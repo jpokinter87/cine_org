@@ -1,9 +1,9 @@
 """
-Repository port interfaces.
+Interfaces ports pour les repositories.
 
-Abstract interfaces (ports) defining contracts for data persistence.
-Implementations (adapters) will provide concrete storage mechanisms
-(SQLite via SQLModel, in-memory for tests, etc.).
+Interfaces abstraites (ports) définissant les contrats pour la persistance des données.
+Les implémentations (adaptateurs) fourniront les mécanismes de stockage concrets
+(SQLite via SQLModel, en mémoire pour les tests, etc.).
 """
 
 from abc import ABC, abstractmethod
@@ -16,108 +16,108 @@ from src.core.entities.media import Movie, Series, Episode
 
 class IVideoFileRepository(ABC):
     """
-    Video file storage interface.
+    Interface de stockage des fichiers vidéo.
 
-    Defines operations for persisting and retrieving VideoFile entities.
+    Définit les opérations pour persister et récupérer les entités VideoFile.
     """
 
     @abstractmethod
     def get_by_id(self, video_id: str) -> Optional[VideoFile]:
-        """Retrieve a video file by its ID."""
+        """Récupère un fichier vidéo par son ID."""
         ...
 
     @abstractmethod
     def get_by_path(self, path: Path) -> Optional[VideoFile]:
-        """Retrieve a video file by its file path."""
+        """Récupère un fichier vidéo par son chemin."""
         ...
 
     @abstractmethod
     def get_by_hash(self, file_hash: str) -> Optional[VideoFile]:
-        """Retrieve a video file by its content hash."""
+        """Récupère un fichier vidéo par son hash de contenu."""
         ...
 
     @abstractmethod
     def save(self, video_file: VideoFile) -> VideoFile:
-        """Save a video file (insert or update)."""
+        """Sauvegarde un fichier vidéo (insertion ou mise à jour)."""
         ...
 
     @abstractmethod
     def delete(self, video_id: str) -> bool:
-        """Delete a video file by ID. Returns True if deleted."""
+        """Supprime un fichier vidéo par ID. Retourne True si supprimé."""
         ...
 
     @abstractmethod
     def list_pending(self) -> list[PendingValidation]:
-        """List all video files with pending validation."""
+        """Liste tous les fichiers vidéo avec une validation en attente."""
         ...
 
 
 class IMovieRepository(ABC):
     """
-    Movie metadata storage interface.
+    Interface de stockage des métadonnées de films.
 
-    Defines operations for persisting and retrieving Movie entities.
+    Définit les opérations pour persister et récupérer les entités Movie.
     """
 
     @abstractmethod
     def get_by_id(self, movie_id: str) -> Optional[Movie]:
-        """Retrieve a movie by its internal ID."""
+        """Récupère un film par son ID interne."""
         ...
 
     @abstractmethod
     def get_by_tmdb_id(self, tmdb_id: int) -> Optional[Movie]:
-        """Retrieve a movie by its TMDB ID."""
+        """Récupère un film par son ID TMDB."""
         ...
 
     @abstractmethod
     def search_by_title(self, title: str, year: Optional[int] = None) -> list[Movie]:
-        """Search movies by title, optionally filtering by year."""
+        """Recherche des films par titre, avec filtrage optionnel par année."""
         ...
 
     @abstractmethod
     def save(self, movie: Movie) -> Movie:
-        """Save a movie (insert or update)."""
+        """Sauvegarde un film (insertion ou mise à jour)."""
         ...
 
 
 class ISeriesRepository(ABC):
     """
-    Series metadata storage interface.
+    Interface de stockage des métadonnées de séries.
 
-    Defines operations for persisting and retrieving Series entities.
+    Définit les opérations pour persister et récupérer les entités Series.
     """
 
     @abstractmethod
     def get_by_id(self, series_id: str) -> Optional[Series]:
-        """Retrieve a series by its internal ID."""
+        """Récupère une série par son ID interne."""
         ...
 
     @abstractmethod
     def get_by_tvdb_id(self, tvdb_id: int) -> Optional[Series]:
-        """Retrieve a series by its TVDB ID."""
+        """Récupère une série par son ID TVDB."""
         ...
 
     @abstractmethod
     def search_by_title(self, title: str, year: Optional[int] = None) -> list[Series]:
-        """Search series by title, optionally filtering by year."""
+        """Recherche des séries par titre, avec filtrage optionnel par année."""
         ...
 
     @abstractmethod
     def save(self, series: Series) -> Series:
-        """Save a series (insert or update)."""
+        """Sauvegarde une série (insertion ou mise à jour)."""
         ...
 
 
 class IEpisodeRepository(ABC):
     """
-    Episode metadata storage interface.
+    Interface de stockage des métadonnées d'épisodes.
 
-    Defines operations for persisting and retrieving Episode entities.
+    Définit les opérations pour persister et récupérer les entités Episode.
     """
 
     @abstractmethod
     def get_by_id(self, episode_id: str) -> Optional[Episode]:
-        """Retrieve an episode by its internal ID."""
+        """Récupère un épisode par son ID interne."""
         ...
 
     @abstractmethod
@@ -128,19 +128,19 @@ class IEpisodeRepository(ABC):
         episode: Optional[int] = None,
     ) -> list[Episode]:
         """
-        Get episodes for a series.
+        Récupère les épisodes d'une série.
 
-        Args:
-            series_id: The series ID
-            season: Optional season number filter
-            episode: Optional episode number filter (requires season)
+        Args :
+            series_id : L'ID de la série
+            season : Filtre optionnel par numéro de saison
+            episode : Filtre optionnel par numéro d'épisode (nécessite season)
 
-        Returns:
-            List of matching episodes
+        Retourne :
+            Liste des épisodes correspondants
         """
         ...
 
     @abstractmethod
     def save(self, episode: Episode) -> Episode:
-        """Save an episode (insert or update)."""
+        """Sauvegarde un épisode (insertion ou mise à jour)."""
         ...

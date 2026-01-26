@@ -1,24 +1,24 @@
 """
-Ports (abstract interfaces) defining contracts for adapters.
+Ports (interfaces abstraites) définissant les contrats pour les adaptateurs.
 
-Ports are the boundaries of the hexagonal architecture. They define
-what the core domain needs from the outside world without specifying
-how those needs are met.
+Les ports sont les frontières de l'architecture hexagonale. Ils définissent
+ce dont le domaine a besoin du monde extérieur sans spécifier
+comment ces besoins sont satisfaits.
 
-Repository ports: Data persistence contracts
-- IVideoFileRepository: Video file storage
-- IMovieRepository: Movie metadata storage
-- ISeriesRepository: Series metadata storage
-- IEpisodeRepository: Episode metadata storage
+Ports repository : Contrats de persistance des données
+- IVideoFileRepository : Stockage des fichiers vidéo
+- IMovieRepository : Stockage des métadonnées de films
+- ISeriesRepository : Stockage des métadonnées de séries
+- IEpisodeRepository : Stockage des métadonnées d'épisodes
 
-API client ports: External service contracts
-- IMediaAPIClient: Base interface for media metadata APIs
-- SearchResult: Search result from API
-- MediaDetails: Detailed media information from API
+Ports client API : Contrats pour les services externes
+- IMediaAPIClient : Interface de base pour les APIs de métadonnées média
+- SearchResult : Résultat de recherche depuis une API
+- MediaDetails : Informations détaillées depuis une API
 
-File system ports: File operation contracts
-- IFileSystem: Basic file operations
-- ISymlinkManager: Symlink management operations
+Ports système de fichiers : Contrats pour les opérations fichiers
+- IFileSystem : Opérations de base sur les fichiers
+- ISymlinkManager : Opérations de gestion des liens symboliques
 """
 
 from src.core.ports.repositories import (
@@ -43,11 +43,11 @@ __all__ = [
     "IMovieRepository",
     "ISeriesRepository",
     "IEpisodeRepository",
-    # API clients
+    # Clients API
     "IMediaAPIClient",
     "SearchResult",
     "MediaDetails",
-    # File system
+    # Système de fichiers
     "IFileSystem",
     "ISymlinkManager",
 ]

@@ -1,9 +1,9 @@
 """
-API client port interfaces.
+Interfaces ports pour les clients API.
 
-Abstract interfaces (ports) defining contracts for external media APIs.
-Implementations (adapters) will provide concrete API clients
-(TMDB for movies, TVDB for TV shows).
+Interfaces abstraites (ports) définissant les contrats pour les APIs média externes.
+Les implémentations (adaptateurs) fourniront les clients API concrets
+(TMDB pour les films, TVDB pour les séries TV).
 """
 
 from abc import ABC, abstractmethod
@@ -14,17 +14,17 @@ from typing import Optional
 @dataclass
 class SearchResult:
     """
-    Search result from a media API.
+    Résultat de recherche depuis une API média.
 
-    Represents a single result from an API search query.
-    Multiple results are returned and scored against the original query.
+    Représente un résultat unique d'une requête de recherche API.
+    Plusieurs résultats sont retournés et scorés par rapport à la requête originale.
 
-    Attributes:
-        id: API-specific ID (TMDB ID or TVDB ID)
-        title: Title from the API
-        year: Release/air year
-        score: Match score (0-100) calculated by the matcher
-        source: API source identifier ("tmdb" or "tvdb")
+    Attributs :
+        id : ID spécifique à l'API (ID TMDB ou ID TVDB)
+        title : Titre depuis l'API
+        year : Année de sortie/diffusion
+        score : Score de correspondance (0-100) calculé par le matcher
+        source : Identifiant de la source API ("tmdb" ou "tvdb")
     """
 
     id: str
@@ -37,20 +37,20 @@ class SearchResult:
 @dataclass
 class MediaDetails:
     """
-    Detailed media information from API.
+    Informations média détaillées depuis l'API.
 
-    Extended information retrieved after selecting a match.
-    Used to enrich the local database entry.
+    Informations étendues récupérées après sélection d'une correspondance.
+    Utilisées pour enrichir l'entrée en base de données locale.
 
-    Attributes:
-        id: API-specific ID
-        title: Localized title
-        original_title: Original language title
-        year: Release/air year
-        genres: List of genre names
-        duration_seconds: Runtime in seconds (for movies)
-        overview: Plot summary/description
-        poster_url: Full URL to poster image
+    Attributs :
+        id : ID spécifique à l'API
+        title : Titre localisé
+        original_title : Titre en langue originale
+        year : Année de sortie/diffusion
+        genres : Tuple des noms de genre
+        duration_seconds : Durée en secondes (pour les films)
+        overview : Résumé de l'intrigue/description
+        poster_url : URL complète vers l'image poster
     """
 
     id: str
@@ -65,10 +65,10 @@ class MediaDetails:
 
 class IMediaAPIClient(ABC):
     """
-    Base interface for media metadata APIs.
+    Interface de base pour les APIs de métadonnées média.
 
-    Defines the contract for searching and retrieving media information
-    from external APIs. Implementations handle TMDB (movies) and TVDB (TV).
+    Définit le contrat pour rechercher et récupérer des informations média
+    depuis des APIs externes. Les implémentations gèrent TMDB (films) et TVDB (séries).
     """
 
     @abstractmethod
@@ -78,32 +78,32 @@ class IMediaAPIClient(ABC):
         year: Optional[int] = None,
     ) -> list[SearchResult]:
         """
-        Search for media by title.
+        Recherche des médias par titre.
 
-        Args:
-            query: Search query (title)
-            year: Optional year filter to narrow results
+        Args :
+            query : Requête de recherche (titre)
+            year : Filtre optionnel par année pour affiner les résultats
 
-        Returns:
-            List of search results, unscored (scoring done by matcher)
+        Retourne :
+            Liste des résultats de recherche, non scorés (scoring fait par le matcher)
         """
         ...
 
     @abstractmethod
     async def get_details(self, media_id: str) -> Optional[MediaDetails]:
         """
-        Get detailed information for a specific media item.
+        Récupère les informations détaillées pour un média spécifique.
 
-        Args:
-            media_id: API-specific ID
+        Args :
+            media_id : ID spécifique à l'API
 
-        Returns:
-            Detailed media information, or None if not found
+        Retourne :
+            Informations média détaillées, ou None si non trouvé
         """
         ...
 
     @property
     @abstractmethod
     def source(self) -> str:
-        """Return the API source identifier (e.g., 'tmdb', 'tvdb')."""
+        """Retourne l'identifiant de la source API (ex: 'tmdb', 'tvdb')."""
         ...

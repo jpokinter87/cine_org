@@ -1,9 +1,9 @@
 """
-File system port interfaces.
+Interfaces ports pour le système de fichiers.
 
-Abstract interfaces (ports) defining contracts for file operations.
-Implementations (adapters) will provide concrete file system access
-and symlink management.
+Interfaces abstraites (ports) définissant les contrats pour les opérations fichiers.
+Les implémentations (adaptateurs) fourniront l'accès concret au système de fichiers
+et la gestion des liens symboliques.
 """
 
 from abc import ABC, abstractmethod
@@ -15,166 +15,166 @@ from src.core.value_objects import MediaInfo
 
 class IFileSystem(ABC):
     """
-    Basic file operations interface.
+    Interface pour les opérations de base sur les fichiers.
 
-    Defines operations for interacting with the file system:
-    checking existence, reading metadata, moving/copying files.
+    Définit les opérations pour interagir avec le système de fichiers :
+    vérification d'existence, lecture des métadonnées, déplacement/copie de fichiers.
     """
 
     @abstractmethod
     def exists(self, path: Path) -> bool:
-        """Check if a path exists."""
+        """Vérifie si un chemin existe."""
         ...
 
     @abstractmethod
     def read_metadata(self, path: Path) -> Optional[MediaInfo]:
         """
-        Read technical metadata from a video file.
+        Lit les métadonnées techniques d'un fichier vidéo.
 
-        Uses mediainfo to extract resolution, codecs, languages, duration.
+        Utilise mediainfo pour extraire résolution, codecs, langues, durée.
 
-        Args:
-            path: Path to the video file
+        Args :
+            path : Chemin vers le fichier vidéo
 
-        Returns:
-            MediaInfo with extracted metadata, or None if extraction fails
+        Retourne :
+            MediaInfo avec les métadonnées extraites, ou None si l'extraction échoue
         """
         ...
 
     @abstractmethod
     def move(self, source: Path, destination: Path) -> bool:
         """
-        Move a file from source to destination.
+        Déplace un fichier de la source vers la destination.
 
-        Creates parent directories if needed.
+        Crée les répertoires parents si nécessaire.
 
-        Args:
-            source: Current file path
-            destination: Target file path
+        Args :
+            source : Chemin actuel du fichier
+            destination : Chemin cible du fichier
 
-        Returns:
-            True if successful, False otherwise
+        Retourne :
+            True si réussi, False sinon
         """
         ...
 
     @abstractmethod
     def copy(self, source: Path, destination: Path) -> bool:
         """
-        Copy a file from source to destination.
+        Copie un fichier de la source vers la destination.
 
-        Creates parent directories if needed.
+        Crée les répertoires parents si nécessaire.
 
-        Args:
-            source: Source file path
-            destination: Target file path
+        Args :
+            source : Chemin du fichier source
+            destination : Chemin du fichier cible
 
-        Returns:
-            True if successful, False otherwise
+        Retourne :
+            True si réussi, False sinon
         """
         ...
 
     @abstractmethod
     def delete(self, path: Path) -> bool:
         """
-        Delete a file.
+        Supprime un fichier.
 
-        Args:
-            path: Path to delete
+        Args :
+            path : Chemin à supprimer
 
-        Returns:
-            True if deleted, False otherwise
+        Retourne :
+            True si supprimé, False sinon
         """
         ...
 
     @abstractmethod
     def calculate_hash(self, path: Path) -> Optional[str]:
         """
-        Calculate content hash (SHA-256) for deduplication.
+        Calcule le hash du contenu (SHA-256) pour la déduplication.
 
-        Args:
-            path: Path to the file
+        Args :
+            path : Chemin vers le fichier
 
-        Returns:
-            Hex-encoded SHA-256 hash, or None if calculation fails
+        Retourne :
+            Hash SHA-256 encodé en hexadécimal, ou None si le calcul échoue
         """
         ...
 
     @abstractmethod
     def get_size(self, path: Path) -> int:
         """
-        Get file size in bytes.
+        Récupère la taille du fichier en octets.
 
-        Args:
-            path: Path to the file
+        Args :
+            path : Chemin vers le fichier
 
-        Returns:
-            File size in bytes, or 0 if file doesn't exist
+        Retourne :
+            Taille du fichier en octets, ou 0 si le fichier n'existe pas
         """
         ...
 
 
 class ISymlinkManager(ABC):
     """
-    Symlink management interface.
+    Interface de gestion des liens symboliques.
 
-    Defines operations for creating and managing symbolic links.
-    Used for the video/ directory that mirrors storage/ structure.
+    Définit les opérations pour créer et gérer les liens symboliques.
+    Utilisée pour le répertoire video/ qui reflète la structure de storage/.
     """
 
     @abstractmethod
     def create_symlink(self, target: Path, link: Path) -> bool:
         """
-        Create a symbolic link.
+        Crée un lien symbolique.
 
-        Args:
-            target: Path the symlink points to (the actual file)
-            link: Path where the symlink will be created
+        Args :
+            target : Chemin vers lequel le lien pointe (le fichier réel)
+            link : Chemin où le lien symbolique sera créé
 
-        Returns:
-            True if created successfully, False otherwise
+        Retourne :
+            True si créé avec succès, False sinon
         """
         ...
 
     @abstractmethod
     def remove_symlink(self, link: Path) -> bool:
         """
-        Remove a symbolic link.
+        Supprime un lien symbolique.
 
-        Args:
-            link: Path to the symlink to remove
+        Args :
+            link : Chemin du lien symbolique à supprimer
 
-        Returns:
-            True if removed, False otherwise
+        Retourne :
+            True si supprimé, False sinon
         """
         ...
 
     @abstractmethod
     def is_symlink(self, path: Path) -> bool:
-        """Check if a path is a symbolic link."""
+        """Vérifie si un chemin est un lien symbolique."""
         ...
 
     @abstractmethod
     def resolve_target(self, link: Path) -> Optional[Path]:
         """
-        Resolve the target of a symbolic link.
+        Résout la cible d'un lien symbolique.
 
-        Args:
-            link: Path to the symlink
+        Args :
+            link : Chemin vers le lien symbolique
 
-        Returns:
-            Resolved target path, or None if not a symlink or broken
+        Retourne :
+            Chemin cible résolu, ou None si ce n'est pas un lien ou s'il est cassé
         """
         ...
 
     @abstractmethod
     def find_broken_links(self, directory: Path) -> list[Path]:
         """
-        Find all broken symbolic links in a directory (recursive).
+        Trouve tous les liens symboliques cassés dans un répertoire (récursif).
 
-        Args:
-            directory: Directory to search
+        Args :
+            directory : Répertoire à parcourir
 
-        Returns:
-            List of paths to broken symlinks
+        Retourne :
+            Liste des chemins vers les liens symboliques cassés
         """
         ...
