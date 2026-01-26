@@ -12,7 +12,7 @@ CineOrg est une reecriture complete d'une application de gestion de videotheque.
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Fondations Architecture** - Structure hexagonale, DI container, configuration
+- [x] **Phase 1: Fondations Architecture** - Structure hexagonale, DI container, configuration
 - [ ] **Phase 2: Parsing et Scan** - Scan repertoires, extraction metadonnees via guessit/mediainfo
 - [ ] **Phase 3: Clients API** - Clients TMDB/TVDB avec rate limiting, cache, scoring
 - [ ] **Phase 4: Persistance** - Base SQLite avec SQLModel, tables metier
@@ -35,8 +35,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Structure hexagonale, entites domain et ports abstraits
-- [ ] 01-02-PLAN.md — Container DI, configuration pydantic-settings et logging loguru
+- [x] 01-01-PLAN.md — Structure hexagonale, entites domain et ports abstraits
+- [x] 01-02-PLAN.md — Container DI, configuration pydantic-settings et logging loguru
 
 ### Phase 2: Parsing et Scan
 **Goal**: Scanner les repertoires de telechargements et extraire les metadonnees des fichiers video via guessit et mediainfo
@@ -152,7 +152,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Fondations Architecture | 0/2 | Planned | - |
+| 1. Fondations Architecture | 2/2 | Complete | 2026-01-26 |
 | 2. Parsing et Scan | 0/2 | Not started | - |
 | 3. Clients API | 0/3 | Not started | - |
 | 4. Persistance | 0/2 | Not started | - |

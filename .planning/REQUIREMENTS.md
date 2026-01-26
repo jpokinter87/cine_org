@@ -7,10 +7,10 @@
 
 ### Architecture
 
-- [ ] **ARCH-01**: Structure hexagonale avec separation domain/application/infrastructure/adapters
-- [ ] **ARCH-02**: Container d'injection de dependances partage entre CLI et Web
-- [ ] **ARCH-03**: Configuration via pydantic-settings avec validation
-- [ ] **ARCH-04**: Logging structure avec rotation et niveaux configurables
+- [x] **ARCH-01**: Structure hexagonale avec separation domain/application/infrastructure/adapters
+- [x] **ARCH-02**: Container d'injection de dependances partage entre CLI et Web
+- [x] **ARCH-03**: Configuration via pydantic-settings avec validation
+- [x] **ARCH-04**: Logging structure avec rotation et niveaux configurables
 
 ### Parsing
 
@@ -99,10 +99,10 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ARCH-01 | Phase 1 | Pending |
-| ARCH-02 | Phase 1 | Pending |
-| ARCH-03 | Phase 1 | Pending |
-| ARCH-04 | Phase 1 | Pending |
+| ARCH-01 | Phase 1 | Complete |
+| ARCH-02 | Phase 1 | Complete |
+| ARCH-03 | Phase 1 | Complete |
+| ARCH-04 | Phase 1 | Complete |
 | PARS-01 | Phase 2 | Pending |
 | PARS-02 | Phase 2 | Pending |
 | PARS-03 | Phase 2 | Pending |
