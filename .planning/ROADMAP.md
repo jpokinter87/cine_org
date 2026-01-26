@@ -32,11 +32,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Le container DI peut injecter des implementations concretes pour les ports abstraits
   3. La configuration via pydantic-settings charge les variables d'environnement et fichier config
   4. Le logging structure ecrit des logs JSON avec rotation et niveaux configurables
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: Structure hexagonale et entites domain
-- [ ] 01-02: Container DI et configuration
+- [ ] 01-01-PLAN.md — Structure hexagonale, entites domain et ports abstraits
+- [ ] 01-02-PLAN.md — Container DI, configuration pydantic-settings et logging loguru
 
 ### Phase 2: Parsing et Scan
 **Goal**: Scanner les repertoires de telechargements et extraire les metadonnees des fichiers video via guessit et mediainfo
@@ -152,7 +152,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Fondations Architecture | 0/2 | Not started | - |
+| 1. Fondations Architecture | 0/2 | Planned | - |
 | 2. Parsing et Scan | 0/2 | Not started | - |
 | 3. Clients API | 0/3 | Not started | - |
 | 4. Persistance | 0/2 | Not started | - |
@@ -163,4 +163,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 ---
 *Roadmap created: 2026-01-26*
+*Phase 1 planned: 2026-01-26*
 *Total: 8 phases, 16 plans, 32 requirements*
