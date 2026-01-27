@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Fondations Architecture** - Structure hexagonale, DI container, configuration
 - [x] **Phase 2: Parsing et Scan** - Scan repertoires, extraction metadonnees via guessit/mediainfo
-- [ ] **Phase 3: Clients API** - Clients TMDB/TVDB avec rate limiting, cache, scoring
+- [x] **Phase 3: Clients API** - Clients TMDB/TVDB avec rate limiting, cache, scoring
 - [ ] **Phase 4: Persistance** - Base SQLite avec SQLModel, tables metier
 - [ ] **Phase 5: Organisation Fichiers** - Renommage, structure repertoires, symlinks
 - [ ] **Phase 6: Validation** - Matching automatique et validation manuelle CLI
@@ -66,10 +66,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Infrastructure cache (diskcache) et retry (tenacity) pour les clients API
-- [ ] 03-02-PLAN.md — Client TMDB implementant IMediaAPIClient avec TDD
-- [ ] 03-03-PLAN.md — Client TVDB implementant IMediaAPIClient avec authentification JWT et TDD
-- [ ] 03-04-PLAN.md — MatcherService avec scoring films (50/25/25) et series (100% titre) via rapidfuzz
+- [x] 03-01-PLAN.md — Infrastructure cache (diskcache) et retry (tenacity) pour les clients API
+- [x] 03-02-PLAN.md — Client TMDB implementant IMediaAPIClient avec TDD
+- [x] 03-03-PLAN.md — Client TVDB implementant IMediaAPIClient avec authentification JWT et TDD
+- [x] 03-04-PLAN.md — MatcherService avec scoring films (50/25/25) et series (100% titre) via rapidfuzz
 
 ### Phase 4: Persistance
 **Goal**: Stocker films, series, episodes et fichiers en attente dans une base SQLite avec SQLModel
@@ -155,8 +155,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 |-------|----------------|--------|-----------|
 | 1. Fondations Architecture | 2/2 | Complete | 2026-01-26 |
 | 2. Parsing et Scan | 2/2 | Complete | 2026-01-27 |
-| 3. Clients API | 0/4 | Ready | - |
-| 4. Persistance | 0/2 | Not started | - |
+| 3. Clients API | 4/4 | Complete | 2026-01-27 |
+| 4. Persistance | 0/2 | Ready | - |
 | 5. Organisation Fichiers | 0/2 | Not started | - |
 | 6. Validation | 0/2 | Not started | - |
 | 7. CLI Principale | 0/1 | Not started | - |

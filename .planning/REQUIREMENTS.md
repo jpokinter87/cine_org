@@ -21,11 +21,11 @@
 
 ### APIs
 
-- [ ] **API-01**: Client TMDB pour recherche et recuperation metadonnees films
-- [ ] **API-02**: Client TVDB pour recherche et recuperation metadonnees series/episodes
-- [ ] **API-03**: Systeme de scoring (titre 50% + annee 25% + duree 25%) avec seuil 85%
-- [ ] **API-04**: Cache des resultats API (24h recherches, 7j details)
-- [ ] **API-05**: Rate limiting avec retry automatique et backoff exponentiel
+- [x] **API-01**: Client TMDB pour recherche et recuperation metadonnees films
+- [x] **API-02**: Client TVDB pour recherche et recuperation metadonnees series/episodes
+- [x] **API-03**: Systeme de scoring (titre 50% + annee 25% + duree 25%) avec seuil 85%
+- [x] **API-04**: Cache des resultats API (24h recherches, 7j details)
+- [x] **API-05**: Rate limiting avec retry automatique et backoff exponentiel
 
 ### Validation
 
@@ -107,11 +107,11 @@
 | PARS-02 | Phase 2 | Complete |
 | PARS-03 | Phase 2 | Complete |
 | PARS-04 | Phase 2 | Complete |
-| API-01 | Phase 3 | Pending |
-| API-02 | Phase 3 | Pending |
-| API-03 | Phase 3 | Pending |
-| API-04 | Phase 3 | Pending |
-| API-05 | Phase 3 | Pending |
+| API-01 | Phase 3 | Complete |
+| API-02 | Phase 3 | Complete |
+| API-03 | Phase 3 | Complete |
+| API-04 | Phase 3 | Complete |
+| API-05 | Phase 3 | Complete |
 | DB-01 | Phase 4 | Pending |
 | DB-02 | Phase 4 | Pending |
 | DB-03 | Phase 4 | Pending |
@@ -144,4 +144,4 @@
 
 ---
 *Requirements defined: 2025-01-26*
-*Last updated: 2026-01-26 after roadmap creation*
+*Last updated: 2026-01-27 after Phase 3 completion*
