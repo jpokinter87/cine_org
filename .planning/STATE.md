@@ -10,27 +10,28 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 2 of 8 (Parsing et Scan)
-Plan: 0 of 2 in current phase
-Status: Ready to plan
-Last activity: 2026-01-26 - Phase 1 verified and complete
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-01-27 - Completed 02-01-PLAN.md
 
-Progress: [██░░░░░░░░] 12%
+Progress: [███░░░░░░░] 19%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 3 min
-- Total execution time: 6 min
+- Total plans completed: 3
+- Average duration: 4 min
+- Total execution time: 12 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-fondations-architecture | 2 | 6 min | 3 min |
+| 02-parsing-et-scan | 1 | 6 min | 6 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3 min), 01-02 (3 min)
+- Last 5 plans: 01-01 (3 min), 01-02 (3 min), 02-01 (6 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -50,6 +51,9 @@ Recent decisions affecting current work:
 - API keys (TMDB/TVDB) are optional - features disabled via tmdb_enabled/tvdb_enabled properties
 - Logging dual output: colored console for real-time, JSON file with rotation for historical analysis
 - DI wiring done explicitly in main.py instead of auto-wiring to avoid import cycles
+- MediaType.UNKNOWN n'est jamais considere mal place (pas de deplacement sans certitude)
+- ScannerService ne prend pas IMediaInfoExtractor - sera ajoute dans Plan 02-02
+- corrected_location est un FLAG (detection seulement, pas de deplacement)
 
 ### Pending Todos
 
@@ -61,6 +65,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-26T22:21:00Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-01-27T16:10:34Z
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None
