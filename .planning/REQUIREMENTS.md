@@ -14,10 +14,10 @@
 
 ### Parsing
 
-- [ ] **PARS-01**: Scan recursif des repertoires telechargements/Films et telechargements/Series
-- [ ] **PARS-02**: Extraction metadonnees via guessit (titre, annee, saison, episode)
-- [ ] **PARS-03**: Extraction infos techniques via mediainfo (codec, resolution, langues, duree)
-- [ ] **PARS-04**: Detection automatique du type (film vs serie) avec correction si mal place
+- [x] **PARS-01**: Scan recursif des repertoires telechargements/Films et telechargements/Series
+- [x] **PARS-02**: Extraction metadonnees via guessit (titre, annee, saison, episode)
+- [x] **PARS-03**: Extraction infos techniques via mediainfo (codec, resolution, langues, duree)
+- [x] **PARS-04**: Detection automatique du type (film vs serie) avec correction si mal place
 
 ### APIs
 
@@ -103,10 +103,10 @@
 | ARCH-02 | Phase 1 | Complete |
 | ARCH-03 | Phase 1 | Complete |
 | ARCH-04 | Phase 1 | Complete |
-| PARS-01 | Phase 2 | Pending |
-| PARS-02 | Phase 2 | Pending |
-| PARS-03 | Phase 2 | Pending |
-| PARS-04 | Phase 2 | Pending |
+| PARS-01 | Phase 2 | Complete |
+| PARS-02 | Phase 2 | Complete |
+| PARS-03 | Phase 2 | Complete |
+| PARS-04 | Phase 2 | Complete |
 | API-01 | Phase 3 | Pending |
 | API-02 | Phase 3 | Pending |
 | API-03 | Phase 3 | Pending |
