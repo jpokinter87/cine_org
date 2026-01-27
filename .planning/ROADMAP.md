@@ -63,12 +63,13 @@ Plans:
   3. Le scoring (titre 50% + annee 25% + duree 25%) classe les candidats avec seuil 85%
   4. Les resultats API sont caches (24h recherches, 7j details)
   5. Le rate limiting avec retry et backoff exponentiel evite les erreurs 429
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 03-01: Client TMDB avec rate limiting
-- [ ] 03-02: Client TVDB avec rate limiting
-- [ ] 03-03: Systeme de scoring et cache
+- [ ] 03-01-PLAN.md — Infrastructure cache (diskcache) et retry (tenacity) pour les clients API
+- [ ] 03-02-PLAN.md — Client TMDB implementant IMediaAPIClient avec TDD
+- [ ] 03-03-PLAN.md — Client TVDB implementant IMediaAPIClient avec authentification JWT et TDD
+- [ ] 03-04-PLAN.md — MatcherService avec scoring films (50/25/25) et series (100% titre) via rapidfuzz
 
 ### Phase 4: Persistance
 **Goal**: Stocker films, series, episodes et fichiers en attente dans une base SQLite avec SQLModel
@@ -154,7 +155,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 |-------|----------------|--------|-----------|
 | 1. Fondations Architecture | 2/2 | Complete | 2026-01-26 |
 | 2. Parsing et Scan | 2/2 | Complete | 2026-01-27 |
-| 3. Clients API | 0/3 | Not started | - |
+| 3. Clients API | 0/4 | Ready | - |
 | 4. Persistance | 0/2 | Not started | - |
 | 5. Organisation Fichiers | 0/2 | Not started | - |
 | 6. Validation | 0/2 | Not started | - |
@@ -165,4 +166,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 *Roadmap created: 2026-01-26*
 *Phase 1 planned: 2026-01-26*
 *Phase 2 planned: 2026-01-27*
-*Total: 8 phases, 16 plans, 32 requirements*
+*Phase 3 planned: 2026-01-27*
+*Total: 8 phases, 17 plans, 32 requirements*
