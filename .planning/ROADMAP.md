@@ -47,11 +47,11 @@ Plans:
   2. Guessit extrait correctement titre, annee, saison, episode des noms de fichiers
   3. Mediainfo extrait codec, resolution, langues audio, duree des fichiers
   4. Le type (film vs serie) est detecte automatiquement et corrige si le fichier est mal place
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: Scanner de fichiers async
-- [ ] 02-02: Parsers guessit et mediainfo
+- [ ] 02-01-PLAN.md — Ports parsing, value objects ParsedFilename/MediaType, ScannerService infrastructure
+- [ ] 02-02-PLAN.md — Adaptateurs GuessitFilenameParser et MediaInfoExtractor avec TDD, integration DI
 
 ### Phase 3: Clients API
 **Goal**: Interroger TMDB et TVDB pour rechercher et recuperer les metadonnees films/series avec gestion robuste du rate limiting
@@ -153,7 +153,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Fondations Architecture | 2/2 | Complete | 2026-01-26 |
-| 2. Parsing et Scan | 0/2 | Not started | - |
+| 2. Parsing et Scan | 0/2 | Planned | - |
 | 3. Clients API | 0/3 | Not started | - |
 | 4. Persistance | 0/2 | Not started | - |
 | 5. Organisation Fichiers | 0/2 | Not started | - |
@@ -164,4 +164,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 ---
 *Roadmap created: 2026-01-26*
 *Phase 1 planned: 2026-01-26*
+*Phase 2 planned: 2026-01-27*
 *Total: 8 phases, 16 plans, 32 requirements*
