@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Architecture propre avec separation claire entre logique metier et interfaces
-**Current focus:** Phase 3 - Clients API (in progress)
+**Current focus:** Phase 3 - Clients API (complete)
 
 ## Current Position
 
 Phase: 3 of 8 (Clients API)
-Plan: 3 of 4 in current phase (03-01, 03-02, 03-04 complete)
-Status: In progress
-Last activity: 2026-01-27 - Completed 03-02-PLAN.md
+Plan: 4 of 4 in current phase (all complete)
+Status: Phase complete
+Last activity: 2026-01-27 - Completed 03-03-PLAN.md
 
-Progress: [███████░░░] 70%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 4.4 min
-- Total execution time: 31 min
+- Total plans completed: 8
+- Average duration: 4.5 min
+- Total execution time: 36 min
 
 **By Phase:**
 
@@ -29,10 +29,10 @@ Progress: [███████░░░] 70%
 |-------|-------|-------|----------|
 | 01-fondations-architecture | 2 | 6 min | 3 min |
 | 02-parsing-et-scan | 2 | 13 min | 6.5 min |
-| 03-clients-api | 3 | 12 min | 4 min |
+| 03-clients-api | 4 | 17 min | 4.25 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-02 (7 min), 03-04 (4 min), 03-01 (4 min), 03-02 (4 min)
+- Last 5 plans: 03-04 (4 min), 03-01 (4 min), 03-02 (4 min), 03-03 (5 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -69,6 +69,10 @@ Recent decisions affecting current work:
 - Cache key format: "tmdb:search:{query}:{year}" and "tmdb:details:{media_id}"
 - French genres: API response (fr-FR) with TMDB_GENRE_MAPPING fallback
 - Duration: TMDB runtime (minutes) * 60 = duration_seconds
+- TVDB JWT: 29-day token expiry (1 month valid, refresh 1 day early)
+- TVDB search: /search?type=series with 'q' parameter
+- TVDB details: /series/{id}/extended for full details including genres
+- Series duration_seconds: None (no single runtime for TV series)
 
 ### Pending Todos
 
@@ -80,6 +84,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-27T17:56:30Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-01-27T17:57:20Z
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None
