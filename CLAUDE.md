@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Langue / Language
+
+**Français obligatoire** pour :
+- Tous les échanges avec l'utilisateur
+- Les docstrings et commentaires dans le code
+- Les messages émis par le programme (logs, erreurs, CLI)
+- La documentation générée (.md, README, etc.)
+
+Les noms de variables, fonctions et classes restent en anglais (convention Python).
+
 ## Project Overview
 
 CineOrg is a personal video library management application that:
