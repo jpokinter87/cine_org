@@ -6,7 +6,9 @@ Fournit egalement des methodes utilitaires pour le scan de fichiers video.
 """
 
 import hashlib
+import os
 import shutil
+import uuid
 from pathlib import Path
 from typing import Iterator, Optional
 
@@ -109,6 +111,50 @@ class FileSystemAdapter(IFileSystem, ISymlinkManager):
             return path.stat().st_size
         except OSError:
             return 0
+
+    def atomic_move(self, source: Path, destination: Path) -> bool:
+        """
+        Deplace un fichier de maniere atomique.
+
+        Utilise os.replace pour un deplacement atomique sur le meme filesystem.
+        Pour un deplacement cross-filesystem, utilise une copie intermediaire
+        avec un fichier temporaire pour garantir l'atomicite.
+
+        Args:
+            source: Chemin du fichier source
+            destination: Chemin de destination
+
+        Returns:
+            True si le deplacement a reussi, False sinon.
+        """
+        try:
+            # Creer les repertoires parents si necessaire
+            destination.parent.mkdir(parents=True, exist_ok=True)
+
+            # Tentative de rename atomique (fonctionne sur le meme filesystem)
+            try:
+                os.replace(source, destination)
+            except OSError:
+                # Cross-filesystem: copie intermediaire avec fichier temporaire
+                # Nom temporaire unique pour eviter les collisions
+                temp_name = f".tmp_{uuid.uuid4().hex}_{destination.name}"
+                temp = destination.with_name(temp_name)
+                try:
+                    # Copie avec preservation des metadonnees
+                    shutil.copy2(source, temp)
+                    # Rename atomique du temp vers destination
+                    os.replace(temp, destination)
+                    # Suppression de la source
+                    source.unlink()
+                except Exception:
+                    # Nettoyer le fichier temporaire en cas d'erreur
+                    if temp.exists():
+                        temp.unlink()
+                    raise
+
+            return True
+        except Exception:
+            return False
 
     # Implementation de ISymlinkManager
 
