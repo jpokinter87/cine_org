@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Architecture propre avec separation claire entre logique metier et interfaces
-**Current focus:** Phase 6 - Validation CLI (in progress)
+**Current focus:** Phase 6 - Validation (COMPLETE)
 
 ## Current Position
 
 Phase: 6 of 8 (Validation)
-Plan: 1 of 2 in current phase (COMPLETE)
-Status: In progress
-Last activity: 2026-01-27 - Completed 06-01-PLAN.md
+Plan: 2 of 2 in current phase (COMPLETE)
+Status: Phase complete
+Last activity: 2026-01-28 - Completed 06-02-PLAN.md
 
-Progress: [█████████████░] 65%
+Progress: [██████████████░] 70%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 13
-- Average duration: 4.0 min
-- Total execution time: 57 min
+- Total plans completed: 14
+- Average duration: 4.4 min
+- Total execution time: 65 min
 
 **By Phase:**
 
@@ -32,10 +32,10 @@ Progress: [█████████████░] 65%
 | 03-clients-api | 4 | 17 min | 4.25 min |
 | 04-persistance | 2 | 6 min | 3 min |
 | 05-organisation-fichiers | 2 | 11 min | 5.5 min |
-| 06-validation | 1 | 4 min | 4 min |
+| 06-validation | 2 | 12 min | 6 min |
 
 **Recent Trend:**
-- Last 5 plans: 06-01 (4 min), 05-02 (4 min), 05-01 (7 min), 04-02 (3 min), 04-01 (3 min)
+- Last 5 plans: 06-02 (8 min), 06-01 (4 min), 05-02 (4 min), 05-01 (7 min), 04-02 (3 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -91,6 +91,8 @@ Recent decisions affecting current work:
 - THRESHOLD = 85 pour auto-validation (coherent avec MatcherService.MATCH_THRESHOLD)
 - Clients API optionnels (None) - geres gracieusement avec retour liste vide
 - list_validated utilise acces direct session pour filtrer par status
+- determine_is_series() via candidate.source + filename patterns (pas de media_info.guessed)
+- Series info extraction from filename (SxxExx pattern) since guessit data not persisted
 
 ### Pending Todos
 
@@ -102,6 +104,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-27T23:05:25Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-01-27T23:17:09Z
+Stopped at: Completed 06-02-PLAN.md
 Resume file: None
