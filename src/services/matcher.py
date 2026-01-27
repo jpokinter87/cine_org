@@ -17,11 +17,6 @@ from rapidfuzz import fuzz, utils
 from src.core.ports.api_clients import SearchResult
 
 
-def _normalize_title(title: str) -> str:
-    """Normalize title for comparison using rapidfuzz default processor."""
-    return utils.default_process(title)
-
-
 def _calculate_title_score(query_title: str, candidate_title: str) -> float:
     """
     Calculate title similarity score (0-100).
