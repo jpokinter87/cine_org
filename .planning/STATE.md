@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Architecture propre avec separation claire entre logique metier et interfaces
-**Current focus:** Phase 4 - Persistance (complete)
+**Current focus:** Phase 5 - Organisation Fichiers (in progress)
 
 ## Current Position
 
-Phase: 4 of 8 (Persistance)
-Plan: 2 of 2 in current phase (COMPLETE)
-Status: Phase complete
-Last activity: 2026-01-27 - Completed 04-02-PLAN.md
+Phase: 5 of 8 (Organisation Fichiers)
+Plan: 1 of 2 in current phase (COMPLETE)
+Status: In progress
+Last activity: 2026-01-27 - Completed 05-01-PLAN.md
 
-Progress: [██████████░] 50%
+Progress: [███████████░] 55%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
-- Average duration: 4.0 min
-- Total execution time: 42 min
+- Total plans completed: 11
+- Average duration: 4.2 min
+- Total execution time: 49 min
 
 **By Phase:**
 
@@ -31,9 +31,10 @@ Progress: [██████████░] 50%
 | 02-parsing-et-scan | 2 | 13 min | 6.5 min |
 | 03-clients-api | 4 | 17 min | 4.25 min |
 | 04-persistance | 2 | 6 min | 3 min |
+| 05-organisation-fichiers | 1 | 7 min | 7 min |
 
 **Recent Trend:**
-- Last 5 plans: 04-02 (3 min), 04-01 (3 min), 03-04 (4 min), 03-01 (4 min), 03-02 (4 min)
+- Last 5 plans: 05-01 (7 min), 04-02 (3 min), 04-01 (3 min), 03-04 (4 min), 03-01 (4 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -81,6 +82,9 @@ Recent decisions affecting current work:
 - xxhash pour hash rapide (echantillons debut/fin/taille au lieu de fichier complet)
 - Factory provider pour repositories (session fraiche a chaque appel)
 - Conversion tuple <-> JSON pour genres/languages dans repositories
+- Ellipsis placeholder: caractere Unicode U+2026 pour preserver les ... en fin de chaine
+- Priority genre: premier genre de GENRE_HIERARCHY trouve dans les genres du film
+- Multi-audio scoring: meilleur score parmi toutes les pistes
 
 ### Pending Todos
 
@@ -92,6 +96,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-27T20:12:57Z
-Stopped at: Completed 04-02-PLAN.md (Phase 4 complete)
+Last session: 2026-01-27T21:14:13Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None
