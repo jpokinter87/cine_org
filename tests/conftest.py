@@ -14,7 +14,7 @@ import pytest
 
 from src.config import Settings
 from src.core.ports.file_system import IFileSystem
-from src.core.ports.parser import IFilenameParser
+from src.core.ports.parser import IFilenameParser, IMediaInfoExtractor
 from src.core.value_objects import MediaInfo, MediaType, ParsedFilename
 
 
@@ -86,6 +86,19 @@ def test_settings(tmp_path: Path) -> Settings:
         match_score_threshold=85,
         log_file=tmp_path / "test.log",
     )
+
+
+@pytest.fixture
+def mock_media_info_extractor() -> MagicMock:
+    """
+    Mock de IMediaInfoExtractor pour les tests.
+
+    Retourne None par defaut (pas de metadonnees techniques).
+    Configurer le mock dans chaque test pour des comportements specifiques.
+    """
+    mock = MagicMock(spec=IMediaInfoExtractor)
+    mock.extract.return_value = None
+    return mock
 
 
 @pytest.fixture

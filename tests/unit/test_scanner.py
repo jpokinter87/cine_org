@@ -1,7 +1,7 @@
 """
 Tests unitaires pour ScannerService.
 
-Ces tests utilisent des mocks pour IFileSystem et IFilenameParser,
+Ces tests utilisent des mocks pour IFileSystem, IFilenameParser et IMediaInfoExtractor,
 sans creer de vrais fichiers sur le disque.
 """
 
@@ -14,7 +14,7 @@ import pytest
 from src.adapters.file_system import FileSystemAdapter, IGNORED_PATTERNS, VIDEO_EXTENSIONS
 from src.config import Settings
 from src.core.ports.file_system import IFileSystem
-from src.core.ports.parser import IFilenameParser
+from src.core.ports.parser import IFilenameParser, IMediaInfoExtractor
 from src.core.value_objects import MediaType, ParsedFilename
 from src.services.scanner import ScannerService, ScanResult
 
@@ -153,6 +153,7 @@ class TestScannerTypeHint:
         self,
         mock_file_system: MagicMock,
         mock_filename_parser: MagicMock,
+        mock_media_info_extractor: MagicMock,
         test_settings: Settings,
     ) -> None:
         """Les fichiers dans Films/ recoivent MediaType.MOVIE comme type_hint."""
@@ -178,7 +179,7 @@ class TestScannerTypeHint:
         mock_file_system.list_video_files = MagicMock(side_effect=list_video_files_by_dir)
         mock_file_system.get_size.return_value = 500 * 1024 * 1024
 
-        scanner = ScannerService(mock_file_system, mock_filename_parser, test_settings)
+        scanner = ScannerService(mock_file_system, mock_filename_parser, mock_media_info_extractor, test_settings)
 
         # Act
         results = list(scanner.scan_downloads())
@@ -191,6 +192,7 @@ class TestScannerTypeHint:
         self,
         mock_file_system: MagicMock,
         mock_filename_parser: MagicMock,
+        mock_media_info_extractor: MagicMock,
         test_settings: Settings,
     ) -> None:
         """Les fichiers dans Series/ recoivent MediaType.SERIES comme type_hint."""
@@ -221,7 +223,7 @@ class TestScannerTypeHint:
         mock_file_system.list_video_files = MagicMock(side_effect=list_video_files_by_dir)
         mock_file_system.get_size.return_value = 500 * 1024 * 1024
 
-        scanner = ScannerService(mock_file_system, mock_filename_parser, test_settings)
+        scanner = ScannerService(mock_file_system, mock_filename_parser, mock_media_info_extractor, test_settings)
 
         # Act
         results = list(scanner.scan_downloads())
@@ -238,6 +240,7 @@ class TestScannerCorrectedLocation:
         self,
         mock_file_system: MagicMock,
         mock_filename_parser: MagicMock,
+        mock_media_info_extractor: MagicMock,
         test_settings: Settings,
     ) -> None:
         """Une serie dans Films/ est detectee comme mal placee (corrected_location=True)."""
@@ -266,7 +269,7 @@ class TestScannerCorrectedLocation:
         mock_file_system.list_video_files = MagicMock(side_effect=list_video_files_by_dir)
         mock_file_system.get_size.return_value = 500 * 1024 * 1024
 
-        scanner = ScannerService(mock_file_system, mock_filename_parser, test_settings)
+        scanner = ScannerService(mock_file_system, mock_filename_parser, mock_media_info_extractor, test_settings)
 
         # Act
         results = list(scanner.scan_downloads())
@@ -281,6 +284,7 @@ class TestScannerCorrectedLocation:
         self,
         mock_file_system: MagicMock,
         mock_filename_parser: MagicMock,
+        mock_media_info_extractor: MagicMock,
         test_settings: Settings,
     ) -> None:
         """Un film dans Series/ est detecte comme mal place (corrected_location=True)."""
@@ -308,7 +312,7 @@ class TestScannerCorrectedLocation:
         mock_file_system.list_video_files = MagicMock(side_effect=list_video_files_by_dir)
         mock_file_system.get_size.return_value = 500 * 1024 * 1024
 
-        scanner = ScannerService(mock_file_system, mock_filename_parser, test_settings)
+        scanner = ScannerService(mock_file_system, mock_filename_parser, mock_media_info_extractor, test_settings)
 
         # Act
         results = list(scanner.scan_downloads())
@@ -323,6 +327,7 @@ class TestScannerCorrectedLocation:
         self,
         mock_file_system: MagicMock,
         mock_filename_parser: MagicMock,
+        mock_media_info_extractor: MagicMock,
         test_settings: Settings,
     ) -> None:
         """Un film dans Films/ n'est pas mal place (corrected_location=False)."""
@@ -349,7 +354,7 @@ class TestScannerCorrectedLocation:
         mock_file_system.list_video_files = MagicMock(side_effect=list_video_files_by_dir)
         mock_file_system.get_size.return_value = 500 * 1024 * 1024
 
-        scanner = ScannerService(mock_file_system, mock_filename_parser, test_settings)
+        scanner = ScannerService(mock_file_system, mock_filename_parser, mock_media_info_extractor, test_settings)
 
         # Act
         results = list(scanner.scan_downloads())
@@ -362,6 +367,7 @@ class TestScannerCorrectedLocation:
         self,
         mock_file_system: MagicMock,
         mock_filename_parser: MagicMock,
+        mock_media_info_extractor: MagicMock,
         test_settings: Settings,
     ) -> None:
         """Un fichier avec type UNKNOWN n'est pas considere mal place."""
@@ -387,7 +393,7 @@ class TestScannerCorrectedLocation:
         mock_file_system.list_video_files = MagicMock(side_effect=list_video_files_by_dir)
         mock_file_system.get_size.return_value = 500 * 1024 * 1024
 
-        scanner = ScannerService(mock_file_system, mock_filename_parser, test_settings)
+        scanner = ScannerService(mock_file_system, mock_filename_parser, mock_media_info_extractor, test_settings)
 
         # Act
         results = list(scanner.scan_downloads())
@@ -404,9 +410,10 @@ class TestScanResult:
         self,
         mock_file_system: MagicMock,
         mock_filename_parser: MagicMock,
+        mock_media_info_extractor: MagicMock,
         test_settings: Settings,
     ) -> None:
-        """ScanResult contient tous les champs attendus (media_info=None dans ce plan)."""
+        """ScanResult contient tous les champs attendus (media_info vient de l'extractor)."""
         # Arrange
         films_dir = test_settings.downloads_dir / "Films"
         movie_file = films_dir / "Inception.2010.BluRay.1080p.mkv"
@@ -434,7 +441,9 @@ class TestScanResult:
         mock_file_system.list_video_files = MagicMock(side_effect=list_video_files_by_dir)
         mock_file_system.get_size.return_value = 500 * 1024 * 1024
 
-        scanner = ScannerService(mock_file_system, mock_filename_parser, test_settings)
+        # media_info_extractor returns None by default (from fixture)
+
+        scanner = ScannerService(mock_file_system, mock_filename_parser, mock_media_info_extractor, test_settings)
 
         # Act
         results = list(scanner.scan_downloads())
@@ -459,13 +468,17 @@ class TestScanResult:
         assert result.source_directory == "Films"
         assert result.corrected_location is False
 
-        # MediaInfo est None dans ce plan
+        # MediaInfo comes from extractor (None in mock)
         assert result.media_info is None
+
+        # Verify extractor was called
+        mock_media_info_extractor.extract.assert_called_once_with(movie_file)
 
     def test_scan_multiple_files(
         self,
         mock_file_system: MagicMock,
         mock_filename_parser: MagicMock,
+        mock_media_info_extractor: MagicMock,
         test_settings: Settings,
     ) -> None:
         """Le scanner retourne un ScanResult pour chaque fichier video."""
@@ -486,7 +499,7 @@ class TestScanResult:
         mock_file_system.list_video_files = MagicMock(side_effect=list_video_files_by_dir)
         mock_file_system.get_size.return_value = 500 * 1024 * 1024
 
-        scanner = ScannerService(mock_file_system, mock_filename_parser, test_settings)
+        scanner = ScannerService(mock_file_system, mock_filename_parser, mock_media_info_extractor, test_settings)
 
         # Act
         results = list(scanner.scan_downloads())
@@ -500,13 +513,14 @@ class TestScanResult:
         self,
         mock_file_system: MagicMock,
         mock_filename_parser: MagicMock,
+        mock_media_info_extractor: MagicMock,
         test_settings: Settings,
     ) -> None:
         """Le scanner retourne une liste vide si aucun fichier video n'est trouve."""
         # Arrange: directories vides
         mock_file_system.list_video_files = MagicMock(return_value=iter([]))
 
-        scanner = ScannerService(mock_file_system, mock_filename_parser, test_settings)
+        scanner = ScannerService(mock_file_system, mock_filename_parser, mock_media_info_extractor, test_settings)
 
         # Act
         results = list(scanner.scan_downloads())

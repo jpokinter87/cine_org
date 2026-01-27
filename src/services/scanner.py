@@ -12,7 +12,7 @@ from typing import Iterator, Optional
 from src.config import Settings
 from src.core.entities.video import VideoFile
 from src.core.ports.file_system import IFileSystem
-from src.core.ports.parser import IFilenameParser
+from src.core.ports.parser import IFilenameParser, IMediaInfoExtractor
 from src.core.value_objects import MediaInfo, MediaType, ParsedFilename
 
 
@@ -53,15 +53,14 @@ class ScannerService:
     Coordonne:
     - Le systeme de fichiers (IFileSystem) pour lister les fichiers video
     - Le parser de noms (IFilenameParser) pour extraire les informations
-
-    NOTE: IMediaInfoExtractor sera ajoute dans Plan 02-02 Task 3
-    pour enrichir les ScanResult avec les metadonnees techniques.
+    - L'extracteur mediainfo (IMediaInfoExtractor) pour les metadonnees techniques
     """
 
     def __init__(
         self,
         file_system: IFileSystem,
         filename_parser: IFilenameParser,
+        media_info_extractor: IMediaInfoExtractor,
         settings: Settings,
     ) -> None:
         """
@@ -70,10 +69,12 @@ class ScannerService:
         Args:
             file_system: Implementation de IFileSystem pour les operations fichiers
             filename_parser: Implementation de IFilenameParser pour le parsing
+            media_info_extractor: Implementation de IMediaInfoExtractor pour mediainfo
             settings: Configuration de l'application
         """
         self._file_system = file_system
         self._filename_parser = filename_parser
+        self._media_info_extractor = media_info_extractor
         self._settings = settings
 
     def scan_downloads(self) -> Iterator[ScanResult]:
@@ -183,6 +184,9 @@ class ScannerService:
         # Parser le nom de fichier avec le type hint
         parsed_info = self._filename_parser.parse(file_path.name, type_hint)
 
+        # Extraire les metadonnees techniques via mediainfo
+        media_info = self._media_info_extractor.extract(file_path)
+
         # Determiner si le fichier est mal place
         # corrected_location = True si le type detecte != type attendu du repertoire
         detected_type = parsed_info.media_type
@@ -194,7 +198,7 @@ class ScannerService:
             detected_type=detected_type,
             source_directory=source_name,
             corrected_location=corrected_location,
-            media_info=None,  # Sera peuple dans Plan 02-02
+            media_info=media_info,
         )
 
     def _is_misplaced(self, detected_type: MediaType, type_hint: MediaType) -> bool:

@@ -1,44 +1,57 @@
 """
-Container d'injection de dépendances via dependency-injector.
+Container d'injection de dependances via dependency-injector.
 
-Fournit une gestion centralisée des dépendances pour les interfaces CLI et Web.
-Les repositories et clients API sont ajoutés dans les phases ultérieures.
+Fournit une gestion centralisee des dependances pour les interfaces CLI et Web.
+Les repositories et clients API sont ajoutes dans les phases ulterieures.
 """
 
 from dependency_injector import containers, providers
 
+from .adapters.file_system import FileSystemAdapter
+from .adapters.parsing.guessit_parser import GuessitFilenameParser
+from .adapters.parsing.mediainfo_extractor import MediaInfoExtractor
 from .config import Settings
+from .services.scanner import ScannerService
 
 
 class Container(containers.DeclarativeContainer):
     """Container DI de l'application.
 
-    Fournit l'injection de dépendances pour les interfaces CLI et Web.
-    Les repositories et clients API sont ajoutés dans les phases ultérieures.
+    Fournit l'injection de dependances pour les interfaces CLI et Web.
+    Les repositories et clients API sont ajoutes dans les phases ulterieures.
 
     Utilisation :
         container = Container()
-        container.wire(modules=[__name__])
-        settings = container.config()
+        scanner = container.scanner_service()
     """
 
-    # Le wiring est fait explicitement dans main.py pour éviter les problèmes d'import
-    # Modules à wirer :
-    # - src.main (point d'entrée CLI)
-    # - src.adapters.cli.commands (ajouté plus tard)
-    # - src.adapters.web.routes.* (ajouté plus tard)
+    # Le wiring est fait explicitement dans main.py pour eviter les problemes d'import
+    # Modules a wirer :
+    # - src.main (point d'entree CLI)
+    # - src.adapters.cli.commands (ajoute plus tard)
+    # - src.adapters.web.routes.* (ajoute plus tard)
 
-    # Configuration - singleton chargé une seule fois
+    # Configuration - singleton charge une seule fois
     config = providers.Singleton(Settings)
 
-    # Repositories - à implémenter en Phase 4
+    # Adapters - implementations concretes des ports
+    file_system = providers.Singleton(FileSystemAdapter)
+    filename_parser = providers.Singleton(GuessitFilenameParser)
+    media_info_extractor = providers.Singleton(MediaInfoExtractor)
+
+    # Services
+    scanner_service = providers.Factory(
+        ScannerService,
+        file_system=file_system,
+        filename_parser=filename_parser,
+        media_info_extractor=media_info_extractor,
+        settings=config,
+    )
+
+    # Repositories - a implementer en Phase 4
     # video_repository = providers.Singleton(...)
     # movie_repository = providers.Singleton(...)
 
-    # Clients API - à implémenter en Phase 3
+    # Clients API - a implementer en Phase 3
     # tmdb_client = providers.Factory(...)
     # tvdb_client = providers.Factory(...)
-
-    # Services - à implémenter dans les phases ultérieures
-    # scanner = providers.Factory(...)
-    # matcher = providers.Factory(...)
