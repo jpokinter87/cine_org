@@ -25,3 +25,6 @@ rapidfuzz>=3.10.0
 
 # Database
 sqlmodel>=0.0.24
+
+# Hashing
+xxhash>=3.6.0
