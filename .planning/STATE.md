@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Architecture propre avec separation claire entre logique metier et interfaces
-**Current focus:** Phase 3 - Clients API (ready to plan)
+**Current focus:** Phase 3 - Clients API (in progress)
 
 ## Current Position
 
 Phase: 3 of 8 (Clients API)
-Plan: 0 of 3 in current phase
-Status: Ready to plan
-Last activity: 2026-01-27 - Phase 2 verified and complete
+Plan: 4 of 4 in current phase
+Status: In progress
+Last activity: 2026-01-27 - Completed 03-04-PLAN.md
 
-Progress: [████░░░░░░] 25%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
+- Total plans completed: 5
 - Average duration: 5 min
-- Total execution time: 19 min
+- Total execution time: 23 min
 
 **By Phase:**
 
@@ -29,10 +29,11 @@ Progress: [████░░░░░░] 25%
 |-------|-------|-------|----------|
 | 01-fondations-architecture | 2 | 6 min | 3 min |
 | 02-parsing-et-scan | 2 | 13 min | 6.5 min |
+| 03-clients-api | 1 | 4 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3 min), 01-02 (3 min), 02-01 (6 min), 02-02 (7 min)
-- Trend: Stable (slightly longer for more complex plans)
+- Last 5 plans: 01-02 (3 min), 02-01 (6 min), 02-02 (7 min), 03-04 (4 min)
+- Trend: Stable
 
 *Updated after each plan completion*
 
@@ -57,6 +58,10 @@ Recent decisions affecting current work:
 - Type hint from directory overrides guessit auto-detection (Films/ -> MOVIE)
 - Duration converted from milliseconds to seconds (pymediainfo returns ms)
 - ScannerService calls extractor.extract() directly (separation of concerns)
+- token_sort_ratio with processor for case-insensitive word-order-independent matching
+- Year tolerance: +/-1 = 100%, -25% per additional year
+- Duration tolerance: +/-10% = 100%, -50% per additional 10%
+- API SearchResult lacks duration, so score_results max for movies = 75%
 
 ### Pending Todos
 
@@ -68,6 +73,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-27T17:25:00Z
-Stopped at: Completed 02-02-PLAN.md (Phase 02 complete)
+Last session: 2026-01-27T17:49:00Z
+Stopped at: Completed 03-04-PLAN.md
 Resume file: None
