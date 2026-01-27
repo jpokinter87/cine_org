@@ -111,11 +111,11 @@ Plans:
   2. L'utilisateur peut voir les candidats et selectionner le bon match via CLI
   3. L'utilisateur peut rechercher manuellement par titre ou saisir un ID IMDB/TMDB/TVDB
   4. La validation finale batch affiche tous les fichiers avec leurs destinations avant transfert
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 06-01: Validation automatique et workflow
-- [ ] 06-02: Interface CLI validation manuelle
+- [ ] 06-01-PLAN.md — ValidationService avec logique auto-validation et selection candidat
+- [ ] 06-02-PLAN.md — Interface CLI validation interactive avec Rich (cartes candidats, batch, progression)
 
 ### Phase 7: CLI Principale
 **Goal**: Fournir les commandes CLI pour le workflow principal: scan, traitement, et gestion des fichiers en attente
@@ -158,7 +158,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 3. Clients API | 4/4 | Complete | 2026-01-27 |
 | 4. Persistance | 2/2 | Complete | 2026-01-27 |
 | 5. Organisation Fichiers | 2/2 | Complete | 2026-01-27 |
-| 6. Validation | 0/2 | Not started | - |
+| 6. Validation | 0/2 | Planned | - |
 | 7. CLI Principale | 0/1 | Not started | - |
 | 8. Import et Maintenance | 0/2 | Not started | - |
 
@@ -169,4 +169,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 *Phase 3 planned: 2026-01-27*
 *Phase 4 planned: 2026-01-27*
 *Phase 5 planned: 2026-01-27*
+*Phase 6 planned: 2026-01-27*
 *Total: 8 phases, 17 plans, 32 requirements*
