@@ -81,11 +81,11 @@ Plans:
   3. La table trash conserve l'historique des suppressions
   4. Les index sur tmdb_id, tvdb_id, title accelerent les recherches
   5. Le hash de fichier est calcule et stocke pour detecter les doublons
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: Modeles SQLModel et migrations
-- [ ] 04-02: Repositories et hash de fichiers
+- [ ] 04-01-PLAN.md — Infrastructure database SQLite, modeles SQLModel avec index
+- [ ] 04-02-PLAN.md — Service hash XXHash, repositories implementant les ports, integration DI
 
 ### Phase 5: Organisation Fichiers
 **Goal**: Renommer les fichiers selon le format standardise et les organiser dans la structure videotheque avec symlinks
@@ -156,7 +156,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 1. Fondations Architecture | 2/2 | Complete | 2026-01-26 |
 | 2. Parsing et Scan | 2/2 | Complete | 2026-01-27 |
 | 3. Clients API | 4/4 | Complete | 2026-01-27 |
-| 4. Persistance | 0/2 | Ready | - |
+| 4. Persistance | 0/2 | Planned | - |
 | 5. Organisation Fichiers | 0/2 | Not started | - |
 | 6. Validation | 0/2 | Not started | - |
 | 7. CLI Principale | 0/1 | Not started | - |
@@ -167,4 +167,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 *Phase 1 planned: 2026-01-26*
 *Phase 2 planned: 2026-01-27*
 *Phase 3 planned: 2026-01-27*
+*Phase 4 planned: 2026-01-27*
 *Total: 8 phases, 17 plans, 32 requirements*
