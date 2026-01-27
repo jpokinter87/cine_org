@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 3 of 8 (Clients API)
-Plan: 2 of 4 in current phase (03-01, 03-04 complete)
+Plan: 3 of 4 in current phase (03-01, 03-02, 03-04 complete)
 Status: In progress
-Last activity: 2026-01-27 - Completed 03-01-PLAN.md
+Last activity: 2026-01-27 - Completed 03-02-PLAN.md
 
-Progress: [█████░░░░░] 50%
+Progress: [███████░░░] 70%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 5 min
-- Total execution time: 27 min
+- Total plans completed: 7
+- Average duration: 4.4 min
+- Total execution time: 31 min
 
 **By Phase:**
 
@@ -29,10 +29,10 @@ Progress: [█████░░░░░] 50%
 |-------|-------|-------|----------|
 | 01-fondations-architecture | 2 | 6 min | 3 min |
 | 02-parsing-et-scan | 2 | 13 min | 6.5 min |
-| 03-clients-api | 2 | 8 min | 4 min |
+| 03-clients-api | 3 | 12 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-01 (6 min), 02-02 (7 min), 03-04 (4 min), 03-01 (4 min)
+- Last 5 plans: 02-02 (7 min), 03-04 (4 min), 03-01 (4 min), 03-02 (4 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -66,6 +66,9 @@ Recent decisions affecting current work:
 - Async cache via run_in_executor (non-blocking despite sync diskcache)
 - Cache TTL: 24h for search results, 7 days for media details
 - wait_random_exponential for retry jitter (avoids thundering herd)
+- Cache key format: "tmdb:search:{query}:{year}" and "tmdb:details:{media_id}"
+- French genres: API response (fr-FR) with TMDB_GENRE_MAPPING fallback
+- Duration: TMDB runtime (minutes) * 60 = duration_seconds
 
 ### Pending Todos
 
@@ -77,6 +80,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-27T17:49:28Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-01-27T17:56:30Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
