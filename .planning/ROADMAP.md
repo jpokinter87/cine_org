@@ -96,11 +96,11 @@ Plans:
   2. Les films sont organises dans stockage/Films/Genre/Lettre/
   3. Les series sont organisees dans stockage/Series/Lettre/Titre/Saison XX/
   4. Les symlinks dans video/ pointent vers les fichiers dans stockage/
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: Renommage et transfert fichiers
-- [ ] 05-02: Structure repertoires et symlinks
+- [ ] 05-01-PLAN.md — Services renommage (RenamerService), organisation (OrganizerService) et scoring qualite (QualityScorerService)
+- [ ] 05-02-PLAN.md — Service transfert atomique (TransfererService) avec symlinks et integration DI
 
 ### Phase 6: Validation
 **Goal**: Valider automatiquement les correspondances avec score >= 85% et permettre la validation manuelle pour les cas ambigus via CLI
@@ -168,4 +168,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 *Phase 2 planned: 2026-01-27*
 *Phase 3 planned: 2026-01-27*
 *Phase 4 planned: 2026-01-27*
+*Phase 5 planned: 2026-01-27*
 *Total: 8 phases, 17 plans, 32 requirements*
