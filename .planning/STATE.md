@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Architecture propre avec separation claire entre logique metier et interfaces
-**Current focus:** Phase 4 - Persistance (ready to plan)
+**Current focus:** Phase 4 - Persistance (in progress)
 
 ## Current Position
 
 Phase: 4 of 8 (Persistance)
-Plan: 0 of 2 in current phase
-Status: Ready to plan
-Last activity: 2026-01-27 - Phase 3 verified and complete
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-01-27 - Completed 04-01-PLAN.md
 
-Progress: [████████░░] 37.5%
+Progress: [█████████░] 43.75%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
-- Average duration: 4.5 min
-- Total execution time: 36 min
+- Total plans completed: 9
+- Average duration: 4.2 min
+- Total execution time: 39 min
 
 **By Phase:**
 
@@ -30,9 +30,10 @@ Progress: [████████░░] 37.5%
 | 01-fondations-architecture | 2 | 6 min | 3 min |
 | 02-parsing-et-scan | 2 | 13 min | 6.5 min |
 | 03-clients-api | 4 | 17 min | 4.25 min |
+| 04-persistance | 1 | 3 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-04 (4 min), 03-01 (4 min), 03-02 (4 min), 03-03 (5 min)
+- Last 5 plans: 04-01 (3 min), 03-04 (4 min), 03-01 (4 min), 03-02 (4 min), 03-03 (5 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -73,6 +74,10 @@ Recent decisions affecting current work:
 - TVDB search: /search?type=series with 'q' parameter
 - TVDB details: /series/{id}/extended for full details including genres
 - Series duration_seconds: None (no single runtime for TV series)
+- check_same_thread=False pour SQLite multi-thread/async
+- Properties getter/setter pour serialisation JSON transparente (genres, languages, candidates)
+- entity_metadata au lieu de metadata pour eviter conflit avec SQLModel.metadata
+- Index compose sur (series_id, season_number, episode_number) pour episodes
 
 ### Pending Todos
 
@@ -84,6 +89,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-27T17:57:20Z
-Stopped at: Completed 03-03-PLAN.md
+Last session: 2026-01-27T20:06:36Z
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None
