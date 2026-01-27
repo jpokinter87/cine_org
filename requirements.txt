@@ -8,9 +8,9 @@ typer>=0.15.0
 # Logging
 loguru>=0.7.0
 
-# Media Processing (to be used in later phases)
-# guessit>=3.8.0
-# pymediainfo>=6.0.0
+# Media Processing
+guessit>=3.8.0
+# pymediainfo>=7.0.1  # Added in Task 2
 
 # Web Framework (to be used in later phases)
 # fastapi>=0.115.0
