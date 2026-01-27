@@ -14,23 +14,15 @@ Les clients implementent IMediaAPIClient defini dans core/ports/api_clients.py.
 """
 
 from src.adapters.api.cache import APICache
+from src.adapters.api.retry import RateLimitError, request_with_retry, with_retry
+from src.adapters.api.tmdb_client import TMDBClient
+from src.adapters.api.tvdb_client import TVDBClient
 
-# Lazy imports pour eviter les erreurs avant creation de retry.py
 __all__ = [
     "APICache",
     "RateLimitError",
     "with_retry",
     "request_with_retry",
+    "TMDBClient",
+    "TVDBClient",
 ]
-
-
-def __getattr__(name: str):
-    """Import paresseux pour RateLimitError et with_retry."""
-    if name in ("RateLimitError", "with_retry", "request_with_retry"):
-        from src.adapters.api.retry import (
-            RateLimitError,
-            request_with_retry,
-            with_retry,
-        )
-        return {"RateLimitError": RateLimitError, "with_retry": with_retry, "request_with_retry": request_with_retry}[name]
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

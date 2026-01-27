@@ -1,0 +1,229 @@
+"""
+Client TMDB pour la recherche et recuperation de metadonnees films.
+
+Implemente l'interface IMediaAPIClient pour TMDB (The Movie Database).
+Utilise le cache persistant et le mecanisme de retry pour gerer
+le rate limiting.
+
+Usage:
+    cache = APICache()
+    client = TMDBClient(api_key="your_key", cache=cache)
+    results = await client.search("Avatar", year=2009)
+    details = await client.get_details("19995")
+    await client.close()
+"""
+
+from typing import Optional
+
+import httpx
+
+from src.adapters.api.cache import APICache
+from src.adapters.api.retry import request_with_retry
+from src.core.ports.api_clients import IMediaAPIClient, MediaDetails, SearchResult
+from src.utils.constants import TMDB_GENRE_MAPPING
+
+
+class TMDBClient(IMediaAPIClient):
+    """
+    Client API TMDB pour les metadonnees de films.
+
+    Implemente IMediaAPIClient avec:
+    - Recherche de films par titre (avec filtre annee optionnel)
+    - Recuperation des details complets d'un film
+    - Cache persistant (24h recherches, 7j details)
+    - Retry automatique sur rate limiting (429)
+
+    Attributes:
+        TMDB_BASE_URL: URL de base de l'API TMDB v3
+        TMDB_IMAGE_BASE_URL: URL de base pour les images (posters)
+
+    Example:
+        cache = APICache()
+        client = TMDBClient(api_key="xxx", cache=cache)
+
+        results = await client.search("Inception", year=2010)
+        if results:
+            details = await client.get_details(results[0].id)
+            print(f"{details.title} ({details.year}) - {details.genres}")
+
+        await client.close()
+    """
+
+    TMDB_BASE_URL = "https://api.themoviedb.org/3"
+    TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
+
+    def __init__(self, api_key: str, cache: APICache) -> None:
+        """
+        Initialise le client TMDB.
+
+        Args:
+            api_key: Cle API TMDB (Read Access Token v4)
+            cache: Instance APICache pour le caching des resultats
+        """
+        self._api_key = api_key
+        self._cache = cache
+        self._client: Optional[httpx.AsyncClient] = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        """
+        Retourne le client HTTP, le cree si necessaire (lazy init).
+
+        Returns:
+            httpx.AsyncClient configure avec auth Bearer
+        """
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(
+                base_url=self.TMDB_BASE_URL,
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Accept": "application/json",
+                },
+                timeout=30.0,
+            )
+        return self._client
+
+    @property
+    def source(self) -> str:
+        """Retourne l'identifiant de la source API."""
+        return "tmdb"
+
+    async def search(
+        self,
+        query: str,
+        year: Optional[int] = None,
+    ) -> list[SearchResult]:
+        """
+        Recherche des films par titre.
+
+        Utilise le pattern cache-first: verifie le cache AVANT de faire
+        un appel API. Les resultats sont caches pour 24 heures.
+
+        Args:
+            query: Titre du film a rechercher
+            year: Annee de sortie optionnelle pour filtrer
+
+        Returns:
+            Liste de SearchResult (vide si aucun resultat)
+        """
+        # Build cache key
+        cache_key = f"tmdb:search:{query}:{year}"
+
+        # CACHE-FIRST: Check cache before API call
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        # Cache miss - make API request
+        client = self._get_client()
+        params = {
+            "query": query,
+            "language": "fr-FR",
+            "include_adult": "false",
+        }
+        if year is not None:
+            params["year"] = str(year)
+
+        response = await request_with_retry(
+            client, "GET", "/search/movie", params=params
+        )
+        data = response.json()
+
+        # Transform results
+        results = []
+        for item in data.get("results", []):
+            # Extract year from release_date (format: YYYY-MM-DD)
+            release_date = item.get("release_date", "")
+            item_year = int(release_date[:4]) if release_date else None
+
+            results.append(
+                SearchResult(
+                    id=str(item["id"]),
+                    title=item.get("title", item.get("original_title", "")),
+                    year=item_year,
+                    source=self.source,
+                )
+            )
+
+        # Cache results
+        await self._cache.set_search(cache_key, results)
+
+        return results
+
+    async def get_details(self, media_id: str) -> Optional[MediaDetails]:
+        """
+        Recupere les details complets d'un film.
+
+        Utilise le pattern cache-first: verifie le cache AVANT de faire
+        un appel API. Les details sont caches pour 7 jours.
+
+        Args:
+            media_id: ID TMDB du film
+
+        Returns:
+            MediaDetails avec toutes les informations, ou None si non trouve
+        """
+        # Build cache key
+        cache_key = f"tmdb:details:{media_id}"
+
+        # CACHE-FIRST: Check cache before API call
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        # Cache miss - make API request
+        client = self._get_client()
+        try:
+            response = await request_with_retry(
+                client, "GET", f"/movie/{media_id}", params={"language": "fr-FR"}
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            raise
+
+        data = response.json()
+
+        # Extract year from release_date
+        release_date = data.get("release_date", "")
+        year = int(release_date[:4]) if release_date else None
+
+        # Extract genres (French names from API, fallback to mapping)
+        genres = tuple(
+            genre.get("name", TMDB_GENRE_MAPPING.get(genre["id"], "Inconnu"))
+            for genre in data.get("genres", [])
+        )
+
+        # Build poster URL
+        poster_path = data.get("poster_path")
+        poster_url = f"{self.TMDB_IMAGE_BASE_URL}{poster_path}" if poster_path else None
+
+        # Convert runtime from minutes to seconds
+        runtime_minutes = data.get("runtime")
+        duration_seconds = runtime_minutes * 60 if runtime_minutes else None
+
+        details = MediaDetails(
+            id=str(data["id"]),
+            title=data.get("title", data.get("original_title", "")),
+            original_title=data.get("original_title"),
+            year=year,
+            genres=genres,
+            duration_seconds=duration_seconds,
+            overview=data.get("overview"),
+            poster_url=poster_url,
+        )
+
+        # Cache results
+        await self._cache.set_details(cache_key, details)
+
+        return details
+
+    async def close(self) -> None:
+        """
+        Ferme le client HTTP.
+
+        Doit etre appele a la fin de l'utilisation pour liberer
+        les ressources reseau.
+        """
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
