@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Parsing et Scan** - Scan repertoires, extraction metadonnees via guessit/mediainfo
 - [x] **Phase 3: Clients API** - Clients TMDB/TVDB avec rate limiting, cache, scoring
 - [x] **Phase 4: Persistance** - Base SQLite avec SQLModel, tables metier
-- [ ] **Phase 5: Organisation Fichiers** - Renommage, structure repertoires, symlinks
+- [x] **Phase 5: Organisation Fichiers** - Renommage, structure repertoires, symlinks
 - [ ] **Phase 6: Validation** - Matching automatique et validation manuelle CLI
 - [ ] **Phase 7: CLI Principale** - Commandes process, pending, validate
 - [ ] **Phase 8: Import et Maintenance** - Import videotheque existante, reparation, verification
@@ -99,8 +99,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Services renommage (RenamerService), organisation (OrganizerService) et scoring qualite (QualityScorerService)
-- [ ] 05-02-PLAN.md — Service transfert atomique (TransfererService) avec symlinks et integration DI
+- [x] 05-01-PLAN.md — Services renommage (RenamerService), organisation (OrganizerService) et scoring qualite (QualityScorerService)
+- [x] 05-02-PLAN.md — Service transfert atomique (TransfererService) avec symlinks et integration DI
 
 ### Phase 6: Validation
 **Goal**: Valider automatiquement les correspondances avec score >= 85% et permettre la validation manuelle pour les cas ambigus via CLI
@@ -157,7 +157,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 2. Parsing et Scan | 2/2 | Complete | 2026-01-27 |
 | 3. Clients API | 4/4 | Complete | 2026-01-27 |
 | 4. Persistance | 2/2 | Complete | 2026-01-27 |
-| 5. Organisation Fichiers | 0/2 | Not started | - |
+| 5. Organisation Fichiers | 2/2 | Complete | 2026-01-27 |
 | 6. Validation | 0/2 | Not started | - |
 | 7. CLI Principale | 0/1 | Not started | - |
 | 8. Import et Maintenance | 0/2 | Not started | - |

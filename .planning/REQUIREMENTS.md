@@ -36,10 +36,10 @@
 
 ### Organisation
 
-- [ ] **ORG-01**: Renommage selon format standardise (Titre (Annee) Langue Codec Resolution)
-- [ ] **ORG-02**: Organisation films par genre puis lettre alphabetique
-- [ ] **ORG-03**: Organisation series par lettre alphabetique avec dossiers Saison XX
-- [ ] **ORG-04**: Creation symlinks dans repertoire video/ pointant vers stockage/
+- [x] **ORG-01**: Renommage selon format standardise (Titre (Annee) Langue Codec Resolution)
+- [x] **ORG-02**: Organisation films par genre puis lettre alphabetique
+- [x] **ORG-03**: Organisation series par lettre alphabetique avec dossiers Saison XX
+- [x] **ORG-04**: Creation symlinks dans repertoire video/ pointant vers stockage/
 
 ### Persistance
 
@@ -117,10 +117,10 @@
 | DB-03 | Phase 4 | Complete |
 | DB-04 | Phase 4 | Complete |
 | DB-05 | Phase 4 | Complete |
-| ORG-01 | Phase 5 | Pending |
-| ORG-02 | Phase 5 | Pending |
-| ORG-03 | Phase 5 | Pending |
-| ORG-04 | Phase 5 | Pending |
+| ORG-01 | Phase 5 | Complete |
+| ORG-02 | Phase 5 | Complete |
+| ORG-03 | Phase 5 | Complete |
+| ORG-04 | Phase 5 | Complete |
 | VALID-01 | Phase 6 | Pending |
 | VALID-02 | Phase 6 | Pending |
 | VALID-03 | Phase 6 | Pending |
@@ -144,4 +144,4 @@
 
 ---
 *Requirements defined: 2025-01-26*
-*Last updated: 2026-01-27 after Phase 4 completion*
+*Last updated: 2026-01-27 after Phase 5 completion*
