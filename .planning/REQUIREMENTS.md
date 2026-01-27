@@ -29,10 +29,10 @@
 
 ### Validation
 
-- [ ] **VALID-01**: Validation automatique si score >= 85% et resultat unique
-- [ ] **VALID-02**: Interface CLI pour validation manuelle (affichage candidats, selection)
-- [ ] **VALID-03**: Recherche manuelle par titre libre et saisie ID IMDB/TMDB/TVDB
-- [ ] **VALID-04**: Validation finale batch avant transfert (liste tous les fichiers, destinations)
+- [x] **VALID-01**: Validation automatique si score >= 85% et resultat unique
+- [x] **VALID-02**: Interface CLI pour validation manuelle (affichage candidats, selection)
+- [x] **VALID-03**: Recherche manuelle par titre libre et saisie ID IMDB/TMDB/TVDB
+- [x] **VALID-04**: Validation finale batch avant transfert (liste tous les fichiers, destinations)
 
 ### Organisation
 
@@ -121,10 +121,10 @@
 | ORG-02 | Phase 5 | Complete |
 | ORG-03 | Phase 5 | Complete |
 | ORG-04 | Phase 5 | Complete |
-| VALID-01 | Phase 6 | Pending |
-| VALID-02 | Phase 6 | Pending |
-| VALID-03 | Phase 6 | Pending |
-| VALID-04 | Phase 6 | Pending |
+| VALID-01 | Phase 6 | Complete |
+| VALID-02 | Phase 6 | Complete |
+| VALID-03 | Phase 6 | Complete |
+| VALID-04 | Phase 6 | Complete |
 | CLI-01 | Phase 7 | Pending |
 | CLI-02 | Phase 7 | Pending |
 | CLI-03 | Phase 7 | Pending |
@@ -144,4 +144,4 @@
 
 ---
 *Requirements defined: 2025-01-26*
-*Last updated: 2026-01-27 after Phase 5 completion*
+*Last updated: 2026-01-28 after Phase 6 completion*

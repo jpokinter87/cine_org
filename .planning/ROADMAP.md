@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Clients API** - Clients TMDB/TVDB avec rate limiting, cache, scoring
 - [x] **Phase 4: Persistance** - Base SQLite avec SQLModel, tables metier
 - [x] **Phase 5: Organisation Fichiers** - Renommage, structure repertoires, symlinks
-- [ ] **Phase 6: Validation** - Matching automatique et validation manuelle CLI
+- [x] **Phase 6: Validation** - Matching automatique et validation manuelle CLI
 - [ ] **Phase 7: CLI Principale** - Commandes process, pending, validate
 - [ ] **Phase 8: Import et Maintenance** - Import videotheque existante, reparation, verification
 
@@ -114,8 +114,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — ValidationService avec logique auto-validation et selection candidat
-- [ ] 06-02-PLAN.md — Interface CLI validation interactive avec Rich (cartes candidats, batch, progression)
+- [x] 06-01-PLAN.md — ValidationService avec logique auto-validation et selection candidat
+- [x] 06-02-PLAN.md — Interface CLI validation interactive avec Rich (cartes candidats, batch, progression)
 
 ### Phase 7: CLI Principale
 **Goal**: Fournir les commandes CLI pour le workflow principal: scan, traitement, et gestion des fichiers en attente
@@ -158,7 +158,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 3. Clients API | 4/4 | Complete | 2026-01-27 |
 | 4. Persistance | 2/2 | Complete | 2026-01-27 |
 | 5. Organisation Fichiers | 2/2 | Complete | 2026-01-27 |
-| 6. Validation | 0/2 | Planned | - |
+| 6. Validation | 2/2 | Complete | 2026-01-28 |
 | 7. CLI Principale | 0/1 | Not started | - |
 | 8. Import et Maintenance | 0/2 | Not started | - |
 
