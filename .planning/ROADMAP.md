@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Fondations Architecture** - Structure hexagonale, DI container, configuration
 - [x] **Phase 2: Parsing et Scan** - Scan repertoires, extraction metadonnees via guessit/mediainfo
 - [x] **Phase 3: Clients API** - Clients TMDB/TVDB avec rate limiting, cache, scoring
-- [ ] **Phase 4: Persistance** - Base SQLite avec SQLModel, tables metier
+- [x] **Phase 4: Persistance** - Base SQLite avec SQLModel, tables metier
 - [ ] **Phase 5: Organisation Fichiers** - Renommage, structure repertoires, symlinks
 - [ ] **Phase 6: Validation** - Matching automatique et validation manuelle CLI
 - [ ] **Phase 7: CLI Principale** - Commandes process, pending, validate
@@ -84,8 +84,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Infrastructure database SQLite, modeles SQLModel avec index
-- [ ] 04-02-PLAN.md — Service hash XXHash, repositories implementant les ports, integration DI
+- [x] 04-01-PLAN.md — Infrastructure database SQLite, modeles SQLModel avec index
+- [x] 04-02-PLAN.md — Service hash XXHash, repositories implementant les ports, integration DI
 
 ### Phase 5: Organisation Fichiers
 **Goal**: Renommer les fichiers selon le format standardise et les organiser dans la structure videotheque avec symlinks
@@ -156,7 +156,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 1. Fondations Architecture | 2/2 | Complete | 2026-01-26 |
 | 2. Parsing et Scan | 2/2 | Complete | 2026-01-27 |
 | 3. Clients API | 4/4 | Complete | 2026-01-27 |
-| 4. Persistance | 0/2 | Planned | - |
+| 4. Persistance | 2/2 | Complete | 2026-01-27 |
 | 5. Organisation Fichiers | 0/2 | Not started | - |
 | 6. Validation | 0/2 | Not started | - |
 | 7. CLI Principale | 0/1 | Not started | - |

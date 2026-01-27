@@ -43,11 +43,11 @@
 
 ### Persistance
 
-- [ ] **DB-01**: Base SQLite avec SQLModel (tables films, series, episodes)
-- [ ] **DB-02**: Table pending_validation pour fichiers en attente
-- [ ] **DB-03**: Table trash pour historique des suppressions
-- [ ] **DB-04**: Index sur colonnes frequemment utilisees (tmdb_id, tvdb_id, title)
-- [ ] **DB-05**: Calcul et stockage hash de fichier pour detection de doublons
+- [x] **DB-01**: Base SQLite avec SQLModel (tables films, series, episodes)
+- [x] **DB-02**: Table pending_validation pour fichiers en attente
+- [x] **DB-03**: Table trash pour historique des suppressions
+- [x] **DB-04**: Index sur colonnes frequemment utilisees (tmdb_id, tvdb_id, title)
+- [x] **DB-05**: Calcul et stockage hash de fichier pour detection de doublons
 
 ### Import
 
@@ -112,11 +112,11 @@
 | API-03 | Phase 3 | Complete |
 | API-04 | Phase 3 | Complete |
 | API-05 | Phase 3 | Complete |
-| DB-01 | Phase 4 | Pending |
-| DB-02 | Phase 4 | Pending |
-| DB-03 | Phase 4 | Pending |
-| DB-04 | Phase 4 | Pending |
-| DB-05 | Phase 4 | Pending |
+| DB-01 | Phase 4 | Complete |
+| DB-02 | Phase 4 | Complete |
+| DB-03 | Phase 4 | Complete |
+| DB-04 | Phase 4 | Complete |
+| DB-05 | Phase 4 | Complete |
 | ORG-01 | Phase 5 | Pending |
 | ORG-02 | Phase 5 | Pending |
 | ORG-03 | Phase 5 | Pending |
@@ -144,4 +144,4 @@
 
 ---
 *Requirements defined: 2025-01-26*
-*Last updated: 2026-01-27 after Phase 3 completion*
+*Last updated: 2026-01-27 after Phase 4 completion*
