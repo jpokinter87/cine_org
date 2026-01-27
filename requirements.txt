@@ -10,7 +10,7 @@ loguru>=0.7.0
 
 # Media Processing
 guessit>=3.8.0
-# pymediainfo>=7.0.1  # Added in Task 2
+pymediainfo>=7.0.1
 
 # Web Framework (to be used in later phases)
 # fastapi>=0.115.0
