@@ -5,34 +5,34 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Architecture propre avec separation claire entre logique metier et interfaces
-**Current focus:** Phase 2 - Parsing et Scan
+**Current focus:** Phase 2 - Parsing et Scan (COMPLETE)
 
 ## Current Position
 
 Phase: 2 of 8 (Parsing et Scan)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-01-27 - Completed 02-01-PLAN.md
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-01-27 - Completed 02-02-PLAN.md
 
-Progress: [███░░░░░░░] 19%
+Progress: [████░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 4 min
-- Total execution time: 12 min
+- Total plans completed: 4
+- Average duration: 5 min
+- Total execution time: 19 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-fondations-architecture | 2 | 6 min | 3 min |
-| 02-parsing-et-scan | 1 | 6 min | 6 min |
+| 02-parsing-et-scan | 2 | 13 min | 6.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3 min), 01-02 (3 min), 02-01 (6 min)
-- Trend: Stable
+- Last 5 plans: 01-01 (3 min), 01-02 (3 min), 02-01 (6 min), 02-02 (7 min)
+- Trend: Stable (slightly longer for more complex plans)
 
 *Updated after each plan completion*
 
@@ -52,8 +52,11 @@ Recent decisions affecting current work:
 - Logging dual output: colored console for real-time, JSON file with rotation for historical analysis
 - DI wiring done explicitly in main.py instead of auto-wiring to avoid import cycles
 - MediaType.UNKNOWN n'est jamais considere mal place (pas de deplacement sans certitude)
-- ScannerService ne prend pas IMediaInfoExtractor - sera ajoute dans Plan 02-02
+- ScannerService now takes IMediaInfoExtractor parameter (implemented in 02-02)
 - corrected_location est un FLAG (detection seulement, pas de deplacement)
+- Type hint from directory overrides guessit auto-detection (Films/ -> MOVIE)
+- Duration converted from milliseconds to seconds (pymediainfo returns ms)
+- ScannerService calls extractor.extract() directly (separation of concerns)
 
 ### Pending Todos
 
@@ -65,6 +68,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-27T16:10:34Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-01-27T17:25:00Z
+Stopped at: Completed 02-02-PLAN.md (Phase 02 complete)
 Resume file: None
