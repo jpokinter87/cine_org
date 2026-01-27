@@ -20,6 +20,10 @@ from .infrastructure.persistence.repositories import (
     SQLModelPendingValidationRepository,
 )
 from .services.scanner import ScannerService
+from .services.renamer import RenamerService
+from .services.organizer import OrganizerService
+from .services.quality_scorer import QualityScorerService
+from .services.transferer import TransfererService
 
 
 class Container(containers.DeclarativeContainer):
@@ -84,6 +88,20 @@ class Container(containers.DeclarativeContainer):
     pending_validation_repository = providers.Factory(
         SQLModelPendingValidationRepository,
         session=session,
+    )
+
+    # Services de renommage et organisation (stateless - Singletons)
+    renamer_service = providers.Singleton(RenamerService)
+    organizer_service = providers.Singleton(OrganizerService)
+    quality_scorer_service = providers.Singleton(QualityScorerService)
+
+    # Service de transfert - Factory car depend des paths de configuration
+    # Note: storage_dir et video_dir sont injectes via config.paths_storage/paths_video
+    # Utiliser: container.transferer_service(storage_dir=Path(...), video_dir=Path(...))
+    transferer_service = providers.Factory(
+        TransfererService,
+        file_system=file_system,
+        symlink_manager=file_system,  # FileSystemAdapter implemente les deux interfaces
     )
 
     # Clients API - a implementer en Phase 3
