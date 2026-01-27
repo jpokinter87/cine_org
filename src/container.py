@@ -7,6 +7,9 @@ Inclut les repositories SQLModel et les services de persistance.
 
 from dependency_injector import containers, providers
 
+from .adapters.api.cache import APICache
+from .adapters.api.tmdb_client import TMDBClient
+from .adapters.api.tvdb_client import TVDBClient
 from .adapters.file_system import FileSystemAdapter
 from .adapters.parsing.guessit_parser import GuessitFilenameParser
 from .adapters.parsing.mediainfo_extractor import MediaInfoExtractor
@@ -19,11 +22,13 @@ from .infrastructure.persistence.repositories import (
     SQLModelVideoFileRepository,
     SQLModelPendingValidationRepository,
 )
+from .services.matcher import MatcherService
 from .services.scanner import ScannerService
 from .services.renamer import RenamerService
 from .services.organizer import OrganizerService
 from .services.quality_scorer import QualityScorerService
 from .services.transferer import TransfererService
+from .services.validation import ValidationService
 
 
 class Container(containers.DeclarativeContainer):
@@ -104,6 +109,35 @@ class Container(containers.DeclarativeContainer):
         symlink_manager=file_system,  # FileSystemAdapter implemente les deux interfaces
     )
 
-    # Clients API - a implementer en Phase 3
-    # tmdb_client = providers.Factory(...)
-    # tvdb_client = providers.Factory(...)
+    # Cache API - Singleton pour partage entre clients
+    api_cache = providers.Singleton(
+        APICache,
+        cache_dir=".cache/api",
+    )
+
+    # Clients API - Singleton avec api_key depuis config
+    # Si api_key est None/vide, le client sera cree mais ValidationService
+    # gere ce cas en verifiant client._api_key avant utilisation
+    tmdb_client = providers.Singleton(
+        TMDBClient,
+        api_key=config.provided.tmdb_api_key,
+        cache=api_cache,
+    )
+
+    tvdb_client = providers.Singleton(
+        TVDBClient,
+        api_key=config.provided.tvdb_api_key,
+        cache=api_cache,
+    )
+
+    # Service de scoring (stateless - Singleton)
+    matcher_service = providers.Singleton(MatcherService)
+
+    # Service de validation - Factory car depend de repositories (sessions fraiches)
+    validation_service = providers.Factory(
+        ValidationService,
+        pending_repo=pending_validation_repository,
+        matcher=matcher_service,
+        tmdb_client=tmdb_client,
+        tvdb_client=tvdb_client,
+    )
