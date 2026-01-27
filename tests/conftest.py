@@ -12,6 +12,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+# Configure pytest-asyncio mode
+pytest_plugins = ("pytest_asyncio",)
+
 from src.config import Settings
 from src.core.ports.file_system import IFileSystem
 from src.core.ports.parser import IFilenameParser, IMediaInfoExtractor
