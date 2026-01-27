@@ -88,11 +88,16 @@ class CandidatePaginator:
         Selectionne un candidat par son numero d'affichage.
 
         Args:
-            display_number: Numero affiche (1-based, relatif a la page)
+            display_number: Numero affiche (1-based, relatif a la page courante)
 
         Returns:
             Le candidat selectionne ou None si numero invalide.
         """
+        # Verifier que le numero est dans les limites de la page courante
+        current_items = self.current_items
+        if not (1 <= display_number <= len(current_items)):
+            return None
+
         idx = (self.current_page * self.page_size) + display_number - 1
         if 0 <= idx < len(self.candidates):
             return self.candidates[idx]
@@ -228,14 +233,24 @@ def detect_external_id(user_input: str) -> tuple[str | None, str | None]:
     return (None, None)
 
 
+# Pattern pour detecter les series dans les noms de fichiers (SxxExx, saison, season, episode)
+SERIES_PATTERNS = [
+    re.compile(r"[Ss]\d{1,2}[Ee]\d{1,2}"),  # S01E01, s1e1
+    re.compile(r"[Ss]aison[\s._]*\d+", re.IGNORECASE),  # Saison 1, saison.1, saison_1
+    re.compile(r"[Ss]eason[\s._]*\d+", re.IGNORECASE),  # Season 1, season.1
+    re.compile(r"[Ee]pisode[\s._]*\d+", re.IGNORECASE),  # Episode 1, episode.1
+    re.compile(r"\b\d{1,2}x\d{1,2}\b"),  # 1x01, 01x01
+]
+
+
 def determine_is_series(pending: PendingValidation) -> bool:
     """
-    Determine si le fichier est une serie a partir de media_info.guessed.
+    Determine si le fichier est une serie.
 
     Priorite:
-    1. Si media_info.guessed["type"] == "episode" -> True
-    2. Si media_info.guessed["type"] == "movie" -> False
-    3. Si type absent ou invalide -> False (defaut film)
+    1. Si les candidats existants proviennent de TVDB -> True
+    2. Si le nom de fichier contient des patterns de serie (SxxExx) -> True
+    3. Sinon -> False (defaut film)
 
     Args:
         pending: L'entite PendingValidation a analyser
@@ -243,18 +258,27 @@ def determine_is_series(pending: PendingValidation) -> bool:
     Returns:
         True si serie, False sinon (film par defaut)
     """
-    if pending.video_file is None or pending.video_file.media_info is None:
-        return False
+    # Priorite 1: Verifier la source des candidats existants
+    if pending.candidates:
+        for candidate in pending.candidates:
+            source = (
+                candidate.source if hasattr(candidate, "source")
+                else candidate.get("source", "") if isinstance(candidate, dict)
+                else ""
+            )
+            if source == "tvdb":
+                return True
+            if source == "tmdb":
+                return False
 
-    guessed = pending.video_file.media_info.guessed
-    if guessed is None:
-        return False
+    # Priorite 2: Detecter les patterns de serie dans le nom de fichier
+    if pending.video_file and pending.video_file.filename:
+        filename = pending.video_file.filename
+        for pattern in SERIES_PATTERNS:
+            if pattern.search(filename):
+                return True
 
-    media_type = guessed.get("type")
-    if media_type == "episode":
-        return True
-
-    # Par defaut (movie, absent, ou autre) -> film
+    # Par defaut -> film
     return False
 
 

@@ -8,10 +8,34 @@ Ce module fournit les commandes CLI:
 """
 
 import asyncio
+import re
 from pathlib import Path
 
 import typer
 from rich.prompt import Confirm
+
+
+# Pattern pour extraire saison/episode d'un nom de fichier
+SERIES_INFO_PATTERN = re.compile(
+    r"[Ss](\d{1,2})[Ee](\d{1,2})",  # S01E01, s1e1
+    re.IGNORECASE
+)
+
+
+def _extract_series_info(filename: str) -> tuple[int, int]:
+    """
+    Extrait le numero de saison et d'episode d'un nom de fichier.
+
+    Args:
+        filename: Nom du fichier video
+
+    Returns:
+        Tuple (season_number, episode_number), defaut (1, 1) si non trouve
+    """
+    match = SERIES_INFO_PATTERN.search(filename)
+    if match:
+        return int(match.group(1)), int(match.group(2))
+    return 1, 1
 
 from src.adapters.cli.validation import (
     console,
@@ -208,14 +232,10 @@ async def _validate_batch_async() -> None:
 
         # Generer le nouveau nom et chemin de destination
         if is_series:
-            # Pour les series: extraire saison/episode de media_info.guessed
-            guessed = media_info.guessed if media_info else {}
-            if guessed is None:
-                guessed = {}
-
-            season_num = guessed.get("season", 1)
-            episode_num = guessed.get("episode", 1)
-            episode_title = guessed.get("episode_title", "")
+            # Pour les series: extraire saison/episode du nom de fichier
+            filename = pending.video_file.filename if pending.video_file else ""
+            season_num, episode_num = _extract_series_info(filename)
+            episode_title = ""  # Non disponible sans parsing complet
 
             # Construire les entites Series et Episode pour renamer/organizer
             series = Series(
