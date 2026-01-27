@@ -12,6 +12,12 @@ loguru>=0.7.0
 guessit>=3.8.0
 pymediainfo>=7.0.1
 
+# API Clients
+httpx>=0.28.0
+tenacity>=9.0.0
+diskcache>=5.6.0
+rapidfuzz>=3.10.0
+
 # Web Framework (to be used in later phases)
 # fastapi>=0.115.0
 # uvicorn>=0.34.0
@@ -19,4 +25,3 @@ pymediainfo>=7.0.1
 
 # Database (to be used in later phases)
 # sqlmodel>=0.0.27
-# httpx>=0.28.0
