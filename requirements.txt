@@ -28,3 +28,6 @@ sqlmodel>=0.0.24
 
 # Hashing
 xxhash>=3.6.0
+
+# File Organization
+pathvalidate>=3.2.0
