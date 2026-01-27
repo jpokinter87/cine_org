@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Architecture propre avec separation claire entre logique metier et interfaces
-**Current focus:** Phase 4 - Persistance (in progress)
+**Current focus:** Phase 4 - Persistance (complete)
 
 ## Current Position
 
 Phase: 4 of 8 (Persistance)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-01-27 - Completed 04-01-PLAN.md
+Plan: 2 of 2 in current phase (COMPLETE)
+Status: Phase complete
+Last activity: 2026-01-27 - Completed 04-02-PLAN.md
 
-Progress: [█████████░] 43.75%
+Progress: [██████████░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
-- Average duration: 4.2 min
-- Total execution time: 39 min
+- Total plans completed: 10
+- Average duration: 4.0 min
+- Total execution time: 42 min
 
 **By Phase:**
 
@@ -30,10 +30,10 @@ Progress: [█████████░] 43.75%
 | 01-fondations-architecture | 2 | 6 min | 3 min |
 | 02-parsing-et-scan | 2 | 13 min | 6.5 min |
 | 03-clients-api | 4 | 17 min | 4.25 min |
-| 04-persistance | 1 | 3 min | 3 min |
+| 04-persistance | 2 | 6 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 04-01 (3 min), 03-04 (4 min), 03-01 (4 min), 03-02 (4 min), 03-03 (5 min)
+- Last 5 plans: 04-02 (3 min), 04-01 (3 min), 03-04 (4 min), 03-01 (4 min), 03-02 (4 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -78,6 +78,9 @@ Recent decisions affecting current work:
 - Properties getter/setter pour serialisation JSON transparente (genres, languages, candidates)
 - entity_metadata au lieu de metadata pour eviter conflit avec SQLModel.metadata
 - Index compose sur (series_id, season_number, episode_number) pour episodes
+- xxhash pour hash rapide (echantillons debut/fin/taille au lieu de fichier complet)
+- Factory provider pour repositories (session fraiche a chaque appel)
+- Conversion tuple <-> JSON pour genres/languages dans repositories
 
 ### Pending Todos
 
@@ -89,6 +92,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-27T20:06:36Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-01-27T20:12:57Z
+Stopped at: Completed 04-02-PLAN.md (Phase 4 complete)
 Resume file: None
