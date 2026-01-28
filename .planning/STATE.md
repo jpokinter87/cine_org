@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Architecture propre avec separation claire entre logique metier et interfaces
-**Current focus:** Phase 6 - Validation (COMPLETE)
+**Current focus:** Phase 7 - CLI Principale (IN PROGRESS)
 
 ## Current Position
 
-Phase: 6 of 8 (Validation)
-Plan: 2 of 2 in current phase (COMPLETE)
-Status: Phase complete
-Last activity: 2026-01-28 - Completed 06-02-PLAN.md
+Phase: 7 of 8 (CLI Principale)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-01-28 - Completed 07-01-PLAN.md
 
-Progress: [██████████████░] 70%
+Progress: [███████████████░] 75%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 14
-- Average duration: 4.4 min
-- Total execution time: 65 min
+- Total plans completed: 15
+- Average duration: 4.5 min
+- Total execution time: 72 min
 
 **By Phase:**
 
@@ -33,9 +33,10 @@ Progress: [██████████████░] 70%
 | 04-persistance | 2 | 6 min | 3 min |
 | 05-organisation-fichiers | 2 | 11 min | 5.5 min |
 | 06-validation | 2 | 12 min | 6 min |
+| 07-cli-principale | 1 | 7 min | 7 min |
 
 **Recent Trend:**
-- Last 5 plans: 06-02 (8 min), 06-01 (4 min), 05-02 (4 min), 05-01 (7 min), 04-02 (3 min)
+- Last 5 plans: 07-01 (7 min), 06-02 (8 min), 06-01 (4 min), 05-02 (4 min), 05-01 (7 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -93,6 +94,9 @@ Recent decisions affecting current work:
 - list_validated utilise acces direct session pour filtrer par status
 - determine_is_series() via candidate.source + filename patterns (pas de media_info.guessed)
 - Series info extraction from filename (SxxExx pattern) since guessit data not persisted
+- validate file as subcommand (not direct command) to avoid namespace conflict
+- database.init() is synchronous - removed erroneous await calls
+- pending sorted by max candidate score descending for priority display
 
 ### Pending Todos
 
@@ -104,6 +108,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-27T23:17:09Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-01-28T19:24:56Z
+Stopped at: Completed 07-01-PLAN.md
 Resume file: None
