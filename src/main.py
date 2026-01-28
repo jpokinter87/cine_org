@@ -4,9 +4,12 @@ Point d'entrée CLI de CineOrg.
 Initialise le container DI, configure le logging et fournit les commandes CLI.
 """
 
+from typing import Annotated
+
 import typer
 from loguru import logger
 
+from .adapters.cli.commands import pending, process, validate_app
 from .config import Settings
 from .container import Container
 from .logging_config import configure_logging
@@ -16,6 +19,37 @@ app = typer.Typer(
     help="Application de gestion de vidéothèque",
 )
 container = Container()
+
+# Etat global pour les options de verbosite
+state = {"verbose": 0, "quiet": False}
+
+
+@app.callback()
+def main_callback(
+    verbose: Annotated[
+        int,
+        typer.Option(
+            "--verbose", "-v", count=True, help="Augmenter la verbosite (-v, -vv, -vvv)"
+        ),
+    ] = 0,
+    quiet: Annotated[
+        bool,
+        typer.Option("--quiet", "-q", help="Mode silencieux (erreurs uniquement)"),
+    ] = False,
+) -> None:
+    """CineOrg - Gestion de videotheque personnelle."""
+    if quiet:
+        state["quiet"] = True
+    else:
+        state["verbose"] = verbose
+
+
+# Monter les commandes depuis commands.py
+app.command()(process)
+app.command()(pending)
+
+# Monter validate_app comme sous-commande
+app.add_typer(validate_app, name="validate")
 
 
 def get_config() -> Settings:

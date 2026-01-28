@@ -332,6 +332,18 @@ class ValidationService:
         """
         return self._pending_repo.list_pending()
 
+    def get_pending_by_id(self, pending_id: str) -> Optional[PendingValidation]:
+        """
+        Recupere une validation en attente par son ID.
+
+        Args:
+            pending_id: ID de la validation a recuperer
+
+        Returns:
+            PendingValidation si trouve, None sinon
+        """
+        return self._pending_repo.get_by_id(pending_id)
+
     def list_validated(self) -> list[PendingValidation]:
         """
         Liste toutes les validations avec statut 'validated'.
