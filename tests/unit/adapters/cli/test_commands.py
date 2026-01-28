@@ -4,6 +4,7 @@ Tests unitaires pour les commandes CLI principales.
 Tests couvrant:
 - process: workflow complet avec filtrage et dry-run
 - pending: affichage des fichiers en attente
+- import: import de videotheque existante
 - validate file: validation d'un fichier par ID
 """
 
@@ -15,10 +16,12 @@ from typer.testing import CliRunner
 
 from src.adapters.cli.commands import (
     MediaFilter,
+    _import_library_async,
     _pending_async,
     _process_async,
     _render_pending_panel,
     _validate_file_async,
+    import_library,
     pending,
     process,
     validate_file,
@@ -607,3 +610,157 @@ class TestCLIIntegration:
         result = runner.invoke(app, ["--help"])
         assert "--quiet" in result.output
         assert "-q" in result.output
+
+    def test_import_help(self):
+        """import --help affiche l'aide."""
+        from src.main import app
+
+        result = runner.invoke(app, ["import", "--help"])
+        assert result.exit_code == 0
+        assert "--dry-run" in result.output
+        assert "STORAGE_DIR" in result.output
+
+    def test_import_in_global_help(self):
+        """import apparait dans l'aide globale."""
+        from src.main import app
+
+        result = runner.invoke(app, ["--help"])
+        assert "import" in result.output
+
+
+# ============================================================================
+# Tests import command
+# ============================================================================
+
+
+class TestImportCommand:
+    """Tests pour la commande import."""
+
+    @pytest.mark.asyncio
+    async def test_import_dry_run_shows_message(self, mock_container, tmp_path):
+        """import --dry-run affiche le message dry-run."""
+        # Creer un repertoire vide
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+
+        # Mock importer service qui ne retourne rien
+        importer_mock = MagicMock()
+        importer_mock.scan_library.return_value = iter([])
+        mock_container.importer_service.return_value = importer_mock
+
+        with patch("src.adapters.cli.commands.console") as mock_console:
+            await _import_library_async(storage_dir, dry_run=True)
+
+        calls = [str(call) for call in mock_console.print.call_args_list]
+        assert any("dry-run" in str(call).lower() for call in calls)
+
+    @pytest.mark.asyncio
+    async def test_import_counts_imported_files(self, mock_container, tmp_path):
+        """import compte correctement les fichiers importes."""
+        from src.services.importer import ImportDecision, ImportResult
+
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+
+        # Mock importer service avec 2 fichiers importes
+        importer_mock = MagicMock()
+        importer_mock.scan_library.return_value = iter([
+            ImportResult(filename="film1.mkv", decision=ImportDecision.IMPORT),
+            ImportResult(filename="film2.mkv", decision=ImportDecision.IMPORT),
+        ])
+        mock_container.importer_service.return_value = importer_mock
+
+        with patch("src.adapters.cli.commands.console") as mock_console:
+            await _import_library_async(storage_dir, dry_run=False)
+
+        calls = [str(call) for call in mock_console.print.call_args_list]
+        # Verifier que le resume affiche "2 importe(s)"
+        assert any("2" in str(call) and "importe" in str(call) for call in calls)
+
+    @pytest.mark.asyncio
+    async def test_import_counts_skipped_files(self, mock_container, tmp_path):
+        """import compte correctement les fichiers ignores."""
+        from src.services.importer import ImportDecision, ImportResult
+
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+
+        # Mock importer service avec 1 fichier skip
+        importer_mock = MagicMock()
+        importer_mock.scan_library.return_value = iter([
+            ImportResult(filename="film1.mkv", decision=ImportDecision.SKIP_KNOWN),
+        ])
+        mock_container.importer_service.return_value = importer_mock
+
+        with patch("src.adapters.cli.commands.console") as mock_console:
+            await _import_library_async(storage_dir, dry_run=False)
+
+        calls = [str(call) for call in mock_console.print.call_args_list]
+        # Verifier que le resume affiche "1 ignore(s)"
+        assert any("1" in str(call) and "ignore" in str(call) for call in calls)
+
+    @pytest.mark.asyncio
+    async def test_import_counts_errors(self, mock_container, tmp_path):
+        """import compte et affiche les erreurs."""
+        from src.services.importer import ImportDecision, ImportResult
+
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+
+        # Mock importer service avec 1 erreur
+        importer_mock = MagicMock()
+        importer_mock.scan_library.return_value = iter([
+            ImportResult(
+                filename="broken.mkv",
+                decision=ImportDecision.ERROR,
+                error_message="Access denied"
+            ),
+        ])
+        mock_container.importer_service.return_value = importer_mock
+
+        with patch("src.adapters.cli.commands.console") as mock_console:
+            await _import_library_async(storage_dir, dry_run=False)
+
+        calls = [str(call) for call in mock_console.print.call_args_list]
+        # Verifier que le resume affiche "1 erreur(s)"
+        assert any("1" in str(call) and "erreur" in str(call) for call in calls)
+        # Verifier que l'erreur est affichee
+        assert any("Access denied" in str(call) for call in calls)
+
+    @pytest.mark.asyncio
+    async def test_import_nonexistent_directory_fails(self, mock_container):
+        """import avec repertoire inexistant retourne erreur."""
+        storage_dir = Path("/nonexistent/path/that/does/not/exist")
+
+        with patch("src.adapters.cli.commands.console") as mock_console:
+            from click.exceptions import Exit
+            with pytest.raises(Exit) as exc_info:
+                await _import_library_async(storage_dir, dry_run=False)
+
+        assert exc_info.value.exit_code == 1
+        calls = [str(call) for call in mock_console.print.call_args_list]
+        assert any("Erreur" in str(call) or "introuvable" in str(call) for call in calls)
+
+    @pytest.mark.asyncio
+    async def test_import_uses_config_storage_dir_when_none(self, mock_container, tmp_path):
+        """import utilise storage_dir depuis config si non fourni."""
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+
+        # Configurer le mock pour retourner notre storage_dir
+        mock_container.config.return_value = MagicMock(
+            storage_dir=str(storage_dir),
+            video_dir="/video",
+        )
+
+        importer_mock = MagicMock()
+        importer_mock.scan_library.return_value = iter([])
+        mock_container.importer_service.return_value = importer_mock
+
+        with patch("src.adapters.cli.commands.console"):
+            await _import_library_async(None, dry_run=False)
+
+        # Verifier que scan_library a ete appele avec le bon path
+        importer_mock.scan_library.assert_called_once()
+        called_path = importer_mock.scan_library.call_args[0][0]
+        assert str(called_path) == str(storage_dir)

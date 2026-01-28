@@ -9,7 +9,7 @@ from typing import Annotated
 import typer
 from loguru import logger
 
-from .adapters.cli.commands import pending, process, validate_app
+from .adapters.cli.commands import import_library, pending, process, validate_app
 from .config import Settings
 from .container import Container
 from .logging_config import configure_logging
@@ -47,6 +47,8 @@ def main_callback(
 # Monter les commandes depuis commands.py
 app.command()(process)
 app.command()(pending)
+# Note: "import" est un mot reserve Python, donc on utilise name= explicitement
+app.command(name="import")(import_library)
 
 # Monter validate_app comme sous-commande
 app.add_typer(validate_app, name="validate")
