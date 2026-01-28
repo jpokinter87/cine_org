@@ -22,6 +22,8 @@ from .infrastructure.persistence.repositories import (
     SQLModelVideoFileRepository,
     SQLModelPendingValidationRepository,
 )
+from .infrastructure.persistence.hash_service import compute_file_hash
+from .services.importer import ImporterService
 from .services.matcher import MatcherService
 from .services.scanner import ScannerService
 from .services.renamer import RenamerService
@@ -140,4 +142,16 @@ class Container(containers.DeclarativeContainer):
         matcher=matcher_service,
         tmdb_client=tmdb_client,
         tvdb_client=tvdb_client,
+    )
+
+    # Service d'import de videotheque - Factory car depend de repositories
+    # Utiliser: container.importer_service(dry_run=True/False)
+    importer_service = providers.Factory(
+        ImporterService,
+        file_system=file_system,
+        filename_parser=filename_parser,
+        media_info_extractor=media_info_extractor,
+        video_file_repo=video_file_repository,
+        pending_repo=pending_validation_repository,
+        compute_hash_fn=compute_file_hash,
     )

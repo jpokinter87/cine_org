@@ -4,6 +4,7 @@ Commandes Typer pour la validation des fichiers video.
 Ce module fournit les commandes CLI:
 - process: Workflow complet (scan -> matching -> validation -> transfert)
 - pending: Liste des fichiers en attente de validation
+- import: Import d'une videotheque existante
 - validate auto: Validation automatique (score >= 85% et candidat unique)
 - validate manual: Validation manuelle interactive
 - validate batch: Execution du batch de transferts pour les fichiers valides
@@ -14,7 +15,7 @@ import asyncio
 import re
 from enum import Enum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import typer
 from rich.panel import Panel
@@ -791,3 +792,94 @@ async def _validate_file_async(file_id: str) -> None:
         if candidate:
             details = await validation_svc.validate_candidate(pend, candidate)
             console.print(f"[green]Fichier valide: {details.title}[/green]")
+
+
+# ============================================================================
+# Commande import
+# ============================================================================
+
+
+def import_library(
+    storage_dir: Annotated[
+        Optional[Path],
+        typer.Argument(help="Repertoire de la videotheque a importer"),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Simule sans modifier la BDD"),
+    ] = False,
+) -> None:
+    """Importe une videotheque existante dans la base de donnees."""
+    asyncio.run(_import_library_async(storage_dir, dry_run))
+
+
+async def _import_library_async(storage_dir: Optional[Path], dry_run: bool) -> None:
+    """Implementation async de la commande import."""
+    from src.services.importer import ImportDecision
+
+    container = Container()
+    config = container.config()
+    container.database.init()
+
+    # Utiliser storage_dir depuis config si non fourni
+    if storage_dir is None:
+        storage_dir = Path(config.storage_dir)
+
+    # Verifier que le repertoire existe
+    if not storage_dir.exists():
+        console.print(f"[red]Erreur:[/red] Repertoire introuvable: {storage_dir}")
+        raise typer.Exit(code=1)
+
+    if dry_run:
+        console.print("[yellow]Mode dry-run - aucune modification[/yellow]\n")
+
+    # Creer le service d'import
+    importer = container.importer_service(dry_run=dry_run)
+
+    # Compteurs
+    imported = 0
+    skipped = 0
+    errors = 0
+
+    console.print(f"[bold cyan]Import de la videotheque[/bold cyan]: {storage_dir}\n")
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        console=console,
+    ) as progress:
+        import_task = progress.add_task("[cyan]Scan en cours...", total=None)
+
+        for result in importer.scan_library(storage_dir):
+            # Mettre a jour la description avec le nom du fichier
+            progress.update(import_task, description=f"[cyan]{result.filename}")
+
+            # Mettre a jour les compteurs
+            if result.decision == ImportDecision.IMPORT:
+                imported += 1
+            elif result.decision == ImportDecision.SKIP_KNOWN:
+                skipped += 1
+            elif result.decision == ImportDecision.UPDATE_PATH:
+                skipped += 1  # Compte comme skip (fichier deja connu)
+            elif result.decision == ImportDecision.ERROR:
+                errors += 1
+                console.print(
+                    f"[red]Erreur:[/red] {result.filename}: {result.error_message}"
+                )
+
+        # Marquer comme termine
+        progress.update(
+            import_task,
+            total=imported + skipped + errors,
+            completed=imported + skipped + errors,
+            description="[green]Termine",
+        )
+
+    # Afficher le resume final
+    console.print("\n[bold]Resume de l'import:[/bold]")
+    console.print(f"  [green]{imported}[/green] importe(s)")
+    console.print(f"  [yellow]{skipped}[/yellow] ignore(s)")
+    if errors > 0:
+        console.print(f"  [red]{errors}[/red] erreur(s)")
