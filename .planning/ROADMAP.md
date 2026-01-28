@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Persistance** - Base SQLite avec SQLModel, tables metier
 - [x] **Phase 5: Organisation Fichiers** - Renommage, structure repertoires, symlinks
 - [x] **Phase 6: Validation** - Matching automatique et validation manuelle CLI
-- [ ] **Phase 7: CLI Principale** - Commandes process, pending, validate
+- [x] **Phase 7: CLI Principale** - Commandes process, pending, validate
 - [ ] **Phase 8: Import et Maintenance** - Import videotheque existante, reparation, verification
 
 ## Phase Details
@@ -128,7 +128,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 07-01-PLAN.md — Commandes CLI process, pending, validate avec callback verbose/quiet et integration validate_app
+- [x] 07-01-PLAN.md — Commandes CLI process, pending, validate avec callback verbose/quiet et integration validate_app
 
 ### Phase 8: Import et Maintenance
 **Goal**: Importer une videotheque existante dans la BDD et fournir les outils de maintenance (symlinks, integrite)
@@ -159,7 +159,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 4. Persistance | 2/2 | Complete | 2026-01-27 |
 | 5. Organisation Fichiers | 2/2 | Complete | 2026-01-27 |
 | 6. Validation | 2/2 | Complete | 2026-01-28 |
-| 7. CLI Principale | 0/1 | Not started | - |
+| 7. CLI Principale | 1/1 | Complete | 2026-01-28 |
 | 8. Import et Maintenance | 0/2 | Not started | - |
 
 ---

@@ -58,9 +58,9 @@
 
 ### CLI
 
-- [ ] **CLI-01**: Commande process (scan -> parsing -> matching -> validation -> transfert)
-- [ ] **CLI-02**: Commande pending (afficher fichiers en attente de validation)
-- [ ] **CLI-03**: Commande validate (valider un fichier specifique)
+- [x] **CLI-01**: Commande process (scan -> parsing -> matching -> validation -> transfert)
+- [x] **CLI-02**: Commande pending (afficher fichiers en attente de validation)
+- [x] **CLI-03**: Commande validate (valider un fichier specifique)
 - [ ] **CLI-04**: Commande import (importer videotheque existante)
 - [ ] **CLI-05**: Commande enrich (enrichir metadonnees via API)
 - [ ] **CLI-06**: Commande repair-links (analyser et reparer symlinks)
@@ -125,9 +125,9 @@
 | VALID-02 | Phase 6 | Complete |
 | VALID-03 | Phase 6 | Complete |
 | VALID-04 | Phase 6 | Complete |
-| CLI-01 | Phase 7 | Pending |
-| CLI-02 | Phase 7 | Pending |
-| CLI-03 | Phase 7 | Pending |
+| CLI-01 | Phase 7 | Complete |
+| CLI-02 | Phase 7 | Complete |
+| CLI-03 | Phase 7 | Complete |
 | CLI-04 | Phase 8 | Pending |
 | CLI-05 | Phase 8 | Pending |
 | CLI-06 | Phase 8 | Pending |
@@ -144,4 +144,4 @@
 
 ---
 *Requirements defined: 2025-01-26*
-*Last updated: 2026-01-28 after Phase 6 completion*
+*Last updated: 2026-01-28 after Phase 7 completion*
