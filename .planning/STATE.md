@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Architecture propre avec separation claire entre logique metier et interfaces
-**Current focus:** Phase 7 - CLI Principale (COMPLETE)
+**Current focus:** Phase 8 - Import et Maintenance (In Progress)
 
 ## Current Position
 
-Phase: 7 of 8 (CLI Principale)
-Plan: 1 of 1 in current phase (COMPLETE)
-Status: Phase complete
-Last activity: 2026-01-28 - Phase 7 verified and complete
+Phase: 8 of 8 (Import et Maintenance)
+Plan: 1 of 2 in current phase (COMPLETE)
+Status: In progress
+Last activity: 2026-01-28 - Completed 08-01-PLAN.md
 
-Progress: [██████████████████░] 87%
+Progress: [███████████████████░] 94%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 15
+- Total plans completed: 16
 - Average duration: 4.5 min
-- Total execution time: 72 min
+- Total execution time: 77 min
 
 **By Phase:**
 
@@ -34,9 +34,10 @@ Progress: [██████████████████░] 87%
 | 05-organisation-fichiers | 2 | 11 min | 5.5 min |
 | 06-validation | 2 | 12 min | 6 min |
 | 07-cli-principale | 1 | 7 min | 7 min |
+| 08-import-et-maintenance | 1 | 5 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 07-01 (7 min), 06-02 (8 min), 06-01 (4 min), 05-02 (4 min), 05-01 (7 min)
+- Last 5 plans: 08-01 (5 min), 07-01 (7 min), 06-02 (8 min), 06-01 (4 min), 05-02 (4 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -97,6 +98,9 @@ Recent decisions affecting current work:
 - validate file as subcommand (not direct command) to avoid namespace conflict
 - database.init() is synchronous - removed erroneous await calls
 - pending sorted by max candidate score descending for priority display
+- Hash-first duplicate detection: check by hash before path for import
+- Dry-run mode via constructor injection for testability
+- Generator pattern for scan_library to support progress streaming
 
 ### Pending Todos
 
@@ -108,6 +112,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-28T19:24:56Z
-Stopped at: Completed 07-01-PLAN.md
+Last session: 2026-01-28T19:59:57Z
+Stopped at: Completed 08-01-PLAN.md
 Resume file: None
