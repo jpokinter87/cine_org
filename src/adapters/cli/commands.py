@@ -89,7 +89,7 @@ def validate_auto() -> None:
 async def _validate_auto_async() -> None:
     """Implementation async de la validation automatique."""
     container = Container()
-    await container.database.init()
+    container.database.init()
 
     service = container.validation_service()
     pending_list = service.list_pending()
@@ -120,7 +120,7 @@ def validate_manual() -> None:
 async def _validate_manual_async() -> None:
     """Implementation async de la validation manuelle."""
     container = Container()
-    await container.database.init()
+    container.database.init()
 
     service = container.validation_service()
     pending_list = service.list_pending()
@@ -191,7 +191,7 @@ async def _validate_batch_async() -> None:
     """Implementation async du batch de transferts."""
     container = Container()
     config = container.config()
-    await container.database.init()
+    container.database.init()
 
     # Recuperer les services necessaires
     service = container.validation_service()
@@ -362,7 +362,7 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
     """Implementation async du workflow complet."""
     container = Container()
     config = container.config()
-    await container.database.init()
+    container.database.init()
 
     scanner = container.scanner_service()
     validation_svc = container.validation_service()
@@ -659,7 +659,7 @@ def pending(
 async def _pending_async(all_files: bool) -> None:
     """Implementation async de la commande pending."""
     container = Container()
-    await container.database.init()
+    container.database.init()
 
     validation_svc = container.validation_service()
     pending_list = validation_svc.list_pending()
@@ -740,7 +740,7 @@ def validate_file(
 async def _validate_file_async(file_id: str) -> None:
     """Implementation async de validate file."""
     container = Container()
-    await container.database.init()
+    container.database.init()
 
     validation_svc = container.validation_service()
 

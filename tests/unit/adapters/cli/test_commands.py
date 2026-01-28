@@ -41,7 +41,7 @@ def mock_container():
     with patch("src.adapters.cli.commands.Container") as mock:
         container_instance = MagicMock()
         mock.return_value = container_instance
-        container_instance.database.init = AsyncMock()
+        container_instance.database.init = MagicMock()
         container_instance.config.return_value = MagicMock(
             storage_dir="/storage",
             video_dir="/video",
