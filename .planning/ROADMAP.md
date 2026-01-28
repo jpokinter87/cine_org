@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Organisation Fichiers** - Renommage, structure repertoires, symlinks
 - [x] **Phase 6: Validation** - Matching automatique et validation manuelle CLI
 - [x] **Phase 7: CLI Principale** - Commandes process, pending, validate
-- [ ] **Phase 8: Import et Maintenance** - Import videotheque existante, reparation, verification
+- [x] **Phase 8: Import et Maintenance** - Import videotheque existante, reparation, verification
 
 ## Phase Details
 
@@ -143,8 +143,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — ImporterService et commande import avec detection doublons par hash
-- [ ] 08-02-PLAN.md — EnricherService, IntegrityChecker, RepairService et commandes enrich, repair-links, check
+- [x] 08-01-PLAN.md — ImporterService et commande import avec detection doublons par hash
+- [x] 08-02-PLAN.md — EnricherService, IntegrityChecker, RepairService et commandes enrich, repair-links, check
 
 ## Progress
 
@@ -160,7 +160,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 5. Organisation Fichiers | 2/2 | Complete | 2026-01-27 |
 | 6. Validation | 2/2 | Complete | 2026-01-28 |
 | 7. CLI Principale | 1/1 | Complete | 2026-01-28 |
-| 8. Import et Maintenance | 0/2 | Planned | - |
+| 8. Import et Maintenance | 2/2 | Complete | 2026-01-28 |
 
 ---
 *Roadmap created: 2026-01-26*
@@ -171,4 +171,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 *Phase 5 planned: 2026-01-27*
 *Phase 6 planned: 2026-01-27*
 *Phase 7 planned: 2026-01-28*
+*Phase 8 complete: 2026-01-28*
 *Total: 8 phases, 17 plans, 32 requirements*

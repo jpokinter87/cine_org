@@ -51,20 +51,20 @@
 
 ### Import
 
-- [ ] **IMP-01**: Scan videotheque existante et import dans BDD
-- [ ] **IMP-02**: Enrichissement metadonnees via API avec rate limiting
-- [ ] **IMP-03**: Detection et reparation symlinks casses
-- [ ] **IMP-04**: Verification integrite (coherence BDD vs fichiers reels)
+- [x] **IMP-01**: Scan videotheque existante et import dans BDD
+- [x] **IMP-02**: Enrichissement metadonnees via API avec rate limiting
+- [x] **IMP-03**: Detection et reparation symlinks casses
+- [x] **IMP-04**: Verification integrite (coherence BDD vs fichiers reels)
 
 ### CLI
 
 - [x] **CLI-01**: Commande process (scan -> parsing -> matching -> validation -> transfert)
 - [x] **CLI-02**: Commande pending (afficher fichiers en attente de validation)
 - [x] **CLI-03**: Commande validate (valider un fichier specifique)
-- [ ] **CLI-04**: Commande import (importer videotheque existante)
-- [ ] **CLI-05**: Commande enrich (enrichir metadonnees via API)
-- [ ] **CLI-06**: Commande repair-links (analyser et reparer symlinks)
-- [ ] **CLI-07**: Commande check (verifier integrite videotheque)
+- [x] **CLI-04**: Commande import (importer videotheque existante)
+- [x] **CLI-05**: Commande enrich (enrichir metadonnees via API)
+- [x] **CLI-06**: Commande repair-links (analyser et reparer symlinks)
+- [x] **CLI-07**: Commande check (verifier integrite videotheque)
 
 ## v2 Requirements
 
@@ -128,14 +128,14 @@
 | CLI-01 | Phase 7 | Complete |
 | CLI-02 | Phase 7 | Complete |
 | CLI-03 | Phase 7 | Complete |
-| CLI-04 | Phase 8 | Pending |
-| CLI-05 | Phase 8 | Pending |
-| CLI-06 | Phase 8 | Pending |
-| CLI-07 | Phase 8 | Pending |
-| IMP-01 | Phase 8 | Pending |
-| IMP-02 | Phase 8 | Pending |
-| IMP-03 | Phase 8 | Pending |
-| IMP-04 | Phase 8 | Pending |
+| CLI-04 | Phase 8 | Complete |
+| CLI-05 | Phase 8 | Complete |
+| CLI-06 | Phase 8 | Complete |
+| CLI-07 | Phase 8 | Complete |
+| IMP-01 | Phase 8 | Complete |
+| IMP-02 | Phase 8 | Complete |
+| IMP-03 | Phase 8 | Complete |
+| IMP-04 | Phase 8 | Complete |
 
 **Coverage:**
 - v1 requirements: 32 total
@@ -144,4 +144,4 @@
 
 ---
 *Requirements defined: 2025-01-26*
-*Last updated: 2026-01-28 after Phase 7 completion*
+*Last updated: 2026-01-28 after Phase 8 completion*
