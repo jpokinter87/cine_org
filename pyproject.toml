@@ -1,0 +1,40 @@
+[project]
+name = "cine-org"
+version = "1.0.0"
+description = "Application de gestion de videotheque personnelle"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    "loguru>=0.7.0",
+    "pydantic-settings>=2.0.0",
+    "sqlmodel>=0.0.14",
+    "httpx>=0.25.0",
+    "guessit>=3.7.0",
+    "pymediainfo>=6.0.0",
+    "diskcache>=5.6.0",
+    "tenacity>=8.2.0",
+    "rapidfuzz>=3.0.0",
+    "xxhash>=3.4.0",
+    "dependency-injector>=4.41.0",
+    "pathvalidate>=3.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.0",
+    "respx>=0.20.0",
+]
+
+[project.scripts]
+cineorg = "src.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
