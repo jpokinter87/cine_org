@@ -140,11 +140,11 @@ Plans:
   3. La commande repair-links detecte et repare les symlinks casses
   4. La commande check verifie la coherence entre BDD et fichiers reels
   5. La commande enrich permet d'enrichir les metadonnees via API pour les fichiers existants
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 08-01: Import videotheque existante
-- [ ] 08-02: Commandes maintenance (enrich, repair-links, check)
+- [ ] 08-01-PLAN.md — ImporterService et commande import avec detection doublons par hash
+- [ ] 08-02-PLAN.md — EnricherService, IntegrityChecker, RepairService et commandes enrich, repair-links, check
 
 ## Progress
 
@@ -160,7 +160,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 5. Organisation Fichiers | 2/2 | Complete | 2026-01-27 |
 | 6. Validation | 2/2 | Complete | 2026-01-28 |
 | 7. CLI Principale | 1/1 | Complete | 2026-01-28 |
-| 8. Import et Maintenance | 0/2 | Not started | - |
+| 8. Import et Maintenance | 0/2 | Planned | - |
 
 ---
 *Roadmap created: 2026-01-26*
