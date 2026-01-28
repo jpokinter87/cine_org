@@ -125,10 +125,10 @@ Plans:
   1. La commande process execute le workflow complet: scan -> parsing -> matching -> validation -> transfert
   2. La commande pending affiche la liste des fichiers en attente de validation
   3. La commande validate permet de valider un fichier specifique par son ID
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 07-01: Commandes process, pending, validate
+- [ ] 07-01-PLAN.md — Commandes CLI process, pending, validate avec callback verbose/quiet et integration validate_app
 
 ### Phase 8: Import et Maintenance
 **Goal**: Importer une videotheque existante dans la BDD et fournir les outils de maintenance (symlinks, integrite)
@@ -170,4 +170,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 *Phase 4 planned: 2026-01-27*
 *Phase 5 planned: 2026-01-27*
 *Phase 6 planned: 2026-01-27*
+*Phase 7 planned: 2026-01-28*
 *Total: 8 phases, 17 plans, 32 requirements*
