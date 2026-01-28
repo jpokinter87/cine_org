@@ -23,7 +23,9 @@ from .infrastructure.persistence.repositories import (
     SQLModelPendingValidationRepository,
 )
 from .infrastructure.persistence.hash_service import compute_file_hash
+from .services.enricher import EnricherService
 from .services.importer import ImporterService
+from .services.integrity import IntegrityChecker, RepairService
 from .services.matcher import MatcherService
 from .services.scanner import ScannerService
 from .services.renamer import RenamerService
@@ -154,4 +156,30 @@ class Container(containers.DeclarativeContainer):
         video_file_repo=video_file_repository,
         pending_repo=pending_validation_repository,
         compute_hash_fn=compute_file_hash,
+    )
+
+    # Service d'enrichissement - Factory car depend de repositories (sessions fraiches)
+    enricher_service = providers.Factory(
+        EnricherService,
+        pending_repo=pending_validation_repository,
+        video_file_repo=video_file_repository,
+        matcher=matcher_service,
+        tmdb_client=tmdb_client,
+        tvdb_client=tvdb_client,
+    )
+
+    # Service de verification d'integrite - Factory
+    # Note: storage_dir et video_dir doivent etre passes explicitement
+    integrity_checker = providers.Factory(
+        IntegrityChecker,
+        file_system=file_system,
+        video_file_repo=video_file_repository,
+    )
+
+    # Service de reparation - Factory
+    # Note: storage_dir, video_dir et trash_dir doivent etre passes explicitement
+    repair_service = providers.Factory(
+        RepairService,
+        file_system=file_system,
+        video_file_repo=video_file_repository,
     )

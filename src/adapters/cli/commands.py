@@ -883,3 +883,256 @@ async def _import_library_async(storage_dir: Optional[Path], dry_run: bool) -> N
     console.print(f"  [yellow]{skipped}[/yellow] ignore(s)")
     if errors > 0:
         console.print(f"  [red]{errors}[/red] erreur(s)")
+
+
+# ============================================================================
+# Commande enrich
+# ============================================================================
+
+
+def enrich() -> None:
+    """Enrichit les metadonnees des fichiers via API."""
+    asyncio.run(_enrich_async())
+
+
+async def _enrich_async() -> None:
+    """Implementation async de la commande enrich."""
+    container = Container()
+    container.database.init()
+
+    enricher = container.enricher_service()
+
+    # Recuperer les fichiers a enrichir
+    pending = enricher.list_pending_enrichment()
+
+    if not pending:
+        console.print("[yellow]Aucun fichier a enrichir.[/yellow]")
+        console.print("[dim]Tous les fichiers ont deja des candidats.[/dim]")
+        return
+
+    console.print(f"[bold cyan]Enrichissement API[/bold cyan]: {len(pending)} fichier(s)\n")
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        console=console,
+    ) as progress:
+        enrich_task = progress.add_task("[cyan]Enrichissement...", total=len(pending))
+
+        def update_description(filename: str) -> None:
+            progress.update(enrich_task, description=f"[cyan]{filename}")
+
+        def advance() -> None:
+            progress.advance(enrich_task)
+
+        result = await enricher.enrich_batch(
+            items=pending,
+            progress_callback=update_description,
+            advance_callback=advance,
+        )
+
+    # Afficher le resume
+    console.print("\n[bold]Resume de l'enrichissement:[/bold]")
+    console.print(f"  [green]{result.enriched}[/green] enrichi(s)")
+    console.print(f"  [red]{result.failed}[/red] echec(s)")
+    if result.skipped > 0:
+        console.print(f"  [yellow]{result.skipped}[/yellow] ignore(s)")
+
+
+# ============================================================================
+# Commande repair-links
+# ============================================================================
+
+
+def repair_links() -> None:
+    """Detecte et repare les symlinks casses interactivement."""
+    asyncio.run(_repair_links_async())
+
+
+async def _repair_links_async() -> None:
+    """Implementation async de la commande repair-links."""
+    from rich.prompt import Prompt
+
+    from src.services.integrity import RepairAction, RepairActionType
+
+    container = Container()
+    config = container.config()
+    container.database.init()
+
+    # Creer le service de reparation avec les paths
+    repair = container.repair_service(
+        storage_dir=Path(config.storage_dir),
+        video_dir=Path(config.video_dir),
+        trash_dir=Path(config.storage_dir).parent / "trash",  # Dossier trash adjacent
+    )
+
+    # Trouver les symlinks casses
+    broken = repair.find_broken_symlinks()
+
+    if not broken:
+        console.print("[green]Aucun symlink casse detecte.[/green]")
+        return
+
+    console.print(f"[bold cyan]Symlinks casses[/bold cyan]: {len(broken)} detecte(s)\n")
+
+    actions: list[RepairAction] = []
+
+    for link in broken:
+        # Afficher les infos du lien
+        try:
+            original_target = link.readlink()
+        except OSError:
+            original_target = Path("<inconnu>")
+
+        panel_content = [
+            f"[bold]{link.name}[/bold]",
+            f"Chemin: {link}",
+            f"Cible originale: [red]{original_target}[/red]",
+        ]
+        console.print(Panel("\n".join(panel_content), title="Symlink casse"))
+
+        # Chercher des cibles possibles
+        targets = repair.find_possible_targets(link)
+
+        if targets:
+            console.print(f"\n[green]{len(targets)}[/green] cible(s) possible(s):")
+            for i, target in enumerate(targets[:5], 1):
+                console.print(f"  {i}. {target}")
+            if len(targets) > 5:
+                console.print(f"  [dim]... et {len(targets) - 5} autre(s)[/dim]")
+
+        # Prompt interactif
+        choices = ["chercher", "supprimer", "ignorer", "quitter"]
+        choice = Prompt.ask(
+            "\nAction",
+            choices=choices,
+            default="ignorer",
+        )
+
+        if choice == "quitter":
+            console.print("[yellow]Reparation interrompue.[/yellow]")
+            break
+
+        elif choice == "ignorer":
+            actions.append(
+                RepairAction(link=link, action=RepairActionType.SKIPPED)
+            )
+            console.print("[dim]Ignore[/dim]\n")
+
+        elif choice == "supprimer":
+            dest = repair.move_to_orphans(link)
+            if dest:
+                actions.append(
+                    RepairAction(link=link, action=RepairActionType.ORPHANED)
+                )
+                console.print(f"[yellow]Deplace vers orphans[/yellow]\n")
+            else:
+                console.print("[red]Echec du deplacement[/red]\n")
+
+        elif choice == "chercher":
+            if not targets:
+                console.print("[red]Aucune cible trouvee[/red]\n")
+                actions.append(
+                    RepairAction(link=link, action=RepairActionType.SKIPPED)
+                )
+                continue
+
+            # Selection de la cible
+            target_choices = [str(i) for i in range(1, min(6, len(targets) + 1))]
+            target_choice = Prompt.ask(
+                "Selectionner la cible",
+                choices=target_choices + ["annuler"],
+                default="1",
+            )
+
+            if target_choice == "annuler":
+                actions.append(
+                    RepairAction(link=link, action=RepairActionType.SKIPPED)
+                )
+                console.print("[dim]Annule[/dim]\n")
+            else:
+                target_idx = int(target_choice) - 1
+                new_target = targets[target_idx]
+                success = repair.repair_symlink(link, new_target)
+
+                if success:
+                    actions.append(
+                        RepairAction(
+                            link=link,
+                            action=RepairActionType.REPAIRED,
+                            new_target=new_target,
+                        )
+                    )
+                    console.print(f"[green]Repare -> {new_target}[/green]\n")
+                else:
+                    console.print("[red]Echec de la reparation[/red]\n")
+
+    # Sauvegarder le log
+    if actions:
+        log_path = repair.save_log(actions)
+        if log_path:
+            console.print(f"\n[dim]Log sauvegarde: {log_path}[/dim]")
+
+    # Resume
+    repaired = sum(1 for a in actions if a.action == RepairActionType.REPAIRED)
+    orphaned = sum(1 for a in actions if a.action == RepairActionType.ORPHANED)
+    skipped = sum(1 for a in actions if a.action == RepairActionType.SKIPPED)
+
+    console.print("\n[bold]Resume:[/bold]")
+    console.print(f"  [green]{repaired}[/green] repare(s)")
+    console.print(f"  [yellow]{orphaned}[/yellow] deplace(s) vers orphans")
+    console.print(f"  [dim]{skipped} ignore(s)[/dim]")
+
+
+# ============================================================================
+# Commande check
+# ============================================================================
+
+
+def check(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Afficher le rapport au format JSON"),
+    ] = False,
+    verify_hash: Annotated[
+        bool,
+        typer.Option("--verify-hash", help="Verifier les hash de fichiers (lent)"),
+    ] = False,
+) -> None:
+    """Verifie l'integrite de la videotheque."""
+    container = Container()
+    config = container.config()
+    container.database.init()
+
+    # Creer le checker avec les paths
+    checker = container.integrity_checker(
+        storage_dir=Path(config.storage_dir),
+        video_dir=Path(config.video_dir),
+    )
+
+    console.print("[bold cyan]Verification d'integrite[/bold cyan]\n")
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        check_task = progress.add_task("[cyan]Verification en cours...", total=None)
+
+        report = checker.check(verify_hash=verify_hash)
+
+        progress.update(check_task, description="[green]Termine")
+
+    # Afficher le rapport
+    if json_output:
+        console.print(report.to_json())
+    else:
+        console.print(report.format_text())
+
+        # Afficher les suggestions si issues detectees
+        if report.has_issues and report.suggestions:
+            console.print("\n[bold yellow]Commandes suggerees:[/bold yellow]")
+            for suggestion in report.suggestions:
+                console.print(f"  {suggestion}")

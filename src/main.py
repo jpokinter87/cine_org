@@ -9,7 +9,15 @@ from typing import Annotated
 import typer
 from loguru import logger
 
-from .adapters.cli.commands import import_library, pending, process, validate_app
+from .adapters.cli.commands import (
+    check,
+    enrich,
+    import_library,
+    pending,
+    process,
+    repair_links,
+    validate_app,
+)
 from .config import Settings
 from .container import Container
 from .logging_config import configure_logging
@@ -49,6 +57,11 @@ app.command()(process)
 app.command()(pending)
 # Note: "import" est un mot reserve Python, donc on utilise name= explicitement
 app.command(name="import")(import_library)
+
+# Commandes de maintenance
+app.command()(enrich)
+app.command(name="repair-links")(repair_links)
+app.command()(check)
 
 # Monter validate_app comme sous-commande
 app.add_typer(validate_app, name="validate")
