@@ -46,3 +46,10 @@ data/
 
 # Cache
 .cache/
+
+# Local config
+.python-version
+.env
+
+# Planning (local only)
+.planning/INTEGRATION_CHECK.md
