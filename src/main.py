@@ -136,6 +136,9 @@ def main() -> None:
         retention_count=settings.log_retention_count,
     )
 
+    # Initialise la base de données (crée les tables si nécessaire)
+    container.database.init()
+
     logger.info("Démarrage de CineOrg", version="0.1.0")
 
     # Lance la CLI

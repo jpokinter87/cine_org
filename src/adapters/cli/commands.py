@@ -412,11 +412,11 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
     # 2. Matching et creation des PendingValidation
     console.print("\n[bold cyan]Etape 2/4: Matching avec les APIs[/bold cyan]\n")
 
-    # Note: Le matching complet necessite l'orchestration avec les clients API
-    # Pour cette phase, on utilise le scanner qui fournit deja les infos parsees
-    # Le matching sera fait via le service de validation existant
     pending_repo = container.pending_validation_repository()
     video_file_repo = container.video_file_repository()
+    tmdb_client = container.tmdb_client()
+    tvdb_client = container.tvdb_client()
+    matcher = container.matcher_service()
 
     with Progress(
         SpinnerColumn(),
@@ -443,11 +443,53 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
             )
             saved_vf = video_file_repo.save(video_file)
 
-            # Creer le PendingValidation (sans candidats pour l'instant)
-            # Les candidats seront ajoutes par le matching API
+            # Rechercher les candidats via API
+            candidates = []
+            title = result.parsed_info.title
+            year = result.parsed_info.year
+
+            if result.detected_type == MediaType.MOVIE:
+                # Film -> TMDB
+                if tmdb_client and getattr(tmdb_client, "_api_key", None):
+                    try:
+                        api_results = await tmdb_client.search(title, year=year)
+                        # Scorer les resultats
+                        duration = None
+                        if result.media_info and result.media_info.duration_seconds:
+                            duration = result.media_info.duration_seconds
+                        candidates = matcher.score_results(
+                            api_results, title, year, duration
+                        )
+                    except Exception as e:
+                        console.print(f"[yellow]Erreur TMDB pour {title}: {e}[/yellow]")
+            else:
+                # Serie -> TVDB
+                if tvdb_client and getattr(tvdb_client, "_api_key", None):
+                    try:
+                        api_results = await tvdb_client.search(title, year=year)
+                        # Scorer les resultats (series: 100% titre)
+                        candidates = matcher.score_results(
+                            api_results, title, year, duration_seconds=None
+                        )
+                    except Exception as e:
+                        console.print(f"[yellow]Erreur TVDB pour {title}: {e}[/yellow]")
+
+            # Convertir les candidats en format dict pour stockage
+            candidates_data = [
+                {
+                    "id": c.id,
+                    "title": c.title,
+                    "year": c.year,
+                    "score": c.score,
+                    "source": c.source,
+                }
+                for c in candidates
+            ]
+
+            # Creer le PendingValidation avec les candidats
             pending = PendingValidation(
                 video_file=saved_vf,
-                candidates=[],
+                candidates=candidates_data,
             )
             pending_repo.save(pending)
 

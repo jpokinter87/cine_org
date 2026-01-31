@@ -27,9 +27,7 @@ Usage:
 """
 
 from src.infrastructure.persistence.database import (
-    DATA_DIR,
-    DATABASE_URL,
-    engine,
+    get_engine,
     get_session,
     init_db,
 )
@@ -52,9 +50,7 @@ from src.infrastructure.persistence.repositories import (
 
 __all__ = [
     # Database
-    "DATA_DIR",
-    "DATABASE_URL",
-    "engine",
+    "get_engine",
     "get_session",
     "init_db",
     # Hash service

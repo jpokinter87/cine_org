@@ -68,16 +68,30 @@ class TMDBClient(IMediaAPIClient):
         """
         Retourne le client HTTP, le cree si necessaire (lazy init).
 
+        Supporte les deux modes d'authentification TMDB:
+        - API Key v3 (32 caracteres hex) : passe en parametre api_key
+        - Read Access Token v4 (long JWT) : passe en header Bearer
+
         Returns:
-            httpx.AsyncClient configure avec auth Bearer
+            httpx.AsyncClient configure pour l'API TMDB
         """
         if self._client is None or self._client.is_closed:
+            # Detecter le type de cle : v3 (32 hex) vs v4 (long JWT)
+            is_v4_token = len(self._api_key) > 40
+
+            headers = {"Accept": "application/json"}
+            params = {}
+
+            if is_v4_token:
+                headers["Authorization"] = f"Bearer {self._api_key}"
+            else:
+                # API Key v3 : passer en parametre de requete
+                params["api_key"] = self._api_key
+
             self._client = httpx.AsyncClient(
                 base_url=self.TMDB_BASE_URL,
-                headers={
-                    "Authorization": f"Bearer {self._api_key}",
-                    "Accept": "application/json",
-                },
+                headers=headers,
+                params=params,
                 timeout=30.0,
             )
         return self._client
