@@ -88,15 +88,17 @@ class ScannerService:
             ScanResult pour chaque fichier video valide trouve
         """
         downloads = self._settings.downloads_dir
-        subdirs_with_hints: list[tuple[str, MediaType]] = [
-            ("Films", MediaType.MOVIE),
-            ("Series", MediaType.SERIES),
+        subdirs_with_hints: list[tuple[list[str], MediaType]] = [
+            (["Films"], MediaType.MOVIE),
+            (["Séries", "Series"], MediaType.SERIES),  # Supporte les deux variantes
         ]
 
-        for subdir_name, type_hint in subdirs_with_hints:
-            source_dir = downloads / subdir_name
-            if source_dir.exists():
-                yield from self._scan_directory(source_dir, subdir_name, type_hint)
+        for subdir_variants, type_hint in subdirs_with_hints:
+            for subdir_name in subdir_variants:
+                source_dir = downloads / subdir_name
+                if source_dir.exists():
+                    yield from self._scan_directory(source_dir, subdir_name, type_hint)
+                    break  # Ne scanner qu'une seule variante
 
     def _scan_directory(
         self,
