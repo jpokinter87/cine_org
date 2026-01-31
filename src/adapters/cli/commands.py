@@ -453,13 +453,46 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
                 if tmdb_client and getattr(tmdb_client, "_api_key", None):
                     try:
                         api_results = await tmdb_client.search(title, year=year)
-                        # Scorer les resultats
                         duration = None
                         if result.media_info and result.media_info.duration_seconds:
                             duration = result.media_info.duration_seconds
+
+                        # Premier scoring sans duree API (utilise coefficients fallback)
                         candidates = matcher.score_results(
                             api_results, title, year, duration
                         )
+
+                        # Enrichir les top 3 candidats avec leurs details (duree)
+                        # puis re-scorer avec les coefficients complets
+                        if candidates and duration:
+                            top_candidates = candidates[:3]
+                            enriched_candidates = []
+
+                            for cand in top_candidates:
+                                try:
+                                    details = await tmdb_client.get_details(cand.id)
+                                    if details and details.duration_seconds:
+                                        # Re-scorer avec la duree API et titre original
+                                        from src.services.matcher import calculate_movie_score
+                                        new_score = calculate_movie_score(
+                                            query_title=title,
+                                            query_year=year,
+                                            query_duration=duration,
+                                            candidate_title=cand.title,
+                                            candidate_year=cand.year,
+                                            candidate_duration=details.duration_seconds,
+                                            candidate_original_title=cand.original_title or details.original_title,
+                                        )
+                                        from dataclasses import replace
+                                        cand = replace(cand, score=new_score)
+                                except Exception:
+                                    pass  # Garder le score fallback
+                                enriched_candidates.append(cand)
+
+                            # Remplacer les top candidats et re-trier
+                            candidates = enriched_candidates + candidates[3:]
+                            candidates.sort(key=lambda c: c.score, reverse=True)
+
                     except Exception as e:
                         console.print(f"[yellow]Erreur TMDB pour {title}: {e}[/yellow]")
             else:

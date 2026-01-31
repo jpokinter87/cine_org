@@ -87,27 +87,53 @@ def calculate_movie_score(
     candidate_title: str,
     candidate_year: int | None,
     candidate_duration: int | None,
+    candidate_original_title: str | None = None,
 ) -> float:
     """
-    Calculate movie match score using 50% title + 25% year + 25% duration.
+    Calculate movie match score with adaptive coefficients and bilingual matching.
+
+    Score le titre sur les deux versions (localisee et originale) et garde le meilleur.
+    Coefficients adaptatifs selon la disponibilite de la duree:
+    - Avec duree: 50% titre + 25% annee + 25% duree
+    - Sans duree (fallback): 67% titre + 33% annee
 
     Args:
         query_title: Title from parsed filename
         query_year: Year from parsed filename (or None)
         query_duration: Duration in seconds from mediainfo (or None)
-        candidate_title: Title from API result
+        candidate_title: Localized title from API result
         candidate_year: Year from API result (or None)
         candidate_duration: Duration from API result (or None)
+        candidate_original_title: Original title from API (for bilingual matching)
 
     Returns:
         Match score from 0.0 to 100.0, rounded to 2 decimals
     """
+    # Scorer sur le titre localise
     title_score = _calculate_title_score(query_title, candidate_title)
-    year_score = _calculate_year_score(query_year, candidate_year)
-    duration_score = _calculate_duration_score(query_duration, candidate_duration)
 
-    # Apply weights: 50% title, 25% year, 25% duration
-    total = (title_score * 0.5) + (year_score * 0.25) + (duration_score * 0.25)
+    # Scorer aussi sur le titre original si disponible, garder le meilleur
+    if candidate_original_title:
+        original_title_score = _calculate_title_score(query_title, candidate_original_title)
+        title_score = max(title_score, original_title_score)
+
+    year_score = _calculate_year_score(query_year, candidate_year)
+
+    # Verifier si la duree est disponible des deux cotes
+    duration_available = (
+        query_duration is not None
+        and query_duration > 0
+        and candidate_duration is not None
+        and candidate_duration > 0
+    )
+
+    if duration_available:
+        # Coefficients complets: 50% titre + 25% annee + 25% duree
+        duration_score = _calculate_duration_score(query_duration, candidate_duration)
+        total = (title_score * 0.50) + (year_score * 0.25) + (duration_score * 0.25)
+    else:
+        # Fallback sans duree: 67% titre + 33% annee
+        total = (title_score * 0.67) + (year_score * 0.33)
 
     return round(total, 2)
 
@@ -174,6 +200,7 @@ class MatcherService:
                     candidate_title=result.title,
                     candidate_year=result.year,
                     candidate_duration=None,  # API results don't have duration
+                    candidate_original_title=result.original_title,
                 )
 
             # Create new SearchResult with updated score

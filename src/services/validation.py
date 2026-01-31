@@ -23,6 +23,8 @@ from src.services.matcher import MatcherService
 
 # Seuil d'auto-validation (score minimum en pourcentage)
 THRESHOLD = 85
+# Seuil eleve pour auto-validation avec plusieurs candidats
+HIGH_CONFIDENCE_THRESHOLD = 95
 
 
 class ValidationService:
@@ -76,8 +78,8 @@ class ValidationService:
         Determine si les candidats permettent une auto-validation.
 
         L'auto-validation est possible si:
-        - Il y a exactement 1 candidat
-        - Le score de ce candidat est >= 85%
+        - Candidat unique avec score >= 85%
+        - OU plusieurs candidats mais le premier a un score >= 95% (haute confiance)
 
         Args:
             candidates: Liste des candidats avec leur score
@@ -85,10 +87,20 @@ class ValidationService:
         Returns:
             True si auto-validation possible, False sinon
         """
-        if len(candidates) != 1:
+        if not candidates:
             return False
 
-        return candidates[0].score >= THRESHOLD
+        best_score = candidates[0].score
+
+        # Cas 1: Candidat unique avec score >= 85%
+        if len(candidates) == 1:
+            return best_score >= THRESHOLD
+
+        # Cas 2: Plusieurs candidats mais score tres eleve (>= 95%)
+        if best_score >= HIGH_CONFIDENCE_THRESHOLD:
+            return True
+
+        return False
 
     async def process_auto_validation(
         self, pending: PendingValidation

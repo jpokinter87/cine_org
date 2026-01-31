@@ -21,7 +21,8 @@ class SearchResult:
 
     Attributs :
         id : ID spécifique à l'API (ID TMDB ou ID TVDB)
-        title : Titre depuis l'API
+        title : Titre localisé depuis l'API
+        original_title : Titre en langue originale (pour matching bilingue)
         year : Année de sortie/diffusion
         score : Score de correspondance (0-100) calculé par le matcher
         source : Identifiant de la source API ("tmdb" ou "tvdb")
@@ -29,6 +30,7 @@ class SearchResult:
 
     id: str
     title: str
+    original_title: Optional[str] = None
     year: Optional[int] = None
     score: float = 0.0
     source: str = ""

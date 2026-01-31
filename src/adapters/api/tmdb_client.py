@@ -149,10 +149,15 @@ class TMDBClient(IMediaAPIClient):
             release_date = item.get("release_date", "")
             item_year = int(release_date[:4]) if release_date else None
 
+            # Extraire titre localise (FR) et titre original
+            localized_title = item.get("title", "")
+            original_title = item.get("original_title", "")
+
             results.append(
                 SearchResult(
                     id=str(item["id"]),
-                    title=item.get("title", item.get("original_title", "")),
+                    title=localized_title or original_title,
+                    original_title=original_title if original_title != localized_title else None,
                     year=item_year,
                     source=self.source,
                 )
