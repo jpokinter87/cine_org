@@ -27,12 +27,20 @@ class Resolution:
 
     @property
     def label(self) -> str:
-        """Retourne le libellé de résolution basé sur la hauteur."""
-        if self.height >= 2160:
+        """
+        Retourne le libelle de resolution base sur la largeur et hauteur.
+
+        Prend en compte les formats cinematographiques (2.35:1, 2.40:1)
+        ou la hauteur est reduite mais la largeur reste standard.
+        """
+        # 4K: 3840x2160 ou plus (ou largeur >= 3840 pour cinema)
+        if self.height >= 2160 or self.width >= 3840:
             return "4K"
-        elif self.height >= 1080:
+        # 1080p: 1920x1080 ou plus (ou largeur >= 1920 pour cinema)
+        elif self.height >= 1080 or self.width >= 1920:
             return "1080p"
-        elif self.height >= 720:
+        # 720p: 1280x720 ou plus (ou largeur >= 1280 pour cinema)
+        elif self.height >= 720 or self.width >= 1280:
             return "720p"
         else:
             return "SD"

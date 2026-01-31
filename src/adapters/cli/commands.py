@@ -39,20 +39,29 @@ SERIES_INFO_PATTERN = re.compile(
 )
 
 
-def _extract_series_info(filename: str) -> tuple[int, int]:
+def _extract_series_info(filename: str) -> tuple[int, int, str]:
     """
-    Extrait le numero de saison et d'episode d'un nom de fichier.
+    Extrait le numero de saison, d'episode et le titre d'episode d'un nom de fichier.
+
+    Utilise le parser guessit pour extraire les informations de serie.
 
     Args:
         filename: Nom du fichier video
 
     Returns:
-        Tuple (season_number, episode_number), defaut (1, 1) si non trouve
+        Tuple (season_number, episode_number, episode_title), defaut (1, 1, "") si non trouve
     """
-    match = SERIES_INFO_PATTERN.search(filename)
-    if match:
-        return int(match.group(1)), int(match.group(2))
-    return 1, 1
+    from src.adapters.parsing.guessit_parser import GuessitFilenameParser
+    from src.core.value_objects.parsed_info import MediaType
+
+    parser = GuessitFilenameParser()
+    parsed = parser.parse(filename, MediaType.SERIES)
+
+    season = parsed.season if parsed.season else 1
+    episode = parsed.episode if parsed.episode else 1
+    episode_title = parsed.episode_title if parsed.episode_title else ""
+
+    return season, episode, episode_title
 
 
 def _display_transfer_tree(transfers: list[dict], storage_dir: Path) -> None:
@@ -333,10 +342,9 @@ async def _validate_batch_async() -> None:
 
         # Generer le nouveau nom et chemin de destination
         if is_series:
-            # Pour les series: extraire saison/episode du nom de fichier
+            # Pour les series: extraire saison/episode/titre du nom de fichier
             filename = pending.video_file.filename if pending.video_file else ""
-            season_num, episode_num = _extract_series_info(filename)
-            episode_title = ""  # Non disponible sans parsing complet
+            season_num, episode_num, episode_title = _extract_series_info(filename)
 
             # Construire les entites Series et Episode pour renamer/organizer
             series = Series(
@@ -728,12 +736,12 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
 
         if is_series:
             filename = pend.video_file.filename if pend.video_file else ""
-            season_num, episode_num = _extract_series_info(filename)
+            season_num, episode_num, episode_title = _extract_series_info(filename)
             series = Series(title=candidate_title, year=candidate_year)
             episode = Episode(
                 season_number=season_num,
                 episode_number=episode_num,
-                title="",
+                title=episode_title,
             )
             new_filename = renamer.generate_series_filename(
                 series=series,
