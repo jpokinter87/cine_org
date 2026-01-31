@@ -39,17 +39,18 @@ SERIES_INFO_PATTERN = re.compile(
 )
 
 
-def _extract_series_info(filename: str) -> tuple[int, int, str]:
+def _extract_series_info(filename: str) -> tuple[int, int]:
     """
-    Extrait le numero de saison, d'episode et le titre d'episode d'un nom de fichier.
+    Extrait le numero de saison et d'episode d'un nom de fichier.
 
     Utilise le parser guessit pour extraire les informations de serie.
+    Le titre d'episode sera recupere depuis TVDB.
 
     Args:
         filename: Nom du fichier video
 
     Returns:
-        Tuple (season_number, episode_number, episode_title), defaut (1, 1, "") si non trouve
+        Tuple (season_number, episode_number), defaut (1, 1) si non trouve
     """
     from src.adapters.parsing.guessit_parser import GuessitFilenameParser
     from src.core.value_objects.parsed_info import MediaType
@@ -59,9 +60,8 @@ def _extract_series_info(filename: str) -> tuple[int, int, str]:
 
     season = parsed.season if parsed.season else 1
     episode = parsed.episode if parsed.episode else 1
-    episode_title = parsed.episode_title if parsed.episode_title else ""
 
-    return season, episode, episode_title
+    return season, episode
 
 
 def _display_transfer_tree(transfers: list[dict], storage_dir: Path) -> None:
@@ -284,6 +284,7 @@ async def _validate_batch_async() -> None:
     service = container.validation_service()
     renamer = container.renamer_service()
     organizer = container.organizer_service()
+    tvdb_client = container.tvdb_client()
 
     # Recuperer TransfererService avec les paths de config
     transferer = container.transferer_service(
@@ -342,9 +343,26 @@ async def _validate_batch_async() -> None:
 
         # Generer le nouveau nom et chemin de destination
         if is_series:
-            # Pour les series: extraire saison/episode/titre du nom de fichier
+            # Pour les series: extraire saison/episode du nom de fichier
             filename = pending.video_file.filename if pending.video_file else ""
-            season_num, episode_num, episode_title = _extract_series_info(filename)
+            season_num, episode_num = _extract_series_info(filename)
+
+            # Recuperer le titre d'episode depuis TVDB
+            episode_title = ""
+            if isinstance(candidate, dict):
+                series_id = candidate.get("id", "")
+            else:
+                series_id = candidate.id
+
+            if tvdb_client and getattr(tvdb_client, "_api_key", None) and series_id:
+                try:
+                    ep_details = await tvdb_client.get_episode_details(
+                        series_id, season_num, episode_num
+                    )
+                    if ep_details and ep_details.title:
+                        episode_title = ep_details.title
+                except Exception:
+                    pass  # Garder episode_title vide en cas d'erreur
 
             # Construire les entites Series et Episode pour renamer/organizer
             series = Series(
@@ -736,7 +754,25 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
 
         if is_series:
             filename = pend.video_file.filename if pend.video_file else ""
-            season_num, episode_num, episode_title = _extract_series_info(filename)
+            season_num, episode_num = _extract_series_info(filename)
+
+            # Recuperer le titre d'episode depuis TVDB
+            episode_title = ""
+            if isinstance(candidate, dict):
+                series_id = candidate.get("id", "")
+            else:
+                series_id = candidate.id
+
+            if tvdb_client and getattr(tvdb_client, "_api_key", None) and series_id:
+                try:
+                    ep_details = await tvdb_client.get_episode_details(
+                        series_id, season_num, episode_num
+                    )
+                    if ep_details and ep_details.title:
+                        episode_title = ep_details.title
+                except Exception:
+                    pass  # Garder episode_title vide en cas d'erreur
+
             series = Series(title=candidate_title, year=candidate_year)
             episode = Episode(
                 season_number=season_num,

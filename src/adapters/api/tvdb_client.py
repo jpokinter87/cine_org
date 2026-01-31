@@ -16,7 +16,12 @@ import httpx
 
 from src.adapters.api.cache import APICache
 from src.adapters.api.retry import request_with_retry
-from src.core.ports.api_clients import IMediaAPIClient, MediaDetails, SearchResult
+from src.core.ports.api_clients import (
+    EpisodeDetails,
+    IMediaAPIClient,
+    MediaDetails,
+    SearchResult,
+)
 
 
 class TVDBClient(IMediaAPIClient):
@@ -233,6 +238,75 @@ class TVDBClient(IMediaAPIClient):
         )
 
         # Cacher les details
+        await self._cache.set_details(cache_key, details)
+        return details
+
+    async def get_episode_details(
+        self,
+        series_id: str,
+        season: int,
+        episode: int,
+    ) -> Optional[EpisodeDetails]:
+        """
+        Recupere les details d'un episode specifique.
+
+        Verifie le cache avant d'appeler l'API. Les details sont caches
+        pendant 7 jours.
+
+        Args:
+            series_id: ID TVDB de la serie
+            season: Numero de saison
+            episode: Numero d'episode
+
+        Returns:
+            EpisodeDetails avec le titre de l'episode, ou None si non trouve
+        """
+        # Cache-first: verifier le cache avant toute requete HTTP
+        cache_key = f"tvdb:episode:{series_id}:S{season:02d}E{episode:02d}"
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        # Cache miss: obtenir le token et faire la requete
+        await self._ensure_token()
+        client = await self._get_client()
+
+        try:
+            # API v3: endpoint /series/{id}/episodes/query avec filtres
+            response = await request_with_retry(
+                client,
+                "GET",
+                f"/series/{series_id}/episodes/query",
+                params={
+                    "airedSeason": str(season),
+                    "airedEpisode": str(episode),
+                },
+                headers=self._get_auth_headers(),
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            raise
+
+        data = response.json()
+        episodes = data.get("data", [])
+
+        if not episodes:
+            return None
+
+        # Prendre le premier episode correspondant
+        ep_data = episodes[0]
+
+        details = EpisodeDetails(
+            id=str(ep_data.get("id", "")),
+            title=ep_data.get("episodeName", ""),
+            season_number=ep_data.get("airedSeason", season),
+            episode_number=ep_data.get("airedEpisodeNumber", episode),
+            overview=ep_data.get("overview"),
+            air_date=ep_data.get("firstAired"),
+        )
+
+        # Cacher les details (utilise set_details car meme duree de cache)
         await self._cache.set_details(cache_key, details)
         return details
 

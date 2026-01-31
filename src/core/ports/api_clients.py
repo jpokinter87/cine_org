@@ -65,6 +65,30 @@ class MediaDetails:
     poster_url: Optional[str] = None
 
 
+@dataclass
+class EpisodeDetails:
+    """
+    Informations detaillees d'un episode de serie TV.
+
+    Utilisees pour enrichir le nom de fichier avec le titre de l'episode.
+
+    Attributs :
+        id : ID TVDB de l'episode
+        title : Titre de l'episode
+        season_number : Numero de saison
+        episode_number : Numero d'episode
+        overview : Resume de l'episode (optionnel)
+        air_date : Date de diffusion (optionnel)
+    """
+
+    id: str
+    title: str
+    season_number: int
+    episode_number: int
+    overview: Optional[str] = None
+    air_date: Optional[str] = None
+
+
 class IMediaAPIClient(ABC):
     """
     Interface de base pour les APIs de métadonnées média.
