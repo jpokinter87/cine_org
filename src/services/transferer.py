@@ -166,6 +166,7 @@ class TransfererService:
         source: Path,
         destination: Path,
         create_symlink: bool = True,
+        symlink_destination: Optional[Path] = None,
     ) -> TransferResult:
         """
         Transfere un fichier vers sa destination avec atomicite.
@@ -180,6 +181,8 @@ class TransfererService:
             source: Chemin du fichier source
             destination: Chemin de destination dans storage/
             create_symlink: Si True, cree un symlink dans video/
+            symlink_destination: Chemin personnalise pour le symlink.
+                Si None, utilise le miroir de destination dans video_dir.
 
         Returns:
             TransferResult avec le resultat de l'operation.
@@ -202,7 +205,12 @@ class TransfererService:
         symlink_path = None
         if create_symlink:
             try:
-                symlink_path = self._create_mirror_symlink(destination)
+                if symlink_destination:
+                    symlink_path = self._create_custom_symlink(
+                        destination, symlink_destination
+                    )
+                else:
+                    symlink_path = self._create_mirror_symlink(destination)
             except Exception as e:
                 # Rollback: remettre le fichier a sa position originale
                 try:
@@ -245,13 +253,47 @@ class TransfererService:
         # Construire le chemin du symlink dans video/
         symlink_path = self._video_dir / relative_to_storage
 
+        return self._create_symlink_at(storage_path, symlink_path)
+
+    def _create_custom_symlink(
+        self, storage_path: Path, symlink_path: Path
+    ) -> Path:
+        """
+        Cree un symlink a un emplacement personnalise pointant vers storage.
+
+        Permet une structure de symlinks differente de la structure de stockage
+        (ex: series classees par type dans video/ mais pas dans storage/).
+
+        Args:
+            storage_path: Chemin du fichier dans storage/
+            symlink_path: Chemin complet ou le creer le symlink
+
+        Returns:
+            Chemin du symlink cree.
+        """
+        return self._create_symlink_at(storage_path, symlink_path)
+
+    def _create_symlink_at(self, target_path: Path, symlink_path: Path) -> Path:
+        """
+        Cree un symlink relatif a l'emplacement specifie.
+
+        Args:
+            target_path: Chemin du fichier cible (dans storage/)
+            symlink_path: Chemin ou creer le symlink
+
+        Returns:
+            Chemin du symlink cree.
+
+        Raises:
+            OSError: Si la creation du symlink echoue.
+        """
         # Creer les repertoires parents
         symlink_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Calculer le chemin relatif vers la cible
         # Utilise os.path.relpath pour compatibilite Python 3.11
         # (Path.relative_to avec walk_up=True necessite Python 3.12)
-        target_relative = os.path.relpath(storage_path, symlink_path.parent)
+        target_relative = os.path.relpath(target_path, symlink_path.parent)
 
         # Supprimer le symlink existant s'il y en a un
         if symlink_path.exists() or symlink_path.is_symlink():

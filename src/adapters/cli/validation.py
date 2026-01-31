@@ -502,10 +502,12 @@ async def execute_batch_transfer(
 
             # Appel transferer.transfer_file(source, destination, create_symlink=True)
             # Retourne TransferResult avec .success, .error, .conflict
+            symlink_dest = transfer.get("symlink_destination")
             result: "TransferResult" = transferer.transfer_file(
                 source=source,
                 destination=destination,
                 create_symlink=True,
+                symlink_destination=symlink_dest,
             )
 
             if result.success:

@@ -160,6 +160,39 @@ def get_movie_destination(movie: Movie, storage_dir: Path) -> Path:
     return storage_dir / "Films" / genre / letter
 
 
+def get_series_type(genres: tuple[str, ...]) -> str:
+    """
+    Determine le type de serie selon les genres.
+
+    Classification:
+    - "Anime" dans les genres -> "Mangas" (animation japonaise)
+    - "Animation" dans les genres -> "Animation" (animation occidentale)
+    - Autre -> "Séries TV"
+
+    Args:
+        genres: Tuple des genres de la serie.
+
+    Returns:
+        Type de serie: "Mangas", "Animation" ou "Séries TV"
+    """
+    if not genres:
+        return "Séries TV"
+
+    # Normaliser les genres en minuscules pour la comparaison
+    genres_lower = [g.lower() for g in genres]
+
+    # Anime (japonais) -> Mangas
+    if "anime" in genres_lower:
+        return "Mangas"
+
+    # Animation (occidentale) -> Animation
+    if "animation" in genres_lower:
+        return "Animation"
+
+    # Tout le reste -> Séries TV
+    return "Séries TV"
+
+
 def get_series_destination(
     series: Series,
     season_number: int,
@@ -194,6 +227,44 @@ def get_series_destination(
     return storage_dir / "Series" / letter / series_folder / season_folder
 
 
+def get_series_video_destination(
+    series: Series,
+    season_number: int,
+    video_dir: Path,
+) -> Path:
+    """
+    Calcule le chemin de symlink pour un épisode de série.
+
+    Structure : video/Séries/{Type}/Lettre/Titre (Annee)/Saison XX/
+    où Type = "Séries TV", "Animation" ou "Mangas" selon les genres.
+
+    Args:
+        series: Métadonnées de la série (avec genres).
+        season_number: Numéro de saison.
+        video_dir: Répertoire racine des symlinks.
+
+    Returns:
+        Chemin de destination pour le symlink.
+    """
+    # Type de série basé sur les genres
+    series_type = get_series_type(series.genres)
+
+    # Lettre de tri
+    letter = get_sort_letter(series.title)
+
+    # Dossier de la série
+    if series.year:
+        series_folder = f"{series.title} ({series.year})"
+    else:
+        series_folder = series.title
+
+    # Dossier de la saison
+    season_folder = f"Saison {season_number:02d}"
+
+    # Construction du chemin avec le type
+    return video_dir / "Séries" / series_type / letter / series_folder / season_folder
+
+
 class OrganizerService:
     """
     Service d'organisation des fichiers médias.
@@ -224,6 +295,27 @@ class OrganizerService:
         Voir get_series_destination() pour les détails.
         """
         return get_series_destination(series, season_number, storage_dir)
+
+    def get_series_video_destination(
+        self,
+        series: Series,
+        season_number: int,
+        video_dir: Path,
+    ) -> Path:
+        """
+        Calcule le chemin de symlink pour un épisode de série.
+
+        Voir get_series_video_destination() pour les détails.
+        """
+        return get_series_video_destination(series, season_number, video_dir)
+
+    def get_series_type(self, genres: tuple[str, ...]) -> str:
+        """
+        Détermine le type de série selon les genres.
+
+        Voir get_series_type() pour les détails.
+        """
+        return get_series_type(genres)
 
     def get_sort_letter(self, title: str) -> str:
         """

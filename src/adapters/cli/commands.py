@@ -64,25 +64,28 @@ def _extract_series_info(filename: str) -> tuple[int, int]:
     return season, episode
 
 
-def _display_transfer_tree(transfers: list[dict], storage_dir: Path) -> None:
+def _display_transfer_tree(
+    transfers: list[dict], storage_dir: Path, video_dir: Path
+) -> None:
     """
     Affiche l'arborescence des transferts prevus en mode dry-run.
 
     Organise les transferts par type (Films/Series) puis par repertoire
-    pour une visualisation claire de la structure de destination.
+    pour une visualisation claire de la structure de destination (symlinks).
 
     Args:
-        transfers: Liste des transferts avec source, destination, etc.
-        storage_dir: Repertoire de stockage racine
+        transfers: Liste des transferts avec source, destination, symlink_destination, etc.
+        storage_dir: Repertoire de stockage racine (fichiers physiques)
+        video_dir: Repertoire video racine (symlinks)
     """
     # Separer films et series
     movies = [t for t in transfers if not t.get("is_series", False)]
     series = [t for t in transfers if t.get("is_series", False)]
 
-    # Arbre principal
-    tree = Tree(f"[bold blue]{storage_dir}[/bold blue]")
+    # Arbre principal (affiche la structure des symlinks dans video_dir)
+    tree = Tree(f"[bold blue]{video_dir}[/bold blue]")
 
-    # Branche Films
+    # Branche Films (structure miroir du storage)
     if movies:
         films_branch = tree.add("[bold cyan]Films/[/bold cyan]")
         # Grouper par sous-repertoire relatif
@@ -106,36 +109,58 @@ def _display_transfer_tree(transfers: list[dict], storage_dir: Path) -> None:
                 new_name = m["new_filename"]
                 dir_branch.add(f"[dim]{source_name}[/dim] -> [green]{new_name}[/green]")
 
-    # Branche Series
+    # Branche Series (structure avec type: Séries TV / Animation / Mangas)
     if series:
-        series_branch = tree.add("[bold magenta]Séries/[/bold magenta]")
-        # Grouper par serie puis par saison
-        series_groups: dict[str, dict[str, list[dict]]] = {}
+        # Grouper par type de serie, puis par serie, puis par saison
+        # Structure: {type: {serie: {saison: [episodes]}}}
+        type_groups: dict[str, dict[str, dict[str, list[dict]]]] = {}
+
         for s in series:
+            # Utiliser symlink_destination pour extraire le type
+            symlink_dest = s.get("symlink_destination")
+            if symlink_dest:
+                try:
+                    rel_path = symlink_dest.relative_to(video_dir)
+                    # Structure: Séries/{Type}/{Lettre}/{Titre}/{Saison}/fichier
+                    parts = rel_path.parts
+                    if len(parts) >= 5:
+                        series_type = parts[1]  # Séries TV, Animation, ou Mangas
+                    else:
+                        series_type = "Séries TV"
+                except ValueError:
+                    series_type = "Séries TV"
+            else:
+                series_type = "Séries TV"
+
             title = s.get("title", "Inconnu")
             year = s.get("year", "")
             series_key = f"{title} ({year})" if year else title
 
-            dest = s["destination"]
-            # Extraire le nom de la saison
+            dest = s.get("symlink_destination") or s["destination"]
             season_dir = dest.parent.name  # ex: "Saison 01"
 
-            if series_key not in series_groups:
-                series_groups[series_key] = {}
-            if season_dir not in series_groups[series_key]:
-                series_groups[series_key][season_dir] = []
-            series_groups[series_key][season_dir].append(s)
+            if series_type not in type_groups:
+                type_groups[series_type] = {}
+            if series_key not in type_groups[series_type]:
+                type_groups[series_type][series_key] = {}
+            if season_dir not in type_groups[series_type][series_key]:
+                type_groups[series_type][series_key][season_dir] = []
+            type_groups[series_type][series_key][season_dir].append(s)
 
-        for series_name in sorted(series_groups.keys()):
-            series_sub = series_branch.add(f"[magenta]{series_name}/[/magenta]")
-            for season in sorted(series_groups[series_name].keys()):
-                season_sub = series_sub.add(f"[dim]{season}/[/dim]")
-                episodes = series_groups[series_name][season]
-                # Trier par numero d'episode
-                episodes.sort(key=lambda e: e["new_filename"])
-                for ep in episodes:
-                    new_name = ep["new_filename"]
-                    season_sub.add(f"[green]{new_name}[/green]")
+        # Afficher par type
+        for series_type in sorted(type_groups.keys()):
+            type_branch = tree.add(f"[bold magenta]Séries/{series_type}/[/bold magenta]")
+
+            for series_name in sorted(type_groups[series_type].keys()):
+                series_sub = type_branch.add(f"[magenta]{series_name}/[/magenta]")
+                for season in sorted(type_groups[series_type][series_name].keys()):
+                    season_sub = series_sub.add(f"[dim]{season}/[/dim]")
+                    episodes = type_groups[series_type][series_name][season]
+                    # Trier par numero d'episode
+                    episodes.sort(key=lambda e: e["new_filename"])
+                    for ep in episodes:
+                        new_name = ep["new_filename"]
+                        season_sub.add(f"[green]{new_name}[/green]")
 
     console.print(tree)
 
@@ -347,8 +372,9 @@ async def _validate_batch_async() -> None:
             filename = pending.video_file.filename if pending.video_file else ""
             season_num, episode_num = _extract_series_info(filename)
 
-            # Recuperer le titre d'episode depuis TVDB
+            # Recuperer le titre d'episode et les genres depuis TVDB
             episode_title = ""
+            series_genres: tuple[str, ...] = ()
             if isinstance(candidate, dict):
                 series_id = candidate.get("id", "")
             else:
@@ -356,18 +382,25 @@ async def _validate_batch_async() -> None:
 
             if tvdb_client and getattr(tvdb_client, "_api_key", None) and series_id:
                 try:
+                    # Recuperer les details de la serie (genres)
+                    series_details = await tvdb_client.get_details(series_id)
+                    if series_details and series_details.genres:
+                        series_genres = series_details.genres
+
+                    # Recuperer le titre d'episode
                     ep_details = await tvdb_client.get_episode_details(
                         series_id, season_num, episode_num
                     )
                     if ep_details and ep_details.title:
                         episode_title = ep_details.title
                 except Exception:
-                    pass  # Garder episode_title vide en cas d'erreur
+                    pass  # Garder les valeurs par defaut en cas d'erreur
 
             # Construire les entites Series et Episode pour renamer/organizer
             series = Series(
                 title=candidate_title,
                 year=candidate_year,
+                genres=series_genres,
             )
             episode = Episode(
                 season_number=season_num,
@@ -386,6 +419,13 @@ async def _validate_batch_async() -> None:
                 season_number=season_num,
                 storage_dir=storage_dir,
             )
+            # Chemin personnalise pour le symlink (avec type de serie)
+            video_dir = Path(config.video_dir)
+            symlink_dir = organizer.get_series_video_destination(
+                series=series,
+                season_number=season_num,
+                video_dir=video_dir,
+            )
         else:
             # Pour les films: construire entite Movie
             movie = Movie(
@@ -403,14 +443,19 @@ async def _validate_batch_async() -> None:
                 movie=movie,
                 storage_dir=storage_dir,
             )
+            symlink_dir = None  # Films: miroir standard
 
-        transfers.append({
+        transfer_data = {
             "pending": pending,
             "source": source_path,
             "destination": dest_dir / new_filename,
             "new_filename": new_filename,
             "action": "move+symlink",
-        })
+        }
+        # Ajouter le chemin de symlink personnalise pour les series
+        if symlink_dir:
+            transfer_data["symlink_destination"] = symlink_dir / new_filename
+        transfers.append(transfer_data)
 
     if not transfers:
         console.print("[yellow]Aucun transfert a effectuer.[/yellow]")
@@ -756,8 +801,9 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
             filename = pend.video_file.filename if pend.video_file else ""
             season_num, episode_num = _extract_series_info(filename)
 
-            # Recuperer le titre d'episode depuis TVDB
+            # Recuperer le titre d'episode et les genres depuis TVDB
             episode_title = ""
+            series_genres: tuple[str, ...] = ()
             if isinstance(candidate, dict):
                 series_id = candidate.get("id", "")
             else:
@@ -765,15 +811,25 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
 
             if tvdb_client and getattr(tvdb_client, "_api_key", None) and series_id:
                 try:
+                    # Recuperer les details de la serie (genres)
+                    series_details = await tvdb_client.get_details(series_id)
+                    if series_details and series_details.genres:
+                        series_genres = series_details.genres
+
+                    # Recuperer le titre d'episode
                     ep_details = await tvdb_client.get_episode_details(
                         series_id, season_num, episode_num
                     )
                     if ep_details and ep_details.title:
                         episode_title = ep_details.title
                 except Exception:
-                    pass  # Garder episode_title vide en cas d'erreur
+                    pass  # Garder les valeurs par defaut en cas d'erreur
 
-            series = Series(title=candidate_title, year=candidate_year)
+            series = Series(
+                title=candidate_title,
+                year=candidate_year,
+                genres=series_genres,
+            )
             episode = Episode(
                 season_number=season_num,
                 episode_number=episode_num,
@@ -790,6 +846,13 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
                 season_number=season_num,
                 storage_dir=storage_dir,
             )
+            # Chemin personnalise pour le symlink (avec type de serie)
+            video_dir = Path(config.video_dir)
+            symlink_dir = organizer.get_series_video_destination(
+                series=series,
+                season_number=season_num,
+                video_dir=video_dir,
+            )
         else:
             movie = Movie(
                 title=candidate_title,
@@ -805,8 +868,9 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
                 movie=movie,
                 storage_dir=storage_dir,
             )
+            symlink_dir = None  # Films: miroir standard
 
-        transfers.append({
+        transfer_data = {
             "pending": pend,
             "source": source_path,
             "destination": dest_dir / new_filename,
@@ -814,15 +878,20 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
             "is_series": is_series,
             "title": candidate_title,
             "year": candidate_year,
-        })
+        }
+        # Ajouter le chemin de symlink personnalise pour les series
+        if symlink_dir:
+            transfer_data["symlink_destination"] = symlink_dir / new_filename
+        transfers.append(transfer_data)
 
     if dry_run:
         console.print("\n[yellow]Mode dry-run - aucun transfert effectue[/yellow]")
         console.print(f"[dim]{len(transfers)} fichier(s) seraient transferes[/dim]\n")
 
-        # Afficher l'arborescence des transferts
+        # Afficher l'arborescence des transferts (symlinks dans video_dir)
         if transfers:
-            _display_transfer_tree(transfers, storage_dir)
+            video_dir = Path(config.video_dir)
+            _display_transfer_tree(transfers, storage_dir, video_dir)
     elif transfers:
         console.print(f"\n[bold cyan]Transfert des fichiers valides[/bold cyan]\n")
         transferer = container.transferer_service(
