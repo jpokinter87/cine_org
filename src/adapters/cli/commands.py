@@ -502,7 +502,7 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
                         api_results = await tvdb_client.search(title, year=year)
                         # Scorer les resultats (series: 100% titre)
                         candidates = matcher.score_results(
-                            api_results, title, year, duration_seconds=None
+                            api_results, title, year, None, is_series=True
                         )
                     except Exception as e:
                         console.print(f"[yellow]Erreur TVDB pour {title}: {e}[/yellow]")

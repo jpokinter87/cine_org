@@ -1,11 +1,12 @@
 """
-Client TVDB API v4 pour les series TV.
+Client TVDB API v3 pour les series TV.
 
 Implemente IMediaAPIClient pour rechercher et recuperer les metadonnees
 des series TV depuis TVDB. Gere l'authentification JWT, le caching et
 le rate limiting automatiquement.
 
-Reference API: https://thetvdb.github.io/v4-api/
+Note: Utilise l'API v3 (legacy) car plus compatible avec les cles existantes.
+Reference API: https://api.thetvdb.com/swagger
 """
 
 from datetime import datetime, timedelta
@@ -22,11 +23,11 @@ class TVDBClient(IMediaAPIClient):
     """
     Client TVDB pour la recherche de series TV.
 
-    Utilise l'API TVDB v4 avec authentification JWT. Le token est obtenu
+    Utilise l'API TVDB v3 avec authentification JWT. Le token est obtenu
     automatiquement a la premiere requete et rafraichi avant expiration.
 
     Attributes:
-        BASE_URL: URL de base de l'API TVDB v4
+        BASE_URL: URL de base de l'API TVDB v3
 
     Example:
         cache = APICache(cache_dir=".cache/api")
@@ -36,7 +37,7 @@ class TVDBClient(IMediaAPIClient):
         await client.close()
     """
 
-    BASE_URL = "https://api4.thetvdb.com/v4"
+    BASE_URL = "https://api.thetvdb.com"
 
     def __init__(self, api_key: str, cache: APICache) -> None:
         """
@@ -90,9 +91,10 @@ class TVDBClient(IMediaAPIClient):
         response.raise_for_status()
         data = response.json()
 
-        self._token = data["data"]["token"]
-        # Token valide 1 mois, rafraichir 1 jour avant expiration
-        self._token_expiry = datetime.now() + timedelta(days=29)
+        # API v3: token directement dans la reponse (pas dans "data")
+        self._token = data["token"]
+        # Token valide ~1 semaine, rafraichir 1 jour avant expiration
+        self._token_expiry = datetime.now() + timedelta(days=6)
         return self._token
 
     def _get_auth_headers(self) -> dict[str, str]:
@@ -129,29 +131,38 @@ class TVDBClient(IMediaAPIClient):
         await self._ensure_token()
         client = await self._get_client()
 
-        params = {"q": query, "type": "series"}
-        if year:
-            params["year"] = str(year)
+        # API v3: endpoint /search/series avec parametre name
+        params = {"name": query}
 
         response = await request_with_retry(
             client,
             "GET",
-            "/search",
+            "/search/series",
             params=params,
             headers=self._get_auth_headers(),
         )
         data = response.json()
 
-        # Convertir les resultats en SearchResult
-        results = [
-            SearchResult(
-                id=str(item["id"]),
-                title=item["name"],
-                year=int(item["year"]) if item.get("year") else None,
-                source="tvdb",
+        # API v3: resultats dans "data" array
+        results = []
+        for item in data.get("data", []):
+            # Extraire l'annee depuis firstAired (format: YYYY-MM-DD)
+            first_aired = item.get("firstAired", "")
+            item_year = int(first_aired[:4]) if first_aired and len(first_aired) >= 4 else None
+
+            # Filtrer par annee si specifie
+            if year and item_year and item_year != year:
+                continue
+
+            results.append(
+                SearchResult(
+                    id=str(item["id"]),
+                    title=item.get("seriesName", ""),
+                    original_title=item.get("aliases", [None])[0] if item.get("aliases") else None,
+                    year=item_year,
+                    source="tvdb",
+                )
             )
-            for item in data.get("data", [])
-        ]
 
         # Cacher les resultats
         await self._cache.set_search(cache_key, results)
@@ -181,10 +192,11 @@ class TVDBClient(IMediaAPIClient):
         client = await self._get_client()
 
         try:
+            # API v3: endpoint /series/{id}
             response = await request_with_retry(
                 client,
                 "GET",
-                f"/series/{media_id}/extended",
+                f"/series/{media_id}",
                 headers=self._get_auth_headers(),
             )
         except httpx.HTTPStatusError as e:
@@ -195,26 +207,29 @@ class TVDBClient(IMediaAPIClient):
         data = response.json()
         series = data.get("data", {})
 
-        # Extraire l'annee depuis firstAired ou year
+        # Extraire l'annee depuis firstAired (format: YYYY-MM-DD)
         year = None
-        if series.get("year"):
-            year = int(series["year"])
-        elif series.get("firstAired"):
-            year = int(series["firstAired"][:4])
+        first_aired = series.get("firstAired", "")
+        if first_aired and len(first_aired) >= 4:
+            year = int(first_aired[:4])
 
-        # Extraire les genres
-        genres = tuple(g["name"] for g in series.get("genres", []))
+        # API v3: genres est une liste de strings
+        genres = tuple(series.get("genre", []))
+
+        # Construire l'URL du poster
+        poster_path = series.get("poster")
+        poster_url = f"https://artworks.thetvdb.com{poster_path}" if poster_path else None
 
         # Construire MediaDetails
         details = MediaDetails(
             id=str(series["id"]),
-            title=series["name"],
-            original_title=series.get("originalName"),
+            title=series.get("seriesName", ""),
+            original_title=series.get("aliases", [None])[0] if series.get("aliases") else None,
             year=year,
             genres=genres,
             duration_seconds=None,  # Series n'ont pas de duree unique
             overview=series.get("overview"),
-            poster_url=series.get("image"),
+            poster_url=poster_url,
         )
 
         # Cacher les details
