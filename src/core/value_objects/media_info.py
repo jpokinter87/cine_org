@@ -32,15 +32,17 @@ class Resolution:
 
         Prend en compte les formats cinematographiques (2.35:1, 2.40:1)
         ou la hauteur est reduite mais la largeur reste standard.
+        Utilise des seuils tolerants pour gerer les variations mineures
+        (ex: 1916 pixels au lieu de 1920).
         """
-        # 4K: 3840x2160 ou plus (ou largeur >= 3840 pour cinema)
-        if self.height >= 2160 or self.width >= 3840:
+        # 4K: 3840x2160 ou plus (seuil tolerant: 3800 pour cinema)
+        if self.height >= 2160 or self.width >= 3800:
             return "4K"
-        # 1080p: 1920x1080 ou plus (ou largeur >= 1920 pour cinema)
-        elif self.height >= 1080 or self.width >= 1920:
+        # 1080p: 1920x1080 ou plus (seuil tolerant: 1900 pour cinema)
+        elif self.height >= 1080 or self.width >= 1900:
             return "1080p"
-        # 720p: 1280x720 ou plus (ou largeur >= 1280 pour cinema)
-        elif self.height >= 720 or self.width >= 1280:
+        # 720p: 1280x720 ou plus (seuil tolerant: 1260 pour cinema)
+        elif self.height >= 720 or self.width >= 1260:
             return "720p"
         else:
             return "SD"

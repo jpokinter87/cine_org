@@ -102,11 +102,20 @@ class TVDBClient(IMediaAPIClient):
         self._token_expiry = datetime.now() + timedelta(days=6)
         return self._token
 
-    def _get_auth_headers(self) -> dict[str, str]:
-        """Retourne les headers d'authentification avec le token JWT."""
+    def _get_auth_headers(self, language: Optional[str] = None) -> dict[str, str]:
+        """
+        Retourne les headers d'authentification avec le token JWT.
+
+        Args:
+            language: Code langue ISO 639-1 optionnel (ex: "fr", "en")
+                     pour demander les donnees dans cette langue.
+        """
         if not self._token:
             raise RuntimeError("Token not available. Call _ensure_token() first.")
-        return {"Authorization": f"Bearer {self._token}"}
+        headers = {"Authorization": f"Bearer {self._token}"}
+        if language:
+            headers["Accept-Language"] = language
+        return headers
 
     async def search(
         self,
@@ -250,6 +259,9 @@ class TVDBClient(IMediaAPIClient):
         """
         Recupere les details d'un episode specifique.
 
+        Privilegie le titre en francais, avec fallback sur l'anglais
+        si la traduction francaise n'existe pas.
+
         Verifie le cache avant d'appeler l'API. Les details sont caches
         pendant 7 jours.
 
@@ -271,31 +283,25 @@ class TVDBClient(IMediaAPIClient):
         await self._ensure_token()
         client = await self._get_client()
 
-        try:
-            # API v3: endpoint /series/{id}/episodes/query avec filtres
-            response = await request_with_retry(
-                client,
-                "GET",
-                f"/series/{series_id}/episodes/query",
-                params={
-                    "airedSeason": str(season),
-                    "airedEpisode": str(episode),
-                },
-                headers=self._get_auth_headers(),
+        # Essayer d'abord en francais
+        ep_data = await self._fetch_episode(
+            client, series_id, season, episode, language="fr"
+        )
+
+        # Si pas de titre en francais, essayer en anglais
+        episode_title = ep_data.get("episodeName", "") if ep_data else ""
+        if not episode_title and ep_data:
+            ep_data_en = await self._fetch_episode(
+                client, series_id, season, episode, language="en"
             )
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                return None
-            raise
+            if ep_data_en:
+                episode_title = ep_data_en.get("episodeName", "")
+                # Utiliser les donnees anglaises si meilleures
+                if episode_title:
+                    ep_data = ep_data_en
 
-        data = response.json()
-        episodes = data.get("data", [])
-
-        if not episodes:
+        if not ep_data:
             return None
-
-        # Prendre le premier episode correspondant
-        ep_data = episodes[0]
 
         details = EpisodeDetails(
             id=str(ep_data.get("id", "")),
@@ -309,6 +315,51 @@ class TVDBClient(IMediaAPIClient):
         # Cacher les details (utilise set_details car meme duree de cache)
         await self._cache.set_details(cache_key, details)
         return details
+
+    async def _fetch_episode(
+        self,
+        client: httpx.AsyncClient,
+        series_id: str,
+        season: int,
+        episode: int,
+        language: str,
+    ) -> Optional[dict]:
+        """
+        Recupere les donnees brutes d'un episode depuis l'API.
+
+        Args:
+            client: Client HTTP
+            series_id: ID TVDB de la serie
+            season: Numero de saison
+            episode: Numero d'episode
+            language: Code langue (fr, en)
+
+        Returns:
+            Dictionnaire des donnees episode ou None
+        """
+        try:
+            response = await request_with_retry(
+                client,
+                "GET",
+                f"/series/{series_id}/episodes/query",
+                params={
+                    "airedSeason": str(season),
+                    "airedEpisode": str(episode),
+                },
+                headers=self._get_auth_headers(language=language),
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            raise
+
+        data = response.json()
+        episodes = data.get("data", [])
+
+        if not episodes:
+            return None
+
+        return episodes[0]
 
     @property
     def source(self) -> str:
