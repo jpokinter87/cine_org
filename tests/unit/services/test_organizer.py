@@ -29,6 +29,12 @@ def storage_dir() -> Path:
 
 
 @pytest.fixture
+def video_dir() -> Path:
+    """Répertoire video (symlinks) de test."""
+    return Path("/video")
+
+
+@pytest.fixture
 def movie_scifi() -> Movie:
     """Film de science-fiction."""
     return Movie(
@@ -259,51 +265,56 @@ class TestGetPriorityGenre:
 # ====================
 
 class TestGetMovieDestination:
-    """Tests pour le calcul du chemin de destination des films."""
+    """Tests pour le calcul du chemin de destination des films (storage).
+
+    Note: Le storage utilise la même structure que video (symlinks).
+    Structure: Films/Genre/Lettre/
+    """
 
     def test_movie_destination_basic(
-        self, movie_scifi: Movie, storage_dir: Path
+        self, movie_scifi: Movie, storage_dir: Path, video_dir: Path
     ) -> None:
-        """Structure de base: stockage/Films/Genre/Lettre."""
-        path = get_movie_destination(movie_scifi, storage_dir)
-        assert path == Path("/storage/Films/Science-Fiction/M")
+        """Structure storage: Films/Genre/Lettre."""
+        path = get_movie_destination(movie_scifi, storage_dir, video_dir)
+        # Science-Fiction -> SF (via GENRE_FOLDER_MAPPING)
+        assert path == Path("/storage/Films/SF/M")
 
     def test_movie_destination_with_article(
-        self, movie_with_french_article: Movie, storage_dir: Path
+        self, movie_with_french_article: Movie, storage_dir: Path, video_dir: Path
     ) -> None:
         """L'article est ignoré pour la lettre."""
-        path = get_movie_destination(movie_with_french_article, storage_dir)
-        # Le Parrain -> Genre Drame (prioritaire sur Crime), Lettre P
+        path = get_movie_destination(movie_with_french_article, storage_dir, video_dir)
+        # Le Parrain -> Drame -> Lettre P
         assert path == Path("/storage/Films/Drame/P")
 
     def test_movie_destination_animation_priority(
-        self, movie_animation: Movie, storage_dir: Path
+        self, movie_animation: Movie, storage_dir: Path, video_dir: Path
     ) -> None:
-        """Animation est prioritaire sur les autres genres."""
-        path = get_movie_destination(movie_animation, storage_dir)
-        # Le Roi Lion -> Genre Animation, Lettre R
+        """Le Roi Lion -> Animation (prioritaire) -> Lettre R."""
+        path = get_movie_destination(movie_animation, storage_dir, video_dir)
         assert path == Path("/storage/Films/Animation/R")
 
     def test_movie_destination_numeric(
-        self, movie_numeric: Movie, storage_dir: Path
+        self, movie_numeric: Movie, storage_dir: Path, video_dir: Path
     ) -> None:
         """Titre numérique va sous #."""
-        path = get_movie_destination(movie_numeric, storage_dir)
-        assert path == Path("/storage/Films/Science-Fiction/#")
+        path = get_movie_destination(movie_numeric, storage_dir, video_dir)
+        # Science-Fiction -> SF
+        assert path == Path("/storage/Films/SF/#")
 
-    def test_movie_destination_no_genres(self, storage_dir: Path) -> None:
-        """Film sans genre va dans Divers."""
+    def test_movie_destination_no_genres(self, storage_dir: Path, video_dir: Path) -> None:
+        """Film sans genre utilise Drame (fallback Divers -> Drame)."""
         movie = Movie(title="Mystery Film", year=2020, genres=())
-        path = get_movie_destination(movie, storage_dir)
-        assert path == Path("/storage/Films/Divers/M")
+        path = get_movie_destination(movie, storage_dir, video_dir)
+        assert path == Path("/storage/Films/Drame/M")
 
     def test_movie_destination_english_article(
-        self, movie_with_english_article: Movie, storage_dir: Path
+        self, movie_with_english_article: Movie, storage_dir: Path, video_dir: Path
     ) -> None:
         """The est ignoré pour la lettre."""
-        path = get_movie_destination(movie_with_english_article, storage_dir)
-        # The Matrix -> Lettre M
-        assert path == Path("/storage/Films/Science-Fiction/M")
+        path = get_movie_destination(movie_with_english_article, storage_dir, video_dir)
+        # The Matrix -> SF -> Lettre M
+        assert path == Path("/storage/Films/SF/M")
 
 
 # ====================
@@ -311,40 +322,45 @@ class TestGetMovieDestination:
 # ====================
 
 class TestGetSeriesDestination:
-    """Tests pour le calcul du chemin de destination des séries."""
+    """Tests pour le calcul du chemin de destination des séries.
+
+    Note: Le storage utilise la même structure que video (symlinks).
+    Structure: Séries/{Type}/{Lettre}/{Titre}/Saison XX/
+    """
 
     def test_series_destination_basic(
-        self, series_fixture: Series, storage_dir: Path
+        self, series_fixture: Series, storage_dir: Path, video_dir: Path
     ) -> None:
-        """Structure de base: stockage/Series/Lettre/Titre (Annee)/Saison XX."""
-        path = get_series_destination(series_fixture, season_number=1, storage_dir=storage_dir)
-        assert path == Path("/storage/Series/B/Breaking Bad (2008)/Saison 01")
+        """Structure de base: stockage/Séries/Type/Lettre/Titre (Annee)/Saison XX."""
+        path = get_series_destination(series_fixture, season_number=1, storage_dir=storage_dir, video_dir=video_dir)
+        # Drame -> Séries TV
+        assert path == Path("/storage/Séries/Séries TV/B/Breaking Bad (2008)/Saison 01")
 
     def test_series_destination_season_double_digit(
-        self, series_fixture: Series, storage_dir: Path
+        self, series_fixture: Series, storage_dir: Path, video_dir: Path
     ) -> None:
         """Numéro de saison à deux chiffres."""
-        path = get_series_destination(series_fixture, season_number=12, storage_dir=storage_dir)
-        assert path == Path("/storage/Series/B/Breaking Bad (2008)/Saison 12")
+        path = get_series_destination(series_fixture, season_number=12, storage_dir=storage_dir, video_dir=video_dir)
+        assert path == Path("/storage/Séries/Séries TV/B/Breaking Bad (2008)/Saison 12")
 
     def test_series_destination_with_article(
-        self, series_with_article: Series, storage_dir: Path
+        self, series_with_article: Series, storage_dir: Path, video_dir: Path
     ) -> None:
         """The est ignoré pour la lettre."""
-        path = get_series_destination(series_with_article, season_number=3, storage_dir=storage_dir)
-        assert path == Path("/storage/Series/W/The Wire (2002)/Saison 03")
+        path = get_series_destination(series_with_article, season_number=3, storage_dir=storage_dir, video_dir=video_dir)
+        assert path == Path("/storage/Séries/Séries TV/W/The Wire (2002)/Saison 03")
 
-    def test_series_destination_no_year(self, storage_dir: Path) -> None:
+    def test_series_destination_no_year(self, storage_dir: Path, video_dir: Path) -> None:
         """Série sans année n'a pas de parenthèses."""
         series = Series(title="Friends", year=None)
-        path = get_series_destination(series, season_number=5, storage_dir=storage_dir)
-        assert path == Path("/storage/Series/F/Friends/Saison 05")
+        path = get_series_destination(series, season_number=5, storage_dir=storage_dir, video_dir=video_dir)
+        assert path == Path("/storage/Séries/Séries TV/F/Friends/Saison 05")
 
-    def test_series_destination_numeric_title(self, storage_dir: Path) -> None:
+    def test_series_destination_numeric_title(self, storage_dir: Path, video_dir: Path) -> None:
         """Titre numérique va sous #."""
         series = Series(title="24", year=2001)
-        path = get_series_destination(series, season_number=1, storage_dir=storage_dir)
-        assert path == Path("/storage/Series/#/24 (2001)/Saison 01")
+        path = get_series_destination(series, season_number=1, storage_dir=storage_dir, video_dir=video_dir)
+        assert path == Path("/storage/Séries/Séries TV/#/24 (2001)/Saison 01")
 
 
 # ====================

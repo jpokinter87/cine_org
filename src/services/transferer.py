@@ -9,12 +9,14 @@ destination finale avec:
 """
 
 import os
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Protocol
 
 from src.infrastructure.persistence.hash_service import compute_file_hash
+from src.utils.constants import VIDEO_EXTENSIONS
 
 
 class ConflictType(Enum):
@@ -24,11 +26,13 @@ class ConflictType(Enum):
     NONE: Pas de conflit (fichier destination n'existe pas)
     DUPLICATE: Meme hash - fichier identique existe deja
     NAME_COLLISION: Meme nom mais contenu different
+    SIMILAR_CONTENT: Contenu similaire existe (ex: serie sans annee vs avec annee)
     """
 
     NONE = "none"
     DUPLICATE = "duplicate"
     NAME_COLLISION = "name_collision"
+    SIMILAR_CONTENT = "similar_content"
 
 
 @dataclass
@@ -47,6 +51,51 @@ class ConflictInfo:
     existing_path: Path
     existing_hash: str
     new_hash: str
+
+
+@dataclass
+class ExistingFileInfo:
+    """
+    Information sur un fichier existant pour comparaison.
+
+    Attributs:
+        path: Chemin du fichier
+        size_bytes: Taille en octets
+        resolution: Resolution video (ex: "1080p", "4K")
+        video_codec: Codec video (ex: "HEVC", "H.264")
+        audio_codec: Codec audio principal (ex: "DTS-HD", "AAC")
+        duration_seconds: Duree en secondes
+    """
+
+    path: Path
+    size_bytes: int
+    resolution: Optional[str] = None
+    video_codec: Optional[str] = None
+    audio_codec: Optional[str] = None
+    duration_seconds: Optional[int] = None
+
+
+@dataclass
+class SimilarContentInfo:
+    """
+    Information sur un conflit de contenu similaire.
+
+    Utilise pour les cas ou un film/serie existe deja avec un nom
+    legerement different (ex: "Station Eleven" vs "Station Eleven (2021)").
+
+    Attributs:
+        existing_dir: Repertoire existant similaire
+        existing_files: Liste des fichiers existants avec leurs infos
+        new_title: Titre du nouveau contenu
+        existing_title: Titre du contenu existant
+        similarity_reason: Raison de la similarite detectee
+    """
+
+    existing_dir: Path
+    existing_files: list[ExistingFileInfo]
+    new_title: str
+    existing_title: str
+    similarity_reason: str
 
 
 @dataclass
@@ -303,3 +352,207 @@ class TransfererService:
         symlink_path.symlink_to(target_relative)
 
         return symlink_path
+
+    def find_similar_content(
+        self,
+        title: str,
+        year: Optional[int],
+        destination_dir: Path,
+        is_series: bool = False,
+    ) -> Optional[SimilarContentInfo]:
+        """
+        Recherche un contenu similaire dans le repertoire de destination.
+
+        Detecte les cas ou un film/serie existe deja avec un nom similaire:
+        - "Station Eleven" vs "Station Eleven (2021)"
+        - "Matrix" vs "The Matrix (1999)"
+
+        Args:
+            title: Titre du nouveau contenu
+            year: Annee du nouveau contenu (peut etre None)
+            destination_dir: Repertoire de destination (parent du dossier cible)
+            is_series: True si c'est une serie, False pour un film
+
+        Returns:
+            SimilarContentInfo si un contenu similaire existe, None sinon.
+        """
+        if not destination_dir.exists():
+            return None
+
+        # Normaliser le titre pour comparaison
+        normalized_title = self._normalize_title(title)
+
+        # Chercher dans les sous-repertoires
+        for subdir in destination_dir.iterdir():
+            if not subdir.is_dir():
+                continue
+
+            # Extraire le titre existant (sans annee)
+            existing_name = subdir.name
+            existing_title, existing_year = self._extract_title_year(existing_name)
+            normalized_existing = self._normalize_title(existing_title)
+
+            # Verifier la similarite
+            if normalized_title == normalized_existing:
+                # Meme titre, verifier si c'est vraiment different
+                new_name = f"{title} ({year})" if year else title
+
+                if existing_name != new_name:
+                    # Conflit detecte: meme titre mais noms differents
+                    files_info = self._collect_files_info(subdir, is_series)
+                    reason = self._get_similarity_reason(
+                        existing_name, new_name, existing_year, year
+                    )
+
+                    return SimilarContentInfo(
+                        existing_dir=subdir,
+                        existing_files=files_info,
+                        new_title=new_name,
+                        existing_title=existing_name,
+                        similarity_reason=reason,
+                    )
+
+        return None
+
+    def _normalize_title(self, title: str) -> str:
+        """Normalise un titre pour comparaison (minuscules, sans articles)."""
+        # Retirer les articles courants
+        articles = ["le", "la", "les", "l'", "the", "a", "an"]
+        words = title.lower().split()
+        if words and words[0] in articles:
+            words = words[1:]
+        return " ".join(words)
+
+    def _extract_title_year(self, name: str) -> tuple[str, Optional[int]]:
+        """Extrait le titre et l'annee d'un nom de dossier."""
+        # Pattern: "Titre (YYYY)" ou juste "Titre"
+        match = re.match(r"^(.+?)\s*\((\d{4})\)$", name)
+        if match:
+            return match.group(1).strip(), int(match.group(2))
+        return name, None
+
+    def _get_similarity_reason(
+        self,
+        existing_name: str,
+        new_name: str,
+        existing_year: Optional[int],
+        new_year: Optional[int],
+    ) -> str:
+        """Determine la raison de la similarite."""
+        if existing_year is None and new_year is not None:
+            return f"L'existant n'a pas d'annee, le nouveau a ({new_year})"
+        elif existing_year is not None and new_year is None:
+            return f"L'existant a une annee ({existing_year}), le nouveau n'en a pas"
+        elif existing_year != new_year:
+            return f"Annees differentes: existant ({existing_year}) vs nouveau ({new_year})"
+        else:
+            return f"Noms differents: '{existing_name}' vs '{new_name}'"
+
+    def _collect_files_info(
+        self, directory: Path, is_series: bool
+    ) -> list[ExistingFileInfo]:
+        """
+        Collecte les informations sur les fichiers video dans un repertoire.
+
+        Args:
+            directory: Repertoire a scanner
+            is_series: Si True, cherche recursivement dans les saisons
+
+        Returns:
+            Liste des informations de fichiers.
+        """
+        files_info = []
+
+        # Pour les series, parcourir les saisons
+        if is_series:
+            for item in directory.rglob("*"):
+                if item.is_file() and item.suffix.lower() in VIDEO_EXTENSIONS:
+                    files_info.append(self._get_file_info(item))
+        else:
+            # Pour les films, chercher dans le repertoire courant ou parent
+            for item in directory.iterdir():
+                if item.is_file() and item.suffix.lower() in VIDEO_EXTENSIONS:
+                    files_info.append(self._get_file_info(item))
+
+        return files_info
+
+    def _get_file_info(self, file_path: Path) -> ExistingFileInfo:
+        """Extrait les informations techniques d'un fichier video."""
+        from src.adapters.parsing.mediainfo_extractor import MediaInfoExtractor
+
+        size = file_path.stat().st_size if file_path.exists() else 0
+
+        # Extraire les infos media
+        resolution = None
+        video_codec = None
+        audio_codec = None
+        duration = None
+
+        try:
+            extractor = MediaInfoExtractor()
+            media_info = extractor.extract(file_path)
+            if media_info:
+                if media_info.resolution:
+                    resolution = media_info.resolution.label
+                if media_info.video_codec:
+                    video_codec = media_info.video_codec.name
+                if media_info.audio_codecs:
+                    audio_codec = media_info.audio_codecs[0].name
+                duration = media_info.duration_seconds
+        except Exception:
+            pass  # Infos non disponibles
+
+        return ExistingFileInfo(
+            path=file_path,
+            size_bytes=size,
+            resolution=resolution,
+            video_codec=video_codec,
+            audio_codec=audio_codec,
+            duration_seconds=duration,
+        )
+
+    def move_to_staging(
+        self,
+        path: Path,
+        staging_dir: Path,
+        preserve_structure: bool = True,
+    ) -> Path:
+        """
+        Deplace un fichier ou repertoire vers la zone d'attente.
+
+        Args:
+            path: Chemin du fichier ou repertoire a deplacer
+            staging_dir: Repertoire racine de la zone d'attente
+            preserve_structure: Si True, preserve la structure relative
+
+        Returns:
+            Chemin de destination dans la zone d'attente.
+        """
+        staging_dir.mkdir(parents=True, exist_ok=True)
+
+        if preserve_structure:
+            # Essayer de preserver la structure relative
+            try:
+                if str(path).startswith(str(self._storage_dir)):
+                    relative = path.relative_to(self._storage_dir)
+                    dest = staging_dir / relative
+                elif str(path).startswith(str(self._video_dir)):
+                    relative = path.relative_to(self._video_dir)
+                    dest = staging_dir / relative
+                else:
+                    dest = staging_dir / path.name
+            except ValueError:
+                dest = staging_dir / path.name
+        else:
+            dest = staging_dir / path.name
+
+        # Creer les parents et deplacer
+        dest.parent.mkdir(parents=True, exist_ok=True)
+
+        if path.is_dir():
+            import shutil
+            shutil.move(str(path), str(dest))
+        else:
+            self._fs.atomic_move(path, dest)
+
+        return dest

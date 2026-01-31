@@ -85,19 +85,24 @@ def _display_transfer_tree(
     # Arbre principal (affiche la structure des symlinks dans video_dir)
     tree = Tree(f"[bold blue]{video_dir}[/bold blue]")
 
-    # Branche Films (structure miroir du storage)
+    # Branche Films (structure des symlinks avec genres et subdivisions)
     if movies:
         films_branch = tree.add("[bold cyan]Films/[/bold cyan]")
-        # Grouper par sous-repertoire relatif
+        # Grouper par sous-repertoire relatif (depuis symlink_destination ou destination)
         movie_dirs: dict[str, list[dict]] = {}
         for m in movies:
-            dest = m["destination"]
-            # Chemin relatif depuis storage_dir
+            # Utiliser symlink_destination pour l'affichage (structure video avec genres)
+            dest = m.get("symlink_destination") or m["destination"]
+            # Chemin relatif depuis video_dir ou storage_dir
             try:
-                rel_path = dest.relative_to(storage_dir)
+                rel_path = dest.relative_to(video_dir)
                 parent = str(rel_path.parent)
             except ValueError:
-                parent = str(dest.parent)
+                try:
+                    rel_path = dest.relative_to(storage_dir)
+                    parent = str(rel_path.parent)
+                except ValueError:
+                    parent = str(dest.parent)
             if parent not in movie_dirs:
                 movie_dirs[parent] = []
             movie_dirs[parent].append(m)
@@ -111,13 +116,15 @@ def _display_transfer_tree(
 
     # Branche Series (structure avec type: Séries TV / Animation / Mangas)
     if series:
-        # Grouper par type de serie, puis par serie, puis par saison
-        # Structure: {type: {serie: {saison: [episodes]}}}
-        type_groups: dict[str, dict[str, dict[str, list[dict]]]] = {}
+        # Grouper par type de serie, lettre, puis par serie, puis par saison
+        # Structure: {type: {lettre: {serie: {saison: [episodes]}}}}
+        type_groups: dict[str, dict[str, dict[str, dict[str, list[dict]]]]] = {}
 
         for s in series:
-            # Utiliser symlink_destination pour extraire le type
+            # Utiliser symlink_destination pour extraire le type et la lettre
             symlink_dest = s.get("symlink_destination")
+            series_type = "Séries TV"
+            letter = "?"
             if symlink_dest:
                 try:
                     rel_path = symlink_dest.relative_to(video_dir)
@@ -125,12 +132,9 @@ def _display_transfer_tree(
                     parts = rel_path.parts
                     if len(parts) >= 5:
                         series_type = parts[1]  # Séries TV, Animation, ou Mangas
-                    else:
-                        series_type = "Séries TV"
+                        letter = parts[2]  # Lettre ou plage
                 except ValueError:
-                    series_type = "Séries TV"
-            else:
-                series_type = "Séries TV"
+                    pass
 
             title = s.get("title", "Inconnu")
             year = s.get("year", "")
@@ -141,36 +145,44 @@ def _display_transfer_tree(
 
             if series_type not in type_groups:
                 type_groups[series_type] = {}
-            if series_key not in type_groups[series_type]:
-                type_groups[series_type][series_key] = {}
-            if season_dir not in type_groups[series_type][series_key]:
-                type_groups[series_type][series_key][season_dir] = []
-            type_groups[series_type][series_key][season_dir].append(s)
+            if letter not in type_groups[series_type]:
+                type_groups[series_type][letter] = {}
+            if series_key not in type_groups[series_type][letter]:
+                type_groups[series_type][letter][series_key] = {}
+            if season_dir not in type_groups[series_type][letter][series_key]:
+                type_groups[series_type][letter][series_key][season_dir] = []
+            type_groups[series_type][letter][series_key][season_dir].append(s)
 
-        # Afficher par type
+        # Afficher par type, lettre, serie
         for series_type in sorted(type_groups.keys()):
             type_branch = tree.add(f"[bold magenta]Séries/{series_type}/[/bold magenta]")
 
-            for series_name in sorted(type_groups[series_type].keys()):
-                series_sub = type_branch.add(f"[magenta]{series_name}/[/magenta]")
-                for season in sorted(type_groups[series_type][series_name].keys()):
-                    season_sub = series_sub.add(f"[dim]{season}/[/dim]")
-                    episodes = type_groups[series_type][series_name][season]
-                    # Trier par numero d'episode
-                    episodes.sort(key=lambda e: e["new_filename"])
-                    for ep in episodes:
-                        new_name = ep["new_filename"]
+            for letter in sorted(type_groups[series_type].keys()):
+                letter_branch = type_branch.add(f"[magenta]{letter}/[/magenta]")
+                for series_name in sorted(type_groups[series_type][letter].keys()):
+                    series_sub = letter_branch.add(f"[magenta]{series_name}/[/magenta]")
+                    for season in sorted(type_groups[series_type][letter][series_name].keys()):
+                        season_sub = series_sub.add(f"[dim]{season}/[/dim]")
+                        episodes = type_groups[series_type][letter][series_name][season]
+                        # Trier par numero d'episode
+                        episodes.sort(key=lambda e: e["new_filename"])
+                        for ep in episodes:
+                            new_name = ep["new_filename"]
                         season_sub.add(f"[green]{new_name}[/green]")
 
     console.print(tree)
 
 from src.adapters.cli.validation import (
+    ConflictResolution,
     console,
     determine_is_series,
     display_batch_summary,
+    display_similar_content_conflict,
     execute_batch_transfer,
+    prompt_conflict_resolution,
     validation_loop,
 )
+from src.services.transferer import ExistingFileInfo, SimilarContentInfo
 from src.container import Container
 from src.core.entities.media import Episode, Movie, Series
 from src.core.entities.video import ValidationStatus
@@ -310,6 +322,7 @@ async def _validate_batch_async() -> None:
     renamer = container.renamer_service()
     organizer = container.organizer_service()
     tvdb_client = container.tvdb_client()
+    tmdb_client = container.tmdb_client()
 
     # Recuperer TransfererService avec les paths de config
     transferer = container.transferer_service(
@@ -365,6 +378,7 @@ async def _validate_batch_async() -> None:
 
         extension = source_path.suffix if source_path.suffix else ".mkv"
         media_info = pending.video_file.media_info if pending.video_file else None
+        video_dir = Path(config.video_dir)
 
         # Generer le nouveau nom et chemin de destination
         if is_series:
@@ -418,20 +432,34 @@ async def _validate_batch_async() -> None:
                 series=series,
                 season_number=season_num,
                 storage_dir=storage_dir,
+                video_dir=video_dir,
             )
             # Chemin personnalise pour le symlink (avec type de serie)
-            video_dir = Path(config.video_dir)
             symlink_dir = organizer.get_series_video_destination(
                 series=series,
                 season_number=season_num,
                 video_dir=video_dir,
             )
         else:
-            # Pour les films: construire entite Movie
+            # Pour les films: recuperer les genres depuis TMDB
+            movie_genres: tuple[str, ...] = ()
+            if isinstance(candidate, dict):
+                movie_id = candidate.get("id", "")
+            else:
+                movie_id = candidate.id
+
+            if tmdb_client and getattr(tmdb_client, "_api_key", None) and movie_id:
+                try:
+                    movie_details = await tmdb_client.get_details(movie_id)
+                    if movie_details and movie_details.genres:
+                        movie_genres = movie_details.genres
+                except Exception:
+                    pass  # Garder genres vide en cas d'erreur
+
             movie = Movie(
                 title=candidate_title,
                 year=candidate_year,
-                genres=(),  # Genres seront enrichis si MediaDetails disponibles
+                genres=movie_genres,
             )
 
             new_filename = renamer.generate_movie_filename(
@@ -442,8 +470,14 @@ async def _validate_batch_async() -> None:
             dest_dir = organizer.get_movie_destination(
                 movie=movie,
                 storage_dir=storage_dir,
+                video_dir=video_dir,
             )
-            symlink_dir = None  # Films: miroir standard
+            # Chemin personnalise pour le symlink (avec genre et subdivisions)
+            video_dir = Path(config.video_dir)
+            symlink_dir = organizer.get_movie_video_destination(
+                movie=movie,
+                video_dir=video_dir,
+            )
 
         transfer_data = {
             "pending": pending,
@@ -566,6 +600,9 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
     tvdb_client = container.tvdb_client()
     matcher = container.matcher_service()
 
+    # Liste pour collecter les IDs crees pendant le scan (pour nettoyage dry-run)
+    created_video_file_ids: list[str] = []
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -590,6 +627,10 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
                 media_info=result.media_info,
             )
             saved_vf = video_file_repo.save(video_file)
+
+            # Collecter l'ID pour nettoyage en cas de dry-run
+            if saved_vf.id:
+                created_video_file_ids.append(saved_vf.id)
 
             # Rechercher les candidats via API
             candidates = []
@@ -767,8 +808,23 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
     renamer = container.renamer_service()
     organizer = container.organizer_service()
     storage_dir = Path(config.storage_dir)
+    video_dir = Path(config.video_dir)
+    # Deux repertoires staging separes (chacun au niveau parent de sa zone)
+    video_staging_dir = video_dir.parent / "staging"
+    storage_staging_dir = storage_dir.parent / "staging"
+
+    # Creer le transferer pour la detection de conflits
+    transferer = container.transferer_service(
+        storage_dir=storage_dir,
+        video_dir=video_dir,
+    )
 
     transfers = []
+    # Cache des decisions de conflit par serie/saison (cle: "titre|annee|saison")
+    conflict_decisions: dict[str, str] = {}
+    # Cache des infos de conflit similaire deja detectes
+    similar_cache: dict[str, "SimilarContentInfo | None"] = {}
+
     for pend in validated_list:
         candidate = None
         for c in pend.candidates:
@@ -845,19 +901,34 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
                 series=series,
                 season_number=season_num,
                 storage_dir=storage_dir,
+                video_dir=video_dir,
             )
             # Chemin personnalise pour le symlink (avec type de serie)
-            video_dir = Path(config.video_dir)
             symlink_dir = organizer.get_series_video_destination(
                 series=series,
                 season_number=season_num,
                 video_dir=video_dir,
             )
         else:
+            # Pour les films: recuperer les genres depuis TMDB
+            movie_genres: tuple[str, ...] = ()
+            if isinstance(candidate, dict):
+                movie_id = candidate.get("id", "")
+            else:
+                movie_id = candidate.id
+
+            if tmdb_client and getattr(tmdb_client, "_api_key", None) and movie_id:
+                try:
+                    movie_details = await tmdb_client.get_details(movie_id)
+                    if movie_details and movie_details.genres:
+                        movie_genres = movie_details.genres
+                except Exception:
+                    pass  # Garder genres vides en cas d'erreur
+
             movie = Movie(
                 title=candidate_title,
                 year=candidate_year,
-                genres=(),
+                genres=movie_genres,
             )
             new_filename = renamer.generate_movie_filename(
                 movie=movie,
@@ -867,8 +938,149 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
             dest_dir = organizer.get_movie_destination(
                 movie=movie,
                 storage_dir=storage_dir,
+                video_dir=video_dir,
             )
-            symlink_dir = None  # Films: miroir standard
+            # Chemin personnalise pour le symlink (avec genre et subdivisions)
+            symlink_dir = organizer.get_movie_video_destination(
+                movie=movie,
+                video_dir=video_dir,
+            )
+
+        # Detection de contenu similaire
+        skip_transfer = False
+
+        # Cle de cache: serie+saison ou film
+        if is_series:
+            cache_key = f"{candidate_title}|{candidate_year}|{season_num}"
+        else:
+            cache_key = f"{candidate_title}|{candidate_year}"
+
+        # Verifier si on a deja une decision pour ce groupe
+        if cache_key in conflict_decisions:
+            # Appliquer la decision deja prise
+            cached_resolution = conflict_decisions[cache_key]
+            if cached_resolution in (ConflictResolution.SKIP, ConflictResolution.KEEP_OLD):
+                skip_transfer = True
+            # KEEP_NEW et KEEP_BOTH: on continue le transfert
+        else:
+            # Premiere rencontre de ce groupe: detecter les conflits
+            if is_series:
+                search_dir = symlink_dir.parent.parent  # Lettre/Serie/Saison -> Lettre
+            else:
+                search_dir = symlink_dir
+
+            # Verifier le cache de detection (eviter de rescanner le meme repertoire)
+            if cache_key not in similar_cache:
+                similar_cache[cache_key] = transferer.find_similar_content(
+                    title=candidate_title,
+                    year=candidate_year,
+                    destination_dir=search_dir,
+                    is_series=is_series,
+                )
+
+            similar = similar_cache[cache_key]
+
+            if similar:
+                # Compter tous les fichiers du meme groupe dans validated_list
+                new_files_count = 0
+                new_files_total_size = 0
+                new_files_resolutions: set[str] = set()
+                new_files_video_codecs: set[str] = set()
+                new_files_audio_codecs: set[str] = set()
+
+                for other_pend in validated_list:
+                    # Recuperer les infos du candidat
+                    other_candidate = None
+                    for c in other_pend.candidates:
+                        c_id = c.id if hasattr(c, "id") else c.get("id", "")
+                        if c_id == other_pend.selected_candidate_id:
+                            other_candidate = c
+                            break
+                    if other_candidate is None:
+                        continue
+
+                    if isinstance(other_candidate, dict):
+                        other_title = other_candidate.get("title", "")
+                        other_year = other_candidate.get("year")
+                        other_source = other_candidate.get("source", "")
+                    else:
+                        other_title = other_candidate.title
+                        other_year = other_candidate.year
+                        other_source = other_candidate.source
+
+                    other_is_series = other_source == "tvdb"
+
+                    # Construire la cle de l'autre fichier
+                    if other_is_series:
+                        other_filename = other_pend.video_file.filename if other_pend.video_file else ""
+                        other_season, _ = _extract_series_info(other_filename)
+                        other_key = f"{other_title}|{other_year}|{other_season}"
+                    else:
+                        other_key = f"{other_title}|{other_year}"
+
+                    # Si meme groupe, agreger les infos
+                    if other_key == cache_key and other_pend.video_file:
+                        new_files_count += 1
+                        other_path = other_pend.video_file.path
+                        if other_path and other_path.exists():
+                            new_files_total_size += other_path.stat().st_size
+                        other_media = other_pend.video_file.media_info
+                        if other_media:
+                            if other_media.resolution:
+                                new_files_resolutions.add(other_media.resolution.label)
+                            if other_media.video_codec:
+                                new_files_video_codecs.add(other_media.video_codec.name)
+                            if other_media.audio_codecs:
+                                new_files_audio_codecs.add(other_media.audio_codecs[0].name)
+
+                # Creer les infos agregees du nouveau contenu
+                new_file_info = ExistingFileInfo(
+                    path=source_path,
+                    size_bytes=new_files_total_size,
+                    resolution=", ".join(sorted(new_files_resolutions)) or None,
+                    video_codec=", ".join(sorted(new_files_video_codecs)) or None,
+                    audio_codec=", ".join(sorted(new_files_audio_codecs)) or None,
+                    duration_seconds=None,
+                )
+
+                # Afficher le conflit et demander la resolution
+                display_similar_content_conflict(similar, new_file_info, new_file_count=new_files_count)
+                resolution = prompt_conflict_resolution()
+
+                # Cacher la decision pour les autres fichiers du groupe
+                conflict_decisions[cache_key] = resolution
+
+                if resolution == ConflictResolution.SKIP:
+                    console.print(f"[yellow]Groupe passe ({new_files_count} fichier(s))[/yellow]")
+                    skip_transfer = True
+                elif resolution == ConflictResolution.KEEP_OLD:
+                    console.print(f"[yellow]Nouveau contenu ignore ({new_files_count} fichier(s))[/yellow]")
+                    skip_transfer = True
+                elif resolution == ConflictResolution.KEEP_NEW:
+                    if dry_run:
+                        console.print(f"[dim]Dry-run: l'ancien serait deplace vers staging[/dim]")
+                    else:
+                        console.print(f"[cyan]Deplacement de l'ancien vers staging...[/cyan]")
+                        # Deplacer les symlinks vers video_staging_dir
+                        transferer.move_to_staging(
+                            similar.existing_dir, video_staging_dir, preserve_structure=True
+                        )
+                        # Deplacer le stockage vers storage_staging_dir
+                        try:
+                            existing_storage_rel = similar.existing_dir.relative_to(video_dir)
+                            existing_storage_path = storage_dir / existing_storage_rel
+                            if existing_storage_path.exists():
+                                transferer.move_to_staging(
+                                    existing_storage_path, storage_staging_dir, preserve_structure=True
+                                )
+                        except (ValueError, OSError):
+                            pass
+                        console.print(f"[green]Ancien contenu deplace vers staging[/green]")
+                elif resolution == ConflictResolution.KEEP_BOTH:
+                    console.print(f"[green]Les deux versions seront conservees[/green]")
+
+        if skip_transfer:
+            continue
 
         transfer_data = {
             "pending": pend,
@@ -879,7 +1091,7 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
             "title": candidate_title,
             "year": candidate_year,
         }
-        # Ajouter le chemin de symlink personnalise pour les series
+        # Ajouter le chemin de symlink personnalise
         if symlink_dir:
             transfer_data["symlink_destination"] = symlink_dir / new_filename
         transfers.append(transfer_data)
@@ -890,15 +1102,10 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
 
         # Afficher l'arborescence des transferts (symlinks dans video_dir)
         if transfers:
-            video_dir = Path(config.video_dir)
             _display_transfer_tree(transfers, storage_dir, video_dir)
     elif transfers:
         console.print(f"\n[bold cyan]Transfert des fichiers valides[/bold cyan]\n")
-        transferer = container.transferer_service(
-            storage_dir=Path(config.storage_dir),
-            video_dir=Path(config.video_dir),
-        )
-        # Ajouter action pour le transferer
+        # Ajouter action pour le transferer (transferer deja cree plus haut)
         for t in transfers:
             t["action"] = "move+symlink"
 
@@ -916,6 +1123,21 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
     console.print(f"  Auto-valides: {auto_count}")
     if validated_list:
         console.print(f"  Total valides: {len(validated_list)}")
+
+    # 7. Nettoyage dry-run : supprimer les donnees creees pendant le scan
+    if dry_run and created_video_file_ids:
+        # Supprimer d'abord les PendingValidation (cle etrangere vers VideoFile)
+        for vf_id in created_video_file_ids:
+            pv = pending_repo.get_by_video_file_id(vf_id)
+            if pv and pv.id:
+                pending_repo.delete(pv.id)
+        # Puis supprimer les VideoFile
+        for vf_id in created_video_file_ids:
+            video_file_repo.delete(vf_id)
+        console.print(
+            f"\n[dim]Dry-run: {len(created_video_file_ids)} enregistrement(s) "
+            f"temporaire(s) nettoye(s)[/dim]"
+        )
 
 
 def pending(

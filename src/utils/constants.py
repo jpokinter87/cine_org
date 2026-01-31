@@ -113,3 +113,48 @@ TMDB_GENRE_MAPPING = {
     10752: "Guerre",
     37: "Western",
 }
+
+# Mapping des genres TMDB/internes vers les noms de repertoires existants
+# Permet de matcher les genres retournes par l'API avec la structure de dossiers
+GENRE_FOLDER_MAPPING = {
+    # Genres TMDB en francais
+    "action": "Action & Aventure",
+    "aventure": "Action & Aventure",
+    "animation": "Animation",
+    "comédie": "Comédie",
+    "comedie": "Comédie",
+    "crime": "Policier",
+    "documentaire": "Documentaire",
+    "drame": "Drame",
+    "famille": "Films pour enfants",
+    "fantastique": "Fantastique",
+    "histoire": "Historique",
+    "horreur": "Horreur",
+    "musique": "Comédie dramatique",
+    "mystère": "Thriller",
+    "mystere": "Thriller",
+    "romance": "Comédie dramatique",
+    "science-fiction": "SF",
+    "téléfilm": "Drame",
+    "telefilm": "Drame",
+    "thriller": "Thriller",
+    "guerre": "Guerre & espionnage",
+    "western": "Western",
+    # Genres TMDB en anglais (fallback)
+    "action & adventure": "Action & Aventure",
+    "sci-fi & fantasy": "SF",
+    "science fiction": "SF",
+    "war": "Guerre & espionnage",
+    "war & politics": "Guerre & espionnage",
+    "mystery": "Thriller",
+    "horror": "Horreur",
+    "comedy": "Comédie",
+    "drama": "Drame",
+    "fantasy": "Fantastique",
+    "kids": "Films pour enfants",
+    "family": "Films pour enfants",
+    "history": "Historique",
+    "documentary": "Documentaire",
+    # Valeur par defaut
+    "divers": "Drame",
+}
