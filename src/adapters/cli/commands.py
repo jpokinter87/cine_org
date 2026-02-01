@@ -1642,9 +1642,7 @@ async def _repair_links_async(
 
     try:
         # Trouver les symlinks casses avec indicateur de progression
-        console.print(f"[bold cyan]Scan:[/bold cyan] {video_dir}")
-
-        with Status("[cyan]Recherche des symlinks casses...", console=console) as status:
+        with Status(f"[cyan]Recherche des symlinks casses dans {video_dir}...", console=console) as status:
             broken = repair.find_broken_symlinks()
             status.update(f"[cyan]{len(broken)} symlinks casses trouves")
 
@@ -1652,17 +1650,20 @@ async def _repair_links_async(
             console.print("[green]Aucun symlink casse detecte.[/green]")
             return
 
+        console.print(f"[bold cyan]Symlinks casses:[/bold cyan] {len(broken)} detecte(s) dans {video_dir}")
+
         # Construire l'index des fichiers pour optimiser les recherches
-        with Status("[cyan]Indexation des fichiers video...", console=console) as status:
+        storage_dir = Path(config.storage_dir)
+        with Status(f"[cyan]Indexation du stockage ({storage_dir})...", console=console) as status:
             def update_status(count: int, msg: str) -> None:
-                status.update(f"[cyan]{msg}")
+                status.update(f"[cyan]Indexation du stockage: {count} fichiers...")
 
             file_count = repair.build_file_index(progress_callback=update_status)
-            status.update(f"[cyan]Index: {file_count} fichiers indexes")
+
+        console.print(f"[bold cyan]Index:[/bold cyan] {file_count} fichiers dans {storage_dir}")
 
         mode_label = "[dim](dry-run)[/dim] " if dry_run else ""
-        console.print(f"\n[bold cyan]{mode_label}Symlinks casses[/bold cyan]: {len(broken)} detecte(s)")
-        console.print(f"[dim]Recherche progressive: genre -> type -> base ({config.storage_dir})[/dim]\n")
+        console.print(f"\n{mode_label}[dim]Recherche progressive: genre -> type -> base[/dim]\n")
 
         if auto_repair:
             console.print("[yellow]Mode automatique: reparation si score >= 90%[/yellow]\n")
