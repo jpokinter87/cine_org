@@ -503,28 +503,39 @@ async def validation_loop(
     paginator = CandidatePaginator(candidates)
     # Cache des details par page pour eviter les appels API redondants
     details_cache: dict[int, dict[str, MediaDetails]] = {}
+    # Flag pour eviter de reafficher les candidats apres certaines commandes
+    should_redisplay = True
 
     while True:
-        # Afficher les candidats avec details enrichis
-        if paginator.candidates:
-            # Recuperer les details pour la page courante (avec cache)
-            page_key = paginator.current_page
-            if page_key not in details_cache:
-                console.print("[dim]Chargement des details...[/dim]")
-                details_cache[page_key] = await _fetch_details_for_page(
-                    paginator, service
+        # Afficher les candidats avec details enrichis (sauf si juste un prompt)
+        if should_redisplay:
+            if paginator.candidates:
+                # Recuperer les details pour la page courante (avec cache)
+                page_key = paginator.current_page
+                if page_key not in details_cache:
+                    console.print("[dim]Chargement des details...[/dim]")
+                    details_cache[page_key] = await _fetch_details_for_page(
+                        paginator, service
+                    )
+                details_map = details_cache[page_key]
+
+                display_enriched_candidates(paginator, pending, details_map)
+            else:
+                filename = (
+                    pending.video_file.filename if pending.video_file else "Fichier inconnu"
                 )
-            details_map = details_cache[page_key]
+                console.print(f"\n[bold cyan]Fichier:[/bold cyan] {filename}")
+                console.print("[yellow]Aucun candidat disponible[/yellow]")
 
-            display_enriched_candidates(paginator, pending, details_map)
-        else:
-            filename = (
-                pending.video_file.filename if pending.video_file else "Fichier inconnu"
-            )
-            console.print(f"\n[bold cyan]Fichier:[/bold cyan] {filename}")
-            console.print("[yellow]Aucun candidat disponible[/yellow]")
+        # Remettre le flag par defaut pour la prochaine iteration
+        should_redisplay = True
 
-        # Demander le choix
+        # Demander le choix avec les options principales visibles
+        console.print(
+            "[dim]Options: [cyan]1-5[/cyan]=selectionner  "
+            "[cyan]s[/cyan]=skip  [cyan]v[/cyan]=voir  [cyan]y[/cyan]=youtube  "
+            "[cyan]a[/cyan]=analyser  [cyan]?[/cyan]=aide[/dim]"
+        )
         choice = Prompt.ask("[bold]Choix[/bold]", default="1")
         choice = choice.strip().lower()
 
@@ -631,6 +642,7 @@ async def validation_loop(
                     console.print(f"[red]Erreur: {e}[/red]")
             else:
                 console.print("[yellow]Chemin du fichier non disponible[/yellow]")
+            should_redisplay = False
 
         # Ouvrir YouTube pour le trailer d'un candidat
         elif choice.startswith("y"):
@@ -649,6 +661,7 @@ async def validation_loop(
                 webbrowser.open(url)
             else:
                 console.print("[yellow]Numero invalide[/yellow]")
+            should_redisplay = False
 
         # Analyser le generique avec IA/OCR
         elif choice == "a":
@@ -676,12 +689,11 @@ async def validation_loop(
                     if not analysis.raw_text:
                         console.print("[yellow]Aucun texte detecte dans le generique[/yellow]")
                     else:
-                        console.print(f"[dim]Methode: {analysis.method}, confiance: {analysis.confidence:.0f}%[/dim]")
+                        console.print(f"[dim]Methode: {analysis.method}, confiance OCR: {analysis.confidence:.0f}%[/dim]")
 
-                        if analysis.detected_director:
-                            console.print(f"[cyan]Realisateur detecte:[/cyan] {analysis.detected_director}")
-                        if analysis.detected_actors:
-                            console.print(f"[cyan]Acteurs detectes:[/cyan] {', '.join(analysis.detected_actors)}")
+                        # Afficher un extrait du texte detecte pour diagnostic
+                        preview = analysis.raw_text[:500].replace("\n", " ")
+                        console.print(f"[dim]Texte: {preview}...[/dim]")
 
                         # Recuperer les details des candidats pour comparaison
                         candidates_details = []
@@ -714,8 +726,16 @@ async def validation_loop(
                                         console.print(f"       [dim]Acteurs: {', '.join(match.matched_actors)}[/dim]")
 
                                 # Proposer de valider le meilleur match
+                                # Fiable si: 3+ acteurs, ou realisateur + 1 acteur, ou score >= 50
                                 best = matches[0]
-                                if best.match_score >= 50:
+                                num_actors = len(best.matched_actors)
+                                is_reliable = (
+                                    num_actors >= 3 or
+                                    (best.matched_director and num_actors >= 1) or
+                                    best.match_score >= 50
+                                )
+
+                                if is_reliable:
                                     if Confirm.ask(
                                         f"\nValider [bold]{best.candidate_title}[/bold] ?",
                                         default=True
@@ -725,10 +745,12 @@ async def validation_loop(
                                 console.print("[yellow]Aucune correspondance trouvee avec les candidats[/yellow]")
                         else:
                             console.print("[yellow]Details des candidats non disponibles[/yellow]")
+            should_redisplay = False
 
         # Aide
         elif choice == "?":
             display_help()
+            should_redisplay = False
 
         # Quitter
         elif choice == "q":

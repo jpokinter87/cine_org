@@ -28,6 +28,12 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "respx>=0.20.0",
 ]
+credits = [
+    "easyocr>=1.7.0",
+    "pytesseract>=0.3.10",
+    "Pillow>=10.0.0",
+    "anthropic>=0.40.0",
+]
 
 [project.scripts]
 cineorg = "src.main:main"

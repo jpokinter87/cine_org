@@ -33,7 +33,9 @@ xxhash>=3.6.0
 pathvalidate>=3.2.0
 
 # Credits Analysis (optional - for automatic candidate matching via OCR)
-# Requires: sudo apt install tesseract-ocr tesseract-ocr-fra ffmpeg
-pytesseract>=0.3.10
+# Requires: sudo apt install ffmpeg
+# Optional: sudo apt install tesseract-ocr tesseract-ocr-fra (for Tesseract fallback)
+easyocr>=1.7.0  # Deep learning OCR (recommended)
+pytesseract>=0.3.10  # Tesseract wrapper (fallback)
 Pillow>=10.0.0
-anthropic>=0.40.0  # For Claude Vision fallback
+anthropic>=0.40.0  # For Claude Vision fallback (optional, paid API)
