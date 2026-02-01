@@ -43,13 +43,35 @@ Valider automatiquement ? [O/n]
 ### Prérequis techniques
 
 - [ ] ffmpeg disponible dans le PATH
-- [ ] Clé API Anthropic avec accès Claude Vision
+- [ ] Clé API Anthropic (même clé que Claude Code, supporte Vision)
 - [ ] Configuration du timeout (analyse ~30s)
 - [ ] Gestion du cache des analyses (éviter de ré-analyser)
 
+### Alternatives pour l'OCR
+
+#### Option 1 : Claude Vision (recommandé)
+- Utilise la même clé API que Claude Code
+- Très performant sur le texte stylisé des génériques
+- Coût : ~$0.01-0.02 par analyse
+
+#### Option 2 : Tesseract OCR (gratuit, local)
+- Installation : `sudo apt install tesseract-ocr tesseract-ocr-fra`
+- Pas de coût, fonctionne hors-ligne
+- Moins performant sur les polices stylisées
+- Utilisation :
+  ```python
+  import pytesseract
+  from PIL import Image
+  text = pytesseract.image_to_string(Image.open("frame.jpg"), lang="fra+eng")
+  ```
+
+L'implémentation pourrait supporter les deux avec un fallback :
+1. Essayer Tesseract (gratuit)
+2. Si confiance faible, proposer Claude Vision
+
 ### Points d'attention
 
-- Coût API Claude Vision (images volumineuses)
 - Qualité variable des génériques (police, contraste)
 - Films sans générique lisible (animations, etc.)
 - Fallback si l'analyse échoue
+- Prétraitement d'image pour améliorer l'OCR (contraste, binarisation)
