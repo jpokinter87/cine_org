@@ -282,8 +282,51 @@ async def _validate_manual_async() -> None:
 
     console.print(f"[bold]{len(pending_list)}[/bold] fichier(s) a valider.\n")
 
-    validated = []
+    # Auto-valider les cas evidents: 1 seul candidat avec score >= 95%
+    auto_validated = []
+    remaining = []
     for pending in pending_list:
+        if pending.candidates and len(pending.candidates) == 1:
+            candidate = pending.candidates[0]
+            score = candidate.get("score", 0) if isinstance(candidate, dict) else getattr(candidate, "score", 0)
+            if score >= 95:
+                auto_validated.append(pending)
+                continue
+        remaining.append(pending)
+
+    # Valider automatiquement les cas evidents
+    if auto_validated:
+        console.print(f"[bold cyan]Auto-validation[/bold cyan]: {len(auto_validated)} fichier(s) avec 1 candidat >= 95%\n")
+        for pending in auto_validated:
+            candidate = pending.candidates[0]
+            filename = pending.video_file.filename if pending.video_file else "?"
+
+            # Convertir dict en SearchResult si necessaire
+            if isinstance(candidate, dict):
+                from src.core.ports.api_clients import SearchResult
+                search_result = SearchResult(
+                    id=candidate.get("id", ""),
+                    title=candidate.get("title", ""),
+                    year=candidate.get("year"),
+                    score=candidate.get("score", 0.0),
+                    source=candidate.get("source", ""),
+                )
+            else:
+                search_result = candidate
+
+            details = await service.validate_candidate(pending, search_result)
+            console.print(f"[green]{filename}[/green] -> {details.title} ({candidate.get('score', 0):.0f}%)")
+
+        console.print()
+
+    if not remaining:
+        console.print(f"[bold]{len(auto_validated)}[/bold] fichier(s) valide(s) automatiquement.")
+        return
+
+    console.print(f"[bold]{len(remaining)}[/bold] fichier(s) restant(s) a valider manuellement.\n")
+
+    validated = []
+    for pending in remaining:
         result = await validation_loop(pending, service)
 
         if result == "quit":
@@ -323,7 +366,8 @@ async def _validate_manual_async() -> None:
                 filename = pending.video_file.filename if pending.video_file else "?"
                 console.print(f"[green]Valide:[/green] {filename} -> {details.title}")
 
-    console.print(f"\n[bold]{len(validated)}[/bold] fichier(s) valide(s).")
+    total_validated = len(auto_validated) + len(validated)
+    console.print(f"\n[bold]Resume:[/bold] {total_validated} fichier(s) valide(s) ({len(auto_validated)} auto, {len(validated)} manuel)")
 
 
 @validate_app.command("batch")
