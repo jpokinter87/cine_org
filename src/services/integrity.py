@@ -556,9 +556,10 @@ class RepairService:
         # Chercher dans le repertoire
         for candidate in search_dir.rglob("*"):
             try:
-                if candidate.is_dir():
-                    continue
+                # Verifier symlink EN PREMIER (avant is_dir qui suit les symlinks)
                 if candidate.is_symlink():
+                    continue
+                if candidate.is_dir():
                     continue
 
                 # Verifier que c'est un fichier video
