@@ -58,12 +58,12 @@ class TestTVDBClientAuthentication:
         """
         from src.adapters.api.tvdb_client import TVDBClient
 
-        # Mock the login endpoint
-        login_route = respx.post("https://api4.thetvdb.com/v4/login").mock(
+        # Mock the login endpoint (API v3)
+        login_route = respx.post("https://api.thetvdb.com/login").mock(
             return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
         )
         # Mock search endpoint (to trigger authentication)
-        search_route = respx.get("https://api4.thetvdb.com/v4/search").mock(
+        search_route = respx.get("https://api.thetvdb.com/search/series").mock(
             return_value=httpx.Response(200, json=TVDB_SEARCH_EMPTY_RESPONSE)
         )
 
@@ -89,13 +89,13 @@ class TestTVDBClientAuthentication:
         """
         from src.adapters.api.tvdb_client import TVDBClient
 
-        token = TVDB_LOGIN_RESPONSE["data"]["token"]
+        token = TVDB_LOGIN_RESPONSE["token"]
 
-        # Mock endpoints
-        respx.post("https://api4.thetvdb.com/v4/login").mock(
+        # Mock endpoints (API v3)
+        respx.post("https://api.thetvdb.com/login").mock(
             return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
         )
-        search_route = respx.get("https://api4.thetvdb.com/v4/search").mock(
+        search_route = respx.get("https://api.thetvdb.com/search/series").mock(
             return_value=httpx.Response(200, json=TVDB_SEARCH_EMPTY_RESPONSE)
         )
 
@@ -123,10 +123,10 @@ class TestTVDBClientAuthentication:
         from src.adapters.api.tvdb_client import TVDBClient
 
         # First login response
-        login_route = respx.post("https://api4.thetvdb.com/v4/login").mock(
+        login_route = respx.post("https://api.thetvdb.com/login").mock(
             return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
         )
-        respx.get("https://api4.thetvdb.com/v4/search").mock(
+        respx.get("https://api.thetvdb.com/search/series").mock(
             return_value=httpx.Response(200, json=TVDB_SEARCH_EMPTY_RESPONSE)
         )
 
@@ -160,10 +160,10 @@ class TestTVDBClientSearch:
         from src.adapters.api.tvdb_client import TVDBClient
 
         # Mock endpoints
-        respx.post("https://api4.thetvdb.com/v4/login").mock(
+        respx.post("https://api.thetvdb.com/login").mock(
             return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
         )
-        respx.get("https://api4.thetvdb.com/v4/search").mock(
+        respx.get("https://api.thetvdb.com/search/series").mock(
             return_value=httpx.Response(200, json=TVDB_SEARCH_RESPONSE)
         )
 
@@ -199,10 +199,10 @@ class TestTVDBClientSearch:
         from src.adapters.api.tvdb_client import TVDBClient
 
         # Mock endpoints
-        respx.post("https://api4.thetvdb.com/v4/login").mock(
+        respx.post("https://api.thetvdb.com/login").mock(
             return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
         )
-        respx.get("https://api4.thetvdb.com/v4/search").mock(
+        respx.get("https://api.thetvdb.com/search/series").mock(
             return_value=httpx.Response(200, json=TVDB_SEARCH_EMPTY_RESPONSE)
         )
 
@@ -225,10 +225,10 @@ class TestTVDBClientSearch:
         from src.adapters.api.tvdb_client import TVDBClient
 
         # Mock endpoints
-        respx.post("https://api4.thetvdb.com/v4/login").mock(
+        respx.post("https://api.thetvdb.com/login").mock(
             return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
         )
-        respx.get("https://api4.thetvdb.com/v4/search").mock(
+        respx.get("https://api.thetvdb.com/search/series").mock(
             return_value=httpx.Response(200, json=TVDB_SEARCH_RESPONSE)
         )
 
@@ -267,10 +267,10 @@ class TestTVDBClientSearch:
         mock_cache.get = AsyncMock(return_value=cached_results)
 
         # Mock endpoints (should NOT be called)
-        login_route = respx.post("https://api4.thetvdb.com/v4/login").mock(
+        login_route = respx.post("https://api.thetvdb.com/login").mock(
             return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
         )
-        search_route = respx.get("https://api4.thetvdb.com/v4/search").mock(
+        search_route = respx.get("https://api.thetvdb.com/search/series").mock(
             return_value=httpx.Response(200, json=TVDB_SEARCH_RESPONSE)
         )
 
@@ -296,29 +296,35 @@ class TestTVDBClientSearch:
         self, mock_cache: MagicMock, api_key: str
     ) -> None:
         """
-        Test that search with year includes year in cache key and request.
+        Test that search with year includes year in cache key.
+
+        Note: TVDB API v3 doesn't support year filter in query params.
+        The year filtering is done client-side after receiving results.
         """
         from src.adapters.api.tvdb_client import TVDBClient
 
         # Mock endpoints
-        respx.post("https://api4.thetvdb.com/v4/login").mock(
+        respx.post("https://api.thetvdb.com/login").mock(
             return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
         )
-        search_route = respx.get("https://api4.thetvdb.com/v4/search").mock(
+        search_route = respx.get("https://api.thetvdb.com/search/series").mock(
             return_value=httpx.Response(200, json=TVDB_SEARCH_RESPONSE)
         )
 
         client = TVDBClient(api_key=api_key, cache=mock_cache)
         try:
-            await client.search("Breaking Bad", year=2008)
+            results = await client.search("Breaking Bad", year=2008)
 
             # Verify cache key includes year
             mock_cache.get.assert_called_with("tvdb:search:Breaking Bad:2008")
 
-            # Verify year in query params
+            # Verify search was called
             assert search_route.called
-            request = search_route.calls[0].request
-            assert "year=2008" in str(request.url)
+
+            # Year filtering is done client-side - only 2008 results returned
+            # TVDB_SEARCH_RESPONSE has Breaking Bad (2008) and Metastasis (2014)
+            assert len(results) == 1
+            assert results[0].year == 2008
         finally:
             await client.close()
 
@@ -337,10 +343,10 @@ class TestTVDBClientGetDetails:
         from src.adapters.api.tvdb_client import TVDBClient
 
         # Mock endpoints
-        respx.post("https://api4.thetvdb.com/v4/login").mock(
+        respx.post("https://api.thetvdb.com/login").mock(
             return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
         )
-        respx.get("https://api4.thetvdb.com/v4/series/81189/extended").mock(
+        respx.get("https://api.thetvdb.com/series/81189").mock(
             return_value=httpx.Response(200, json=TVDB_SERIES_DETAILS_RESPONSE)
         )
 
@@ -371,10 +377,10 @@ class TestTVDBClientGetDetails:
         from src.adapters.api.tvdb_client import TVDBClient
 
         # Mock endpoints
-        respx.post("https://api4.thetvdb.com/v4/login").mock(
+        respx.post("https://api.thetvdb.com/login").mock(
             return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
         )
-        respx.get("https://api4.thetvdb.com/v4/series/99999999/extended").mock(
+        respx.get("https://api.thetvdb.com/series/99999999").mock(
             return_value=httpx.Response(404, json=TVDB_SERIES_NOT_FOUND_RESPONSE)
         )
 
@@ -397,10 +403,10 @@ class TestTVDBClientGetDetails:
         from src.adapters.api.tvdb_client import TVDBClient
 
         # Mock endpoints
-        respx.post("https://api4.thetvdb.com/v4/login").mock(
+        respx.post("https://api.thetvdb.com/login").mock(
             return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
         )
-        respx.get("https://api4.thetvdb.com/v4/series/81189/extended").mock(
+        respx.get("https://api.thetvdb.com/series/81189").mock(
             return_value=httpx.Response(200, json=TVDB_SERIES_DETAILS_RESPONSE)
         )
 
@@ -442,10 +448,10 @@ class TestTVDBClientGetDetails:
         mock_cache.get = AsyncMock(return_value=cached_details)
 
         # Mock endpoints (should NOT be called)
-        login_route = respx.post("https://api4.thetvdb.com/v4/login").mock(
+        login_route = respx.post("https://api.thetvdb.com/login").mock(
             return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
         )
-        details_route = respx.get("https://api4.thetvdb.com/v4/series/81189/extended").mock(
+        details_route = respx.get("https://api.thetvdb.com/series/81189").mock(
             return_value=httpx.Response(200, json=TVDB_SERIES_DETAILS_RESPONSE)
         )
 
@@ -514,7 +520,7 @@ class TestTVDBClientRateLimiting:
         from src.adapters.api.tvdb_client import TVDBClient
 
         # Mock login
-        respx.post("https://api4.thetvdb.com/v4/login").mock(
+        respx.post("https://api.thetvdb.com/login").mock(
             return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
         )
 
@@ -528,7 +534,7 @@ class TestTVDBClientRateLimiting:
                 return httpx.Response(429, headers={"Retry-After": "1"})
             return httpx.Response(200, json=TVDB_SEARCH_RESPONSE)
 
-        search_route = respx.get("https://api4.thetvdb.com/v4/search").mock(
+        search_route = respx.get("https://api.thetvdb.com/search/series").mock(
             side_effect=search_response
         )
 
@@ -554,12 +560,12 @@ class TestTVDBClientRateLimiting:
         from src.adapters.api.tvdb_client import TVDBClient
 
         # Mock login
-        respx.post("https://api4.thetvdb.com/v4/login").mock(
+        respx.post("https://api.thetvdb.com/login").mock(
             return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
         )
 
         # Mock search: always returns 429
-        respx.get("https://api4.thetvdb.com/v4/search").mock(
+        respx.get("https://api.thetvdb.com/search/series").mock(
             return_value=httpx.Response(429, headers={"Retry-After": "1"})
         )
 

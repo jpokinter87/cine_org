@@ -34,12 +34,19 @@ class Resolution:
         ou la hauteur est reduite mais la largeur reste standard.
         Utilise des seuils tolerants pour gerer les variations mineures
         (ex: 1916 pixels au lieu de 1920).
+
+        Seuils de hauteur :
+        - 4K: >= 2160 (ou largeur >= 3800)
+        - 1080p: >= 1000 (pour inclure les formats 4:3 et recadres comme 1056p)
+        - 720p: >= 720
+        - SD: < 720
         """
         # 4K: 3840x2160 ou plus (seuil tolerant: 3800 pour cinema)
         if self.height >= 2160 or self.width >= 3800:
             return "4K"
-        # 1080p: 1920x1080 ou plus (seuil tolerant: 1900 pour cinema)
-        elif self.height >= 1080 or self.width >= 1900:
+        # 1080p: hauteur >= 1000 (inclut 1056p, 1080p) ou largeur >= 1900
+        # Le seuil 1000 couvre les formats 4:3 (1440x1080) et recadres (1392x1056)
+        elif self.height >= 1000 or self.width >= 1900:
             return "1080p"
         # 720p: 1280x720 ou plus (seuil tolerant: 1260 pour cinema)
         elif self.height >= 720 or self.width >= 1260:

@@ -411,6 +411,18 @@ class TransfererService:
                         existing_title=existing_name,
                         similarity_reason=reason,
                     )
+                else:
+                    # Nom identique: contenu existant avec le meme nom
+                    # Signaler pour eviter les doublons d'episodes/fichiers
+                    files_info = self._collect_files_info(subdir, is_series)
+                    if files_info:  # Seulement si des fichiers existent deja
+                        return SimilarContentInfo(
+                            existing_dir=subdir,
+                            existing_files=files_info,
+                            new_title=new_name,
+                            existing_title=existing_name,
+                            similarity_reason="Contenu existant avec le meme nom",
+                        )
 
         return None
 

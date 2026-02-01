@@ -215,6 +215,39 @@ class TestGetSortLetter:
         """Si le titre ne contient qu'un article, on le garde."""
         assert get_sort_letter("Le") == "L"
 
+    # --- Caractères invisibles Unicode ---
+    def test_sort_letter_ignores_invisible_chars(self) -> None:
+        """Les caractères invisibles Unicode sont ignorés."""
+        # U+200E Left-to-Right Mark - caractère invisible courant dans les APIs
+        assert get_sort_letter("\u200eZoe") == "Z"
+        # U+200F Right-to-Left Mark
+        assert get_sort_letter("\u200fMatrix") == "M"
+        # U+FEFF BOM (Byte Order Mark)
+        assert get_sort_letter("\ufeffAvatar") == "A"
+        # U+00AD Soft Hyphen
+        assert get_sort_letter("\u00adTest") == "T"
+        # Zero-Width Space
+        assert get_sort_letter("\u200bFilm") == "F"
+
+    def test_sort_letter_invisible_with_article(self) -> None:
+        """Caractères invisibles combinés avec articles."""
+        # LRM + article français
+        assert get_sort_letter("\u200eLe Parrain") == "P"
+        # Article anglais avec caractère invisible au milieu
+        assert get_sort_letter("The\u200e Matrix") == "M"
+
+
+class TestTitleMatchesRange:
+    """Tests pour _title_matches_range avec caractères invisibles."""
+
+    def test_title_matches_range_invisible_not_hash(self) -> None:
+        """Un titre avec caractère invisible ne doit pas matcher #."""
+        from src.services.organizer import _title_matches_range
+        # U+200E Left-to-Right Mark devant "Zoe"
+        assert _title_matches_range("\u200eZoe, mon amie morte", "#") is False
+        assert _title_matches_range("\u200eZoe, mon amie morte", "R-Z") is True
+        assert _title_matches_range("\u200eZoe, mon amie morte", "Z") is True
+
 
 # ====================
 # Tests get_priority_genre

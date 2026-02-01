@@ -53,6 +53,8 @@ class MediaDetails:
         duration_seconds : Durée en secondes (pour les films)
         overview : Résumé de l'intrigue/description
         poster_url : URL complète vers l'image poster
+        director : Nom du réalisateur (pour les films)
+        cast : Tuple des noms des acteurs principaux (3-5 premiers)
     """
 
     id: str
@@ -63,6 +65,8 @@ class MediaDetails:
     duration_seconds: Optional[int] = None
     overview: Optional[str] = None
     poster_url: Optional[str] = None
+    director: Optional[str] = None
+    cast: tuple[str, ...] = ()
 
 
 @dataclass

@@ -144,11 +144,20 @@ class TestShouldAutoValidate:
         ]
         assert validation_service.should_auto_validate(candidates) is False
 
-    def test_should_auto_validate_multiple_high_scores(self, validation_service):
-        """Multiple candidates with high scores should NOT auto-validate."""
+    def test_should_auto_validate_multiple_high_confidence(self, validation_service):
+        """Multiple candidates with best score >= 95% SHOULD auto-validate (high confidence)."""
         candidates = [
             SearchResult(id="1", title="Avatar", year=2009, score=95.0, source="tmdb"),
             SearchResult(id="2", title="Avatar 2", year=2022, score=90.0, source="tmdb"),
+        ]
+        # HIGH_CONFIDENCE_THRESHOLD (95%) allows auto-validation even with multiple candidates
+        assert validation_service.should_auto_validate(candidates) is True
+
+    def test_should_auto_validate_multiple_below_high_confidence(self, validation_service):
+        """Multiple candidates with best score < 95% should NOT auto-validate."""
+        candidates = [
+            SearchResult(id="1", title="Avatar", year=2009, score=90.0, source="tmdb"),
+            SearchResult(id="2", title="Avatar 2", year=2022, score=85.0, source="tmdb"),
         ]
         assert validation_service.should_auto_validate(candidates) is False
 
@@ -210,16 +219,40 @@ class TestProcessAutoValidation:
         mock_pending_repo.save.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_process_auto_validation_multiple_candidates(
+    async def test_process_auto_validation_multiple_candidates_high_confidence(
         self, validation_service, mock_pending_repo, sample_video_file
     ):
-        """2 candidats -> entite inchangee (meme avec scores eleves)."""
+        """2 candidats avec best >= 95% -> auto-validation (haute confiance)."""
         pending = PendingValidation(
             id="1",
             video_file=sample_video_file,
             candidates=[
                 {"id": "19995", "title": "Avatar", "year": 2009, "score": 95.0, "source": "tmdb"},
                 {"id": "76600", "title": "Avatar 2", "year": 2022, "score": 90.0, "source": "tmdb"},
+            ],
+            auto_validated=False,
+            validation_status=ValidationStatus.PENDING,
+        )
+
+        result = await validation_service.process_auto_validation(pending)
+
+        # HIGH_CONFIDENCE_THRESHOLD (95%) permet l'auto-validation
+        assert result.auto_validated is True
+        assert result.validation_status == ValidationStatus.VALIDATED
+        assert result.selected_candidate_id == "19995"
+        mock_pending_repo.save.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_process_auto_validation_multiple_candidates_low_confidence(
+        self, validation_service, mock_pending_repo, sample_video_file
+    ):
+        """2 candidats avec best < 95% -> entite inchangee."""
+        pending = PendingValidation(
+            id="1",
+            video_file=sample_video_file,
+            candidates=[
+                {"id": "19995", "title": "Avatar", "year": 2009, "score": 90.0, "source": "tmdb"},
+                {"id": "76600", "title": "Avatar 2", "year": 2022, "score": 85.0, "source": "tmdb"},
             ],
             auto_validated=False,
             validation_status=ValidationStatus.PENDING,

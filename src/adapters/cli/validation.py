@@ -28,7 +28,7 @@ from rich.table import Table
 from rich.tree import Tree
 
 from src.core.entities.video import PendingValidation
-from src.core.ports.api_clients import SearchResult
+from src.core.ports.api_clients import MediaDetails, SearchResult
 
 if TYPE_CHECKING:
     from src.services.transferer import (
@@ -129,7 +129,7 @@ def render_candidate_card(
     candidate: SearchResult, rank: int, is_best: bool = False
 ) -> Panel:
     """
-    Cree un panel Rich representant une carte de candidat.
+    Cree un panel Rich representant une carte de candidat (version simple).
 
     Args:
         candidate: Le candidat a afficher
@@ -169,11 +169,127 @@ def render_candidate_card(
     return Panel(content, title=title, border_style=border_style)
 
 
+def _get_duration_color(file_duration: int, api_duration: int) -> str:
+    """
+    Determine la couleur selon l'ecart entre durees.
+
+    Args:
+        file_duration: Duree du fichier en secondes
+        api_duration: Duree depuis l'API en secondes
+
+    Returns:
+        Nom de couleur Rich: green, yellow, ou red
+    """
+    diff = abs(file_duration - api_duration)
+    if diff < 5 * 60:  # < 5 minutes
+        return "green"
+    elif diff < 15 * 60:  # < 15 minutes
+        return "yellow"
+    else:
+        return "red"
+
+
+def _truncate_text(text: str, max_length: int = 100) -> str:
+    """Tronque un texte avec ellipse si necessaire."""
+    if not text:
+        return ""
+    if len(text) <= max_length:
+        return text
+    return text[: max_length - 3] + "..."
+
+
+def render_enriched_candidate_card(
+    candidate: SearchResult,
+    rank: int,
+    is_best: bool = False,
+    details: "MediaDetails | None" = None,
+    file_duration_seconds: int | None = None,
+) -> Panel:
+    """
+    Cree un panel Rich enrichi avec synopsis, credits et durees.
+
+    Args:
+        candidate: Le candidat a afficher
+        rank: Numero d'affichage (1-based)
+        is_best: True si c'est le meilleur candidat (badge RECOMMANDE)
+        details: Details enrichis depuis l'API (optionnel)
+        file_duration_seconds: Duree du fichier local en secondes (optionnel)
+
+    Returns:
+        Un Panel Rich avec les informations enrichies du candidat.
+    """
+    from src.core.ports.api_clients import MediaDetails
+
+    lines = []
+
+    # Titre en gras
+    lines.append(f"[bold]{candidate.title}[/bold]")
+
+    # Annee
+    if candidate.year:
+        lines.append(f"Annee: {candidate.year}")
+
+    # Score avec couleur (vert >= 85, jaune sinon)
+    score_color = "green" if candidate.score >= 85 else "yellow"
+    lines.append(f"Score: [{score_color}]{candidate.score:.0f}%[/{score_color}]")
+
+    # Source
+    lines.append(f"Source: {candidate.source.upper()}")
+
+    # Infos enrichies si disponibles
+    if details:
+        # Separateur
+        lines.append("")
+
+        # Realisateur
+        if details.director:
+            lines.append(f"[cyan]Realisateur:[/cyan] {details.director}")
+
+        # Acteurs (4 premiers)
+        if details.cast:
+            cast_str = ", ".join(details.cast[:4])
+            lines.append(f"[cyan]Acteurs:[/cyan] {cast_str}")
+
+        # Durees avec code couleur
+        if details.duration_seconds or file_duration_seconds:
+            api_dur_str = format_duration(details.duration_seconds) if details.duration_seconds else "?"
+            file_dur_str = format_duration(file_duration_seconds) if file_duration_seconds else "?"
+
+            if details.duration_seconds and file_duration_seconds:
+                color = _get_duration_color(file_duration_seconds, details.duration_seconds)
+                lines.append(
+                    f"[cyan]Duree:[/cyan] fichier [{color}]{file_dur_str}[/{color}] / "
+                    f"TMDB {api_dur_str}"
+                )
+            elif file_duration_seconds:
+                lines.append(f"[cyan]Duree fichier:[/cyan] {file_dur_str}")
+            else:
+                lines.append(f"[cyan]Duree TMDB:[/cyan] {api_dur_str}")
+
+        # Synopsis tronque
+        if details.overview:
+            synopsis = _truncate_text(details.overview, 120)
+            lines.append("")
+            lines.append(f"[dim]{synopsis}[/dim]")
+
+    content = "\n".join(lines)
+
+    # Titre du panel avec numero et badge optionnel
+    if is_best:
+        title = f"[{rank}] [bold green]* RECOMMANDE[/bold green]"
+        border_style = "green"
+    else:
+        title = f"[{rank}]"
+        border_style = "white"
+
+    return Panel(content, title=title, border_style=border_style)
+
+
 def display_candidates(
     paginator: CandidatePaginator, pending: PendingValidation
 ) -> None:
     """
-    Affiche les candidats de la page courante.
+    Affiche les candidats de la page courante (version simple).
 
     Args:
         paginator: Paginateur avec les candidats
@@ -189,6 +305,53 @@ def display_candidates(
         # Le premier de la premiere page est le meilleur (recommande)
         is_best = idx == 1 and paginator.current_page == 0
         panel = render_candidate_card(candidate, idx, is_best)
+        console.print(panel)
+
+    # Indication de pagination
+    if paginator.has_more():
+        console.print("[dim]Autres candidats disponibles... (n pour suivant)[/dim]")
+
+
+def display_enriched_candidates(
+    paginator: CandidatePaginator,
+    pending: PendingValidation,
+    details_map: dict[str, "MediaDetails"],
+) -> None:
+    """
+    Affiche les candidats enrichis avec synopsis, credits et durees.
+
+    Args:
+        paginator: Paginateur avec les candidats
+        pending: Entite PendingValidation pour afficher le nom du fichier
+        details_map: Dict candidate_id -> MediaDetails pour les candidats de la page
+    """
+    from src.core.ports.api_clients import MediaDetails
+
+    # Header avec nom du fichier
+    filename = pending.video_file.filename if pending.video_file else "Fichier inconnu"
+    console.print(f"\n[bold cyan]Fichier:[/bold cyan] {filename}")
+
+    # Afficher la duree du fichier
+    file_duration = None
+    if pending.video_file and pending.video_file.media_info:
+        file_duration = pending.video_file.media_info.duration_seconds
+        if file_duration:
+            console.print(f"[dim]Duree fichier: {format_duration(file_duration)}[/dim]")
+
+    console.print()
+
+    # Afficher chaque candidat avec details enrichis
+    for idx, candidate in enumerate(paginator.current_items, start=1):
+        is_best = idx == 1 and paginator.current_page == 0
+        details = details_map.get(candidate.id)
+
+        panel = render_enriched_candidate_card(
+            candidate=candidate,
+            rank=idx,
+            is_best=is_best,
+            details=details,
+            file_duration_seconds=file_duration,
+        )
         console.print(panel)
 
     # Indication de pagination
@@ -287,6 +450,35 @@ def determine_is_series(pending: PendingValidation) -> bool:
     return False
 
 
+async def _fetch_details_for_page(
+    paginator: CandidatePaginator, service: "ValidationService"
+) -> dict[str, MediaDetails]:
+    """
+    Recupere les details enrichis pour les candidats de la page courante.
+
+    Args:
+        paginator: Paginateur avec les candidats
+        service: ValidationService avec acces aux clients API
+
+    Returns:
+        Dict mapping candidate_id -> MediaDetails
+    """
+    details_map: dict[str, MediaDetails] = {}
+
+    for candidate in paginator.current_items:
+        try:
+            details = await service._get_details_from_source(
+                candidate.source, candidate.id
+            )
+            if details:
+                details_map[candidate.id] = details
+        except Exception:
+            # En cas d'erreur API, on continue sans les details
+            pass
+
+    return details_map
+
+
 async def validation_loop(
     pending: PendingValidation, service: "ValidationService"
 ) -> str | None:
@@ -306,11 +498,22 @@ async def validation_loop(
     # Parser les candidats initiaux
     candidates = _parse_candidates_to_search_results(pending.candidates)
     paginator = CandidatePaginator(candidates)
+    # Cache des details par page pour eviter les appels API redondants
+    details_cache: dict[int, dict[str, MediaDetails]] = {}
 
     while True:
-        # Afficher les candidats
+        # Afficher les candidats avec details enrichis
         if paginator.candidates:
-            display_candidates(paginator, pending)
+            # Recuperer les details pour la page courante (avec cache)
+            page_key = paginator.current_page
+            if page_key not in details_cache:
+                console.print("[dim]Chargement des details...[/dim]")
+                details_cache[page_key] = await _fetch_details_for_page(
+                    paginator, service
+                )
+            details_map = details_cache[page_key]
+
+            display_enriched_candidates(paginator, pending, details_map)
         else:
             filename = (
                 pending.video_file.filename if pending.video_file else "Fichier inconnu"
@@ -360,6 +563,8 @@ async def validation_loop(
                 results = await service.search_manual(query, is_series=is_series)
                 if results:
                     paginator = CandidatePaginator(results)
+                    # Reinitialiser le cache des details pour les nouveaux candidats
+                    details_cache.clear()
                     console.print(f"[green]{len(results)} resultat(s) trouve(s)[/green]")
                 else:
                     console.print("[yellow]Aucun resultat[/yellow]")

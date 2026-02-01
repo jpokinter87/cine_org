@@ -1,144 +1,82 @@
 """
-Mock TVDB API v4 responses for testing.
+Mock TVDB API v3 responses for testing.
 
-These fixtures simulate the TVDB API responses for authentication,
+These fixtures simulate the TVDB API v3 responses for authentication,
 search, and series details endpoints.
 
-Reference: https://thetvdb.github.io/v4-api/
+Reference: https://api.thetvdb.com/swagger (legacy v3 API)
 """
 
-# POST /login response - JWT token
+# POST /login response - JWT token (API v3: token at root level)
 TVDB_LOGIN_RESPONSE = {
-    "status": "success",
-    "data": {
-        "token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZ2UiOiIiLCJhcGlrZXkiOiJ0ZXN0LWFwaS1rZXkiLCJjb21tdW5pdHlfc3VwcG9ydGVkIjpmYWxzZSwiZXhwIjoxNzAwMDAwMDAwLCJnZW5kZXIiOiIiLCJoaXRzX3Blcl9kYXkiOjEwMDAwMDAwMCwiaGl0c19wZXJfbW9udGgiOjEwMDAwMDAwMDAsImlkIjoiMTIzNDU2Nzg5MCIsImlzX21vZCI6ZmFsc2UsImlzX3N5c3RlbV9rZXkiOmZhbHNlLCJpc190cnVzdGVkIjpmYWxzZSwicGluIjoiIiwidGhlbWUiOiIifQ.test-signature"
-    }
+    "token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZ2UiOiIiLCJhcGlrZXkiOiJ0ZXN0LWFwaS1rZXkiLCJjb21tdW5pdHlfc3VwcG9ydGVkIjpmYWxzZSwiZXhwIjoxNzAwMDAwMDAwLCJnZW5kZXIiOiIiLCJoaXRzX3Blcl9kYXkiOjEwMDAwMDAwMCwiaGl0c19wZXJfbW9udGgiOjEwMDAwMDAwMDAsImlkIjoiMTIzNDU2Nzg5MCIsImlzX21vZCI6ZmFsc2UsImlzX3N5c3RlbV9rZXkiOmZhbHNlLCJpc190cnVzdGVkIjpmYWxzZSwicGluIjoiIiwidGhlbWUiOiIifQ.test-signature"
 }
 
-# GET /search?type=series&q=Breaking%20Bad response
+# GET /search/series?name=Breaking%20Bad response (API v3 format)
 TVDB_SEARCH_RESPONSE = {
-    "status": "success",
     "data": [
         {
-            "objectID": "series-81189",
-            "id": "81189",
-            "name": "Breaking Bad",
-            "slug": "breaking-bad",
-            "aliases": [
-                "Breaking Bad",
-                "Ruptura Total"
-            ],
-            "country": "usa",
-            "first_air_time": "2008-01-20",
-            "image_url": "https://artworks.thetvdb.com/banners/posters/81189-10.jpg",
-            "year": "2008",
-            "type": "series",
-            "primary_language": "eng",
-            "primary_type": "series",
-            "overview": "Walter White, a high school chemistry teacher...",
+            "id": 81189,
+            "seriesName": "Breaking Bad",
+            "aliases": ["Ruptura Total"],
+            "banner": "banners/graphical/81189-g10.jpg",
+            "firstAired": "2008-01-20",
             "network": "AMC",
-            "status": "Ended",
-            "genres": ["Crime", "Drama", "Thriller"]
+            "overview": "Walter White, a high school chemistry teacher...",
+            "seriesId": "81189",
+            "slug": "breaking-bad",
+            "status": "Ended"
         },
         {
-            "objectID": "series-273181",
-            "id": "273181",
-            "name": "Metastasis",
-            "slug": "metastasis",
+            "id": 273181,
+            "seriesName": "Metastasis",
             "aliases": ["Breaking Bad (Metastasis)"],
-            "country": "col",
-            "first_air_time": "2014-06-09",
-            "image_url": "https://artworks.thetvdb.com/banners/posters/273181-1.jpg",
-            "year": "2014",
-            "type": "series",
-            "primary_language": "spa",
-            "primary_type": "series",
-            "overview": "Colombian adaptation of Breaking Bad...",
+            "banner": "banners/graphical/273181-g.jpg",
+            "firstAired": "2014-06-09",
             "network": "Univision",
-            "status": "Ended",
-            "genres": ["Crime", "Drama"]
+            "overview": "Colombian adaptation of Breaking Bad...",
+            "seriesId": "273181",
+            "slug": "metastasis",
+            "status": "Ended"
         }
     ]
 }
 
-# GET /search?type=series&q=NonexistentSeries response (empty results)
+# GET /search/series?name=NonexistentSeries response (empty results)
 TVDB_SEARCH_EMPTY_RESPONSE = {
-    "status": "success",
     "data": []
 }
 
-# GET /series/81189/extended response
+# GET /series/81189 response (API v3 format)
 TVDB_SERIES_DETAILS_RESPONSE = {
-    "status": "success",
     "data": {
         "id": 81189,
-        "name": "Breaking Bad",
-        "slug": "breaking-bad",
-        "image": "https://artworks.thetvdb.com/banners/posters/81189-10.jpg",
-        "nameTranslations": ["fra", "eng", "deu", "spa"],
-        "overviewTranslations": ["fra", "eng", "deu", "spa"],
-        "aliases": [
-            {"language": "fra", "name": "Breaking Bad"},
-            {"language": "spa", "name": "Ruptura Total"}
-        ],
+        "seriesName": "Breaking Bad",
+        "aliases": ["Ruptura Total"],
+        "banner": "banners/graphical/81189-g10.jpg",
         "firstAired": "2008-01-20",
-        "lastAired": "2013-09-29",
-        "nextAired": "",
-        "score": 11989,
-        "status": {
-            "id": 2,
-            "name": "Ended",
-            "recordType": "series",
-            "keepUpdated": False
-        },
-        "originalCountry": "usa",
-        "originalLanguage": "eng",
-        "originalNetwork": {
-            "id": 20,
-            "name": "AMC",
-            "slug": "amc",
-            "abbreviation": "AMC",
-            "country": "usa"
-        },
-        "year": "2008",
+        "genre": ["Crime", "Drama", "Thriller"],
+        "imdbId": "tt0903747",
+        "lastUpdated": 1630000000,
+        "network": "AMC",
+        "networkId": "20",
         "overview": "Walter White, a struggling high school chemistry teacher, is diagnosed with inoperable lung cancer...",
-        "genres": [
-            {"id": 1, "name": "Crime", "slug": "crime"},
-            {"id": 2, "name": "Drama", "slug": "drama"},
-            {"id": 3, "name": "Thriller", "slug": "thriller"}
-        ],
-        "averageRuntime": 47,
-        "seasons": [
-            {"id": 30272, "seriesId": 81189, "type": {"id": 1, "name": "Aired Order"}, "number": 1},
-            {"id": 30273, "seriesId": 81189, "type": {"id": 1, "name": "Aired Order"}, "number": 2},
-            {"id": 30274, "seriesId": 81189, "type": {"id": 1, "name": "Aired Order"}, "number": 3},
-            {"id": 30275, "seriesId": 81189, "type": {"id": 1, "name": "Aired Order"}, "number": 4},
-            {"id": 30276, "seriesId": 81189, "type": {"id": 1, "name": "Aired Order"}, "number": 5}
-        ],
-        "translations": {
-            "nameTranslations": [
-                {"language": "fra", "name": "Breaking Bad", "isPrimary": True},
-                {"language": "eng", "name": "Breaking Bad", "isPrimary": True}
-            ],
-            "overviewTranslations": [
-                {
-                    "language": "fra",
-                    "overview": "Walter White est un professeur de chimie dans un lycee du Nouveau-Mexique...",
-                    "isPrimary": False
-                },
-                {
-                    "language": "eng",
-                    "overview": "Walter White, a struggling high school chemistry teacher...",
-                    "isPrimary": True
-                }
-            ]
-        }
+        "poster": "/banners/posters/81189-10.jpg",
+        "rating": "TV-MA",
+        "runtime": "47",
+        "seriesId": "81189",
+        "slug": "breaking-bad",
+        "status": "Ended",
+        "added": "2008-01-20 00:00:00",
+        "addedBy": 1,
+        "airsDayOfWeek": "Sunday",
+        "airsTime": "9:00 PM",
+        "siteRating": 9.4,
+        "siteRatingCount": 500000
     }
 }
 
-# GET /series/99999999/extended response (not found - 404)
+# GET /series/99999999 response (not found - 404)
 TVDB_SERIES_NOT_FOUND_RESPONSE = {
-    "status": "failure",
-    "message": "Record not found",
-    "data": None
+    "Error": "Resource not found"
 }

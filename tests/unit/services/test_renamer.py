@@ -415,3 +415,105 @@ class TestGenerateSeriesFilename:
         assert "MULTi" in result
         assert "AV1" in result
         assert "4K" in result
+
+
+# ====================
+# Tests fallback langue (guessit)
+# ====================
+
+class TestLanguageFallback:
+    """Tests pour le fallback de langue depuis guessit quand mediainfo ne détecte pas."""
+
+    def test_movie_fallback_language_when_mediainfo_empty(
+        self,
+        movie_fixture: Movie,
+        media_info_minimal: MediaInfo,
+    ) -> None:
+        """Utilise fallback_language si mediainfo n'a pas de langue."""
+        # media_info_minimal n'a pas de langue
+        result = generate_movie_filename(
+            movie_fixture, media_info_minimal, ".mkv", fallback_language="FR"
+        )
+        assert result == "Matrix (1999) FR H.264 720p.mkv"
+
+    def test_movie_fallback_language_not_used_when_mediainfo_has_language(
+        self,
+        movie_fixture: Movie,
+        media_info_complete: MediaInfo,
+    ) -> None:
+        """N'utilise pas fallback si mediainfo a déjà une langue."""
+        # media_info_complete a FR
+        result = generate_movie_filename(
+            movie_fixture, media_info_complete, ".mkv", fallback_language="EN"
+        )
+        # Doit utiliser FR de mediainfo, pas EN du fallback
+        assert result == "Matrix (1999) FR HEVC 1080p.mkv"
+
+    def test_movie_no_language_without_fallback(
+        self,
+        movie_fixture: Movie,
+        media_info_minimal: MediaInfo,
+    ) -> None:
+        """Sans fallback et sans langue mediainfo, pas de langue dans le nom."""
+        result = generate_movie_filename(movie_fixture, media_info_minimal, ".mkv")
+        assert result == "Matrix (1999) H.264 720p.mkv"
+
+    def test_series_fallback_language_when_mediainfo_empty(
+        self,
+        series_fixture: Series,
+        episode_fixture: Episode,
+        media_info_minimal: MediaInfo,
+    ) -> None:
+        """Série utilise fallback_language si mediainfo n'a pas de langue."""
+        result = generate_series_filename(
+            series_fixture, episode_fixture, media_info_minimal, ".mkv",
+            fallback_language="EN"
+        )
+        assert result == "Breaking Bad (2008) - S01E01 - Pilot - EN H.264 720p.mkv"
+
+    def test_series_fallback_language_not_used_when_mediainfo_has_language(
+        self,
+        series_fixture: Series,
+        episode_fixture: Episode,
+        media_info_complete: MediaInfo,
+    ) -> None:
+        """Série n'utilise pas fallback si mediainfo a déjà une langue."""
+        result = generate_series_filename(
+            series_fixture, episode_fixture, media_info_complete, ".mkv",
+            fallback_language="DE"
+        )
+        # Doit utiliser FR de mediainfo, pas DE du fallback
+        assert result == "Breaking Bad (2008) - S01E01 - Pilot - FR HEVC 1080p.mkv"
+
+    def test_movie_fallback_with_no_media_info(
+        self,
+        movie_fixture: Movie,
+    ) -> None:
+        """Fallback fonctionne même sans MediaInfo."""
+        result = generate_movie_filename(
+            movie_fixture, None, ".mkv", fallback_language="FR"
+        )
+        assert result == "Matrix (1999) FR.mkv"
+
+    def test_series_fallback_with_no_media_info(
+        self,
+        series_fixture: Series,
+        episode_fixture: Episode,
+    ) -> None:
+        """Série: fallback fonctionne même sans MediaInfo."""
+        result = generate_series_filename(
+            series_fixture, episode_fixture, None, ".mkv",
+            fallback_language="EN"
+        )
+        assert result == "Breaking Bad (2008) - S01E01 - Pilot - EN.mkv"
+
+    def test_fallback_language_case_normalization(
+        self,
+        movie_fixture: Movie,
+    ) -> None:
+        """Le fallback de langue est normalisé en majuscules."""
+        result = generate_movie_filename(
+            movie_fixture, None, ".mkv", fallback_language="fr"
+        )
+        assert "FR" in result
+        assert "fr" not in result

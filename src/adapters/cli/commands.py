@@ -64,6 +64,27 @@ def _extract_series_info(filename: str) -> tuple[int, int]:
     return season, episode
 
 
+def _extract_language_from_filename(filename: str) -> Optional[str]:
+    """
+    Extrait la langue du nom de fichier via guessit.
+
+    Utilise comme fallback quand mediainfo ne detecte pas la langue
+    des pistes audio (fichiers sans tag de langue).
+
+    Args:
+        filename: Nom du fichier video
+
+    Returns:
+        Code langue en majuscules (ex: "FR", "EN"), ou None si non trouve
+    """
+    from src.adapters.parsing.guessit_parser import GuessitFilenameParser
+
+    parser = GuessitFilenameParser()
+    parsed = parser.parse(filename)
+
+    return parsed.language  # Deja en majuscules ou None
+
+
 def _display_transfer_tree(
     transfers: list[dict], storage_dir: Path, video_dir: Path
 ) -> None:
@@ -380,6 +401,10 @@ async def _validate_batch_async() -> None:
         media_info = pending.video_file.media_info if pending.video_file else None
         video_dir = Path(config.video_dir)
 
+        # Extraire la langue du nom de fichier (fallback si mediainfo n'a pas de langue)
+        original_filename = pending.video_file.filename if pending.video_file else ""
+        fallback_language = _extract_language_from_filename(original_filename)
+
         # Generer le nouveau nom et chemin de destination
         if is_series:
             # Pour les series: extraire saison/episode du nom de fichier
@@ -427,6 +452,7 @@ async def _validate_batch_async() -> None:
                 episode=episode,
                 media_info=media_info,
                 extension=extension,
+                fallback_language=fallback_language,
             )
             dest_dir = organizer.get_series_destination(
                 series=series,
@@ -466,6 +492,7 @@ async def _validate_batch_async() -> None:
                 movie=movie,
                 media_info=media_info,
                 extension=extension,
+                fallback_language=fallback_language,
             )
             dest_dir = organizer.get_movie_destination(
                 movie=movie,
@@ -878,6 +905,10 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
         extension = source_path.suffix if source_path.suffix else ".mkv"
         media_info = pend.video_file.media_info if pend.video_file else None
 
+        # Extraire la langue du nom de fichier (fallback si mediainfo n'a pas de langue)
+        original_filename = pend.video_file.filename if pend.video_file else ""
+        fallback_language = _extract_language_from_filename(original_filename)
+
         if is_series:
             filename = pend.video_file.filename if pend.video_file else ""
             season_num, episode_num = _extract_series_info(filename)
@@ -921,6 +952,7 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
                 episode=episode,
                 media_info=media_info,
                 extension=extension,
+                fallback_language=fallback_language,
             )
             dest_dir = organizer.get_series_destination(
                 series=series,
@@ -959,6 +991,7 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
                 movie=movie,
                 media_info=media_info,
                 extension=extension,
+                fallback_language=fallback_language,
             )
             dest_dir = organizer.get_movie_destination(
                 movie=movie,

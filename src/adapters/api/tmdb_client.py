@@ -189,11 +189,14 @@ class TMDBClient(IMediaAPIClient):
         if cached is not None:
             return cached
 
-        # Cache miss - make API request
+        # Cache miss - make API request avec credits
         client = self._get_client()
         try:
             response = await request_with_retry(
-                client, "GET", f"/movie/{media_id}", params={"language": "fr-FR"}
+                client,
+                "GET",
+                f"/movie/{media_id}",
+                params={"language": "fr-FR", "append_to_response": "credits"},
             )
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
@@ -220,6 +223,21 @@ class TMDBClient(IMediaAPIClient):
         runtime_minutes = data.get("runtime")
         duration_seconds = runtime_minutes * 60 if runtime_minutes else None
 
+        # Extract credits: director and main cast
+        director = None
+        cast: tuple[str, ...] = ()
+        credits_data = data.get("credits", {})
+
+        # Find director in crew
+        for crew_member in credits_data.get("crew", []):
+            if crew_member.get("job") == "Director":
+                director = crew_member.get("name")
+                break
+
+        # Get top 4 actors from cast
+        cast_list = credits_data.get("cast", [])[:4]
+        cast = tuple(actor.get("name", "") for actor in cast_list if actor.get("name"))
+
         details = MediaDetails(
             id=str(data["id"]),
             title=data.get("title", data.get("original_title", "")),
@@ -229,6 +247,8 @@ class TMDBClient(IMediaAPIClient):
             duration_seconds=duration_seconds,
             overview=data.get("overview"),
             poster_url=poster_url,
+            director=director,
+            cast=cast,
         )
 
         # Cache results

@@ -131,34 +131,39 @@ def format_language_code(languages: tuple[str, ...]) -> str:
     return "MULTi"
 
 
-def _build_tech_suffix(media_info: Optional[MediaInfo]) -> str:
+def _build_tech_suffix(
+    media_info: Optional[MediaInfo],
+    fallback_language: Optional[str] = None,
+) -> str:
     """
     Construit le suffixe technique (Langue Codec Résolution).
 
     Args:
         media_info: Informations techniques du fichier.
+        fallback_language: Code langue de fallback (depuis guessit)
+                          si mediainfo ne détecte pas de langue.
 
     Returns:
         Suffixe technique ou chaîne vide si pas d'infos.
     """
-    if media_info is None:
-        return ""
-
     parts: list[str] = []
 
-    # Langue(s) audio
-    if media_info.audio_languages:
+    # Langue(s) audio - avec fallback si mediainfo n'a rien
+    if media_info and media_info.audio_languages:
         lang_codes = tuple(lang.code for lang in media_info.audio_languages)
         lang_str = format_language_code(lang_codes)
         if lang_str:
             parts.append(lang_str)
+    elif fallback_language:
+        # Fallback sur la langue du nom de fichier (guessit)
+        parts.append(fallback_language.upper())
 
     # Codec vidéo
-    if media_info.video_codec:
+    if media_info and media_info.video_codec:
         parts.append(media_info.video_codec.name)
 
     # Résolution
-    if media_info.resolution:
+    if media_info and media_info.resolution:
         parts.append(media_info.resolution.label)
 
     if not parts:
@@ -171,6 +176,7 @@ def generate_movie_filename(
     movie: Movie,
     media_info: Optional[MediaInfo],
     extension: str,
+    fallback_language: Optional[str] = None,
 ) -> str:
     """
     Génère le nom de fichier standardisé pour un film.
@@ -183,6 +189,8 @@ def generate_movie_filename(
         movie: Métadonnées du film.
         media_info: Informations techniques du fichier (optionnel).
         extension: Extension du fichier (avec le point).
+        fallback_language: Code langue de fallback (depuis guessit)
+                          si mediainfo ne détecte pas de langue.
 
     Returns:
         Nom de fichier formaté et nettoyé.
@@ -198,7 +206,7 @@ def generate_movie_filename(
         parts.append(f"({movie.year})")
 
     # Suffixe technique
-    tech_suffix = _build_tech_suffix(media_info)
+    tech_suffix = _build_tech_suffix(media_info, fallback_language)
     if tech_suffix:
         parts.append(tech_suffix)
 
@@ -214,6 +222,7 @@ def generate_series_filename(
     episode: Episode,
     media_info: Optional[MediaInfo],
     extension: str,
+    fallback_language: Optional[str] = None,
 ) -> str:
     """
     Génère le nom de fichier standardisé pour un épisode de série.
@@ -227,6 +236,8 @@ def generate_series_filename(
         episode: Métadonnées de l'épisode.
         media_info: Informations techniques du fichier (optionnel).
         extension: Extension du fichier (avec le point).
+        fallback_language: Code langue de fallback (depuis guessit)
+                          si mediainfo ne détecte pas de langue.
 
     Returns:
         Nom de fichier formaté et nettoyé.
@@ -255,7 +266,7 @@ def generate_series_filename(
         parts.append(episode_title)
 
     # Suffixe technique
-    tech_suffix = _build_tech_suffix(media_info)
+    tech_suffix = _build_tech_suffix(media_info, fallback_language)
     if tech_suffix:
         parts.append("-")
         parts.append(tech_suffix)
@@ -282,13 +293,14 @@ class RenamerService:
         movie: Movie,
         media_info: Optional[MediaInfo],
         extension: str,
+        fallback_language: Optional[str] = None,
     ) -> str:
         """
         Génère le nom de fichier pour un film.
 
         Voir generate_movie_filename() pour les détails.
         """
-        return generate_movie_filename(movie, media_info, extension)
+        return generate_movie_filename(movie, media_info, extension, fallback_language)
 
     def generate_series_filename(
         self,
@@ -296,10 +308,11 @@ class RenamerService:
         episode: Episode,
         media_info: Optional[MediaInfo],
         extension: str,
+        fallback_language: Optional[str] = None,
     ) -> str:
         """
         Génère le nom de fichier pour un épisode de série.
 
         Voir generate_series_filename() pour les détails.
         """
-        return generate_series_filename(series, episode, media_info, extension)
+        return generate_series_filename(series, episode, media_info, extension, fallback_language)

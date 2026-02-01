@@ -2,6 +2,23 @@
 
 Application de gestion de vidéothèque personnelle. Scanne les téléchargements, identifie les contenus via TMDB/TVDB, renomme et organise les fichiers selon un format standardisé, et crée des symlinks pour le mediacenter.
 
+## Table des matières
+
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+  - [Modèle de stockage dual](#modèle-de-stockage-dual)
+  - [Organisation des films](#organisation-des-films)
+  - [Organisation des séries](#organisation-des-séries)
+  - [Subdivision alphabétique](#subdivision-alphabétique)
+- [Workflow de traitement](#workflow-de-traitement)
+  - [Zone de staging](#zone-de-staging)
+  - [Validation automatique et manuelle](#validation-automatique-et-manuelle)
+  - [Détection des doublons](#détection-des-doublons)
+- [Commandes](#commandes)
+- [Format de nommage](#format-de-nommage)
+- [Stack technique](#stack-technique)
+
 ## Installation
 
 ```bash
@@ -52,6 +69,9 @@ CINEORG_MIN_FILE_SIZE_MB=100
 # Seuil de score pour validation automatique (0-100)
 CINEORG_MATCH_SCORE_THRESHOLD=85
 
+# Nombre max de fichiers par sous-répertoire avant subdivision
+CINEORG_MAX_FILES_PER_SUBDIR=50
+
 # === LOGGING ===
 CINEORG_LOG_LEVEL=INFO
 CINEORG_LOG_FILE=logs/cineorg.log
@@ -70,53 +90,289 @@ EOF
 | `CINEORG_TVDB_API_KEY` | (vide) | Clé API TVDB pour les séries |
 | `CINEORG_MIN_FILE_SIZE_MB` | `100` | Taille minimum en MB |
 | `CINEORG_MATCH_SCORE_THRESHOLD` | `85` | Seuil de validation auto (%) |
+| `CINEORG_MAX_FILES_PER_SUBDIR` | `50` | Max fichiers par sous-dossier |
 | `CINEORG_LOG_LEVEL` | `INFO` | Niveau de log (DEBUG, INFO, WARNING, ERROR) |
 
-### Structure des répertoires
+## Architecture
 
-#### Répertoire de téléchargements (source)
+### Modèle de stockage dual
 
-```
-~/telechargements/
-├── Films/
-│   ├── Inception.2010.1080p.BluRay.x264.mkv
-│   └── The.Matrix.1999.2160p.UHD.mkv
-└── Series/
-    ├── Breaking.Bad.S01E01.720p.mkv
-    └── Game.of.Thrones.S08E06.1080p.mkv
-```
-
-#### Répertoire de stockage (destination physique)
+CineOrg utilise un modèle de **stockage dual** séparant les fichiers physiques des symlinks :
 
 ```
-~/Videos/stockage/
-├── Films/
-│   ├── Science-Fiction/
-│   │   ├── I/
-│   │   │   └── Inception (2010) French DTS-HD MA 5.1 H.265 2160p.mkv
-│   │   └── M/
-│   │       └── Matrix (The) (1999) French DTS 5.1 H.264 1080p.mkv
-│   └── Action/
+~/Videos/
+├── storage/          # Fichiers physiques (ne bougent jamais)
+│   ├── Films/
+│   │   └── Genre/Subdivision/fichier.mkv
+│   └── Séries/
+│       └── Type/Subdivision/Titre (Année)/Saison XX/fichier.mkv
+│
+└── video/            # Symlinks (réorganisés librement)
+    ├── Films/        # Miroir de storage/Films/
+    └── Séries/       # Miroir de storage/Séries/
+```
+
+**Principe clé :** Le répertoire `video/` (symlinks) **dicte la structure visible** par le mediacenter. Lors des réorganisations (subdivision de répertoires trop peuplés), seuls les symlinks sont déplacés — les fichiers physiques restent en place dans `storage/`.
+
+**Avantages :**
+- Performances : pas de déplacement de gros fichiers lors des réorganisations
+- Sécurité : les fichiers originaux ne sont jamais touchés après le premier transfert
+- Flexibilité : structure du mediacenter modifiable sans impact sur le stockage
+
+### Organisation des films
+
+#### Structure : Films/Genre/[Subdivision]/
+
+```
+video/Films/
+├── Animation/
+│   ├── A-F/
+│   │   ├── Akira (1988) FR DTS HEVC 1080p.mkv → ../../storage/...
+│   │   └── ...
+│   └── G-Z/
+├── Science-Fiction/
+│   ├── A-I/
+│   │   ├── Avatar (2009) FR DTS-HD MA HEVC 2160p.mkv
+│   │   └── Inception (2010) FR DTS H264 1080p.mkv
+│   └── J-Z/
+│       └── Matrix (1999) EN DTS H264 1080p.mkv
+├── Action & Aventure/
+│   └── ...
+└── Drame/
+    └── ...
+```
+
+#### Hiérarchie des genres
+
+Quand un film appartient à plusieurs genres, le **premier genre correspondant dans la hiérarchie** est sélectionné :
+
+1. Animation
+2. Science-Fiction
+3. Fantastique
+4. Horreur
+5. Action
+6. Aventure
+7. Comédie
+8. Drame
+9. Thriller
+10. Crime
+11. Guerre
+12. Western
+13. Romance
+14. Musical
+15. Documentaire
+16. Famille
+17. Histoire
+18. Mystère
+19. Téléfilm
+
+Exemple : Un film "Action/Science-Fiction" sera classé dans **Science-Fiction** (priorité 2 > priorité 5).
+
+#### Mapping des genres API
+
+Les genres TMDB sont mappés vers des noms de dossiers français :
+
+| Genre API | Dossier |
+|-----------|---------|
+| `action`, `aventure` | Action & Aventure |
+| `science-fiction` | SF |
+| `crime` | Policier |
+| `animation` | Animation |
+
+### Organisation des séries
+
+#### Structure : Séries/{Type}/[Subdivision]/Titre (Année)/Saison XX/
+
+```
+video/Séries/
+├── Séries TV/                    # Séries classiques
+│   ├── A-M/
+│   │   ├── Breaking Bad (2008)/
+│   │   │   ├── Saison 01/
+│   │   │   │   ├── Breaking Bad (2008) - S01E01 - Pilot - EN AAC H264 720p.mkv
+│   │   │   │   └── ...
+│   │   │   └── Saison 02/
+│   │   └── Game of Thrones (2011)/
+│   │       └── ...
+│   └── N-Z/
 │       └── ...
-└── Series/
-    ├── B/
-    │   └── Breaking Bad (2008)/
-    │       └── Saison 01/
-    │           └── Breaking Bad (2008) - S01E01 - Pilot - French AAC 2.0 H.264 720p.mkv
-    └── G/
-        └── Game of Thrones (2011)/
-            └── Saison 08/
-                └── ...
+│
+├── Animation/                    # Animation occidentale (Cartoon Network, etc.)
+│   ├── A-F/
+│   │   └── Avatar, le dernier maître de l'air (2005)/
+│   └── ...
+│
+└── Mangas/                       # Anime japonais
+    ├── A-H/
+    │   ├── Attack on Titan (2013)/
+    │   └── Death Note (2006)/
+    └── I-Z/
+        └── Naruto (2002)/
 ```
 
-#### Répertoire vidéo (symlinks)
+#### Classification par type
+
+La classification se base sur les genres retournés par l'API TVDB :
+
+| Genre TVDB | Type |
+|------------|------|
+| `anime` | **Mangas** (animation japonaise) |
+| `animation` (sans `anime`) | **Animation** (occidentale) |
+| Autres | **Séries TV** |
+
+### Subdivision alphabétique
+
+#### Tri alphabétique multilingue
+
+Les articles sont **retirés du début des titres** pour le tri :
+
+| Langue | Articles ignorés |
+|--------|------------------|
+| Français | le, la, les, l', un, une, des |
+| Anglais | the, a, an |
+| Allemand | der, die, das, ein, eine |
+| Espagnol | el, los, las |
+
+Exemples :
+- "The Matrix" → classé sous **M** (pas T)
+- "L'Odyssée" → classé sous **O** (pas L)
+- "Les Misérables" → classé sous **M**
+
+#### Création des subdivisions
+
+Quand un répertoire dépasse `max_files_per_subdir` (50 par défaut), il est subdivisé :
+
+| Contenu | Subdivision |
+|---------|-------------|
+| Peu de fichiers | Lettres simples : `A`, `B`, `C` |
+| Plus de fichiers | Plages : `A-F`, `G-M`, `N-Z` |
+| Beaucoup de fichiers | Préfixes : `Ba-Bi`, `Me-My`, `Sh-Sy` |
+
+Caractère spécial `#` : pour les titres commençant par des chiffres ou symboles.
+
+## Workflow de traitement
+
+### Flux de données
 
 ```
-~/Videos/video/
-├── Films/
-│   └── ... (symlinks vers stockage/Films/)
-└── Series/
-    └── ... (symlinks vers stockage/Series/)
+Téléchargements/
+    Films/ ou Series/
+         └── [fichiers vidéo]
+              ↓
+         Scanner (chemin, taille, nom)
+              ↓
+         Parser (guessit + mediainfo)
+         (titre, année, épisode, codecs, langues)
+              ↓
+         Matcher (recherche TMDB/TVDB, scoring)
+              ↓
+         Validation
+              ├─ Score ≥ 85% + candidat unique → AUTO-VALIDATION
+              ├─ Score ≥ 95% + plusieurs candidats → AUTO-VALIDATION (haute confiance)
+              └─ Sinon → STAGING (validation manuelle requise)
+              ↓
+         Transfert
+              ├─ Vérification conflits (hash SHA-256)
+              ├─ Déplacement atomique → storage/
+              └─ Création symlink → video/
+              ↓
+         Bibliothèque organisée
+```
+
+### Zone de staging
+
+La zone de staging est un **espace temporaire** pour les fichiers nécessitant une validation utilisateur.
+
+#### Quand un fichier va en staging
+
+- Score de correspondance < 85%
+- Plusieurs candidats avec scores similaires (< 95% pour le meilleur)
+- Aucun candidat trouvé
+- Conflit détecté avec contenu existant
+
+#### Commandes staging
+
+```bash
+# Voir les fichiers en attente
+uv run cineorg pending
+
+# Valider manuellement
+uv run cineorg validate manual
+```
+
+### Validation automatique et manuelle
+
+#### Seuils d'auto-validation
+
+| Condition | Action |
+|-----------|--------|
+| 1 candidat, score ≥ 85% | Auto-validation |
+| Plusieurs candidats, meilleur score ≥ 95% | Auto-validation (haute confiance) |
+| Sinon | Validation manuelle requise |
+
+#### Formule de scoring
+
+**Films :**
+```
+Avec durée disponible :
+  Score = 50% × titre + 25% × année + 25% × durée
+
+Sans durée (fallback) :
+  Score = 67% × titre + 33% × année
+
+Où :
+- titre : similarité token_sort_ratio (indépendant de l'ordre des mots)
+- année : 100% si ±1 an, puis -25% par année d'écart
+- durée : 100% si ±10%, puis -50% par tranche de 10%
+```
+
+**Séries :**
+```
+Score = 100% × titre (similarité uniquement)
+```
+
+#### Matching bilingue
+
+Pour les films, le système compare le titre recherché avec **le titre localisé ET le titre original**, gardant le meilleur score. Cela gère les cas comme :
+- Recherche "Kill Bill" → Candidat "Kill Bill Vol. 1" (japonais: "キル・ビル")
+
+### Détection des doublons
+
+#### Types de conflits
+
+| Type | Description | Action |
+|------|-------------|--------|
+| `DUPLICATE` | Même fichier (hash identique) | Skip automatique |
+| `NAME_COLLISION` | Même chemin, contenu différent | Demande utilisateur |
+| `SIMILAR_CONTENT` | Titre similaire, peut-être même média | Comparaison affichée |
+
+#### Détection de contenu similaire
+
+Le système détecte les cas subtils :
+- "Station Eleven" vs "Station Eleven (2021)"
+- "Matrix" vs "The Matrix (1999)"
+- Même série avec/sans année dans le nom
+
+Lors d'une détection, un tableau comparatif est affiché :
+
+```
+⚠ Contenu similaire détecté
+
+L'existant n'a pas d'année, le nouveau a (2021)
+
+Comparaison           Existant              Nouveau
+─────────────────────────────────────────────────────
+Fichiers              3                     1
+Taille totale         12.5 Go               4.2 Go
+Résolution            1080p                 2160p
+Codec vidéo           H.264                 HEVC
+Codec audio           DTS                   DTS-HD MA
+
+Options:
+  [1] Garder l'ancien (nouveau → staging)
+  [2] Garder le nouveau (ancien → staging)
+  [3] Garder les deux (sous-dossier créé)
+  [s] Passer
 ```
 
 ## Commandes
@@ -127,7 +383,7 @@ EOF
 uv run cineorg info
 ```
 
-### Workflow principal : traiter les nouveaux téléchargements
+### Traiter les nouveaux téléchargements
 
 ```bash
 # Scanner et traiter tous les fichiers
@@ -143,29 +399,19 @@ uv run cineorg process --filter series
 uv run cineorg process --dry-run
 ```
 
-Le workflow `process` :
-1. Scanne le répertoire de téléchargements
-2. Extrait les métadonnées (titre, année, codec, résolution...)
-3. Recherche les correspondances sur TMDB/TVDB
-4. Valide automatiquement les matchs avec score ≥ 85%
-5. Affiche les fichiers en attente de validation manuelle
-
-### Voir les fichiers en attente
+### Gestion des validations
 
 ```bash
+# Voir les fichiers en attente
 uv run cineorg pending
-```
 
-### Validation manuelle
-
-```bash
 # Validation interactive (un par un)
 uv run cineorg validate manual
 
 # Valider un fichier spécifique par son ID
 uv run cineorg validate file <ID>
 
-# Auto-valider tous les fichiers avec score ≥ 85%
+# Auto-valider tous les fichiers éligibles
 uv run cineorg validate auto
 
 # Afficher et exécuter le batch de transferts
@@ -173,15 +419,13 @@ uv run cineorg validate batch
 ```
 
 Lors de la validation manuelle, vous pouvez :
-- Sélectionner un candidat proposé
+- Sélectionner un candidat proposé (avec synopsis, réalisateur, acteurs)
 - Rechercher manuellement par titre
 - Entrer un ID IMDB/TMDB/TVDB directement
 - Passer le fichier pour plus tard
-- Marquer comme "traitement manuel" (déplacé dans un dossier spécial)
+- Marquer comme "corbeille"
 
 ### Importer une vidéothèque existante
-
-Si vous avez déjà une vidéothèque organisée :
 
 ```bash
 # Importer depuis le répertoire configuré
@@ -218,71 +462,28 @@ uv run cineorg check --json
 uv run cineorg repair-links
 ```
 
-## Workflow typique
-
-### 1. Première utilisation
-
-```bash
-# 1. Configurer l'environnement
-nano .env  # Éditer avec vos chemins et clés API
-
-# 2. Vérifier la configuration
-uv run cineorg info
-
-# 3. Importer une vidéothèque existante (si applicable)
-uv run cineorg import --dry-run  # Vérifier d'abord
-uv run cineorg import
-
-# 4. Enrichir avec les métadonnées API
-uv run cineorg enrich
-```
-
-### 2. Usage quotidien
-
-```bash
-# Traiter les nouveaux téléchargements
-uv run cineorg process
-
-# Si des fichiers sont en attente de validation
-uv run cineorg pending
-uv run cineorg validate manual
-
-# Transférer les fichiers validés
-uv run cineorg validate batch
-```
-
-### 3. Maintenance périodique
-
-```bash
-# Vérifier l'intégrité
-uv run cineorg check
-
-# Réparer les symlinks si nécessaire
-uv run cineorg repair-links
-```
-
 ## Format de nommage
 
 ### Films
 
 ```
-Titre (Année) Langue Codec-Audio Canaux Codec-Video Résolution.ext
+Titre (Année) Langue Codec-Audio Codec-Video Résolution.ext
 ```
 
 Exemples :
-- `Inception (2010) French DTS-HD MA 5.1 H.265 2160p.mkv`
-- `Matrix (The) (1999) English DTS 5.1 H.264 1080p.mkv`
-- `Amélie (2001) French AAC 2.0 H.264 720p.mp4`
+- `Inception (2010) FR DTS-HD MA HEVC 2160p.mkv`
+- `Matrix (1999) EN DTS H264 1080p.mkv`
+- `Amélie (2001) FR AAC H264 720p.mp4`
 
 ### Séries
 
 ```
-Titre (Année) - SxxExx - Titre Episode - Langue Codec-Audio Canaux Codec-Video Résolution.ext
+Titre (Année) - SxxExx - Titre Episode - Langue Codec-Audio Codec-Video Résolution.ext
 ```
 
 Exemples :
-- `Breaking Bad (2008) - S01E01 - Pilot - English AAC 2.0 H.264 720p.mkv`
-- `Game of Thrones (2011) - S08E06 - The Iron Throne - French DTS 5.1 H.265 1080p.mkv`
+- `Breaking Bad (2008) - S01E01 - Pilot - EN AAC H264 720p.mkv`
+- `Game of Thrones (2011) - S08E06 - The Iron Throne - FR DTS HEVC 1080p.mkv`
 
 ## Extensions supportées
 
@@ -302,7 +503,7 @@ Les fichiers contenant ces termes sont automatiquement ignorés :
 1. Créer un compte sur [themoviedb.org](https://www.themoviedb.org/)
 2. Aller dans Paramètres → API
 3. Demander une clé API (usage personnel)
-4. Copier la clé "API Key (v3 auth)"
+4. Copier la clé "API Key (v3 auth)" ou le "Read Access Token (v4)"
 
 ### TVDB (séries)
 
@@ -316,7 +517,6 @@ Les fichiers contenant ces termes sont automatiquement ignorés :
 # Mode verbeux (plus de détails)
 uv run cineorg -v process
 uv run cineorg -vv process  # Encore plus verbeux
-uv run cineorg -vvv process # Maximum de détails
 
 # Mode silencieux (erreurs uniquement)
 uv run cineorg -q process
@@ -325,12 +525,12 @@ uv run cineorg -q process
 ## Stack technique
 
 - **Python 3.11+**
-- **Typer + Rich** - Interface CLI interactive
+- **Typer + Rich** - Interface CLI interactive avec panneaux colorés
 - **SQLModel** - ORM (SQLite)
 - **guessit** - Parsing des noms de fichiers
-- **pymediainfo** - Extraction métadonnées techniques
+- **pymediainfo** - Extraction métadonnées techniques (codecs, résolution, durée)
 - **httpx** - Client HTTP async pour les APIs
-- **diskcache** - Cache des résultats API
+- **diskcache** - Cache persistant des résultats API
 - **tenacity** - Retry avec backoff exponentiel
 - **rapidfuzz** - Scoring de similarité des titres
 
@@ -353,6 +553,12 @@ uv sync  # Réinstaller les dépendances
 - Vérifier que les clés API sont définies dans `.env`
 - Tester avec `uv run cineorg info` (affiche si les APIs sont activées)
 
+### Symlinks cassés après déplacement
+
+```bash
+uv run cineorg repair-links
+```
+
 ### Base de données corrompue
 
 ```bash
@@ -360,6 +566,10 @@ uv sync  # Réinstaller les dépendances
 mv cineorg.db cineorg.db.backup
 uv run cineorg import  # Réimporter la vidéothèque
 ```
+
+### Fichier classé dans le mauvais genre
+
+Le genre est déterminé par la **hiérarchie de priorité**. Si un film "Action/Drame" est dans "Action" au lieu de "Drame", c'est le comportement attendu (Action a une priorité plus élevée).
 
 ## Licence
 

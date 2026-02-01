@@ -466,3 +466,125 @@ class TestRollback:
         # Le fichier devrait etre revenu a sa position originale (rollback)
         # Note: Le rollback tente de remettre le fichier, mais selon l'etat
         # exact du systeme, il peut ne pas toujours reussir
+
+
+# ====================
+# Tests find_similar_content
+# ====================
+
+
+class TestFindSimilarContent:
+    """Tests pour la detection de contenu similaire."""
+
+    def test_similar_content_different_year(self, tmp_path):
+        """Detecte un contenu similaire avec annee differente."""
+        storage = tmp_path / "storage"
+        video = tmp_path / "video"
+        storage.mkdir()
+        video.mkdir()
+
+        # Creer un dossier de serie existante
+        existing_dir = video / "Series" / "I-K" / "Industry (2020)"
+        existing_dir.mkdir(parents=True)
+        (existing_dir / "Saison 01" / "episode.mkv").parent.mkdir(parents=True)
+        (existing_dir / "Saison 01" / "episode.mkv").write_bytes(b"content")
+
+        from src.adapters.file_system import FileSystemAdapter
+
+        fs = FileSystemAdapter()
+        transferer = TransfererService(fs, fs, storage, video)
+
+        # Chercher un contenu similaire avec une annee differente
+        result = transferer.find_similar_content(
+            title="Industry",
+            year=2021,  # Annee differente
+            destination_dir=video / "Series" / "I-K",
+            is_series=True,
+        )
+
+        assert result is not None
+        assert result.existing_title == "Industry (2020)"
+        assert "differentes" in result.similarity_reason.lower()
+
+    def test_identical_content_detected(self, tmp_path):
+        """Detecte un contenu existant avec le meme nom exact."""
+        storage = tmp_path / "storage"
+        video = tmp_path / "video"
+        storage.mkdir()
+        video.mkdir()
+
+        # Creer un dossier de serie existante
+        existing_dir = video / "Series" / "I-K" / "Industry (2020)"
+        existing_dir.mkdir(parents=True)
+        (existing_dir / "Saison 01").mkdir(parents=True)
+        (existing_dir / "Saison 01" / "S01E01.mkv").write_bytes(b"content")
+
+        from src.adapters.file_system import FileSystemAdapter
+
+        fs = FileSystemAdapter()
+        transferer = TransfererService(fs, fs, storage, video)
+
+        # Chercher le meme contenu (nom identique)
+        result = transferer.find_similar_content(
+            title="Industry",
+            year=2020,  # Meme annee
+            destination_dir=video / "Series" / "I-K",
+            is_series=True,
+        )
+
+        assert result is not None
+        assert result.existing_title == "Industry (2020)"
+        assert result.new_title == "Industry (2020)"
+        assert "meme nom" in result.similarity_reason.lower()
+
+    def test_no_similar_content(self, tmp_path):
+        """Pas de contenu similaire si dossier vide."""
+        storage = tmp_path / "storage"
+        video = tmp_path / "video"
+        storage.mkdir()
+        video.mkdir()
+
+        # Dossier de destination vide
+        dest_dir = video / "Series" / "I-K"
+        dest_dir.mkdir(parents=True)
+
+        from src.adapters.file_system import FileSystemAdapter
+
+        fs = FileSystemAdapter()
+        transferer = TransfererService(fs, fs, storage, video)
+
+        result = transferer.find_similar_content(
+            title="Industry",
+            year=2020,
+            destination_dir=dest_dir,
+            is_series=True,
+        )
+
+        assert result is None
+
+    def test_identical_empty_directory_not_detected(self, tmp_path):
+        """Ne detecte pas un dossier existant vide (sans fichiers)."""
+        storage = tmp_path / "storage"
+        video = tmp_path / "video"
+        storage.mkdir()
+        video.mkdir()
+
+        # Creer un dossier de serie existante VIDE
+        existing_dir = video / "Series" / "I-K" / "Industry (2020)"
+        existing_dir.mkdir(parents=True)
+        # Pas de fichiers a l'interieur
+
+        from src.adapters.file_system import FileSystemAdapter
+
+        fs = FileSystemAdapter()
+        transferer = TransfererService(fs, fs, storage, video)
+
+        result = transferer.find_similar_content(
+            title="Industry",
+            year=2020,
+            destination_dir=video / "Series" / "I-K",
+            is_series=True,
+        )
+
+        # Ne devrait pas detecter car le dossier est vide
+        assert result is None

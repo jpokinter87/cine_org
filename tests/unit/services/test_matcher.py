@@ -214,18 +214,21 @@ class TestDurationScoring:
             candidate_year=None,
             candidate_duration=None,
         )
-        # Query none: Title: 50, Year: 25, Duration: 0 = 75
-        assert score_query_none == 75.0
-        # Candidate none (year and duration): Title: 50, Year: 0, Duration: 0 = 50
-        assert score_candidate_none == 50.0
+        # Query none (no duration available): uses fallback 67% title + 33% year = 100
+        # title=100%, year=100% -> 67 + 33 = 100
+        assert score_query_none == 100.0
+        # Candidate none (year and duration): uses fallback 67% title + 33% year
+        # title=100%, year=0% (missing) -> 67 + 0 = 67
+        assert score_candidate_none == 67.0
 
 
 class TestMovieScoreFormula:
     """Tests for the complete movie scoring formula."""
 
     def test_movie_score_formula_weights(self):
-        """Verify 50% title + 25% year + 25% duration weights."""
-        # Title only (year and duration missing)
+        """Verify adaptive coefficients: 67% title + 33% year (fallback) or 50/25/25."""
+        # Title only (year and duration missing) - fallback mode
+        # 67% title + 33% year, both title=100% year=0% (missing)
         title_only = calculate_movie_score(
             query_title="Avatar",
             query_year=None,
@@ -234,9 +237,10 @@ class TestMovieScoreFormula:
             candidate_year=None,
             candidate_duration=None,
         )
-        assert title_only == 50.0  # 100% title * 50% weight
+        assert title_only == 67.0  # 100% title * 67% weight + 0% year
 
-        # Title + year (duration missing)
+        # Title + year (duration missing) - fallback mode
+        # 67% title + 33% year, title=100%, year=100%
         title_year = calculate_movie_score(
             query_title="Avatar",
             query_year=2009,
@@ -245,18 +249,21 @@ class TestMovieScoreFormula:
             candidate_year=2009,
             candidate_duration=None,
         )
-        assert title_year == 75.0  # 50 (title) + 25 (year)
+        assert title_year == 100.0  # 67 (title) + 33 (year)
 
-        # Title + duration (year missing)
+        # Title + duration (year missing) - still uses fallback because candidate has no duration
+        # Note: candidate_duration must also be present to use full formula
         title_duration = calculate_movie_score(
             query_title="Avatar",
             query_year=None,
             query_duration=9720,
             candidate_title="Avatar",
             candidate_year=None,
-            candidate_duration=9720,
+            candidate_duration=9720,  # Both sides have duration -> full formula
         )
-        assert title_duration == 75.0  # 50 (title) + 25 (duration)
+        # Full formula: 50% title + 25% year + 25% duration
+        # title=100%, year=0% (missing), duration=100%
+        assert title_duration == 75.0  # 50 (title) + 0 (year) + 25 (duration)
 
 
 class TestSeriesScoring:
@@ -316,9 +323,8 @@ class TestScoreResults:
     def test_score_results_modifies_score_field(self):
         """score_results should populate the score field.
 
-        Note: SearchResult from API does not have duration, so duration
-        component is always 0% in score_results. Max movie score = 75%
-        (50% title + 25% year + 0% duration).
+        Note: SearchResult from API does not have duration, so the adaptive
+        fallback formula is used: 67% title + 33% year = 100% max.
         """
         matcher = MatcherService()
         results = [
@@ -332,8 +338,9 @@ class TestScoreResults:
             is_series=False,
         )
         assert scored[0].score > 0
-        # Title: 50%, Year: 25%, Duration: 0% (no candidate duration) = 75%
-        assert scored[0].score == 75.0
+        # Fallback mode (no candidate duration): 67% title + 33% year
+        # title=100%, year=100% -> 67 + 33 = 100%
+        assert scored[0].score == 100.0
 
     def test_score_results_series_mode(self):
         """is_series=True should use series scoring (title only)."""

@@ -81,6 +81,36 @@ def _strip_article(title: str) -> str:
     return title
 
 
+def _strip_invisible_chars(text: str) -> str:
+    """
+    Retire les caractères Unicode invisibles d'une chaîne.
+
+    Supprime les caractères de contrôle, les marques directionnelles,
+    et autres caractères invisibles qui peuvent provenir des APIs.
+
+    Args:
+        text: Texte potentiellement contaminé par des caractères invisibles.
+
+    Returns:
+        Texte nettoyé.
+    """
+    import unicodedata
+
+    result = []
+    for char in text:
+        category = unicodedata.category(char)
+        # Filtrer les catégories de caractères invisibles :
+        # Cf = Format (LRM, RLM, BOM, etc.)
+        # Cc = Control
+        # Mn = Nonspacing Mark (certains accents combinants indésirables seuls)
+        # Zs = Space Separator (mais on garde l'espace normal U+0020)
+        if category in ("Cf", "Cc"):
+            continue
+        # Soft hyphen (U+00AD) est en catégorie Cf, déjà filtré
+        result.append(char)
+    return "".join(result)
+
+
 def get_sort_letter(title: str) -> str:
     """
     Extrait la lettre de tri d'un titre.
@@ -90,12 +120,21 @@ def get_sort_letter(title: str) -> str:
     Les titres commençant par un chiffre ou caractère spécial
     retournent '#'.
 
+    Nettoie également les caractères Unicode invisibles qui peuvent
+    provenir des APIs (LRM, RLM, BOM, etc.).
+
     Args:
         title: Titre du film ou de la série.
 
     Returns:
         Lettre de tri en majuscule, ou '#' pour les numériques/spéciaux.
     """
+    if not title:
+        return "#"
+
+    # Nettoyer les caractères invisibles Unicode
+    title = _strip_invisible_chars(title)
+
     if not title:
         return "#"
 
@@ -220,6 +259,9 @@ def _title_matches_range(title: str, range_name: str) -> bool:
     """
     if not title or not range_name:
         return False
+
+    # Nettoyer les caractères invisibles Unicode (LRM, RLM, BOM, etc.)
+    title = _strip_invisible_chars(title)
 
     title_stripped = _strip_article(title).strip()
     if not title_stripped:
