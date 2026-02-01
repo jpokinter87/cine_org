@@ -152,47 +152,31 @@ class EnricherService:
         """
         Extrait les infos de recherche depuis un PendingValidation.
 
+        Utilise guessit pour une extraction fiable du titre et de l'annee.
+
         Args:
             pending: La validation en attente
 
         Returns:
             Tuple (query_title, year, duration_seconds)
         """
+        from guessit import guessit
+
         query_title = ""
         year = None
         duration = None
 
         if pending.video_file:
-            # Extraire le titre du nom de fichier (sans extension)
             filename = pending.video_file.filename or ""
             if filename:
-                # Retirer l'extension
-                query_title = filename.rsplit(".", 1)[0] if "." in filename else filename
-
-                # Nettoyer le titre (retirer patterns techniques courants)
-                query_title = re.sub(
-                    r"\b(720p|1080p|2160p|4K|x264|x265|HEVC|BluRay|WEB-DL|HDRip|"
-                    r"AAC|DTS|AC3|MULTI|FRENCH|VOSTFR|TRUEFRENCH|WEBRip|BDRip)\b",
-                    "",
-                    query_title,
-                    flags=re.IGNORECASE,
-                )
-                # Retirer le pattern SxxExx pour les series
-                query_title = re.sub(
-                    r"\s*[Ss]\d{1,2}[Ee]\d{1,2}(-[Ee]?\d{1,2})?\s*",
-                    " ",
-                    query_title,
-                )
-                # Nettoyer les points et underscores
-                query_title = query_title.replace(".", " ").replace("_", " ")
-                # Extraire l'annee potentielle
-                year_match = re.search(r"\b(19\d{2}|20\d{2})\b", query_title)
-                if year_match:
-                    year = int(year_match.group(1))
-                    query_title = query_title.replace(year_match.group(1), "")
-
-                # Nettoyer les espaces multiples
-                query_title = re.sub(r"\s+", " ", query_title).strip()
+                # Utiliser guessit pour extraire le titre proprement
+                try:
+                    parsed = guessit(filename)
+                    query_title = parsed.get("title", "")
+                    year = parsed.get("year")
+                except Exception:
+                    # Fallback: utiliser le nom sans extension
+                    query_title = filename.rsplit(".", 1)[0] if "." in filename else filename
 
             # Recuperer la duree depuis media_info
             if pending.video_file.media_info:
