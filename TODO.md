@@ -1,10 +1,11 @@
 # TODO - Fonctionnalités futures
 
-## Analyse IA du générique pour validation automatique
+## ✅ Analyse IA du générique pour validation automatique
 
+**Statut** : IMPLÉMENTÉ
 **Priorité** : Moyenne
 **Complexité** : Élevée
-**Dépendances** : ffmpeg, Claude Vision API
+**Dépendances** : ffmpeg, Tesseract OCR, Claude Vision API (optionnel)
 
 ### Description
 

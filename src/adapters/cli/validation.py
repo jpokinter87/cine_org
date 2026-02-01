@@ -370,6 +370,7 @@ def display_help() -> None:
   [cyan]i[/cyan]      Saisir un ID externe (IMDB, TMDB, TVDB)
   [cyan]v[/cyan]      Visionner le fichier (ouvre le lecteur)
   [cyan]y[/cyan]      YouTube trailer du candidat 1 (ou y2, y3...)
+  [cyan]a[/cyan]      Analyser le generique (OCR/IA)
   [cyan]n[/cyan]      Page suivante (si disponible)
   [cyan]?[/cyan]      Afficher cette aide
   [cyan]q[/cyan]      Quitter la validation
@@ -648,6 +649,82 @@ async def validation_loop(
                 webbrowser.open(url)
             else:
                 console.print("[yellow]Numero invalide[/yellow]")
+
+        # Analyser le generique avec IA/OCR
+        elif choice == "a":
+            if not pending.video_file or not pending.video_file.path:
+                console.print("[yellow]Chemin du fichier non disponible[/yellow]")
+            elif not paginator.candidates:
+                console.print("[yellow]Aucun candidat a comparer[/yellow]")
+            else:
+                from src.services.credits_analyzer import CreditsAnalyzer
+                import os
+
+                # Recuperer la cle API depuis l'environnement
+                api_key = os.environ.get("ANTHROPIC_API_KEY")
+                analyzer = CreditsAnalyzer(anthropic_api_key=api_key)
+
+                available, msg = analyzer.is_available()
+                if not available:
+                    console.print(f"[red]Analyse non disponible: {msg}[/red]")
+                else:
+                    console.print("[dim]Extraction du generique et analyse OCR...[/dim]")
+
+                    # Analyser le generique
+                    analysis = await analyzer.analyze(pending.video_file.path)
+
+                    if not analysis.raw_text:
+                        console.print("[yellow]Aucun texte detecte dans le generique[/yellow]")
+                    else:
+                        console.print(f"[dim]Methode: {analysis.method}, confiance: {analysis.confidence:.0f}%[/dim]")
+
+                        if analysis.detected_director:
+                            console.print(f"[cyan]Realisateur detecte:[/cyan] {analysis.detected_director}")
+                        if analysis.detected_actors:
+                            console.print(f"[cyan]Acteurs detectes:[/cyan] {', '.join(analysis.detected_actors)}")
+
+                        # Recuperer les details des candidats pour comparaison
+                        candidates_details = []
+                        for i, cand in enumerate(paginator.current_items):
+                            # Recuperer les details depuis le cache ou l'API
+                            page_key = paginator.current_page
+                            if page_key in details_cache and cand.id in details_cache[page_key]:
+                                details = details_cache[page_key][cand.id]
+                                candidates_details.append({
+                                    "id": cand.id,
+                                    "title": cand.title,
+                                    "year": cand.year,
+                                    "director": details.director if details else None,
+                                    "actors": details.cast[:5] if details and details.cast else [],
+                                })
+
+                        if candidates_details:
+                            matches = analyzer.match_with_candidates(analysis, candidates_details)
+
+                            if matches:
+                                console.print("\n[bold]Correspondances trouvees:[/bold]")
+                                for match in matches[:3]:
+                                    year_str = f" ({match.candidate_year})" if match.candidate_year else ""
+                                    console.print(
+                                        f"  [green]{match.match_score:.0f}%[/green] {match.candidate_title}{year_str}"
+                                    )
+                                    if match.matched_director:
+                                        console.print(f"       [dim]Realisateur: ✓[/dim]")
+                                    if match.matched_actors:
+                                        console.print(f"       [dim]Acteurs: {', '.join(match.matched_actors)}[/dim]")
+
+                                # Proposer de valider le meilleur match
+                                best = matches[0]
+                                if best.match_score >= 50:
+                                    if Confirm.ask(
+                                        f"\nValider [bold]{best.candidate_title}[/bold] ?",
+                                        default=True
+                                    ):
+                                        return best.candidate_id
+                            else:
+                                console.print("[yellow]Aucune correspondance trouvee avec les candidats[/yellow]")
+                        else:
+                            console.print("[yellow]Details des candidats non disponibles[/yellow]")
 
         # Aide
         elif choice == "?":
