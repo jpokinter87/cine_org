@@ -425,6 +425,164 @@ class RepairService:
         self._storage_dir = storage_dir
         self._video_dir = video_dir
         self._trash_dir = trash_dir
+        # Index des fichiers video: {chemin_normalise: [(Path, nom_normalise), ...]}
+        self._file_index: list[tuple[Path, str]] = []
+        self._index_built = False
+
+    def _get_index_cache_path(self) -> Path:
+        """Retourne le chemin du fichier cache de l'index."""
+        cache_dir = Path.home() / ".cineorg"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir / "file_index.json"
+
+    def _load_cached_index(self, max_age_hours: int = 24) -> bool:
+        """
+        Charge l'index depuis le cache s'il existe et n'est pas trop vieux.
+
+        Args:
+            max_age_hours: Age maximum du cache en heures
+
+        Returns:
+            True si l'index a ete charge depuis le cache
+        """
+        import time
+
+        cache_path = self._get_index_cache_path()
+        if not cache_path.exists():
+            return False
+
+        try:
+            # Verifier l'age du cache
+            cache_age = time.time() - cache_path.stat().st_mtime
+            if cache_age > max_age_hours * 3600:
+                logger.debug(f"Cache d'index trop vieux ({cache_age/3600:.1f}h)")
+                return False
+
+            with open(cache_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Verifier que le storage_dir correspond
+            if data.get("storage_dir") != str(self._storage_dir):
+                logger.debug("Cache d'index pour un autre storage_dir")
+                return False
+
+            # Charger l'index
+            self._file_index = [
+                (Path(item["path"]), item["normalized"])
+                for item in data.get("files", [])
+            ]
+            self._index_built = True
+            logger.debug(f"Index charge depuis le cache: {len(self._file_index)} fichiers")
+            return True
+
+        except (json.JSONDecodeError, KeyError, OSError) as e:
+            logger.debug(f"Erreur chargement cache d'index: {e}")
+            return False
+
+    def _save_index_to_cache(self) -> None:
+        """Sauvegarde l'index dans le cache."""
+        cache_path = self._get_index_cache_path()
+        try:
+            data = {
+                "storage_dir": str(self._storage_dir),
+                "files": [
+                    {"path": str(path), "normalized": norm}
+                    for path, norm in self._file_index
+                ],
+            }
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+            logger.debug(f"Index sauvegarde dans le cache: {cache_path}")
+        except OSError as e:
+            logger.warning(f"Impossible de sauvegarder le cache d'index: {e}")
+
+    def build_file_index(
+        self,
+        progress_callback: Optional[callable] = None,
+        force_rebuild: bool = False,
+        max_cache_age_hours: int = 24,
+    ) -> int:
+        """
+        Construit un index de tous les fichiers video dans storage.
+
+        Utilise un cache persistant pour eviter de rescanner a chaque commande.
+        Limite l'indexation aux repertoires Films et Series.
+
+        Args:
+            progress_callback: Fonction appelee avec (fichiers_indexes, message)
+            force_rebuild: Force la reconstruction meme si le cache est valide
+            max_cache_age_hours: Age maximum du cache en heures (defaut: 24h)
+
+        Returns:
+            Nombre de fichiers indexes
+        """
+        from src.adapters.file_system import VIDEO_EXTENSIONS
+
+        if not self._storage_dir or not self._storage_dir.exists():
+            return 0
+
+        # Essayer de charger depuis le cache
+        if not force_rebuild and self._load_cached_index(max_cache_age_hours):
+            if progress_callback:
+                progress_callback(len(self._file_index), f"Index charge (cache): {len(self._file_index)} fichiers")
+            return len(self._file_index)
+
+        self._file_index = []
+        count = 0
+
+        # Limiter aux repertoires de videos (Films et Series)
+        media_dirs = []
+        for subdir in ["Films", "Séries", "Series"]:
+            media_path = self._storage_dir / subdir
+            if media_path.exists():
+                media_dirs.append(media_path)
+                if progress_callback:
+                    progress_callback(count, f"Scan: {media_path}")
+
+        # Fallback: si aucun sous-repertoire Films/Series, scanner storage_dir
+        if not media_dirs:
+            media_dirs = [self._storage_dir]
+
+        for media_dir in media_dirs:
+            for candidate in media_dir.rglob("*"):
+                try:
+                    # Verifier symlink EN PREMIER
+                    if candidate.is_symlink():
+                        continue
+                    if candidate.is_dir():
+                        continue
+
+                    # Verifier que c'est un fichier video
+                    if candidate.suffix.lower() not in VIDEO_EXTENSIONS:
+                        continue
+
+                    # Normaliser le nom pour comparaison rapide
+                    normalized = self._normalize_filename(candidate.name)
+                    self._file_index.append((candidate, normalized))
+                    count += 1
+
+                    if progress_callback and count % 500 == 0:
+                        progress_callback(count, f"Indexation: {count} fichiers...")
+
+                except (PermissionError, OSError):
+                    continue
+
+        self._index_built = True
+
+        # Sauvegarder dans le cache
+        self._save_index_to_cache()
+
+        if progress_callback:
+            progress_callback(count, f"Index construit: {count} fichiers")
+
+        return count
+
+    def _normalize_filename(self, name: str) -> str:
+        """Normalise un nom de fichier pour comparaison."""
+        stem = Path(name).stem.lower()
+        for sep in [".", "_", "-"]:
+            stem = stem.replace(sep, " ")
+        return stem
 
     def find_broken_symlinks(self) -> list[Path]:
         """
@@ -532,6 +690,9 @@ class RepairService:
         """
         Recherche des candidats dans un repertoire specifique.
 
+        Utilise l'index pre-construit si disponible pour des performances
+        optimales. Sinon, effectue une recherche directe (plus lente).
+
         Args:
             link: Chemin du symlink casse
             search_dir: Repertoire de recherche
@@ -540,8 +701,6 @@ class RepairService:
         Returns:
             Liste de tuples (chemin, score) triee par score decroissant
         """
-        from src.adapters.file_system import VIDEO_EXTENSIONS
-
         filename = link.name
 
         # Lire la cible originale du symlink pour comparaison
@@ -551,42 +710,73 @@ class RepairService:
         except OSError:
             original_name = filename
 
+        # Normaliser les noms de recherche
+        norm_link = self._normalize_filename(filename)
+        norm_target = self._normalize_filename(original_name)
+
         candidates: list[tuple[Path, float]] = []
+        search_str = str(search_dir)
 
-        # Chercher dans le repertoire
-        for candidate in search_dir.rglob("*"):
-            try:
-                # Verifier symlink EN PREMIER (avant is_dir qui suit les symlinks)
-                if candidate.is_symlink():
-                    continue
-                if candidate.is_dir():
-                    continue
-
-                # Verifier que c'est un fichier video
-                if candidate.suffix.lower() not in VIDEO_EXTENSIONS:
+        # Utiliser l'index pre-construit si disponible
+        if self._index_built:
+            for candidate_path, candidate_norm in self._file_index:
+                # Filtrer par repertoire
+                if not str(candidate_path).startswith(search_str):
                     continue
 
-                # Calculer la similarite avec le nom du symlink et la cible originale
-                score_link = self._calculate_title_similarity(filename, candidate.name)
-                score_target = self._calculate_title_similarity(original_name, candidate.name)
-
-                # Prendre le meilleur score
+                # Calculer la similarite avec les noms normalises
+                score_link = self._calculate_similarity_fast(norm_link, candidate_norm)
+                score_target = self._calculate_similarity_fast(norm_target, candidate_norm)
                 score = max(score_link, score_target)
 
                 # Match exact = score maximum
-                if candidate.name == filename or candidate.name == original_name:
+                if candidate_path.name == filename or candidate_path.name == original_name:
                     score = 100.0
 
                 if score >= min_score:
-                    candidates.append((candidate, score))
+                    candidates.append((candidate_path, score))
 
-            except (PermissionError, OSError):
-                # Ignorer les fichiers inaccessibles
-                continue
+        else:
+            # Fallback: recherche directe (plus lente)
+            from src.adapters.file_system import VIDEO_EXTENSIONS
+
+            for candidate in search_dir.rglob("*"):
+                try:
+                    if candidate.is_symlink():
+                        continue
+                    if candidate.is_dir():
+                        continue
+                    if candidate.suffix.lower() not in VIDEO_EXTENSIONS:
+                        continue
+
+                    score_link = self._calculate_title_similarity(filename, candidate.name)
+                    score_target = self._calculate_title_similarity(original_name, candidate.name)
+                    score = max(score_link, score_target)
+
+                    if candidate.name == filename or candidate.name == original_name:
+                        score = 100.0
+
+                    if score >= min_score:
+                        candidates.append((candidate, score))
+
+                except (PermissionError, OSError):
+                    continue
 
         # Trier par score decroissant et limiter
         candidates.sort(key=lambda x: x[1], reverse=True)
         return candidates[:15]
+
+    def _calculate_similarity_fast(self, norm1: str, norm2: str) -> float:
+        """
+        Calcule rapidement la similarite entre deux noms deja normalises.
+
+        Version optimisee qui assume que les noms sont deja normalises.
+        """
+        from difflib import SequenceMatcher
+
+        # Comparaison directe des noms normalises
+        ratio = SequenceMatcher(None, norm1, norm2).ratio()
+        return ratio * 100
 
     def _calculate_title_similarity(self, name1: str, name2: str) -> float:
         """
@@ -740,13 +930,34 @@ class RepairService:
         if not actions:
             return None
 
-        # Determiner le dossier de log
+        # Determiner le dossier de log avec fallback
         target_dir = log_dir or self._trash_dir
-        if not target_dir:
-            logger.warning("Aucun dossier configure pour le log")
-            return None
 
-        target_dir.mkdir(parents=True, exist_ok=True)
+        # Liste des dossiers de fallback si le dossier principal n'est pas accessible
+        fallback_dirs = [
+            target_dir,
+            self._storage_dir / "logs" if self._storage_dir else None,
+            Path.home() / ".cineorg" / "logs",
+            Path.cwd() / "logs",
+        ]
+
+        # Trouver un dossier accessible
+        for candidate_dir in fallback_dirs:
+            if candidate_dir is None:
+                continue
+            try:
+                candidate_dir.mkdir(parents=True, exist_ok=True)
+                target_dir = candidate_dir
+                break
+            except PermissionError:
+                logger.debug(f"Dossier de log non accessible: {candidate_dir}")
+                continue
+            except OSError as e:
+                logger.debug(f"Erreur creation dossier de log {candidate_dir}: {e}")
+                continue
+        else:
+            logger.warning("Aucun dossier accessible pour sauvegarder le log")
+            return None
 
         # Nom du fichier avec date
         date_str = datetime.now().strftime("%Y-%m-%d")

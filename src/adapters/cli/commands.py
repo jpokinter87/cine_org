@@ -1611,6 +1611,7 @@ async def _repair_links_async(
     scan_dir: Optional[Path], auto_repair: bool, min_score: float, dry_run: bool
 ) -> None:
     """Implementation async de la commande repair-links."""
+    from loguru import logger as loguru_logger
     from rich.prompt import Prompt
     from rich.status import Status
 
@@ -1628,216 +1629,242 @@ async def _repair_links_async(
         raise typer.Exit(1)
 
     # Creer le service de reparation avec les paths
+    # Utiliser un dossier trash sous storage plutot que le parent
+    # pour eviter les problemes de permission (/media/trash)
     repair = container.repair_service(
         storage_dir=Path(config.storage_dir),
         video_dir=video_dir,
-        trash_dir=Path(config.storage_dir).parent / "trash",
+        trash_dir=Path(config.storage_dir) / ".trash",
     )
 
-    # Trouver les symlinks casses avec indicateur de progression
-    console.print(f"[bold cyan]Scan:[/bold cyan] {video_dir}")
+    # Desactiver les logs loguru pendant l'affichage Rich pour eviter le melange
+    loguru_logger.disable("src")
 
-    with Status("[cyan]Recherche des symlinks casses...", console=console) as status:
-        broken = repair.find_broken_symlinks()
-        status.update(f"[cyan]{len(broken)} symlinks casses trouves")
+    try:
+        # Trouver les symlinks casses avec indicateur de progression
+        console.print(f"[bold cyan]Scan:[/bold cyan] {video_dir}")
 
-    if not broken:
-        console.print("[green]Aucun symlink casse detecte.[/green]")
-        return
+        with Status("[cyan]Recherche des symlinks casses...", console=console) as status:
+            broken = repair.find_broken_symlinks()
+            status.update(f"[cyan]{len(broken)} symlinks casses trouves")
 
-    mode_label = "[dim](dry-run)[/dim] " if dry_run else ""
-    console.print(f"\n[bold cyan]{mode_label}Symlinks casses[/bold cyan]: {len(broken)} detecte(s)")
-    console.print(f"[dim]Recherche progressive: genre -> type -> base ({config.storage_dir})[/dim]\n")
+        if not broken:
+            console.print("[green]Aucun symlink casse detecte.[/green]")
+            return
 
-    if auto_repair:
-        console.print("[yellow]Mode automatique: reparation si score >= 90%[/yellow]\n")
+        # Construire l'index des fichiers pour optimiser les recherches
+        with Status("[cyan]Indexation des fichiers video...", console=console) as status:
+            def update_status(count: int, msg: str) -> None:
+                status.update(f"[cyan]{msg}")
 
-    actions: list[RepairAction] = []
-    auto_repaired = 0
-    no_match_count = 0
+            file_count = repair.build_file_index(progress_callback=update_status)
+            status.update(f"[cyan]Index: {file_count} fichiers indexes")
 
-    # Mode automatique avec barre de progression
-    if auto_repair:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            console=console,
-        ) as progress:
-            task = progress.add_task("[cyan]Recherche et reparation...", total=len(broken))
+        mode_label = "[dim](dry-run)[/dim] " if dry_run else ""
+        console.print(f"\n[bold cyan]{mode_label}Symlinks casses[/bold cyan]: {len(broken)} detecte(s)")
+        console.print(f"[dim]Recherche progressive: genre -> type -> base ({config.storage_dir})[/dim]\n")
 
-            for link in broken:
-                progress.update(task, description=f"[cyan]{link.name[:50]}")
+        if auto_repair:
+            console.print("[yellow]Mode automatique: reparation si score >= 90%[/yellow]\n")
+
+        actions: list[RepairAction] = []
+        auto_repaired = 0
+        no_match_count = 0
+
+        # Mode automatique avec barre de progression
+        if auto_repair:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                console=console,
+            ) as progress:
+                task = progress.add_task("[cyan]Recherche et reparation...", total=len(broken))
+
+                for link in broken:
+                    short_name = link.name[:60]
+                    progress.update(task, description=f"[cyan]{short_name}")
+
+                    # Chercher des cibles possibles avec recherche floue
+                    targets_with_scores = repair.find_possible_targets(link, min_score=min_score)
+
+                    # Reparer si score >= 90%
+                    if targets_with_scores and targets_with_scores[0][1] >= 90:
+                        best_target, best_score = targets_with_scores[0]
+                        if not dry_run:
+                            success = repair.repair_symlink(link, best_target)
+                        else:
+                            success = True
+
+                        if success:
+                            actions.append(
+                                RepairAction(
+                                    link=link,
+                                    action=RepairActionType.REPAIRED,
+                                    new_target=best_target,
+                                )
+                            )
+                            auto_repaired += 1
+                            # Afficher en vert au-dessus de la barre
+                            progress.console.print(f"[green]✓[/green] {short_name}")
+                    else:
+                        if not targets_with_scores:
+                            no_match_count += 1
+                            # Afficher en rouge au-dessus de la barre
+                            progress.console.print(f"[red]✗[/red] {short_name}")
+                        else:
+                            # Afficher en jaune au-dessus de la barre
+                            progress.console.print(f"[yellow]~[/yellow] {short_name}")
+                        actions.append(RepairAction(link=link, action=RepairActionType.SKIPPED))
+
+                    progress.advance(task)
+
+                progress.update(task, description="[green]Termine")
+
+            # Afficher le resume des reparations auto
+            console.print(f"\n[bold]Reparations automatiques:[/bold]")
+            console.print(f"  [green]{auto_repaired}[/green] repare(s) (score >= 90%)")
+            console.print(f"  [yellow]{len(broken) - auto_repaired - no_match_count}[/yellow] ignore(s) (score < 90%)")
+            console.print(f"  [red]{no_match_count}[/red] sans candidat")
+
+        # Mode interactif
+        else:
+            for i, link in enumerate(broken, 1):
+                # Afficher les infos du lien
+                try:
+                    original_target = link.readlink()
+                except OSError:
+                    original_target = Path("<inconnu>")
+
+                console.print(f"\n[dim]({i}/{len(broken)})[/dim]")
 
                 # Chercher des cibles possibles avec recherche floue
-                targets_with_scores = repair.find_possible_targets(link, min_score=min_score)
+                with console.status(f"[cyan]Recherche de candidats pour {link.name}..."):
+                    targets_with_scores = repair.find_possible_targets(link, min_score=min_score)
 
-                # Reparer si score >= 90%
-                if targets_with_scores and targets_with_scores[0][1] >= 90:
-                    best_target, best_score = targets_with_scores[0]
-                    if not dry_run:
-                        success = repair.repair_symlink(link, best_target)
-                    else:
-                        success = True
+                # Afficher le panel
+                panel_content = [
+                    f"[bold]{link.name}[/bold]",
+                    f"Chemin: {link}",
+                    f"Cible originale: [red]{original_target}[/red]",
+                ]
+                console.print(Panel("\n".join(panel_content), title="Symlink casse"))
 
-                    if success:
-                        actions.append(
-                            RepairAction(
-                                link=link,
-                                action=RepairActionType.REPAIRED,
-                                new_target=best_target,
-                            )
+                if targets_with_scores:
+                    console.print(f"\n[green]{len(targets_with_scores)}[/green] cible(s) possible(s):")
+                    for j, (target, score) in enumerate(targets_with_scores[:5], 1):
+                        score_color = "green" if score >= 80 else "yellow" if score >= 60 else "red"
+                        console.print(
+                            f"  {j}. [{score_color}]{score:.0f}%[/{score_color}] {target.name}"
                         )
-                        auto_repaired += 1
+                        console.print(f"     [dim]{target.parent}[/dim]")
+                    if len(targets_with_scores) > 5:
+                        console.print(f"  [dim]... et {len(targets_with_scores) - 5} autre(s)[/dim]")
+
+                # Prompt interactif
+                if targets_with_scores:
+                    choices = ["reparer", "supprimer", "ignorer", "quitter"]
+                    default = "reparer" if targets_with_scores[0][1] >= 70 else "ignorer"
                 else:
-                    if not targets_with_scores:
-                        no_match_count += 1
-                    actions.append(RepairAction(link=link, action=RepairActionType.SKIPPED))
+                    choices = ["supprimer", "ignorer", "quitter"]
+                    default = "ignorer"
 
-                progress.advance(task)
-
-            progress.update(task, description="[green]Termine")
-
-        # Afficher le resume des reparations auto
-        console.print(f"\n[bold]Reparations automatiques:[/bold]")
-        console.print(f"  [green]{auto_repaired}[/green] repare(s) (score >= 90%)")
-        console.print(f"  [yellow]{len(broken) - auto_repaired - no_match_count}[/yellow] ignore(s) (score < 90%)")
-        console.print(f"  [red]{no_match_count}[/red] sans candidat")
-
-    # Mode interactif
-    else:
-        for i, link in enumerate(broken, 1):
-            # Afficher les infos du lien
-            try:
-                original_target = link.readlink()
-            except OSError:
-                original_target = Path("<inconnu>")
-
-            console.print(f"\n[dim]({i}/{len(broken)})[/dim]")
-
-            # Chercher des cibles possibles avec recherche floue
-            with console.status(f"[cyan]Recherche de candidats pour {link.name}..."):
-                targets_with_scores = repair.find_possible_targets(link, min_score=min_score)
-
-            # Afficher le panel
-            panel_content = [
-                f"[bold]{link.name}[/bold]",
-                f"Chemin: {link}",
-                f"Cible originale: [red]{original_target}[/red]",
-            ]
-            console.print(Panel("\n".join(panel_content), title="Symlink casse"))
-
-            if targets_with_scores:
-                console.print(f"\n[green]{len(targets_with_scores)}[/green] cible(s) possible(s):")
-                for j, (target, score) in enumerate(targets_with_scores[:5], 1):
-                    score_color = "green" if score >= 80 else "yellow" if score >= 60 else "red"
-                    console.print(
-                        f"  {j}. [{score_color}]{score:.0f}%[/{score_color}] {target.name}"
-                    )
-                    console.print(f"     [dim]{target.parent}[/dim]")
-                if len(targets_with_scores) > 5:
-                    console.print(f"  [dim]... et {len(targets_with_scores) - 5} autre(s)[/dim]")
-
-            # Prompt interactif
-            if targets_with_scores:
-                choices = ["reparer", "supprimer", "ignorer", "quitter"]
-                default = "reparer" if targets_with_scores[0][1] >= 70 else "ignorer"
-            else:
-                choices = ["supprimer", "ignorer", "quitter"]
-                default = "ignorer"
-
-            choice = Prompt.ask(
-                "\nAction",
-                choices=choices,
-                default=default,
-            )
-
-            if choice == "quitter":
-                console.print("[yellow]Reparation interrompue.[/yellow]")
-                break
-
-            elif choice == "ignorer":
-                actions.append(
-                    RepairAction(link=link, action=RepairActionType.SKIPPED)
+                choice = Prompt.ask(
+                    "\nAction",
+                    choices=choices,
+                    default=default,
                 )
-                console.print("[dim]Ignore[/dim]\n")
 
-            elif choice == "supprimer":
-                if dry_run:
+                if choice == "quitter":
+                    console.print("[yellow]Reparation interrompue.[/yellow]")
+                    break
+
+                elif choice == "ignorer":
                     actions.append(
-                        RepairAction(link=link, action=RepairActionType.ORPHANED)
+                        RepairAction(link=link, action=RepairActionType.SKIPPED)
                     )
-                    console.print(f"[cyan](dry-run)[/cyan] Deplacement vers orphans\n")
-                else:
-                    dest = repair.move_to_orphans(link)
-                    if dest:
+                    console.print("[dim]Ignore[/dim]\n")
+
+                elif choice == "supprimer":
+                    if dry_run:
                         actions.append(
                             RepairAction(link=link, action=RepairActionType.ORPHANED)
                         )
-                        console.print(f"[yellow]Deplace vers orphans[/yellow]\n")
+                        console.print(f"[cyan](dry-run)[/cyan] Deplacement vers orphans\n")
                     else:
-                        console.print("[red]Echec du deplacement[/red]\n")
-
-            elif choice == "reparer":
-                if not targets_with_scores:
-                    console.print("[red]Aucune cible trouvee[/red]\n")
-                    actions.append(
-                        RepairAction(link=link, action=RepairActionType.SKIPPED)
-                    )
-                    continue
-
-                # Selection de la cible
-                target_choices = [str(j) for j in range(1, min(6, len(targets_with_scores) + 1))]
-                target_choice = Prompt.ask(
-                    "Selectionner la cible",
-                    choices=target_choices + ["annuler"],
-                    default="1",
-                )
-
-                if target_choice == "annuler":
-                    actions.append(
-                        RepairAction(link=link, action=RepairActionType.SKIPPED)
-                    )
-                    console.print("[dim]Annule[/dim]\n")
-                else:
-                    target_idx = int(target_choice) - 1
-                    new_target, score = targets_with_scores[target_idx]
-
-                    if dry_run:
-                        success = True
-                        console.print(f"[cyan](dry-run)[/cyan] Reparation: {new_target.name}\n")
-                    else:
-                        success = repair.repair_symlink(link, new_target)
-
-                    if success:
-                        actions.append(
-                            RepairAction(
-                                link=link,
-                                action=RepairActionType.REPAIRED,
-                                new_target=new_target,
+                        dest = repair.move_to_orphans(link)
+                        if dest:
+                            actions.append(
+                                RepairAction(link=link, action=RepairActionType.ORPHANED)
                             )
+                            console.print(f"[yellow]Deplace vers orphans[/yellow]\n")
+                        else:
+                            console.print("[red]Echec du deplacement[/red]\n")
+
+                elif choice == "reparer":
+                    if not targets_with_scores:
+                        console.print("[red]Aucune cible trouvee[/red]\n")
+                        actions.append(
+                            RepairAction(link=link, action=RepairActionType.SKIPPED)
                         )
-                        if not dry_run:
-                            console.print(f"[green]Repare -> {new_target.name}[/green]\n")
+                        continue
+
+                    # Selection de la cible
+                    target_choices = [str(j) for j in range(1, min(6, len(targets_with_scores) + 1))]
+                    target_choice = Prompt.ask(
+                        "Selectionner la cible",
+                        choices=target_choices + ["annuler"],
+                        default="1",
+                    )
+
+                    if target_choice == "annuler":
+                        actions.append(
+                            RepairAction(link=link, action=RepairActionType.SKIPPED)
+                        )
+                        console.print("[dim]Annule[/dim]\n")
                     else:
-                        console.print("[red]Echec de la reparation[/red]\n")
+                        target_idx = int(target_choice) - 1
+                        new_target, score = targets_with_scores[target_idx]
 
-    # Sauvegarder le log
-    if actions:
-        log_path = repair.save_log(actions)
-        if log_path:
-            console.print(f"\n[dim]Log sauvegarde: {log_path}[/dim]")
+                        if dry_run:
+                            success = True
+                            console.print(f"[cyan](dry-run)[/cyan] Reparation: {new_target.name}\n")
+                        else:
+                            success = repair.repair_symlink(link, new_target)
 
-    # Resume
-    repaired = sum(1 for a in actions if a.action == RepairActionType.REPAIRED)
-    orphaned = sum(1 for a in actions if a.action == RepairActionType.ORPHANED)
-    skipped = sum(1 for a in actions if a.action == RepairActionType.SKIPPED)
+                        if success:
+                            actions.append(
+                                RepairAction(
+                                    link=link,
+                                    action=RepairActionType.REPAIRED,
+                                    new_target=new_target,
+                                )
+                            )
+                            if not dry_run:
+                                console.print(f"[green]Repare -> {new_target.name}[/green]\n")
+                        else:
+                            console.print("[red]Echec de la reparation[/red]\n")
 
-    console.print("\n[bold]Resume:[/bold]")
-    console.print(f"  [green]{repaired}[/green] repare(s)")
-    console.print(f"  [yellow]{orphaned}[/yellow] deplace(s) vers orphans")
-    console.print(f"  [dim]{skipped} ignore(s)[/dim]")
+        # Sauvegarder le log
+        if actions:
+            log_path = repair.save_log(actions)
+            if log_path:
+                console.print(f"\n[dim]Log sauvegarde: {log_path}[/dim]")
+
+        # Resume
+        repaired = sum(1 for a in actions if a.action == RepairActionType.REPAIRED)
+        orphaned = sum(1 for a in actions if a.action == RepairActionType.ORPHANED)
+        skipped = sum(1 for a in actions if a.action == RepairActionType.SKIPPED)
+
+        console.print("\n[bold]Resume:[/bold]")
+        console.print(f"  [green]{repaired}[/green] repare(s)")
+        console.print(f"  [yellow]{orphaned}[/yellow] deplace(s) vers orphans")
+        console.print(f"  [dim]{skipped} ignore(s)[/dim]")
+
+    finally:
+        # Reactiver les logs loguru
+        loguru_logger.enable("src")
 
 
 # ============================================================================

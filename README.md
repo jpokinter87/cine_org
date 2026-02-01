@@ -16,6 +16,8 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Validation automatique et manuelle](#validation-automatique-et-manuelle)
   - [Détection des doublons](#détection-des-doublons)
 - [Commandes](#commandes)
+  - [Réparation des symlinks cassés](#réparation-des-symlinks-cassés)
+  - [Consolidation des fichiers externes](#consolidation-des-fichiers-externes)
 - [Format de nommage](#format-de-nommage)
 - [Stack technique](#stack-technique)
 
@@ -457,10 +459,63 @@ uv run cineorg check --verify-hash
 
 # Rapport au format JSON
 uv run cineorg check --json
-
-# Réparer les symlinks cassés
-uv run cineorg repair-links
 ```
+
+### Réparation des symlinks cassés
+
+La commande `repair-links` détecte les symlinks cassés dans `video/` et recherche automatiquement les fichiers correspondants dans `storage/` grâce à une recherche floue intelligente.
+
+```bash
+# Scanner tout video/ en mode interactif
+uv run cineorg repair-links
+
+# Scanner un répertoire spécifique
+uv run cineorg repair-links /chemin/vers/Films/Drame
+
+# Mode automatique : répare si score >= 90%
+uv run cineorg repair-links --auto
+
+# Mode simulation (sans modification)
+uv run cineorg repair-links --auto --dry-run
+
+# Ajuster le score minimum de recherche (défaut: 50%)
+uv run cineorg repair-links --min-score 60
+```
+
+**Fonctionnement :**
+
+1. **Indexation** : Au premier lancement, un index des fichiers vidéo est construit et mis en cache (`~/.cineorg/file_index.json`). Le cache est valide 24h.
+
+2. **Recherche progressive** : Pour chaque symlink cassé, la recherche se fait d'abord dans le même genre, puis le même type (Films/Séries), puis toute la base.
+
+3. **Scoring** : La similarité est calculée en comparant les titres (extraction du titre et de l'année, suppression des infos techniques).
+
+4. **Affichage** :
+   - `✓` vert : symlink réparé avec succès
+   - `✗` rouge : aucun candidat trouvé
+   - `~` jaune : candidat trouvé mais score insuffisant
+
+**Mode interactif** : Sans `--auto`, chaque symlink est présenté avec ses candidats et vous pouvez choisir l'action (réparer, supprimer, ignorer).
+
+### Consolidation des fichiers externes
+
+Si certains symlinks dans `storage/` pointent vers des volumes externes (NAS secondaire, disque USB), la commande `consolidate` permet de rapatrier ces fichiers dans le stockage principal.
+
+```bash
+# Lister les symlinks vers des volumes externes
+uv run cineorg consolidate
+
+# Scanner un répertoire spécifique
+uv run cineorg consolidate /chemin/vers/storage/Films
+
+# Rapatrier les fichiers accessibles
+uv run cineorg consolidate --execute
+
+# Mode simulation
+uv run cineorg consolidate --execute --dry-run
+```
+
+**Cas d'usage** : Vous avez déplacé des fichiers sur un NAS externe pour libérer de l'espace. Plus tard, vous voulez les récupérer sur le stockage principal.
 
 ## Format de nommage
 
@@ -556,7 +611,12 @@ uv sync  # Réinstaller les dépendances
 ### Symlinks cassés après déplacement
 
 ```bash
-uv run cineorg repair-links
+# Réparation automatique
+uv run cineorg repair-links --auto
+
+# Forcer la reconstruction de l'index de recherche
+rm ~/.cineorg/file_index.json
+uv run cineorg repair-links --auto
 ```
 
 ### Base de données corrompue

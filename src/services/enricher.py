@@ -313,18 +313,20 @@ class EnricherService:
                     advance_callback()
                 continue
 
-            # Enrichir avec retry
+            # Enrichir avec retry (uniquement sur erreur reseau/API)
             success = False
             retries = 0
 
-            while retries < self.MAX_RETRIES and not success:
+            while retries < self.MAX_RETRIES:
                 try:
                     success = await self._enrich_single(item)
                     if success:
                         result.enriched += 1
                     else:
-                        # Pas de resultat mais pas d'erreur
+                        # Pas de resultat mais pas d'erreur - ne pas retenter
                         result.failed += 1
+                    # Sortir de la boucle (succes ou echec sans erreur)
+                    break
                 except Exception as e:
                     retries += 1
                     logger.warning(
