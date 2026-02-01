@@ -1730,7 +1730,35 @@ async def _repair_links_async(
 
         # Mode interactif
         else:
+            # Suivi des echecs par serie pour proposer d'ignorer toute la serie
+            series_failures: dict[str, int] = {}  # {nom_serie: nb_echecs}
+            skipped_series: set[str] = set()  # Series a ignorer completement
+
+            def extract_series_name(path: Path) -> str | None:
+                """Extrait le nom de la serie depuis le chemin du symlink."""
+                parts = path.parts
+                for i, part in enumerate(parts):
+                    if part.lower() in ("séries", "series"):
+                        # Le nom de la serie est generalement 2-3 niveaux apres
+                        # Ex: Séries/Séries TV/A-M/Breaking Bad/Saison 01/...
+                        for j in range(i + 1, min(i + 5, len(parts))):
+                            # Ignorer les subdivisions alphabetiques et types
+                            if parts[j] in ("Séries TV", "Animation", "Mangas"):
+                                continue
+                            if len(parts[j]) <= 3 and "-" in parts[j]:
+                                continue  # Subdivision A-M, etc.
+                            if parts[j].startswith("Saison"):
+                                break
+                            return parts[j]
+                return None
+
             for i, link in enumerate(broken, 1):
+                # Verifier si cette serie doit etre ignoree
+                series_name = extract_series_name(link)
+                if series_name and series_name in skipped_series:
+                    actions.append(RepairAction(link=link, action=RepairActionType.SKIPPED))
+                    continue
+
                 # Afficher les infos du lien
                 try:
                     original_target = link.readlink()
@@ -1751,42 +1779,162 @@ async def _repair_links_async(
                 ]
                 console.print(Panel("\n".join(panel_content), title="Symlink casse"))
 
-                if targets_with_scores:
-                    console.print(f"\n[green]{len(targets_with_scores)}[/green] cible(s) possible(s):")
-                    for j, (target, score) in enumerate(targets_with_scores[:5], 1):
+                # Affichage pagine des candidats
+                page_size = 5
+                page_start = 0
+
+                def display_candidates(start: int) -> None:
+                    """Affiche une page de candidats."""
+                    end = min(start + page_size, len(targets_with_scores))
+                    for j, (target, score) in enumerate(targets_with_scores[start:end], start + 1):
                         score_color = "green" if score >= 80 else "yellow" if score >= 60 else "red"
                         console.print(
                             f"  {j}. [{score_color}]{score:.0f}%[/{score_color}] {target.name}"
                         )
                         console.print(f"     [dim]{target.parent}[/dim]")
-                    if len(targets_with_scores) > 5:
-                        console.print(f"  [dim]... et {len(targets_with_scores) - 5} autre(s)[/dim]")
+                    remaining = len(targets_with_scores) - end
+                    if remaining > 0:
+                        console.print(f"  [dim]... et {remaining} autre(s) (tapez 'plus' pour voir)[/dim]")
 
-                # Prompt interactif
                 if targets_with_scores:
-                    choices = ["reparer", "supprimer", "ignorer", "quitter"]
-                    default = "reparer" if targets_with_scores[0][1] >= 70 else "ignorer"
-                else:
-                    choices = ["supprimer", "ignorer", "quitter"]
-                    default = "ignorer"
+                    # Auto-reparation si score = 100%
+                    if targets_with_scores[0][1] >= 100:
+                        best_target, best_score = targets_with_scores[0]
+                        console.print(f"\n[green]Match parfait (100%)[/green]: {best_target.name}")
+                        if not dry_run:
+                            success = repair.repair_symlink(link, best_target)
+                        else:
+                            success = True
+                        if success:
+                            actions.append(
+                                RepairAction(
+                                    link=link,
+                                    action=RepairActionType.REPAIRED,
+                                    new_target=best_target,
+                                )
+                            )
+                            if series_name and series_name in series_failures:
+                                series_failures[series_name] = 0
+                            console.print(f"[green]✓ Auto-repare -> {best_target.name}[/green]\n")
+                        else:
+                            console.print("[red]Echec de la reparation automatique[/red]\n")
+                        continue  # Passer au symlink suivant
 
-                choice = Prompt.ask(
-                    "\nAction",
-                    choices=choices,
-                    default=default,
-                )
+                    console.print(f"\n[green]{len(targets_with_scores)}[/green] cible(s) possible(s):")
+                    display_candidates(page_start)
 
-                if choice == "quitter":
+                # Boucle pour gerer la pagination et recherche par titre
+                while True:
+                    # Prompt interactif avec raccourcis
+                    valid_choices = {"r", "s", "i", "q", "t"}  # t = rechercher par titre
+                    has_more = targets_with_scores and page_start + page_size < len(targets_with_scores)
+                    if has_more:
+                        valid_choices.add("p")
+
+                    if targets_with_scores:
+                        default = "r" if targets_with_scores[0][1] >= 70 else "i"
+                        # Affichage propre des options
+                        options = "[green]r[/green]=reparer  [yellow]s[/yellow]=supprimer  [dim]i[/dim]=ignorer  [red]q[/red]=quitter  [magenta]t[/magenta]=titre"
+                        if has_more:
+                            options += "  [cyan]p[/cyan]=plus"
+                    else:
+                        default = "i"
+                        options = "[yellow]s[/yellow]=supprimer  [dim]i[/dim]=ignorer  [red]q[/red]=quitter  [magenta]t[/magenta]=titre"
+
+                    console.print(f"\n{options}")
+                    choice = input(f"Action [{default}]: ").strip().lower() or default
+
+                    # Valider le choix
+                    if choice not in valid_choices:
+                        console.print(f"[red]Choix invalide. Utilisez: {', '.join(sorted(valid_choices))}[/red]")
+                        continue
+
+                    # Recherche par titre personnalise
+                    if choice == "t":
+                        custom_title = input("Titre a rechercher: ").strip()
+                        if custom_title:
+                            console.print(f"[cyan]Recherche de '{custom_title}'...[/cyan]")
+
+                            # Detecter le type de media pour filtrer
+                            link_str = str(link).lower()
+                            is_film = "/films/" in link_str
+                            is_series = "/séries/" in link_str or "/series/" in link_str
+
+                            # Recherche dans l'index avec le titre personnalise
+                            from difflib import SequenceMatcher
+                            custom_norm = repair._normalize_filename(custom_title)
+                            custom_results: list[tuple[Path, float]] = []
+
+                            for candidate_path, candidate_norm in repair._file_index:
+                                # Filtrer par type de media
+                                candidate_str = str(candidate_path).lower()
+                                if is_film and ("/séries/" in candidate_str or "/series/" in candidate_str):
+                                    continue
+                                if is_series and "/films/" in candidate_str:
+                                    continue
+
+                                # Calculer la similarite avec le titre personnalise
+                                ratio = SequenceMatcher(None, custom_norm, candidate_norm).ratio()
+                                score = ratio * 100
+                                if score >= min_score:
+                                    custom_results.append((candidate_path, score))
+
+                            custom_results.sort(key=lambda x: x[1], reverse=True)
+                            custom_results = custom_results[:15]
+
+                            if custom_results:
+                                targets_with_scores = custom_results
+                                page_start = 0
+                                media_label = "films" if is_film else "séries" if is_series else "tous"
+                                console.print(f"\n[green]{len(targets_with_scores)}[/green] resultat(s) pour '{custom_title}' ({media_label}):")
+                                display_candidates(page_start)
+                            else:
+                                console.print(f"[red]Aucun resultat pour '{custom_title}'[/red]")
+                        continue
+
+                    # Gerer la pagination
+                    if choice == "p":
+                        page_start += page_size
+                        console.print("")
+                        display_candidates(page_start)
+                        continue
+                    else:
+                        break
+
+                if choice == "q":
                     console.print("[yellow]Reparation interrompue.[/yellow]")
                     break
 
-                elif choice == "ignorer":
+                elif choice == "i":
                     actions.append(
                         RepairAction(link=link, action=RepairActionType.SKIPPED)
                     )
-                    console.print("[dim]Ignore[/dim]\n")
+                    console.print("[dim]Ignore[/dim]")
 
-                elif choice == "supprimer":
+                    # Compter les echecs pour cette serie
+                    if series_name:
+                        series_failures[series_name] = series_failures.get(series_name, 0) + 1
+
+                        # Apres 3 echecs, proposer d'ignorer toute la serie
+                        if series_failures[series_name] == 3:
+                            # Compter combien d'episodes restants pour cette serie
+                            remaining = sum(
+                                1 for future_link in broken[i:]
+                                if extract_series_name(future_link) == series_name
+                            )
+                            if remaining > 0:
+                                console.print(
+                                    f"\n[yellow]3 echecs consecutifs pour '{series_name}'.[/yellow]"
+                                )
+                                skip_all = input(
+                                    f"Ignorer les {remaining} episode(s) restant(s) de cette serie ? (o/n) [n]: "
+                                ).strip().lower()
+                                if skip_all == "o" or skip_all == "oui":
+                                    skipped_series.add(series_name)
+                                    console.print(f"[dim]Serie '{series_name}' ignoree.[/dim]")
+                    console.print("")
+
+                elif choice == "s":
                     if dry_run:
                         actions.append(
                             RepairAction(link=link, action=RepairActionType.ORPHANED)
@@ -1802,7 +1950,7 @@ async def _repair_links_async(
                         else:
                             console.print("[red]Echec du deplacement[/red]\n")
 
-                elif choice == "reparer":
+                elif choice == "r":
                     if not targets_with_scores:
                         console.print("[red]Aucune cible trouvee[/red]\n")
                         actions.append(
@@ -1810,21 +1958,26 @@ async def _repair_links_async(
                         )
                         continue
 
-                    # Selection de la cible
-                    target_choices = [str(j) for j in range(1, min(6, len(targets_with_scores) + 1))]
-                    target_choice = Prompt.ask(
-                        "Selectionner la cible",
-                        choices=target_choices + ["annuler"],
-                        default="1",
-                    )
+                    # Selection de la cible (tous les candidats disponibles)
+                    max_choice = min(len(targets_with_scores), 15)  # Limite a 15
+                    target_choice = input(f"Cible (1-{max_choice}, a=annuler) [1]: ").strip().lower() or "1"
 
-                    if target_choice == "annuler":
+                    if target_choice == "a" or target_choice == "annuler":
                         actions.append(
                             RepairAction(link=link, action=RepairActionType.SKIPPED)
                         )
                         console.print("[dim]Annule[/dim]\n")
                     else:
-                        target_idx = int(target_choice) - 1
+                        try:
+                            target_idx = int(target_choice) - 1
+                            if target_idx < 0 or target_idx >= len(targets_with_scores):
+                                console.print(f"[red]Choix invalide (1-{max_choice})[/red]\n")
+                                actions.append(RepairAction(link=link, action=RepairActionType.SKIPPED))
+                                continue
+                        except ValueError:
+                            console.print(f"[red]Choix invalide (1-{max_choice} ou 'a')[/red]\n")
+                            actions.append(RepairAction(link=link, action=RepairActionType.SKIPPED))
+                            continue
                         new_target, score = targets_with_scores[target_idx]
 
                         if dry_run:
@@ -1841,6 +1994,9 @@ async def _repair_links_async(
                                     new_target=new_target,
                                 )
                             )
+                            # Reinitialiser le compteur d'echecs pour cette serie
+                            if series_name and series_name in series_failures:
+                                series_failures[series_name] = 0
                             if not dry_run:
                                 console.print(f"[green]Repare -> {new_target.name}[/green]\n")
                         else:

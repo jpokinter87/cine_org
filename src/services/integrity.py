@@ -584,6 +584,66 @@ class RepairService:
             stem = stem.replace(sep, " ")
         return stem
 
+    def _extract_series_info(self, name: str) -> tuple[str, str | None, int | None, int | None]:
+        """
+        Extrait les informations structurees d'un nom de fichier de serie.
+
+        Args:
+            name: Nom du fichier
+
+        Returns:
+            Tuple (titre_normalise, saison, episode, annee)
+        """
+        import re
+
+        stem = Path(name).stem.lower()
+
+        # Remplacer les separateurs
+        for sep in [".", "_", "-"]:
+            stem = stem.replace(sep, " ")
+
+        # Extraire saison/episode (S01E03, S01 E03, 1x03, etc.)
+        season = None
+        episode = None
+        episode_match = re.search(r"\bs(\d{1,2})\s*e(\d{1,2})\b", stem)
+        if episode_match:
+            season = int(episode_match.group(1))
+            episode = int(episode_match.group(2))
+        else:
+            # Format alternatif 1x03
+            alt_match = re.search(r"\b(\d{1,2})x(\d{1,2})\b", stem)
+            if alt_match:
+                season = int(alt_match.group(1))
+                episode = int(alt_match.group(2))
+
+        # Extraire l'annee
+        year_match = re.search(r"\b(19\d{2}|20\d{2})\b", stem)
+        year = int(year_match.group(1)) if year_match else None
+
+        # Extraire le titre (tout avant SxxExx ou l'annee)
+        title = stem
+        if episode_match:
+            title = stem[: episode_match.start()].strip()
+        elif year_match:
+            title = stem[: year_match.start()].strip()
+
+        # Nettoyer le titre des termes techniques
+        tech_terms = [
+            "french", "vostfr", "multi", "truefrench", "vff", "vf", "vo",
+            "720p", "1080p", "2160p", "4k", "uhd",
+            "x264", "x265", "hevc", "h264", "h265", "avc",
+            "bluray", "bdrip", "webrip", "hdtv", "dvdrip", "web dl", "web",
+            "dts", "ac3", "aac", "dolby", "atmos", "truehd",
+            "internal", "final", "repack", "proper",
+        ]
+        for term in tech_terms:
+            title = re.sub(rf"\b{term}\b", "", title, flags=re.IGNORECASE)
+
+        # Nettoyer les espaces multiples
+        title = " ".join(title.split())
+
+        return title, season, episode, year
+
     def find_broken_symlinks(self) -> list[Path]:
         """
         Trouve tous les symlinks casses dans video/.
@@ -646,7 +706,10 @@ class RepairService:
                 return candidates
 
         # Si aucun bon match, retourner les resultats de la recherche complete
-        return self._search_in_directory(link, self._storage_dir, min_score)
+        # mais filtrer par type de media pour eviter de proposer des series pour des films
+        return self._search_in_directory(
+            link, self._storage_dir, min_score, media_type_filter=media_type
+        )
 
     def _detect_media_context(self, link: Path) -> tuple[str | None, str | None]:
         """
@@ -685,7 +748,8 @@ class RepairService:
         return media_type, genre
 
     def _search_in_directory(
-        self, link: Path, search_dir: Path, min_score: float
+        self, link: Path, search_dir: Path, min_score: float,
+        media_type_filter: str | None = None
     ) -> list[tuple[Path, float]]:
         """
         Recherche des candidats dans un repertoire specifique.
@@ -697,6 +761,7 @@ class RepairService:
             link: Chemin du symlink casse
             search_dir: Repertoire de recherche
             min_score: Score minimum
+            media_type_filter: Filtrer par type ("Films" ou "Séries")
 
         Returns:
             Liste de tuples (chemin, score) triee par score decroissant
@@ -710,9 +775,77 @@ class RepairService:
         except OSError:
             original_name = filename
 
+        # Detecter si le nom de la cible est "cryptique" (code release, pas de titre lisible)
+        # Ex: "ninhd-ltrt-1080_HEVC_remux.mkv" vs "La pizzeria en révolte (1989).mkv"
+        def is_cryptic_name(name: str) -> bool:
+            """Detecte si un nom de fichier est cryptique (code release)."""
+            import re
+            stem = Path(name).stem.lower()
+
+            # Un nom n'est pas cryptique s'il a une annee (avec ou sans parentheses)
+            has_year = bool(re.search(r"\b(19\d{2}|20\d{2})\b", stem))
+            if has_year:
+                return False
+
+            # Normaliser: remplacer les separateurs par des espaces
+            for sep in [".", "_", "-"]:
+                stem = stem.replace(sep, " ")
+
+            # Supprimer les termes techniques et les groupes de release connus
+            tech_terms = ["hevc", "x264", "x265", "h264", "h265", "remux", "1080p", "720p", "2160p",
+                         "multi", "french", "vostfr", "bluray", "webrip", "web", "dts", "ac3",
+                         "aac", "internal", "proper", "repack", "hdr", "10bit", "fraternity",
+                         "extreme", "notag", "lost", "azaze", "cielos", "jiheff", "mhdgz",
+                         "fhd", "hd", "sd", "uhd", "dvdrip", "bdrip", "tvrip", "eac3"]
+            clean = stem
+            for term in tech_terms:
+                clean = re.sub(rf"\b{term}\b", "", clean, flags=re.IGNORECASE)
+
+            # Supprimer les chiffres isoles
+            clean = re.sub(r"\b\d+\b", "", clean)
+            clean = " ".join(clean.split())  # Nettoyer espaces
+
+            # Heuristique: un vrai mot a un bon ratio voyelles/consonnes et est prononçable
+            vowels = set("aeiouyàâäéèêëïîôùûü")
+
+            def is_word_like(word: str) -> bool:
+                """Verifie si un mot ressemble a un vrai mot (pas un code)."""
+                if len(word) < 3:
+                    return False
+                # Ratio de voyelles (les vrais mots ont generalement >25%)
+                vowel_count = sum(1 for c in word if c in vowels)
+                vowel_ratio = vowel_count / len(word)
+                if vowel_ratio < 0.2:
+                    return False
+                # Verifier les consonnes consecutives (max 2-3 pour un vrai mot)
+                consonant_streak = 0
+                max_streak = 0
+                for c in word:
+                    if c not in vowels:
+                        consonant_streak += 1
+                        max_streak = max(max_streak, consonant_streak)
+                    else:
+                        consonant_streak = 0
+                # Plus de 3 consonnes consecutives = probablement pas un vrai mot
+                # (sauf exceptions comme "str", "scr", "thr" en debut de mot)
+                if max_streak > 3:
+                    return False
+                return True
+
+            # Filtrer les mots qui ressemblent a des vrais mots
+            words = [w for w in clean.split() if len(w) >= 3 and w.isalpha() and is_word_like(w)]
+
+            # Un titre normal a au moins 2 mots lisibles OU un mot long (> 6 lettres)
+            has_long_word = any(len(w) >= 7 for w in words)
+            has_multiple_words = len(words) >= 2
+
+            return not (has_long_word or has_multiple_words)
+
         # Normaliser les noms de recherche
         norm_link = self._normalize_filename(filename)
-        norm_target = self._normalize_filename(original_name)
+        # N'utiliser le nom de la cible que s'il n'est pas cryptique
+        use_target_name = not is_cryptic_name(original_name)
+        norm_target = self._normalize_filename(original_name) if use_target_name else ""
 
         candidates: list[tuple[Path, float]] = []
         search_str = str(search_dir)
@@ -724,10 +857,24 @@ class RepairService:
                 if not str(candidate_path).startswith(search_str):
                     continue
 
+                # Filtrer par type de media (Films vs Series)
+                if media_type_filter:
+                    candidate_str = str(candidate_path).lower()
+                    if media_type_filter.lower() == "films":
+                        if "/séries/" in candidate_str or "/series/" in candidate_str:
+                            continue
+                    elif media_type_filter.lower() in ("séries", "series"):
+                        if "/films/" in candidate_str:
+                            continue
+
                 # Calculer la similarite avec les noms normalises
                 score_link = self._calculate_similarity_fast(norm_link, candidate_norm)
-                score_target = self._calculate_similarity_fast(norm_target, candidate_norm)
-                score = max(score_link, score_target)
+                # N'utiliser le nom de la cible que s'il n'est pas cryptique
+                if norm_target:
+                    score_target = self._calculate_similarity_fast(norm_target, candidate_norm)
+                    score = max(score_link, score_target)
+                else:
+                    score = score_link
 
                 # Match exact = score maximum
                 if candidate_path.name == filename or candidate_path.name == original_name:
@@ -750,8 +897,12 @@ class RepairService:
                         continue
 
                     score_link = self._calculate_title_similarity(filename, candidate.name)
-                    score_target = self._calculate_title_similarity(original_name, candidate.name)
-                    score = max(score_link, score_target)
+                    # N'utiliser le nom de la cible que s'il n'est pas cryptique
+                    if use_target_name:
+                        score_target = self._calculate_title_similarity(original_name, candidate.name)
+                        score = max(score_link, score_target)
+                    else:
+                        score = score_link
 
                     if candidate.name == filename or candidate.name == original_name:
                         score = 100.0
@@ -771,12 +922,45 @@ class RepairService:
         Calcule rapidement la similarite entre deux noms deja normalises.
 
         Version optimisee qui assume que les noms sont deja normalises.
+        Pour les series, compare le titre et l'episode separement.
         """
         from difflib import SequenceMatcher
 
-        # Comparaison directe des noms normalises
-        ratio = SequenceMatcher(None, norm1, norm2).ratio()
-        return ratio * 100
+        # Extraire les informations structurees
+        title1, season1, episode1, year1 = self._extract_series_info(norm1)
+        title2, season2, episode2, year2 = self._extract_series_info(norm2)
+
+        # Similarite des titres
+        if title1 and title2:
+            title_ratio = SequenceMatcher(None, title1, title2).ratio()
+        else:
+            # Fallback sur la comparaison directe
+            title_ratio = SequenceMatcher(None, norm1, norm2).ratio()
+
+        # Pour les series: bonus/malus selon correspondance episode
+        if season1 is not None and episode1 is not None:
+            # C'est une serie
+            if season2 == season1 and episode2 == episode1:
+                # Meme episode: gros bonus
+                return min(100.0, title_ratio * 100 + 30)
+            elif season2 == season1 and episode2 is not None:
+                # Meme saison mais episode different: malus
+                return max(0.0, title_ratio * 100 - 20)
+            elif episode2 is not None:
+                # Saison differente: malus important
+                return max(0.0, title_ratio * 100 - 30)
+
+        # Pour les films ou si pas d'info episode: comparaison simple
+        score = title_ratio * 100
+
+        # Bonus/malus pour l'annee
+        if year1 and year2:
+            if year1 == year2:
+                score = min(100.0, score + 10)
+            elif abs(year1 - year2) > 2:
+                score = max(0.0, score - 10)
+
+        return score
 
     def _calculate_title_similarity(self, name1: str, name2: str) -> float:
         """
