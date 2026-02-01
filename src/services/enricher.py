@@ -152,6 +152,7 @@ class EnricherService:
         """
         Extrait les infos de recherche depuis un PendingValidation.
 
+        Priorite: symlink (bien formate) > fichier physique.
         Utilise guessit pour une extraction fiable du titre et de l'annee.
 
         Args:
@@ -167,16 +168,35 @@ class EnricherService:
         duration = None
 
         if pending.video_file:
+            # Priorite au symlink qui est generalement bien formate
+            # Ex: "Le Film (2020) FR HEVC 1080p.mkv" vs "fhd-xyz.720p.mkv"
+            symlink_name = ""
+            if pending.video_file.symlink_path:
+                symlink_name = pending.video_file.symlink_path.name
+
             filename = pending.video_file.filename or ""
-            if filename:
-                # Utiliser guessit pour extraire le titre proprement
+
+            # Utiliser le symlink en priorite s'il existe
+            name_to_parse = symlink_name if symlink_name else filename
+
+            if name_to_parse:
                 try:
-                    parsed = guessit(filename)
+                    parsed = guessit(name_to_parse)
                     query_title = parsed.get("title", "")
                     year = parsed.get("year")
+
+                    # Si le titre extrait du symlink est vide ou trop court,
+                    # essayer avec le nom du fichier
+                    if len(query_title) < 3 and filename and filename != name_to_parse:
+                        parsed = guessit(filename)
+                        fallback_title = parsed.get("title", "")
+                        if len(fallback_title) > len(query_title):
+                            query_title = fallback_title
+                            year = parsed.get("year") or year
+
                 except Exception:
                     # Fallback: utiliser le nom sans extension
-                    query_title = filename.rsplit(".", 1)[0] if "." in filename else filename
+                    query_title = name_to_parse.rsplit(".", 1)[0] if "." in name_to_parse else name_to_parse
 
             # Recuperer la duree depuis media_info
             if pending.video_file.media_info:
