@@ -85,3 +85,31 @@ def init_db() -> None:
 
     # Creation des tables
     SQLModel.metadata.create_all(get_engine())
+
+    # Migrations automatiques
+    _run_migrations()
+
+
+def _run_migrations() -> None:
+    """
+    Execute les migrations de schema necessaires.
+
+    Verifie et ajoute les colonnes manquantes dans les tables existantes.
+    SQLModel.metadata.create_all() ne modifie pas les tables existantes,
+    donc cette fonction est necessaire pour les mises a jour de schema.
+    """
+    from sqlalchemy import text
+
+    engine = get_engine()
+
+    # Migration 1: Ajouter symlink_path a video_files si manquante
+    with engine.connect() as conn:
+        # Verifier si la colonne existe
+        result = conn.execute(text("PRAGMA table_info(video_files)"))
+        columns = [row[1] for row in result.fetchall()]
+
+        if "symlink_path" not in columns:
+            conn.execute(
+                text("ALTER TABLE video_files ADD COLUMN symlink_path VARCHAR")
+            )
+            conn.commit()
