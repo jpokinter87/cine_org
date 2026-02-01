@@ -550,6 +550,23 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
     scanner = container.scanner_service()
     validation_svc = container.validation_service()
 
+    # Nettoyage des enregistrements orphelins (runs precedents interrompus)
+    pending_repo = container.pending_validation_repository()
+    video_file_repo = container.video_file_repository()
+    orphan_count = 0
+    # Recuperer les pending et validated (tout sauf TRANSFERRED)
+    orphans = validation_svc.list_pending() + validation_svc.list_validated()
+    for pv in orphans:
+        if pv.id:
+            pending_repo.delete(pv.id)
+        if pv.video_file and pv.video_file.id:
+            video_file_repo.delete(pv.video_file.id)
+        orphan_count += 1
+    if orphan_count > 0:
+        console.print(
+            f"[dim]Nettoyage: {orphan_count} enregistrement(s) orphelin(s) supprime(s)[/dim]\n"
+        )
+
     # 1. Scan avec Progress
     console.print("\n[bold cyan]Etape 1/4: Scan des telechargements[/bold cyan]\n")
 
@@ -809,9 +826,11 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
     organizer = container.organizer_service()
     storage_dir = Path(config.storage_dir)
     video_dir = Path(config.video_dir)
-    # Deux repertoires staging separes (chacun au niveau parent de sa zone)
+    # Deux repertoires staging separes
+    # Video: au niveau parent (ex: /media/Serveur/test -> /media/Serveur/staging)
+    # Storage: a la racine du stockage (ex: /media/NAS64 -> /media/NAS64/staging)
     video_staging_dir = video_dir.parent / "staging"
-    storage_staging_dir = storage_dir.parent / "staging"
+    storage_staging_dir = storage_dir / "staging"
 
     # Creer le transferer pour la detection de conflits
     transferer = container.transferer_service(
@@ -826,6 +845,12 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
     similar_cache: dict[str, "SimilarContentInfo | None"] = {}
 
     for pend in validated_list:
+        # Ne traiter que les fichiers de cette session (pas les anciens de la DB)
+        if not pend.video_file or not pend.video_file.id:
+            continue
+        if pend.video_file.id not in created_video_file_ids:
+            continue
+
         candidate = None
         for c in pend.candidates:
             c_id = c.id if hasattr(c, "id") else c.get("id", "")
@@ -989,6 +1014,12 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
                 new_files_audio_codecs: set[str] = set()
 
                 for other_pend in validated_list:
+                    # Ne compter que les fichiers de cette session
+                    if not other_pend.video_file or not other_pend.video_file.id:
+                        continue
+                    if other_pend.video_file.id not in created_video_file_ids:
+                        continue
+
                     # Recuperer les infos du candidat
                     other_candidate = None
                     for c in other_pend.candidates:
@@ -1019,7 +1050,7 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
                         other_key = f"{other_title}|{other_year}"
 
                     # Si meme groupe, agreger les infos
-                    if other_key == cache_key and other_pend.video_file:
+                    if other_key == cache_key:
                         new_files_count += 1
                         other_path = other_pend.video_file.path
                         if other_path and other_path.exists():
@@ -1061,21 +1092,47 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
                         console.print(f"[dim]Dry-run: l'ancien serait deplace vers staging[/dim]")
                     else:
                         console.print(f"[cyan]Deplacement de l'ancien vers staging...[/cyan]")
-                        # Deplacer les symlinks vers video_staging_dir
-                        transferer.move_to_staging(
-                            similar.existing_dir, video_staging_dir, preserve_structure=True
-                        )
-                        # Deplacer le stockage vers storage_staging_dir
                         try:
-                            existing_storage_rel = similar.existing_dir.relative_to(video_dir)
-                            existing_storage_path = storage_dir / existing_storage_rel
-                            if existing_storage_path.exists():
-                                transferer.move_to_staging(
-                                    existing_storage_path, storage_staging_dir, preserve_structure=True
+                            # 1. Collecter les mappings symlink -> cible AVANT de deplacer
+                            symlink_mappings: list[tuple[Path, Path]] = []
+                            storage_source_dir = None
+                            for item in similar.existing_dir.rglob("*"):
+                                if item.is_symlink():
+                                    target = item.resolve()
+                                    symlink_mappings.append((item, target))
+                                    if storage_source_dir is None:
+                                        # Remonter au niveau du repertoire serie/film
+                                        storage_source_dir = target.parent.parent
+
+                            # 2. Deplacer le stockage vers storage_staging_dir
+                            storage_staging_path = None
+                            if storage_source_dir and storage_source_dir.exists():
+                                storage_staging_path = transferer.move_to_staging(
+                                    storage_source_dir, storage_staging_dir, preserve_structure=True
                                 )
-                        except (ValueError, OSError):
-                            pass
-                        console.print(f"[green]Ancien contenu deplace vers staging[/green]")
+
+                            # 3. Deplacer les symlinks vers video_staging_dir
+                            video_staging_path = transferer.move_to_staging(
+                                similar.existing_dir, video_staging_dir, preserve_structure=True
+                            )
+
+                            # 4. Mettre a jour les symlinks pour pointer vers le nouveau stockage
+                            if storage_staging_path and video_staging_path:
+                                for old_symlink, old_target in symlink_mappings:
+                                    # Calculer le nouveau chemin du symlink
+                                    rel_to_existing = old_symlink.relative_to(similar.existing_dir)
+                                    new_symlink = video_staging_path / rel_to_existing
+                                    # Calculer le nouveau chemin de la cible
+                                    rel_to_storage = old_target.relative_to(storage_source_dir)
+                                    new_target = storage_staging_path / rel_to_storage
+                                    # Recréer le symlink
+                                    if new_symlink.exists() or new_symlink.is_symlink():
+                                        new_symlink.unlink()
+                                    new_symlink.symlink_to(new_target)
+
+                            console.print(f"[green]Ancien contenu deplace vers staging[/green]")
+                        except (ValueError, OSError) as e:
+                            console.print(f"[yellow]Avertissement: erreur lors du deplacement: {e}[/yellow]")
                 elif resolution == ConflictResolution.KEEP_BOTH:
                     console.print(f"[green]Les deux versions seront conservees[/green]")
 
