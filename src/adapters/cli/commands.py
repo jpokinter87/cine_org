@@ -1542,9 +1542,6 @@ async def _enrich_async() -> None:
         for i, item in enumerate(pending, 1):
             filename = item.video_file.filename if item.video_file else "inconnu"
 
-            # Afficher progression
-            console.print(f"[dim]({i}/{len(pending)})[/dim] {filename}", end="")
-
             # Enrichir ce fichier
             result = await enricher.enrich_batch(
                 items=[item],
@@ -1553,15 +1550,16 @@ async def _enrich_async() -> None:
             )
 
             if result.enriched > 0:
-                # Recuperer le nombre de candidats et le meilleur score
+                # Afficher en vert avec le nombre de candidats et le meilleur score
                 if item.candidates:
                     best_score = item.candidates[0].get("score", 0) if item.candidates else 0
-                    console.print(f" [green]✓[/green] {len(item.candidates)} candidat(s), score: {best_score:.0f}%")
+                    console.print(f"[dim]({i}/{len(pending)})[/dim] [green]{filename}[/green] ✓ {len(item.candidates)} candidat(s), score: {best_score:.0f}%")
                 else:
-                    console.print(f" [green]✓[/green]")
+                    console.print(f"[dim]({i}/{len(pending)})[/dim] [green]{filename}[/green] ✓")
                 enriched_count += 1
             else:
-                console.print(f" [red]✗ aucun resultat[/red]")
+                # Afficher en rouge
+                console.print(f"[dim]({i}/{len(pending)})[/dim] [red]{filename}[/red] ✗")
                 failed_count += 1
 
         # Afficher le resume
