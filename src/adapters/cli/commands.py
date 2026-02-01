@@ -1862,10 +1862,10 @@ async def _repair_links_async(
 
                             # Recherche dans l'index avec le titre personnalise
                             from difflib import SequenceMatcher
-                            custom_norm = repair._normalize_filename(custom_title)
+                            custom_clean = repair._extract_clean_title(custom_title)
                             custom_results: list[tuple[Path, float]] = []
 
-                            for candidate_path, candidate_norm in repair._file_index:
+                            for candidate_path, candidate_norm, candidate_clean in repair._file_index:
                                 # Filtrer par type de media
                                 candidate_str = str(candidate_path).lower()
                                 if is_film and ("/séries/" in candidate_str or "/series/" in candidate_str):
@@ -1873,8 +1873,8 @@ async def _repair_links_async(
                                 if is_series and "/films/" in candidate_str:
                                     continue
 
-                                # Calculer la similarite avec le titre personnalise
-                                ratio = SequenceMatcher(None, custom_norm, candidate_norm).ratio()
+                                # Calculer la similarite avec le titre personnalise (utiliser clean_title)
+                                ratio = SequenceMatcher(None, custom_clean, candidate_clean).ratio()
                                 score = ratio * 100
                                 if score >= min_score:
                                     custom_results.append((candidate_path, score))

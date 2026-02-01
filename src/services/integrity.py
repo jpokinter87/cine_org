@@ -466,9 +466,15 @@ class RepairService:
                 logger.debug("Cache d'index pour un autre storage_dir")
                 return False
 
-            # Charger l'index
+            # Verifier la version du cache (version 2 requis pour clean_title)
+            cache_version = data.get("version", 1)
+            if cache_version < 2:
+                logger.debug("Cache d'index version obsolete, reconstruction necessaire")
+                return False
+
+            # Charger l'index (version 2 avec clean_title)
             self._file_index = [
-                (Path(item["path"]), item["normalized"])
+                (Path(item["path"]), item["normalized"], item.get("clean_title", ""))
                 for item in data.get("files", [])
             ]
             self._index_built = True
@@ -484,10 +490,11 @@ class RepairService:
         cache_path = self._get_index_cache_path()
         try:
             data = {
+                "version": 2,  # Version du format de cache
                 "storage_dir": str(self._storage_dir),
                 "files": [
-                    {"path": str(path), "normalized": norm}
-                    for path, norm in self._file_index
+                    {"path": str(path), "normalized": norm, "clean_title": clean}
+                    for path, norm, clean in self._file_index
                 ],
             }
             with open(cache_path, "w", encoding="utf-8") as f:
@@ -558,7 +565,9 @@ class RepairService:
 
                     # Normaliser le nom pour comparaison rapide
                     normalized = self._normalize_filename(candidate.name)
-                    self._file_index.append((candidate, normalized))
+                    # Extraire aussi le titre nettoye (sans termes techniques)
+                    clean_title = self._extract_clean_title(candidate.name)
+                    self._file_index.append((candidate, normalized, clean_title))
                     count += 1
 
                     if progress_callback and count % 500 == 0:
@@ -583,6 +592,29 @@ class RepairService:
         for sep in [".", "_", "-"]:
             stem = stem.replace(sep, " ")
         return stem
+
+    def _extract_clean_title(self, name: str) -> str:
+        """
+        Extrait le titre pur d'un nom de fichier via guessit.
+
+        Args:
+            name: Nom du fichier
+
+        Returns:
+            Titre nettoye (minuscules)
+        """
+        from guessit import guessit
+
+        try:
+            result = guessit(name)
+            title = result.get("title", "")
+            if title:
+                return title.lower()
+        except Exception:
+            pass
+
+        # Fallback: retourner le stem normalise
+        return self._normalize_filename(name)
 
     def _extract_series_info(self, name: str) -> tuple[str, str | None, int | None, int | None]:
         """
@@ -843,16 +875,18 @@ class RepairService:
 
         # Normaliser les noms de recherche
         norm_link = self._normalize_filename(filename)
+        clean_link = self._extract_clean_title(filename)
         # N'utiliser le nom de la cible que s'il n'est pas cryptique
         use_target_name = not is_cryptic_name(original_name)
         norm_target = self._normalize_filename(original_name) if use_target_name else ""
+        clean_target = self._extract_clean_title(original_name) if use_target_name else ""
 
         candidates: list[tuple[Path, float]] = []
         search_str = str(search_dir)
 
         # Utiliser l'index pre-construit si disponible
         if self._index_built:
-            for candidate_path, candidate_norm in self._file_index:
+            for candidate_path, candidate_norm, candidate_clean in self._file_index:
                 # Filtrer par repertoire
                 if not str(candidate_path).startswith(search_str):
                     continue
@@ -867,14 +901,18 @@ class RepairService:
                         if "/films/" in candidate_str:
                             continue
 
-                # Calculer la similarite avec les noms normalises
-                score_link = self._calculate_similarity_fast(norm_link, candidate_norm)
-                # N'utiliser le nom de la cible que s'il n'est pas cryptique
-                if norm_target:
-                    score_target = self._calculate_similarity_fast(norm_target, candidate_norm)
-                    score = max(score_link, score_target)
+                # Calculer la similarite avec les titres nettoyes (priorite)
+                # puis avec les noms normalises complets
+                score_clean_link = self._calculate_similarity_fast(clean_link, candidate_clean)
+                score_norm_link = self._calculate_similarity_fast(norm_link, candidate_norm)
+
+                if clean_target:
+                    score_clean_target = self._calculate_similarity_fast(clean_target, candidate_clean)
+                    score_norm_target = self._calculate_similarity_fast(norm_target, candidate_norm)
+                    # Prendre le meilleur score parmi les 4 comparaisons
+                    score = max(score_clean_link, score_norm_link, score_clean_target, score_norm_target)
                 else:
-                    score = score_link
+                    score = max(score_clean_link, score_norm_link)
 
                 # Match exact = score maximum
                 if candidate_path.name == filename or candidate_path.name == original_name:
