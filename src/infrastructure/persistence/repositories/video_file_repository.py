@@ -86,6 +86,7 @@ class SQLModelVideoFileRepository(IVideoFileRepository):
         return VideoFile(
             id=str(model.id) if model.id else None,
             path=Path(model.path) if model.path else None,
+            symlink_path=Path(model.symlink_path) if model.symlink_path else None,
             filename=model.filename,
             size_bytes=model.size_bytes,
             file_hash=model.file_hash,
@@ -106,6 +107,7 @@ class SQLModelVideoFileRepository(IVideoFileRepository):
         """
         model = VideoFileModel(
             path=str(entity.path) if entity.path else "",
+            symlink_path=str(entity.symlink_path) if entity.symlink_path else None,
             filename=entity.filename,
             size_bytes=entity.size_bytes,
             file_hash=entity.file_hash,
@@ -174,6 +176,8 @@ class SQLModelVideoFileRepository(IVideoFileRepository):
             existing.filename = video_file.filename
             existing.size_bytes = video_file.size_bytes
             existing.file_hash = video_file.file_hash
+            if video_file.symlink_path:
+                existing.symlink_path = str(video_file.symlink_path)
             if video_file.media_info:
                 mi = video_file.media_info
                 if mi.resolution:

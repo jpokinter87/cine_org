@@ -1383,20 +1383,38 @@ async def _validate_file_async(file_id: str) -> None:
 
 
 def import_library(
-    storage_dir: Annotated[
+    source_dir: Annotated[
         Optional[Path],
-        typer.Argument(help="Repertoire de la videotheque a importer"),
+        typer.Argument(help="Repertoire a importer (storage ou video selon mode)"),
     ] = None,
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Simule sans modifier la BDD"),
     ] = False,
+    from_symlinks: Annotated[
+        bool,
+        typer.Option(
+            "--from-symlinks",
+            help="Import inverse: scanne les symlinks et resout leurs cibles",
+        ),
+    ] = False,
 ) -> None:
-    """Importe une videotheque existante dans la base de donnees."""
-    asyncio.run(_import_library_async(storage_dir, dry_run))
+    """
+    Importe une videotheque existante dans la base de donnees.
+
+    Deux modes disponibles:
+
+    - Mode standard (defaut): scanne les fichiers physiques dans storage_dir
+
+    - Mode --from-symlinks: scanne les symlinks dans video_dir et resout leurs cibles.
+      Enregistre a la fois le chemin du symlink ET le chemin du fichier physique.
+    """
+    asyncio.run(_import_library_async(source_dir, dry_run, from_symlinks))
 
 
-async def _import_library_async(storage_dir: Optional[Path], dry_run: bool) -> None:
+async def _import_library_async(
+    source_dir: Optional[Path], dry_run: bool, from_symlinks: bool
+) -> None:
     """Implementation async de la commande import."""
     from src.services.importer import ImportDecision
 
@@ -1404,13 +1422,16 @@ async def _import_library_async(storage_dir: Optional[Path], dry_run: bool) -> N
     config = container.config()
     container.database.init()
 
-    # Utiliser storage_dir depuis config si non fourni
-    if storage_dir is None:
-        storage_dir = Path(config.storage_dir)
+    # Determiner le repertoire source selon le mode
+    if source_dir is None:
+        if from_symlinks:
+            source_dir = Path(config.video_dir)
+        else:
+            source_dir = Path(config.storage_dir)
 
     # Verifier que le repertoire existe
-    if not storage_dir.exists():
-        console.print(f"[red]Erreur:[/red] Repertoire introuvable: {storage_dir}")
+    if not source_dir.exists():
+        console.print(f"[red]Erreur:[/red] Repertoire introuvable: {source_dir}")
         raise typer.Exit(code=1)
 
     if dry_run:
@@ -1422,9 +1443,21 @@ async def _import_library_async(storage_dir: Optional[Path], dry_run: bool) -> N
     # Compteurs
     imported = 0
     skipped = 0
+    updated = 0
     errors = 0
 
-    console.print(f"[bold cyan]Import de la videotheque[/bold cyan]: {storage_dir}\n")
+    # Afficher le mode
+    if from_symlinks:
+        console.print(
+            f"[bold cyan]Import depuis les symlinks[/bold cyan]: {source_dir}\n"
+        )
+        console.print(
+            "[dim]Les symlinks seront resolus vers leurs fichiers physiques cibles[/dim]\n"
+        )
+        scan_generator = importer.scan_from_symlinks(source_dir)
+    else:
+        console.print(f"[bold cyan]Import de la videotheque[/bold cyan]: {source_dir}\n")
+        scan_generator = importer.scan_library(source_dir)
 
     with Progress(
         SpinnerColumn(),
@@ -1435,7 +1468,7 @@ async def _import_library_async(storage_dir: Optional[Path], dry_run: bool) -> N
     ) as progress:
         import_task = progress.add_task("[cyan]Scan en cours...", total=None)
 
-        for result in importer.scan_library(storage_dir):
+        for result in scan_generator:
             # Mettre a jour la description avec le nom du fichier
             progress.update(import_task, description=f"[cyan]{result.filename}")
 
@@ -1445,7 +1478,7 @@ async def _import_library_async(storage_dir: Optional[Path], dry_run: bool) -> N
             elif result.decision == ImportDecision.SKIP_KNOWN:
                 skipped += 1
             elif result.decision == ImportDecision.UPDATE_PATH:
-                skipped += 1  # Compte comme skip (fichier deja connu)
+                updated += 1
             elif result.decision == ImportDecision.ERROR:
                 errors += 1
                 console.print(
@@ -1455,14 +1488,16 @@ async def _import_library_async(storage_dir: Optional[Path], dry_run: bool) -> N
         # Marquer comme termine
         progress.update(
             import_task,
-            total=imported + skipped + errors,
-            completed=imported + skipped + errors,
+            total=imported + skipped + updated + errors,
+            completed=imported + skipped + updated + errors,
             description="[green]Termine",
         )
 
     # Afficher le resume final
     console.print("\n[bold]Resume de l'import:[/bold]")
     console.print(f"  [green]{imported}[/green] importe(s)")
+    if updated > 0:
+        console.print(f"  [blue]{updated}[/blue] mis a jour")
     console.print(f"  [yellow]{skipped}[/yellow] ignore(s)")
     if errors > 0:
         console.print(f"  [red]{errors}[/red] erreur(s)")

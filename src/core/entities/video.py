@@ -32,7 +32,8 @@ class VideoFile:
 
     Attributs :
         id : Identifiant unique (UUID ou ID base de données)
-        path : Chemin actuel du fichier sur le disque
+        path : Chemin du fichier physique (storage)
+        symlink_path : Chemin du symlink (video) - optionnel
         filename : Nom de fichier original (sans le chemin)
         size_bytes : Taille du fichier en octets
         file_hash : Hash du contenu pour la déduplication (SHA-256)
@@ -43,6 +44,7 @@ class VideoFile:
 
     id: Optional[str] = None
     path: Optional[Path] = None
+    symlink_path: Optional[Path] = None
     filename: str = ""
     size_bytes: int = 0
     file_hash: Optional[str] = None

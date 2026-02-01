@@ -618,7 +618,8 @@ class TestCLIIntegration:
         result = runner.invoke(app, ["import", "--help"])
         assert result.exit_code == 0
         assert "--dry-run" in result.output
-        assert "STORAGE_DIR" in result.output
+        assert "--from-symlinks" in result.output
+        assert "SOURCE_DIR" in result.output
 
     def test_import_in_global_help(self):
         """import apparait dans l'aide globale."""
@@ -649,7 +650,7 @@ class TestImportCommand:
         mock_container.importer_service.return_value = importer_mock
 
         with patch("src.adapters.cli.commands.console") as mock_console:
-            await _import_library_async(storage_dir, dry_run=True)
+            await _import_library_async(storage_dir, dry_run=True, from_symlinks=False)
 
         calls = [str(call) for call in mock_console.print.call_args_list]
         assert any("dry-run" in str(call).lower() for call in calls)
@@ -671,7 +672,7 @@ class TestImportCommand:
         mock_container.importer_service.return_value = importer_mock
 
         with patch("src.adapters.cli.commands.console") as mock_console:
-            await _import_library_async(storage_dir, dry_run=False)
+            await _import_library_async(storage_dir, dry_run=False, from_symlinks=False)
 
         calls = [str(call) for call in mock_console.print.call_args_list]
         # Verifier que le resume affiche "2 importe(s)"
@@ -693,7 +694,7 @@ class TestImportCommand:
         mock_container.importer_service.return_value = importer_mock
 
         with patch("src.adapters.cli.commands.console") as mock_console:
-            await _import_library_async(storage_dir, dry_run=False)
+            await _import_library_async(storage_dir, dry_run=False, from_symlinks=False)
 
         calls = [str(call) for call in mock_console.print.call_args_list]
         # Verifier que le resume affiche "1 ignore(s)"
@@ -719,7 +720,7 @@ class TestImportCommand:
         mock_container.importer_service.return_value = importer_mock
 
         with patch("src.adapters.cli.commands.console") as mock_console:
-            await _import_library_async(storage_dir, dry_run=False)
+            await _import_library_async(storage_dir, dry_run=False, from_symlinks=False)
 
         calls = [str(call) for call in mock_console.print.call_args_list]
         # Verifier que le resume affiche "1 erreur(s)"
@@ -735,7 +736,7 @@ class TestImportCommand:
         with patch("src.adapters.cli.commands.console") as mock_console:
             from click.exceptions import Exit
             with pytest.raises(Exit) as exc_info:
-                await _import_library_async(storage_dir, dry_run=False)
+                await _import_library_async(storage_dir, dry_run=False, from_symlinks=False)
 
         assert exc_info.value.exit_code == 1
         calls = [str(call) for call in mock_console.print.call_args_list]
@@ -758,7 +759,7 @@ class TestImportCommand:
         mock_container.importer_service.return_value = importer_mock
 
         with patch("src.adapters.cli.commands.console"):
-            await _import_library_async(None, dry_run=False)
+            await _import_library_async(None, dry_run=False, from_symlinks=False)
 
         # Verifier que scan_library a ete appele avec le bon path
         importer_mock.scan_library.assert_called_once()

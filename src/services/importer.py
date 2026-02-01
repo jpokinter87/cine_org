@@ -264,3 +264,164 @@ class ImporterService:
             if parent_name in ("series", "séries"):
                 return "series"
         return "unknown"
+
+    def scan_from_symlinks(
+        self, video_dir: Path
+    ) -> Generator[ImportResult, None, None]:
+        """
+        Import inverse : scanne les symlinks et importe leurs cibles.
+
+        Parcourt recursivement le repertoire des symlinks, resout chaque
+        symlink vers son fichier physique cible, et importe les deux chemins
+        (symlink + cible) dans la base de donnees.
+
+        Args:
+            video_dir: Repertoire des symlinks a scanner
+
+        Yields:
+            ImportResult pour chaque symlink traite
+        """
+        from src.adapters.file_system import IGNORED_PATTERNS, VIDEO_EXTENSIONS
+
+        # Parcourir recursivement le repertoire
+        for symlink_path in video_dir.rglob("*"):
+            # Ignorer les repertoires
+            if symlink_path.is_dir():
+                continue
+
+            # On ne traite QUE les symlinks
+            if not symlink_path.is_symlink():
+                continue
+
+            # Verifier que c'est un fichier video
+            if symlink_path.suffix.lower() not in VIDEO_EXTENSIONS:
+                continue
+
+            # Verifier les patterns ignores
+            filename_lower = symlink_path.name.lower()
+            if any(pattern in filename_lower for pattern in IGNORED_PATTERNS):
+                continue
+
+            # Traiter le symlink
+            yield self._process_symlink(symlink_path)
+
+    def _process_symlink(self, symlink_path: Path) -> ImportResult:
+        """
+        Traite un symlink et importe sa cible.
+
+        Args:
+            symlink_path: Chemin du symlink a traiter
+
+        Returns:
+            ImportResult avec la decision prise
+        """
+        try:
+            # Resoudre le symlink vers sa cible
+            try:
+                target_path = symlink_path.resolve()
+            except OSError as e:
+                return ImportResult(
+                    filename=symlink_path.name,
+                    decision=ImportDecision.ERROR,
+                    error_message=f"Symlink casse: {e}",
+                )
+
+            # Verifier que la cible existe
+            if not target_path.exists():
+                return ImportResult(
+                    filename=symlink_path.name,
+                    decision=ImportDecision.ERROR,
+                    error_message=f"Cible introuvable: {target_path}",
+                )
+
+            # Verifier que la cible n'est pas un symlink (eviter les boucles)
+            if target_path.is_symlink():
+                return ImportResult(
+                    filename=symlink_path.name,
+                    decision=ImportDecision.ERROR,
+                    error_message="Cible est aussi un symlink",
+                )
+
+            # Determiner la decision
+            decision, existing = self._should_import(target_path)
+
+            if decision == ImportDecision.SKIP_KNOWN:
+                # Fichier connu - verifier si on doit mettre a jour le symlink_path
+                if existing and not existing.symlink_path:
+                    if not self._dry_run:
+                        existing.symlink_path = symlink_path
+                        self._video_file_repo.save(existing)
+                    return ImportResult(
+                        filename=symlink_path.name,
+                        decision=ImportDecision.UPDATE_PATH,
+                    )
+                return ImportResult(
+                    filename=symlink_path.name,
+                    decision=ImportDecision.SKIP_KNOWN,
+                )
+
+            if decision == ImportDecision.UPDATE_PATH:
+                # Mettre a jour le path du fichier existant + symlink
+                if not self._dry_run and existing:
+                    existing.path = target_path
+                    existing.symlink_path = symlink_path
+                    self._video_file_repo.save(existing)
+                return ImportResult(
+                    filename=symlink_path.name,
+                    decision=ImportDecision.UPDATE_PATH,
+                )
+
+            # Nouveau fichier - creer VideoFile avec symlink
+            return self._import_symlink(symlink_path, target_path)
+
+        except Exception as e:
+            return ImportResult(
+                filename=symlink_path.name,
+                decision=ImportDecision.ERROR,
+                error_message=str(e),
+            )
+
+    def _import_symlink(self, symlink_path: Path, target_path: Path) -> ImportResult:
+        """
+        Importe un nouveau fichier depuis un symlink.
+
+        Cree un VideoFile avec le path physique ET le symlink_path.
+
+        Args:
+            symlink_path: Chemin du symlink
+            target_path: Chemin du fichier physique cible
+
+        Returns:
+            ImportResult avec decision IMPORT
+        """
+        # Calculer le hash du fichier cible
+        file_hash = self._compute_hash_fn(target_path)
+
+        # Extraire les metadonnees techniques du fichier cible
+        media_info = self._media_info_extractor.extract(target_path)
+
+        # Creer le VideoFile avec les deux chemins
+        video_file = VideoFile(
+            path=target_path,
+            symlink_path=symlink_path,
+            filename=target_path.name,
+            size_bytes=self._file_system.get_size(target_path),
+            file_hash=file_hash,
+            media_info=media_info,
+        )
+
+        if not self._dry_run:
+            # Sauvegarder le VideoFile
+            saved_vf = self._video_file_repo.save(video_file)
+
+            # Creer le PendingValidation
+            pending = PendingValidation(
+                video_file=saved_vf,
+                candidates=[],
+            )
+            self._pending_repo.save(pending)
+
+        return ImportResult(
+            filename=symlink_path.name,
+            decision=ImportDecision.IMPORT,
+        )

@@ -169,7 +169,8 @@ class VideoFileModel(SQLModel, table=True):
     __tablename__ = "video_files"
 
     id: int | None = Field(default=None, primary_key=True)
-    path: str = Field(index=True)  # Chemin complet
+    path: str = Field(index=True)  # Chemin du fichier physique (storage)
+    symlink_path: str | None = Field(default=None, index=True)  # Chemin du symlink (video)
     filename: str
     file_hash: str | None = Field(default=None, index=True)
     size_bytes: int = 0
