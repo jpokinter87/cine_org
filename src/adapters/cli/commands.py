@@ -282,21 +282,39 @@ async def _validate_manual_async() -> None:
 
     console.print(f"[bold]{len(pending_list)}[/bold] fichier(s) a valider.\n")
 
-    # Auto-valider les cas evidents: 1 seul candidat avec score >= 95%
+    # Auto-valider les cas evidents:
+    # - 1 seul candidat avec score >= 95%
+    # - Plusieurs candidats mais le 1er >= 95% et les autres < 70%
     auto_validated = []
     remaining = []
+
+    def get_score(candidate: dict | object) -> float:
+        return candidate.get("score", 0) if isinstance(candidate, dict) else getattr(candidate, "score", 0)
+
     for pending in pending_list:
-        if pending.candidates and len(pending.candidates) == 1:
-            candidate = pending.candidates[0]
-            score = candidate.get("score", 0) if isinstance(candidate, dict) else getattr(candidate, "score", 0)
-            if score >= 95:
+        if not pending.candidates:
+            remaining.append(pending)
+            continue
+
+        first_score = get_score(pending.candidates[0])
+
+        # Cas 1: un seul candidat >= 95%
+        if len(pending.candidates) == 1 and first_score >= 95:
+            auto_validated.append(pending)
+            continue
+
+        # Cas 2: premier >= 95% et tous les autres < 70% (haute confiance)
+        if first_score >= 95 and len(pending.candidates) > 1:
+            others_low = all(get_score(c) < 70 for c in pending.candidates[1:])
+            if others_low:
                 auto_validated.append(pending)
                 continue
+
         remaining.append(pending)
 
     # Valider automatiquement les cas evidents
     if auto_validated:
-        console.print(f"[bold cyan]Auto-validation[/bold cyan]: {len(auto_validated)} fichier(s) avec 1 candidat >= 95%\n")
+        console.print(f"[bold cyan]Auto-validation[/bold cyan]: {len(auto_validated)} fichier(s) (1er candidat >= 95%, autres < 70%)\n")
         for pending in auto_validated:
             candidate = pending.candidates[0]
             filename = pending.video_file.filename if pending.video_file else "?"
