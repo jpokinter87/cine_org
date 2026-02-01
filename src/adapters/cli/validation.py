@@ -25,6 +25,7 @@ from rich.progress import (
 )
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
+from rich.tree import Tree
 
 from src.core.entities.video import PendingValidation
 from src.core.ports.api_clients import SearchResult
@@ -576,27 +577,153 @@ def prompt_conflict_resolution() -> str:
 
 def display_batch_summary(transfers: list[dict]) -> None:
     """
-    Affiche un resume des transferts prevus sous forme de tableau.
+    Affiche un resume des transferts prevus sous forme d'arborescence.
+
+    Structure affichee:
+    - Zone symlinks (video_dir)
+      - Films ou Series groupes par type/lettre/titre
+        - Fichier symlink -> [dim]cible stockage[/dim]
 
     Args:
-        transfers: Liste de dicts avec keys 'source', 'destination', 'new_filename', 'action'
+        transfers: Liste de dicts avec keys 'source', 'destination', 'new_filename',
+                   'symlink_destination', 'is_series', 'title', 'year'
     """
-    table = Table(
-        title="Transferts a effectuer", show_header=True, header_style="bold magenta"
-    )
-    table.add_column("#", style="dim", width=4)
-    table.add_column("Fichier source", style="cyan", no_wrap=True)
-    table.add_column("Destination", style="green")
-    table.add_column("Action", style="yellow")
+    if not transfers:
+        console.print("[yellow]Aucun transfert a effectuer.[/yellow]")
+        return
 
-    for idx, transfer in enumerate(transfers, start=1):
-        source = transfer.get("source")
-        source_name = source.name if hasattr(source, "name") else str(source)
-        dest_str = str(transfer.get("destination", ""))
-        action = transfer.get("action", "move+symlink")
-        table.add_row(str(idx), source_name, dest_str, action)
+    # Extraire video_dir et storage_dir depuis les chemins
+    first_symlink = transfers[0].get("symlink_destination")
+    first_storage = transfers[0].get("destination")
 
-    console.print(table)
+    # Determiner les racines
+    video_dir = None
+    storage_dir = None
+    if first_symlink:
+        # Remonter pour trouver la racine video (avant Films/ ou Séries/)
+        parts = first_symlink.parts
+        for i, part in enumerate(parts):
+            if part in ("Films", "Séries"):
+                video_dir = first_symlink.parents[len(parts) - i - 1]
+                break
+    if first_storage:
+        parts = first_storage.parts
+        for i, part in enumerate(parts):
+            if part in ("Films", "Séries"):
+                storage_dir = first_storage.parents[len(parts) - i - 1]
+                break
+
+    # Separer films et series
+    movies = [t for t in transfers if not t.get("is_series", False)]
+    series = [t for t in transfers if t.get("is_series", False)]
+
+    # Arbre principal (zone symlinks)
+    tree = Tree(f"[bold blue]{video_dir or 'Symlinks'}[/bold blue]")
+
+    # Branche Films
+    if movies:
+        films_branch = tree.add("[bold cyan]Films/[/bold cyan]")
+        # Grouper par sous-repertoire (genre/lettre)
+        movie_dirs: dict[str, list[dict]] = {}
+        for m in movies:
+            symlink_dest = m.get("symlink_destination")
+            if symlink_dest and video_dir:
+                try:
+                    rel_path = symlink_dest.relative_to(video_dir)
+                    # Prendre le chemin parent sans "Films/"
+                    parent_parts = rel_path.parts[1:-1]  # Enlever Films/ et le fichier
+                    parent = "/".join(parent_parts) if parent_parts else ""
+                except ValueError:
+                    parent = ""
+            else:
+                parent = ""
+            if parent not in movie_dirs:
+                movie_dirs[parent] = []
+            movie_dirs[parent].append(m)
+
+        for dir_path in sorted(movie_dirs.keys()):
+            if dir_path:
+                dir_branch = films_branch.add(f"[cyan]{dir_path}/[/cyan]")
+            else:
+                dir_branch = films_branch
+            for m in movie_dirs[dir_path]:
+                new_name = m["new_filename"]
+                storage_dest = m.get("destination")
+                if storage_dest and storage_dir:
+                    try:
+                        rel_storage = storage_dest.relative_to(storage_dir)
+                        storage_str = f" [dim]-> {rel_storage}[/dim]"
+                    except ValueError:
+                        storage_str = f" [dim]-> {storage_dest}[/dim]"
+                else:
+                    storage_str = ""
+                dir_branch.add(f"[green]{new_name}[/green]{storage_str}")
+
+    # Branche Series
+    if series:
+        # Grouper par type, lettre, serie, saison
+        type_groups: dict[str, dict[str, dict[str, dict[str, list[dict]]]]] = {}
+
+        for s in series:
+            symlink_dest = s.get("symlink_destination")
+            series_type = "Séries TV"
+            letter = "?"
+
+            if symlink_dest and video_dir:
+                try:
+                    rel_path = symlink_dest.relative_to(video_dir)
+                    parts = rel_path.parts
+                    # Structure: Séries/{Type}/{Lettre}/{Titre}/{Saison}/fichier
+                    if len(parts) >= 5:
+                        series_type = parts[1]
+                        letter = parts[2]
+                except ValueError:
+                    pass
+
+            title = s.get("title", "Inconnu")
+            year = s.get("year", "")
+            series_key = f"{title} ({year})" if year else title
+            season_dir = symlink_dest.parent.name if symlink_dest else "Saison ??"
+
+            if series_type not in type_groups:
+                type_groups[series_type] = {}
+            if letter not in type_groups[series_type]:
+                type_groups[series_type][letter] = {}
+            if series_key not in type_groups[series_type][letter]:
+                type_groups[series_type][letter][series_key] = {}
+            if season_dir not in type_groups[series_type][letter][series_key]:
+                type_groups[series_type][letter][series_key][season_dir] = []
+            type_groups[series_type][letter][series_key][season_dir].append(s)
+
+        # Afficher l'arbre des series
+        for series_type in sorted(type_groups.keys()):
+            type_branch = tree.add(f"[bold magenta]Séries/{series_type}/[/bold magenta]")
+
+            for letter in sorted(type_groups[series_type].keys()):
+                letter_branch = type_branch.add(f"[magenta]{letter}/[/magenta]")
+
+                for series_name in sorted(type_groups[series_type][letter].keys()):
+                    series_branch = letter_branch.add(f"[magenta]{series_name}/[/magenta]")
+
+                    for season in sorted(type_groups[series_type][letter][series_name].keys()):
+                        season_branch = series_branch.add(f"[dim]{season}/[/dim]")
+                        episodes = type_groups[series_type][letter][series_name][season]
+                        episodes.sort(key=lambda e: e["new_filename"])
+
+                        for ep in episodes:
+                            new_name = ep["new_filename"]
+                            storage_dest = ep.get("destination")
+                            if storage_dest and storage_dir:
+                                try:
+                                    rel_storage = storage_dest.relative_to(storage_dir)
+                                    storage_str = f" [dim]-> {rel_storage}[/dim]"
+                                except ValueError:
+                                    storage_str = f" [dim]-> {storage_dest}[/dim]"
+                            else:
+                                storage_str = ""
+                            season_branch.add(f"[green]{new_name}[/green]{storage_str}")
+
+    console.print(tree)
 
 
 async def execute_batch_transfer(
