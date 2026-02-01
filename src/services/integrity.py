@@ -555,28 +555,33 @@ class RepairService:
 
         # Chercher dans le repertoire
         for candidate in search_dir.rglob("*"):
-            if candidate.is_dir():
+            try:
+                if candidate.is_dir():
+                    continue
+                if candidate.is_symlink():
+                    continue
+
+                # Verifier que c'est un fichier video
+                if candidate.suffix.lower() not in VIDEO_EXTENSIONS:
+                    continue
+
+                # Calculer la similarite avec le nom du symlink et la cible originale
+                score_link = self._calculate_title_similarity(filename, candidate.name)
+                score_target = self._calculate_title_similarity(original_name, candidate.name)
+
+                # Prendre le meilleur score
+                score = max(score_link, score_target)
+
+                # Match exact = score maximum
+                if candidate.name == filename or candidate.name == original_name:
+                    score = 100.0
+
+                if score >= min_score:
+                    candidates.append((candidate, score))
+
+            except (PermissionError, OSError):
+                # Ignorer les fichiers inaccessibles
                 continue
-            if candidate.is_symlink():
-                continue
-
-            # Verifier que c'est un fichier video
-            if candidate.suffix.lower() not in VIDEO_EXTENSIONS:
-                continue
-
-            # Calculer la similarite avec le nom du symlink et la cible originale
-            score_link = self._calculate_title_similarity(filename, candidate.name)
-            score_target = self._calculate_title_similarity(original_name, candidate.name)
-
-            # Prendre le meilleur score
-            score = max(score_link, score_target)
-
-            # Match exact = score maximum
-            if candidate.name == filename or candidate.name == original_name:
-                score = 100.0
-
-            if score >= min_score:
-                candidates.append((candidate, score))
 
         # Trier par score decroissant et limiter
         candidates.sort(key=lambda x: x[1], reverse=True)
