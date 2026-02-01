@@ -368,6 +368,8 @@ def display_help() -> None:
   [cyan]t[/cyan]      Mettre en corbeille (trash)
   [cyan]r[/cyan]      Recherche manuelle par titre
   [cyan]i[/cyan]      Saisir un ID externe (IMDB, TMDB, TVDB)
+  [cyan]v[/cyan]      Visionner le fichier (ouvre le lecteur)
+  [cyan]y[/cyan]      YouTube trailer du candidat 1 (ou y2, y3...)
   [cyan]n[/cyan]      Page suivante (si disponible)
   [cyan]?[/cyan]      Afficher cette aide
   [cyan]q[/cyan]      Quitter la validation
@@ -609,6 +611,43 @@ async def validation_loop(
                 paginator.next_page()
             else:
                 console.print("[yellow]Pas d'autres pages[/yellow]")
+
+        # Visionner le fichier
+        elif choice == "v":
+            if pending.video_file and pending.video_file.path:
+                import subprocess
+                import sys
+                file_path = str(pending.video_file.path)
+                console.print(f"[dim]Ouverture de {file_path}...[/dim]")
+                try:
+                    if sys.platform == "linux":
+                        subprocess.Popen(["xdg-open", file_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    elif sys.platform == "darwin":
+                        subprocess.Popen(["open", file_path])
+                    else:
+                        subprocess.Popen(["start", file_path], shell=True)
+                except Exception as e:
+                    console.print(f"[red]Erreur: {e}[/red]")
+            else:
+                console.print("[yellow]Chemin du fichier non disponible[/yellow]")
+
+        # Ouvrir YouTube pour le trailer d'un candidat
+        elif choice.startswith("y"):
+            # y ou y1, y2, etc.
+            import urllib.parse
+            import webbrowser
+            num = 1
+            if len(choice) > 1 and choice[1:].isdigit():
+                num = int(choice[1:])
+            if 1 <= num <= len(paginator.current_items):
+                candidate = paginator.current_items[num - 1]
+                year_str = f" {candidate.year}" if candidate.year else ""
+                query = f"{candidate.title}{year_str} trailer"
+                url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(query)}"
+                console.print(f"[dim]Recherche YouTube: {query}[/dim]")
+                webbrowser.open(url)
+            else:
+                console.print("[yellow]Numero invalide[/yellow]")
 
         # Aide
         elif choice == "?":
