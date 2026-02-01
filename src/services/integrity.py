@@ -444,8 +444,10 @@ class RepairService:
         """
         Cherche des cibles possibles pour un symlink casse avec recherche floue.
 
-        Recherche des fichiers avec le meme nom ou un nom similaire
-        dans le dossier storage, en utilisant la similarite des titres.
+        Strategie de recherche progressive:
+        1. Meme genre (Films/Drame, Series/Animation, etc.)
+        2. Meme type (Films ou Series)
+        3. Toute la base de stockage
 
         Args:
             link: Chemin du symlink casse
@@ -454,15 +456,95 @@ class RepairService:
         Returns:
             Liste de tuples (chemin, score) triee par score decroissant
         """
-        from src.adapters.file_system import VIDEO_EXTENSIONS
-
         if not self._storage_dir or not self._storage_dir.exists():
             return []
 
-        # Extraire le nom du fichier attendu
+        # Detecter le type et genre depuis le chemin du symlink
+        media_type, genre = self._detect_media_context(link)
+
+        # Construire les chemins de recherche progressifs
+        search_paths = []
+
+        if media_type and genre:
+            # 1. Meme genre
+            genre_path = self._storage_dir / media_type / genre
+            if genre_path.exists():
+                search_paths.append(("genre", genre_path))
+
+        if media_type:
+            # 2. Meme type (Films ou Series)
+            type_path = self._storage_dir / media_type
+            if type_path.exists():
+                search_paths.append(("type", type_path))
+
+        # 3. Toute la base
+        search_paths.append(("base", self._storage_dir))
+
+        # Recherche progressive
+        for scope, search_path in search_paths:
+            candidates = self._search_in_directory(link, search_path, min_score)
+            if candidates and candidates[0][1] >= 70:
+                # Bon match trouve, on s'arrete
+                return candidates
+
+        # Si aucun bon match, retourner les resultats de la recherche complete
+        return self._search_in_directory(link, self._storage_dir, min_score)
+
+    def _detect_media_context(self, link: Path) -> tuple[str | None, str | None]:
+        """
+        Detecte le type de media et le genre depuis le chemin du symlink.
+
+        Args:
+            link: Chemin du symlink
+
+        Returns:
+            Tuple (type, genre) ou (None, None) si non detecte
+        """
+        # Parcourir les parents du symlink pour detecter Films/Series et le genre
+        parts = link.parts
+        media_type = None
+        genre = None
+
+        for i, part in enumerate(parts):
+            part_lower = part.lower()
+            if part_lower == "films":
+                media_type = "Films"
+                # Le genre est le repertoire suivant (si existe)
+                if i + 1 < len(parts) and not parts[i + 1].startswith(("A-", "H-", "R-")):
+                    # C'est probablement un genre, pas une subdivision alphabetique
+                    genre = parts[i + 1]
+                elif i + 1 < len(parts):
+                    # C'est une subdivision, on prend quand meme
+                    genre = parts[i + 1]
+                break
+            elif part_lower in ("series", "séries"):
+                media_type = "Séries"
+                # Pour les series, structure peut etre differente
+                if i + 1 < len(parts):
+                    genre = parts[i + 1]
+                break
+
+        return media_type, genre
+
+    def _search_in_directory(
+        self, link: Path, search_dir: Path, min_score: float
+    ) -> list[tuple[Path, float]]:
+        """
+        Recherche des candidats dans un repertoire specifique.
+
+        Args:
+            link: Chemin du symlink casse
+            search_dir: Repertoire de recherche
+            min_score: Score minimum
+
+        Returns:
+            Liste de tuples (chemin, score) triee par score decroissant
+        """
+        from src.adapters.file_system import VIDEO_EXTENSIONS
+
         filename = link.name
 
-        # Lire aussi la cible originale du symlink pour comparaison
+        # Lire la cible originale du symlink pour comparaison
         try:
             original_target = link.readlink()
             original_name = original_target.name
@@ -471,8 +553,8 @@ class RepairService:
 
         candidates: list[tuple[Path, float]] = []
 
-        # Chercher dans storage
-        for candidate in self._storage_dir.rglob("*"):
+        # Chercher dans le repertoire
+        for candidate in search_dir.rglob("*"):
             if candidate.is_dir():
                 continue
             if candidate.is_symlink():

@@ -1627,7 +1627,7 @@ async def _repair_links_async(
 
     mode_label = "[dim](dry-run)[/dim] " if dry_run else ""
     console.print(f"[bold cyan]{mode_label}Symlinks casses[/bold cyan]: {len(broken)} detecte(s)")
-    console.print(f"[dim]Recherche floue dans: {config.storage_dir}[/dim]\n")
+    console.print(f"[dim]Recherche progressive: genre -> type -> base ({config.storage_dir})[/dim]\n")
 
     if auto_repair:
         console.print("[yellow]Mode automatique: reparation si score >= 90%[/yellow]\n")
