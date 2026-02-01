@@ -1841,6 +1841,167 @@ async def _repair_links_async(
 
 
 # ============================================================================
+# Commande consolidate
+# ============================================================================
+
+
+def consolidate(
+    scan_dir: Annotated[
+        Optional[Path],
+        typer.Argument(
+            help="Repertoire a scanner (defaut: storage_dir de la config)",
+        ),
+    ] = None,
+    do_consolidate: Annotated[
+        bool,
+        typer.Option(
+            "--consolidate",
+            help="Effectue le rapatriement (sinon affiche seulement le rapport)",
+        ),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Simule sans copier les fichiers",
+        ),
+    ] = False,
+) -> None:
+    """
+    Detecte et rapatrie les fichiers stockes sur des volumes externes.
+
+    Scanne la zone de stockage pour trouver les symlinks pointant vers
+    d'autres volumes et permet de rapatrier les fichiers.
+
+    Exemples:
+      cineorg consolidate                    # Rapport des symlinks externes
+      cineorg consolidate --consolidate      # Rapatrie les fichiers accessibles
+      cineorg consolidate --consolidate --dry-run  # Simulation
+    """
+    from rich.status import Status
+    from rich.table import Table
+
+    from src.services.consolidation import (
+        ConsolidationService,
+        ConsolidationStatus,
+        ExternalSymlink,
+    )
+
+    container = Container()
+    config = container.config()
+
+    # Determiner le repertoire a scanner
+    storage_dir = scan_dir if scan_dir else Path(config.storage_dir)
+
+    if not storage_dir.exists():
+        console.print(f"[red]Erreur: Repertoire introuvable: {storage_dir}[/red]")
+        raise typer.Exit(1)
+
+    service = ConsolidationService(storage_dir, dry_run=dry_run)
+
+    # Scanner les symlinks externes
+    console.print(f"[bold cyan]Scan:[/bold cyan] {storage_dir}")
+
+    with Status("[cyan]Recherche des symlinks externes...", console=console) as status:
+        symlinks: list[ExternalSymlink] = list(service.scan_external_symlinks())
+        status.update(f"[cyan]{len(symlinks)} symlinks externes trouves")
+
+    if not symlinks:
+        console.print("[green]Aucun symlink externe detecte.[/green]")
+        console.print("[dim]Tous les fichiers sont dans la zone de stockage.[/dim]")
+        return
+
+    # Afficher le resume par volume
+    summary = service.get_summary(symlinks)
+
+    console.print(f"\n[bold]Symlinks externes:[/bold] {len(symlinks)}\n")
+
+    table = Table(title="Resume par volume")
+    table.add_column("Volume", style="cyan")
+    table.add_column("Total", justify="right")
+    table.add_column("Accessibles", justify="right", style="green")
+    table.add_column("Inaccessibles", justify="right", style="red")
+    table.add_column("Taille", justify="right")
+
+    for volume, stats in summary.items():
+        size_gb = stats["total_size"] / (1024**3) if stats["total_size"] else 0
+        table.add_row(
+            volume,
+            str(stats["count"]),
+            str(stats["accessible"]),
+            str(stats["inaccessible"]),
+            f"{size_gb:.1f} Go",
+        )
+
+    console.print(table)
+
+    # Compter les accessibles et inaccessibles
+    accessible = [s for s in symlinks if s.status == ConsolidationStatus.ACCESSIBLE]
+    inaccessible = [s for s in symlinks if s.status == ConsolidationStatus.INACCESSIBLE]
+
+    if inaccessible:
+        console.print(f"\n[yellow]Attention:[/yellow] {len(inaccessible)} fichiers inaccessibles")
+        console.print("[dim]Volumes non montes ou permissions insuffisantes[/dim]")
+
+    # Si pas de consolidation demandee, afficher quelques exemples
+    if not do_consolidate:
+        console.print("\n[dim]Exemples de symlinks externes:[/dim]")
+        for s in symlinks[:5]:
+            status_icon = "[green]✓[/green]" if s.status == ConsolidationStatus.ACCESSIBLE else "[red]✗[/red]"
+            console.print(f"  {status_icon} {s.symlink_path.name}")
+            console.print(f"    [dim]-> {s.target_path}[/dim]")
+
+        if len(symlinks) > 5:
+            console.print(f"  [dim]... et {len(symlinks) - 5} autres[/dim]")
+
+        console.print(f"\n[cyan]Pour rapatrier les fichiers accessibles:[/cyan]")
+        console.print(f"  cineorg consolidate --consolidate")
+        return
+
+    # Effectuer la consolidation
+    if not accessible:
+        console.print("\n[yellow]Aucun fichier accessible a rapatrier.[/yellow]")
+        return
+
+    mode_label = "[dim](dry-run)[/dim] " if dry_run else ""
+    console.print(f"\n[bold cyan]{mode_label}Rapatriement de {len(accessible)} fichiers...[/bold cyan]\n")
+
+    consolidated = 0
+    errors = 0
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("[cyan]Copie...", total=len(accessible))
+
+        for symlink in accessible:
+            progress.update(task, description=f"[cyan]{symlink.symlink_path.name[:40]}")
+
+            result = service.consolidate(symlink)
+
+            if result.status == ConsolidationStatus.CONSOLIDATED:
+                consolidated += 1
+            elif result.status == ConsolidationStatus.ERROR:
+                errors += 1
+                console.print(f"[red]Erreur:[/red] {symlink.symlink_path.name}: {result.error_message}")
+
+            progress.advance(task)
+
+        progress.update(task, description="[green]Termine")
+
+    # Resume
+    console.print(f"\n[bold]Resume:[/bold]")
+    console.print(f"  [green]{consolidated}[/green] fichier(s) rapatrie(s)")
+    if errors:
+        console.print(f"  [red]{errors}[/red] erreur(s)")
+    console.print(f"  [yellow]{len(inaccessible)}[/yellow] inaccessible(s)")
+
+
+# ============================================================================
 # Commande check
 # ============================================================================
 

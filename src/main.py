@@ -11,6 +11,7 @@ from loguru import logger
 
 from .adapters.cli.commands import (
     check,
+    consolidate,
     enrich,
     import_library,
     pending,
@@ -61,6 +62,7 @@ app.command(name="import")(import_library)
 # Commandes de maintenance
 app.command()(enrich)
 app.command(name="repair-links")(repair_links)
+app.command()(consolidate)
 app.command()(check)
 
 # Monter validate_app comme sous-commande
