@@ -1564,12 +1564,44 @@ async def _enrich_async() -> None:
 # ============================================================================
 
 
-def repair_links() -> None:
-    """Detecte et repare les symlinks casses interactivement."""
-    asyncio.run(_repair_links_async())
+def repair_links(
+    auto: Annotated[
+        bool,
+        typer.Option(
+            "--auto",
+            help="Repare automatiquement les symlinks avec score >= 90%",
+        ),
+    ] = False,
+    min_score: Annotated[
+        float,
+        typer.Option(
+            "--min-score",
+            help="Score minimum pour proposer une cible (0-100)",
+        ),
+    ] = 50.0,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Simule sans modifier les symlinks",
+        ),
+    ] = False,
+) -> None:
+    """
+    Detecte et repare les symlinks casses.
+
+    Recherche floue basee sur la similarite des titres de films.
+
+    Modes:
+    - Interactif (defaut): propose les candidats et demande confirmation
+    - Auto (--auto): repare automatiquement si score >= 90%
+    """
+    asyncio.run(_repair_links_async(auto, min_score, dry_run))
 
 
-async def _repair_links_async() -> None:
+async def _repair_links_async(
+    auto_repair: bool, min_score: float, dry_run: bool
+) -> None:
     """Implementation async de la commande repair-links."""
     from rich.prompt import Prompt
 
@@ -1593,9 +1625,16 @@ async def _repair_links_async() -> None:
         console.print("[green]Aucun symlink casse detecte.[/green]")
         return
 
-    console.print(f"[bold cyan]Symlinks casses[/bold cyan]: {len(broken)} detecte(s)\n")
+    mode_label = "[dim](dry-run)[/dim] " if dry_run else ""
+    console.print(f"[bold cyan]{mode_label}Symlinks casses[/bold cyan]: {len(broken)} detecte(s)")
+    console.print(f"[dim]Recherche floue dans: {config.storage_dir}[/dim]\n")
+
+    if auto_repair:
+        console.print("[yellow]Mode automatique: reparation si score >= 90%[/yellow]\n")
 
     actions: list[RepairAction] = []
+    auto_repaired = 0
+    no_match_count = 0
 
     for link in broken:
         # Afficher les infos du lien
@@ -1604,6 +1643,46 @@ async def _repair_links_async() -> None:
         except OSError:
             original_target = Path("<inconnu>")
 
+        # Chercher des cibles possibles avec recherche floue
+        targets_with_scores = repair.find_possible_targets(link, min_score=min_score)
+
+        # Mode automatique: reparer si score >= 90%
+        if auto_repair and targets_with_scores and targets_with_scores[0][1] >= 90:
+            best_target, best_score = targets_with_scores[0]
+            if not dry_run:
+                success = repair.repair_symlink(link, best_target)
+            else:
+                success = True
+
+            if success:
+                console.print(
+                    f"[green]AUTO[/green] {link.name} -> {best_target.name} "
+                    f"[dim]({best_score:.0f}%)[/dim]"
+                )
+                actions.append(
+                    RepairAction(
+                        link=link,
+                        action=RepairActionType.REPAIRED,
+                        new_target=best_target,
+                    )
+                )
+                auto_repaired += 1
+                continue
+
+        # Mode interactif si pas de match auto
+        if auto_repair and (not targets_with_scores or targets_with_scores[0][1] < 90):
+            if not targets_with_scores:
+                console.print(f"[red]SKIP[/red] {link.name} [dim](aucun candidat)[/dim]")
+                no_match_count += 1
+            else:
+                console.print(
+                    f"[yellow]SKIP[/yellow] {link.name} "
+                    f"[dim](meilleur: {targets_with_scores[0][1]:.0f}%)[/dim]"
+                )
+            actions.append(RepairAction(link=link, action=RepairActionType.SKIPPED))
+            continue
+
+        # Mode interactif complet
         panel_content = [
             f"[bold]{link.name}[/bold]",
             f"Chemin: {link}",
@@ -1611,22 +1690,29 @@ async def _repair_links_async() -> None:
         ]
         console.print(Panel("\n".join(panel_content), title="Symlink casse"))
 
-        # Chercher des cibles possibles
-        targets = repair.find_possible_targets(link)
-
-        if targets:
-            console.print(f"\n[green]{len(targets)}[/green] cible(s) possible(s):")
-            for i, target in enumerate(targets[:5], 1):
-                console.print(f"  {i}. {target}")
-            if len(targets) > 5:
-                console.print(f"  [dim]... et {len(targets) - 5} autre(s)[/dim]")
+        if targets_with_scores:
+            console.print(f"\n[green]{len(targets_with_scores)}[/green] cible(s) possible(s):")
+            for i, (target, score) in enumerate(targets_with_scores[:5], 1):
+                score_color = "green" if score >= 80 else "yellow" if score >= 60 else "red"
+                console.print(
+                    f"  {i}. [{score_color}]{score:.0f}%[/{score_color}] {target.name}"
+                )
+                console.print(f"     [dim]{target.parent}[/dim]")
+            if len(targets_with_scores) > 5:
+                console.print(f"  [dim]... et {len(targets_with_scores) - 5} autre(s)[/dim]")
 
         # Prompt interactif
-        choices = ["chercher", "supprimer", "ignorer", "quitter"]
+        if targets_with_scores:
+            choices = ["reparer", "supprimer", "ignorer", "quitter"]
+            default = "reparer" if targets_with_scores[0][1] >= 70 else "ignorer"
+        else:
+            choices = ["supprimer", "ignorer", "quitter"]
+            default = "ignorer"
+
         choice = Prompt.ask(
             "\nAction",
             choices=choices,
-            default="ignorer",
+            default=default,
         )
 
         if choice == "quitter":
@@ -1640,17 +1726,23 @@ async def _repair_links_async() -> None:
             console.print("[dim]Ignore[/dim]\n")
 
         elif choice == "supprimer":
-            dest = repair.move_to_orphans(link)
-            if dest:
+            if dry_run:
                 actions.append(
                     RepairAction(link=link, action=RepairActionType.ORPHANED)
                 )
-                console.print(f"[yellow]Deplace vers orphans[/yellow]\n")
+                console.print(f"[cyan](dry-run)[/cyan] Deplacement vers orphans\n")
             else:
-                console.print("[red]Echec du deplacement[/red]\n")
+                dest = repair.move_to_orphans(link)
+                if dest:
+                    actions.append(
+                        RepairAction(link=link, action=RepairActionType.ORPHANED)
+                    )
+                    console.print(f"[yellow]Deplace vers orphans[/yellow]\n")
+                else:
+                    console.print("[red]Echec du deplacement[/red]\n")
 
-        elif choice == "chercher":
-            if not targets:
+        elif choice == "reparer":
+            if not targets_with_scores:
                 console.print("[red]Aucune cible trouvee[/red]\n")
                 actions.append(
                     RepairAction(link=link, action=RepairActionType.SKIPPED)
@@ -1658,7 +1750,7 @@ async def _repair_links_async() -> None:
                 continue
 
             # Selection de la cible
-            target_choices = [str(i) for i in range(1, min(6, len(targets) + 1))]
+            target_choices = [str(i) for i in range(1, min(6, len(targets_with_scores) + 1))]
             target_choice = Prompt.ask(
                 "Selectionner la cible",
                 choices=target_choices + ["annuler"],
@@ -1672,8 +1764,13 @@ async def _repair_links_async() -> None:
                 console.print("[dim]Annule[/dim]\n")
             else:
                 target_idx = int(target_choice) - 1
-                new_target = targets[target_idx]
-                success = repair.repair_symlink(link, new_target)
+                new_target, score = targets_with_scores[target_idx]
+
+                if dry_run:
+                    success = True
+                    console.print(f"[cyan](dry-run)[/cyan] Reparation: {new_target.name}\n")
+                else:
+                    success = repair.repair_symlink(link, new_target)
 
                 if success:
                     actions.append(
@@ -1683,7 +1780,8 @@ async def _repair_links_async() -> None:
                             new_target=new_target,
                         )
                     )
-                    console.print(f"[green]Repare -> {new_target}[/green]\n")
+                    if not dry_run:
+                        console.print(f"[green]Repare -> {new_target.name}[/green]\n")
                 else:
                     console.print("[red]Echec de la reparation[/red]\n")
 

@@ -438,46 +438,138 @@ class RepairService:
 
         return self._file_system.find_broken_links(self._video_dir)
 
-    def find_possible_targets(self, link: Path) -> list[Path]:
+    def find_possible_targets(
+        self, link: Path, min_score: float = 50.0
+    ) -> list[tuple[Path, float]]:
         """
-        Cherche des cibles possibles pour un symlink casse.
+        Cherche des cibles possibles pour un symlink casse avec recherche floue.
 
-        Recherche des fichiers avec le meme nom (ou nom similaire)
-        dans le dossier storage.
+        Recherche des fichiers avec le meme nom ou un nom similaire
+        dans le dossier storage, en utilisant la similarite des titres.
 
         Args:
             link: Chemin du symlink casse
+            min_score: Score minimum de similarite (0-100)
 
         Returns:
-            Liste des cibles possibles, triees par pertinence
+            Liste de tuples (chemin, score) triee par score decroissant
         """
+        from src.adapters.file_system import VIDEO_EXTENSIONS
+
         if not self._storage_dir or not self._storage_dir.exists():
             return []
 
         # Extraire le nom du fichier attendu
         filename = link.name
-        filename_stem = link.stem
 
-        possible_targets = []
+        # Lire aussi la cible originale du symlink pour comparaison
+        try:
+            original_target = link.readlink()
+            original_name = original_target.name
+        except OSError:
+            original_name = filename
 
-        # Chercher dans storage avec le meme nom exact
+        candidates: list[tuple[Path, float]] = []
+
+        # Chercher dans storage
         for candidate in self._storage_dir.rglob("*"):
             if candidate.is_dir():
                 continue
             if candidate.is_symlink():
                 continue
 
-            # Match exact
-            if candidate.name == filename:
-                possible_targets.insert(0, candidate)  # Priorite haute
-            # Match partiel (meme nom sans extension)
-            elif candidate.stem == filename_stem:
-                possible_targets.append(candidate)
-            # Match par contenu du nom
-            elif filename_stem.lower() in candidate.stem.lower():
-                possible_targets.append(candidate)
+            # Verifier que c'est un fichier video
+            if candidate.suffix.lower() not in VIDEO_EXTENSIONS:
+                continue
 
-        return possible_targets
+            # Calculer la similarite avec le nom du symlink et la cible originale
+            score_link = self._calculate_title_similarity(filename, candidate.name)
+            score_target = self._calculate_title_similarity(original_name, candidate.name)
+
+            # Prendre le meilleur score
+            score = max(score_link, score_target)
+
+            # Match exact = score maximum
+            if candidate.name == filename or candidate.name == original_name:
+                score = 100.0
+
+            if score >= min_score:
+                candidates.append((candidate, score))
+
+        # Trier par score decroissant et limiter
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        return candidates[:15]
+
+    def _calculate_title_similarity(self, name1: str, name2: str) -> float:
+        """
+        Calcule la similarite entre deux noms de fichiers video.
+
+        Extrait les titres et annees, puis compare avec SequenceMatcher.
+
+        Args:
+            name1: Premier nom de fichier
+            name2: Deuxieme nom de fichier
+
+        Returns:
+            Score de similarite (0-100)
+        """
+        import re
+        from difflib import SequenceMatcher
+
+        def normalize_and_extract(name: str) -> tuple[str, int | None]:
+            """Normalise un nom et extrait titre + annee."""
+            # Supprimer l'extension
+            stem = Path(name).stem.lower()
+
+            # Remplacer les separateurs
+            for sep in [".", "_", "-"]:
+                stem = stem.replace(sep, " ")
+
+            # Chercher une annee
+            year_match = re.search(r"\b(19\d{2}|20\d{2})\b", stem)
+            year = int(year_match.group(1)) if year_match else None
+
+            # Extraire le titre (avant l'annee ou infos techniques)
+            title = stem
+            if year_match:
+                title = stem[: year_match.start()]
+
+            # Supprimer les infos techniques
+            tech_patterns = [
+                r"\b(french|vostfr|multi|truefrench|vff|vf|vo|eng)\b",
+                r"\b(720p|1080p|2160p|4k|uhd)\b",
+                r"\b(x264|x265|hevc|h264|h265|avc)\b",
+                r"\b(bluray|bdrip|webrip|hdtv|dvdrip|web)\b",
+                r"\b(dts|ac3|aac|dolby|atmos|truehd|dd|ddp)\b",
+                r"\b(remux|proper|repack)\b",
+            ]
+            for pattern in tech_patterns:
+                title = re.sub(pattern, "", title, flags=re.IGNORECASE)
+
+            # Nettoyer les espaces
+            while "  " in title:
+                title = title.replace("  ", " ")
+
+            return title.strip(), year
+
+        title1, year1 = normalize_and_extract(name1)
+        title2, year2 = normalize_and_extract(name2)
+
+        # Similarite des titres
+        title_ratio = SequenceMatcher(None, title1, title2).ratio()
+
+        # Bonus/malus pour l'annee
+        year_bonus = 0.0
+        if year1 and year2:
+            if year1 == year2:
+                year_bonus = 0.15  # +15% si meme annee
+            elif abs(year1 - year2) <= 1:
+                year_bonus = 0.05  # +5% si annee proche
+            else:
+                year_bonus = -0.15  # -15% si annee differente
+
+        score = (title_ratio + year_bonus) * 100
+        return max(0.0, min(100.0, score))
 
     def repair_symlink(self, link: Path, new_target: Path) -> bool:
         """
