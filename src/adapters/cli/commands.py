@@ -1515,6 +1515,8 @@ def enrich() -> None:
 
 async def _enrich_async() -> None:
     """Implementation async de la commande enrich."""
+    from loguru import logger as loguru_logger
+
     container = Container()
     container.database.init()
 
@@ -1530,33 +1532,44 @@ async def _enrich_async() -> None:
 
     console.print(f"[bold cyan]Enrichissement API[/bold cyan]: {len(pending)} fichier(s)\n")
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        console=console,
-    ) as progress:
-        enrich_task = progress.add_task("[cyan]Enrichissement...", total=len(pending))
+    # Desactiver les logs loguru pendant l'affichage pour eviter le melange
+    loguru_logger.disable("src")
 
-        def update_description(filename: str) -> None:
-            progress.update(enrich_task, description=f"[cyan]{filename}")
+    try:
+        enriched_count = 0
+        failed_count = 0
 
-        def advance() -> None:
-            progress.advance(enrich_task)
+        for i, item in enumerate(pending, 1):
+            filename = item.video_file.filename if item.video_file else "inconnu"
 
-        result = await enricher.enrich_batch(
-            items=pending,
-            progress_callback=update_description,
-            advance_callback=advance,
-        )
+            # Afficher progression
+            console.print(f"[dim]({i}/{len(pending)})[/dim] {filename}", end="")
 
-    # Afficher le resume
-    console.print("\n[bold]Resume de l'enrichissement:[/bold]")
-    console.print(f"  [green]{result.enriched}[/green] enrichi(s)")
-    console.print(f"  [red]{result.failed}[/red] echec(s)")
-    if result.skipped > 0:
-        console.print(f"  [yellow]{result.skipped}[/yellow] ignore(s)")
+            # Enrichir ce fichier
+            result = await enricher.enrich_batch(
+                items=[item],
+                progress_callback=None,
+                advance_callback=None,
+            )
+
+            if result.enriched > 0:
+                # Recuperer le nombre de candidats et le meilleur score
+                if item.candidates:
+                    best_score = item.candidates[0].get("score", 0) if item.candidates else 0
+                    console.print(f" [green]✓[/green] {len(item.candidates)} candidat(s), score: {best_score:.0f}%")
+                else:
+                    console.print(f" [green]✓[/green]")
+                enriched_count += 1
+            else:
+                console.print(f" [red]✗ aucun resultat[/red]")
+                failed_count += 1
+
+        # Afficher le resume
+        console.print(f"\n[bold]Resume:[/bold] [green]{enriched_count}[/green] enrichi(s), [red]{failed_count}[/red] echec(s)")
+
+    finally:
+        # Reactiver les logs
+        loguru_logger.enable("src")
 
 
 # ============================================================================
