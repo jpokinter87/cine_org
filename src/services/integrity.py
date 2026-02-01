@@ -603,13 +603,26 @@ class RepairService:
         Returns:
             Titre nettoye (minuscules)
         """
+        import re
         from guessit import guessit
 
         try:
             result = guessit(name)
             title = result.get("title", "")
             if title:
-                return title.lower()
+                # Nettoyer le titre des termes techniques que guessit laisse passer
+                title = title.lower()
+                # Retirer 3D, Top-Bottom, Top-Bot, etc.
+                cleanup_terms = [
+                    r"\b3d\b", r"\btop[-\s]?bottom\b", r"\btop[-\s]?bot\b",
+                    r"\bsbs\b", r"\bhsbs\b", r"\bhalf[-\s]?sbs\b",
+                    r"\bou\b", r"\bhou\b",  # Over-Under
+                ]
+                for term in cleanup_terms:
+                    title = re.sub(term, "", title, flags=re.IGNORECASE)
+                # Nettoyer les espaces multiples
+                title = " ".join(title.split())
+                return title.strip()
         except Exception:
             pass
 
