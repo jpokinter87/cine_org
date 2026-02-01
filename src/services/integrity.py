@@ -725,33 +725,10 @@ class RepairService:
         # Detecter le type et genre depuis le chemin du symlink
         media_type, genre = self._detect_media_context(link)
 
-        # Construire les chemins de recherche progressifs
-        search_paths = []
-
-        if media_type and genre:
-            # 1. Meme genre
-            genre_path = self._storage_dir / media_type / genre
-            if genre_path.exists():
-                search_paths.append(("genre", genre_path))
-
-        if media_type:
-            # 2. Meme type (Films ou Series)
-            type_path = self._storage_dir / media_type
-            if type_path.exists():
-                search_paths.append(("type", type_path))
-
-        # 3. Toute la base
-        search_paths.append(("base", self._storage_dir))
-
-        # Recherche progressive
-        for scope, search_path in search_paths:
-            candidates = self._search_in_directory(link, search_path, min_score)
-            if candidates and candidates[0][1] >= 70:
-                # Bon match trouve, on s'arrete
-                return candidates
-
-        # Si aucun bon match, retourner les resultats de la recherche complete
-        # mais filtrer par type de media pour eviter de proposer des series pour des films
+        # Toujours chercher dans toute la base avec filtre par type de media
+        # La recherche progressive causait des problemes car elle s'arretait trop tot
+        # (ex: fichier dans "non detectes" avec 100% de match non trouve car
+        # un autre fichier dans le genre avec 75% stoppait la recherche)
         return self._search_in_directory(
             link, self._storage_dir, min_score, media_type_filter=media_type
         )
