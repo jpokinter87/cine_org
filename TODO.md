@@ -1,5 +1,93 @@
 # TODO - Fonctionnalités futures
 
+## 📊 Ajout des notes TMDB dans la base de données
+
+**Statut** : À IMPLÉMENTER
+**Priorité** : Moyenne
+**Complexité** : Faible
+**Dépendances** : Aucune (API TMDB retourne déjà ces données)
+
+### Description
+
+Ajouter les notes et nombre de votes TMDB aux entités `Movie` et `Series` pour permettre des recherches avancées basées sur la popularité et la qualité des contenus.
+
+### Cas d'usage
+
+Recherches avancées sur la vidéothèque :
+- "Films de SF des années 90 avec une note > 8.0"
+- "Films cultes (>10000 votes) peu connus (<7.0)"
+- "Meilleurs films d'action toutes époques (>8.0)"
+- Trier la vidéothèque par note décroissante
+- Filtrer les films "sûrs" pour une soirée (>7.5)
+
+### Modifications nécessaires
+
+#### 1. Modèles de données (`src/core/entities/media.py`)
+
+```python
+@dataclass
+class Movie:
+    # ... champs existants ...
+    vote_average: Optional[float] = None  # Note moyenne /10 (ex: 8.4)
+    vote_count: Optional[int] = None      # Nombre de votes (ex: 32000)
+
+@dataclass
+class Series:
+    # ... champs existants ...
+    vote_average: Optional[float] = None
+    vote_count: Optional[int] = None
+```
+
+#### 2. Interface API (`src/core/ports/api_clients.py`)
+
+```python
+@dataclass
+class MediaDetails:
+    # ... champs existants ...
+    vote_average: Optional[float] = None
+    vote_count: Optional[int] = None
+```
+
+#### 3. Client TMDB (`src/adapters/api/tmdb_client.py`)
+
+Extraire `vote_average` et `vote_count` des réponses API :
+```python
+# Dans get_details()
+vote_average = data.get("vote_average")
+vote_count = data.get("vote_count")
+```
+
+#### 4. Migration de base de données
+
+Ajouter les colonnes dans les tables `movies` et `series` :
+```sql
+ALTER TABLE movies ADD COLUMN vote_average REAL;
+ALTER TABLE movies ADD COLUMN vote_count INTEGER;
+ALTER TABLE series ADD COLUMN vote_average REAL;
+ALTER TABLE series ADD COLUMN vote_count INTEGER;
+```
+
+#### 5. Tests
+
+- Mettre à jour les fixtures (`tests/fixtures/tmdb_responses.py`)
+- Ajouter tests unitaires pour vérifier l'extraction des notes
+- Tester la migration de base de données
+
+### Notes techniques
+
+- TMDB fournit `vote_average` (0-10) et `vote_count` pour tous les films/séries
+- TVDB ne semble pas fournir de note utilisateur (juste rating de classification d'âge)
+- Les notes existantes ne seront pas rétroactivement mises à jour → nécessite un ré-enrichissement ou une commande dédiée
+
+### Implémentation future
+
+Une fois les notes en base, possibilité d'ajouter :
+- Une commande CLI de recherche avancée
+- Des filtres dans l'interface web (future)
+- Un système de recommandation basé sur les notes
+
+---
+
 ## ✅ Analyse IA du générique pour validation automatique
 
 **Statut** : IMPLÉMENTÉ
