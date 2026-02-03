@@ -200,6 +200,7 @@ from src.adapters.cli.validation import (
     display_batch_summary,
     display_similar_content_conflict,
     execute_batch_transfer,
+    get_display_filename,
     prompt_conflict_resolution,
     validation_loop,
 )
@@ -248,9 +249,7 @@ async def _validate_auto_async() -> None:
         result = await service.process_auto_validation(pending)
         if result.auto_validated:
             auto_count += 1
-            filename = (
-                result.video_file.filename if result.video_file else "Fichier inconnu"
-            )
+            filename = get_display_filename(pending)
             console.print(f"[green]Auto-valide:[/green] {filename}")
 
     console.print(f"\n[bold]{auto_count}[/bold] fichier(s) valide(s) automatiquement.")
@@ -317,7 +316,7 @@ async def _validate_manual_async() -> None:
         console.print(f"[bold cyan]Auto-validation[/bold cyan]: {len(auto_validated)} fichier(s) (1er candidat >= 95%, autres < 70%)\n")
         for pending in auto_validated:
             candidate = pending.candidates[0]
-            filename = pending.video_file.filename if pending.video_file else "?"
+            filename = get_display_filename(pending)
 
             # Convertir dict en SearchResult si necessaire
             if isinstance(candidate, dict):
@@ -352,10 +351,10 @@ async def _validate_manual_async() -> None:
             break
         elif result == "trash":
             service.reject_pending(pending)
-            filename = pending.video_file.filename if pending.video_file else "?"
+            filename = get_display_filename(pending)
             console.print(f"[red]Corbeille:[/red] {filename}")
         elif result is None:
-            filename = pending.video_file.filename if pending.video_file else "?"
+            filename = get_display_filename(pending)
             console.print(f"[yellow]Passe:[/yellow] {filename}")
         else:
             # result est l'ID du candidat selectionne
@@ -381,7 +380,7 @@ async def _validate_manual_async() -> None:
             if candidate:
                 details = await service.validate_candidate(pending, candidate)
                 validated.append({"pending": pending, "details": details})
-                filename = pending.video_file.filename if pending.video_file else "?"
+                filename = get_display_filename(pending)
                 console.print(f"[green]Valide:[/green] {filename} -> {details.title}")
 
     total_validated = len(auto_validated) + len(validated)
@@ -435,7 +434,7 @@ async def _validate_batch_async() -> None:
                 break
 
         if candidate is None:
-            filename = pending.video_file.filename if pending.video_file else "?"
+            filename = get_display_filename(pending)
             console.print(f"[red]Erreur:[/red] Candidat non trouve pour {filename}")
             continue
 
@@ -455,7 +454,7 @@ async def _validate_batch_async() -> None:
         # Extraire l'extension du fichier source
         source_path = pending.video_file.path if pending.video_file else None
         if source_path is None:
-            filename = pending.video_file.filename if pending.video_file else "?"
+            filename = get_display_filename(pending)
             console.print(f"[red]Erreur:[/red] Chemin source manquant pour {filename}")
             continue
 
@@ -874,10 +873,10 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
                 break
             elif result == "trash":
                 validation_svc.reject_pending(pend)
-                filename = pend.video_file.filename if pend.video_file else "?"
+                filename = get_display_filename(pend)
                 console.print(f"[red]Corbeille:[/red] {filename}")
             elif result is None:
-                filename = pend.video_file.filename if pend.video_file else "?"
+                filename = get_display_filename(pend)
                 console.print(f"[yellow]Passe:[/yellow] {filename}")
             else:
                 # Valide avec le candidat selectionne
@@ -902,7 +901,7 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
                 if candidate:
                     await validation_svc.validate_candidate(pend, candidate)
                     validated_manual += 1
-                    filename = pend.video_file.filename if pend.video_file else "?"
+                    filename = get_display_filename(pend)
                     console.print(f"[green]Valide:[/green] {filename}")
 
         console.print(f"\n[bold]{validated_manual}[/bold] fichier(s) valide(s) manuellement")
@@ -1602,7 +1601,7 @@ async def _enrich_async() -> None:
         failed_count = 0
 
         for i, item in enumerate(pending, 1):
-            filename = item.video_file.filename if item.video_file else "inconnu"
+            filename = get_display_filename(item)
 
             # Enrichir ce fichier
             result = await enricher.enrich_batch(

@@ -45,6 +45,32 @@ console = Console()
 # Nombre de candidats par page
 PAGE_SIZE = 5
 
+
+def get_display_filename(pending: PendingValidation) -> str:
+    """
+    Extrait le nom de fichier a afficher pour un PendingValidation.
+
+    Priorite au symlink (mieux formate) sur le nom du fichier physique (souvent cryptique).
+
+    Args:
+        pending: L'entite PendingValidation
+
+    Returns:
+        Le nom du fichier a afficher
+    """
+    if not pending.video_file:
+        return "Fichier inconnu"
+
+    # Priorite au symlink qui est generalement bien formate
+    # Ex: "Le Film (2020) FR HEVC 1080p.mkv" vs "fhd-xyz.720p.mkv"
+    if pending.video_file.symlink_path:
+        return pending.video_file.symlink_path.name
+
+    if pending.video_file.filename:
+        return pending.video_file.filename
+
+    return "Fichier inconnu"
+
 # Pattern pour detecter un ID IMDB (tt suivi de 7-8 chiffres)
 IMDB_PATTERN = re.compile(r"^tt\d{7,8}$", re.IGNORECASE)
 
@@ -295,8 +321,8 @@ def display_candidates(
         paginator: Paginateur avec les candidats
         pending: Entite PendingValidation pour afficher le nom du fichier
     """
-    # Header avec nom du fichier
-    filename = pending.video_file.filename if pending.video_file else "Fichier inconnu"
+    # Header avec nom du fichier - utiliser le symlink en priorite (mieux formate)
+    filename = get_display_filename(pending)
     console.print(f"\n[bold cyan]Fichier:[/bold cyan] {filename}")
     console.print()
 
@@ -327,8 +353,8 @@ def display_enriched_candidates(
     """
     from src.core.ports.api_clients import MediaDetails
 
-    # Header avec nom du fichier
-    filename = pending.video_file.filename if pending.video_file else "Fichier inconnu"
+    # Header avec nom du fichier - utiliser le symlink en priorite (mieux formate)
+    filename = get_display_filename(pending)
     console.print(f"\n[bold cyan]Fichier:[/bold cyan] {filename}")
 
     # Afficher la duree du fichier
@@ -443,11 +469,18 @@ def determine_is_series(pending: PendingValidation) -> bool:
                 return False
 
     # Priorite 2: Detecter les patterns de serie dans le nom de fichier
-    if pending.video_file and pending.video_file.filename:
-        filename = pending.video_file.filename
-        for pattern in SERIES_PATTERNS:
-            if pattern.search(filename):
-                return True
+    # Utiliser le symlink en priorite (mieux formate)
+    if pending.video_file:
+        filename = None
+        if pending.video_file.symlink_path:
+            filename = pending.video_file.symlink_path.name
+        elif pending.video_file.filename:
+            filename = pending.video_file.filename
+
+        if filename:
+            for pattern in SERIES_PATTERNS:
+                if pattern.search(filename):
+                    return True
 
     # Par defaut -> film
     return False
@@ -521,9 +554,8 @@ async def validation_loop(
 
                 display_enriched_candidates(paginator, pending, details_map)
             else:
-                filename = (
-                    pending.video_file.filename if pending.video_file else "Fichier inconnu"
-                )
+                # Afficher le nom du fichier - utiliser le symlink en priorite
+                filename = get_display_filename(pending)
                 console.print(f"\n[bold cyan]Fichier:[/bold cyan] {filename}")
                 console.print("[yellow]Aucun candidat disponible[/yellow]")
 
