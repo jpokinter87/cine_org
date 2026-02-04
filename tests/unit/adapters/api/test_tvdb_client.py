@@ -216,6 +216,36 @@ class TestTVDBClientSearch:
 
     @pytest.mark.asyncio
     @respx.mock
+    async def test_search_returns_empty_list_on_404(
+        self, mock_cache: MagicMock, api_key: str
+    ) -> None:
+        """
+        Test that search returns empty list when TVDB returns 404.
+
+        TVDB returns 404 when no series matches the search query,
+        instead of returning an empty data array.
+        """
+        from src.adapters.api.tvdb_client import TVDBClient
+
+        # Mock endpoints
+        respx.post("https://api.thetvdb.com/login").mock(
+            return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
+        )
+        respx.get("https://api.thetvdb.com/search/series").mock(
+            return_value=httpx.Response(404, json={"Error": "Resource not found"})
+        )
+
+        client = TVDBClient(api_key=api_key, cache=mock_cache)
+        try:
+            results = await client.search("24 heures dans la vie d'une femme")
+
+            # Should return empty list, not raise exception
+            assert results == []
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    @respx.mock
     async def test_search_caches_results(
         self, mock_cache: MagicMock, api_key: str
     ) -> None:

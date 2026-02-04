@@ -148,13 +148,20 @@ class TVDBClient(IMediaAPIClient):
         # API v3: endpoint /search/series avec parametre name
         params = {"name": query}
 
-        response = await request_with_retry(
-            client,
-            "GET",
-            "/search/series",
-            params=params,
-            headers=self._get_auth_headers(),
-        )
+        try:
+            response = await request_with_retry(
+                client,
+                "GET",
+                "/search/series",
+                params=params,
+                headers=self._get_auth_headers(),
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                # TVDB retourne 404 quand aucune serie ne correspond
+                return []
+            raise
+
         data = response.json()
 
         # API v3: resultats dans "data" array
