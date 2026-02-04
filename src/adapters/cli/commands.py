@@ -85,6 +85,24 @@ def _extract_language_from_filename(filename: str) -> Optional[str]:
     return parsed.language  # Deja en majuscules ou None
 
 
+def _get_series_folder(pend) -> Optional[Path]:
+    """
+    Retourne le repertoire parent d'un fichier en attente de validation.
+
+    Les episodes d'une meme serie sont generalement dans le meme repertoire.
+    Utilisé pour regrouper et auto-valider les episodes apres validation du premier.
+
+    Args:
+        pend: PendingValidation avec video_file
+
+    Returns:
+        Path du repertoire parent ou None si non disponible
+    """
+    if pend.video_file and pend.video_file.path:
+        return pend.video_file.path.parent
+    return None
+
+
 def _display_transfer_tree(
     transfers: list[dict], storage_dir: Path, video_dir: Path
 ) -> None:
@@ -1057,7 +1075,14 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
         )
 
         validated_manual = 0
+        # Set des IDs deja traites (pour eviter de retraiter les episodes auto-valides)
+        processed_ids: set[str] = set()
+
         for pend in remaining:
+            # Skip si deja traite (auto-validation d'episode)
+            if pend.id and pend.id in processed_ids:
+                continue
+
             result = await validation_loop(pend, validation_svc)
 
             if result == "quit":
@@ -1077,6 +1102,31 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
                 validated_manual += 1
                 filename = pend.video_file.filename if pend.video_file else "?"
                 console.print(f"[green]Valide:[/green] {filename}")
+
+                # Auto-validation des autres episodes de la meme serie
+                if candidate.source == "tvdb":
+                    current_folder = _get_series_folder(pend)
+                    if current_folder:
+                        auto_validated_episodes = 0
+                        for other in remaining:
+                            # Skip le fichier courant et ceux deja traites
+                            if other.id == pend.id or (other.id and other.id in processed_ids):
+                                continue
+                            # Meme repertoire parent = meme serie
+                            other_folder = _get_series_folder(other)
+                            if other_folder == current_folder:
+                                await validation_svc.validate_candidate(other, candidate)
+                                processed_ids.add(other.id)
+                                validated_manual += 1
+                                auto_validated_episodes += 1
+                                other_filename = other.video_file.filename if other.video_file else "?"
+                                console.print(f"[green]  ↳ Auto-valide:[/green] {other_filename}")
+
+                        if auto_validated_episodes > 0:
+                            console.print(
+                                f"[cyan]{auto_validated_episodes} autre(s) episode(s) "
+                                f"auto-valide(s) pour cette serie[/cyan]"
+                            )
 
         console.print(f"\n[bold]{validated_manual}[/bold] fichier(s) valide(s) manuellement")
 
