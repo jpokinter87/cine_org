@@ -13,8 +13,12 @@ from .adapters.cli.commands import (
     check,
     consolidate,
     enrich,
+    enrich_imdb_ids,
+    enrich_ratings,
+    imdb_app,
     import_library,
     pending,
+    populate_movies,
     process,
     repair_links,
     validate_app,
@@ -61,12 +65,18 @@ app.command(name="import")(import_library)
 
 # Commandes de maintenance
 app.command()(enrich)
+app.command(name="populate-movies")(populate_movies)
+app.command(name="enrich-ratings")(enrich_ratings)
+app.command(name="enrich-imdb-ids")(enrich_imdb_ids)
 app.command(name="repair-links")(repair_links)
 app.command()(consolidate)
 app.command()(check)
 
 # Monter validate_app comme sous-commande
 app.add_typer(validate_app, name="validate")
+
+# Monter imdb_app comme sous-commande
+app.add_typer(imdb_app, name="imdb")
 
 
 def get_config() -> Settings:

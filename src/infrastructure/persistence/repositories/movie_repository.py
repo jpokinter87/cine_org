@@ -53,6 +53,11 @@ class SQLModelMovieRepository(IMovieRepository):
             duration_seconds=model.duration_seconds,
             overview=model.overview,
             poster_path=model.poster_path,
+            vote_average=model.vote_average,
+            vote_count=model.vote_count,
+            imdb_id=model.imdb_id,
+            imdb_rating=model.imdb_rating,
+            imdb_votes=model.imdb_votes,
         )
 
     def _to_model(self, entity: Movie) -> MovieModel:
@@ -67,6 +72,7 @@ class SQLModelMovieRepository(IMovieRepository):
         """
         model = MovieModel(
             tmdb_id=entity.tmdb_id,
+            imdb_id=entity.imdb_id,
             title=entity.title,
             original_title=entity.original_title,
             year=entity.year,
@@ -74,6 +80,10 @@ class SQLModelMovieRepository(IMovieRepository):
             duration_seconds=entity.duration_seconds,
             overview=entity.overview,
             poster_path=entity.poster_path,
+            vote_average=entity.vote_average,
+            vote_count=entity.vote_count,
+            imdb_rating=entity.imdb_rating,
+            imdb_votes=entity.imdb_votes,
         )
         if entity.id:
             model.id = int(entity.id)
@@ -103,6 +113,35 @@ class SQLModelMovieRepository(IMovieRepository):
         models = self._session.exec(statement).all()
         return [self._to_entity(model) for model in models]
 
+    def list_without_ratings(self, limit: int = 100) -> list[Movie]:
+        """Liste les films sans notes TMDB (vote_average ou vote_count null)."""
+        from sqlalchemy import or_
+
+        statement = (
+            select(MovieModel)
+            .where(
+                or_(
+                    MovieModel.vote_average.is_(None),
+                    MovieModel.vote_count.is_(None),
+                )
+            )
+            .where(MovieModel.tmdb_id.isnot(None))  # Doit avoir un tmdb_id
+            .limit(limit)
+        )
+        models = self._session.exec(statement).all()
+        return [self._to_entity(model) for model in models]
+
+    def list_without_imdb_id(self, limit: int = 100) -> list[Movie]:
+        """Liste les films avec tmdb_id mais sans imdb_id."""
+        statement = (
+            select(MovieModel)
+            .where(MovieModel.tmdb_id.isnot(None))
+            .where(MovieModel.imdb_id.is_(None))
+            .limit(limit)
+        )
+        models = self._session.exec(statement).all()
+        return [self._to_entity(model) for model in models]
+
     def save(self, movie: Movie) -> Movie:
         """Sauvegarde un film (insertion ou mise a jour)."""
         # Verifier si le film existe deja (par ID ou tmdb_id)
@@ -124,6 +163,11 @@ class SQLModelMovieRepository(IMovieRepository):
             existing.duration_seconds = movie.duration_seconds
             existing.overview = movie.overview
             existing.poster_path = movie.poster_path
+            existing.vote_average = movie.vote_average
+            existing.vote_count = movie.vote_count
+            existing.imdb_id = movie.imdb_id
+            existing.imdb_rating = movie.imdb_rating
+            existing.imdb_votes = movie.imdb_votes
             self._session.add(existing)
             self._session.commit()
             self._session.refresh(existing)

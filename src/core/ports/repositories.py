@@ -79,6 +79,16 @@ class IMovieRepository(ABC):
         """Sauvegarde un film (insertion ou mise à jour)."""
         ...
 
+    @abstractmethod
+    def list_without_ratings(self, limit: int = 100) -> list[Movie]:
+        """Liste les films sans notes TMDB (vote_average ou vote_count null)."""
+        ...
+
+    @abstractmethod
+    def list_without_imdb_id(self, limit: int = 100) -> list[Movie]:
+        """Liste les films avec tmdb_id mais sans imdb_id."""
+        ...
+
 
 class ISeriesRepository(ABC):
     """

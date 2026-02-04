@@ -268,6 +268,7 @@ async def _validate_manual_async() -> None:
     container.database.init()
 
     service = container.validation_service()
+    tmdb_client = container.tmdb_client()
     pending_list = service.list_pending()
 
     # Filtrer les non-auto-valides (status PENDING)
@@ -285,6 +286,7 @@ async def _validate_manual_async() -> None:
     # Auto-valider les cas evidents:
     # - 1 seul candidat avec score >= 95%
     # - Plusieurs candidats mais le 1er >= 95% et les autres < 70%
+    # - Premier >= 90% et ecart >= 12 points avec le 2eme
     auto_validated = []
     remaining = []
 
@@ -310,11 +312,112 @@ async def _validate_manual_async() -> None:
                 auto_validated.append(pending)
                 continue
 
+        # Cas 3: premier >= 90% et ecart >= 12 points avec le 2eme
+        if first_score >= 90 and len(pending.candidates) > 1:
+            second_score = get_score(pending.candidates[1])
+            if first_score - second_score >= 12:
+                auto_validated.append(pending)
+                continue
+
         remaining.append(pending)
+
+    # Cas 4: Un seul candidat avec duree compatible (±30%)
+    # Necessite des appels API pour recuperer la duree TMDB
+    if remaining and tmdb_client:
+        duration_validated = []
+        still_remaining = []
+
+        def is_duration_compatible(file_duration: int, tmdb_duration: int) -> bool:
+            """Verifie si la duree TMDB est compatible (±30%) avec la duree fichier."""
+            if not file_duration or not tmdb_duration:
+                return False
+            ratio = tmdb_duration / file_duration
+            return 0.7 <= ratio <= 1.3
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TextColumn("[dim]{task.fields[status]}[/dim]"),
+            console=console,
+        ) as progress:
+            task = progress.add_task(
+                "Verification durees TMDB...",
+                total=len(remaining),
+                status=""
+            )
+
+            for pending in remaining:
+                # Mettre a jour la barre de progression
+                filename = pending.video_file.filename[:40] if pending.video_file else "?"
+                progress.update(task, advance=1, status=filename)
+
+                # Verifier qu'on a la duree du fichier
+                file_duration = None
+                if pending.video_file and pending.video_file.media_info:
+                    file_duration = pending.video_file.media_info.duration_seconds
+
+                if not file_duration or len(pending.candidates) < 2:
+                    still_remaining.append(pending)
+                    continue
+
+                # Recuperer la duree TMDB des 3 premiers candidats
+                compatible_candidates = []
+                for candidate in pending.candidates[:3]:
+                    candidate_id = candidate.get("id") if isinstance(candidate, dict) else candidate.id
+                    candidate_source = candidate.get("source", "") if isinstance(candidate, dict) else getattr(candidate, "source", "")
+
+                    # Ne traiter que les candidats TMDB (pas TVDB pour les series)
+                    if candidate_source != "tmdb":
+                        continue
+
+                    try:
+                        details = await tmdb_client.get_details(str(candidate_id))
+                        if details and details.duration_seconds:
+                            if is_duration_compatible(file_duration, details.duration_seconds):
+                                compatible_candidates.append((candidate, details))
+                    except Exception:
+                        pass
+
+                # Si UN SEUL candidat a une duree compatible, auto-valider
+                if len(compatible_candidates) == 1:
+                    candidate, details = compatible_candidates[0]
+                    # Stocker le candidat compatible pour validation
+                    pending._duration_validated_candidate = candidate
+                    duration_validated.append(pending)
+                else:
+                    still_remaining.append(pending)
+
+        # Ajouter les valides par duree a la liste
+        if duration_validated:
+            console.print(f"[bold cyan]Auto-validation (duree)[/bold cyan]: {len(duration_validated)} fichier(s) (1 seul candidat avec duree compatible)\n")
+            for pending in duration_validated:
+                candidate = pending._duration_validated_candidate
+                filename = pending.video_file.filename if pending.video_file else "?"
+
+                if isinstance(candidate, dict):
+                    from src.core.ports.api_clients import SearchResult
+                    search_result = SearchResult(
+                        id=candidate.get("id", ""),
+                        title=candidate.get("title", ""),
+                        year=candidate.get("year"),
+                        score=candidate.get("score", 0.0),
+                        source=candidate.get("source", ""),
+                    )
+                else:
+                    search_result = candidate
+
+                details = await service.validate_candidate(pending, search_result)
+                console.print(f"[green]{filename}[/green] -> {details.title} (duree compatible)")
+
+            auto_validated.extend(duration_validated)
+
+        remaining = still_remaining
 
     # Valider automatiquement les cas evidents
     if auto_validated:
-        console.print(f"[bold cyan]Auto-validation[/bold cyan]: {len(auto_validated)} fichier(s) (1er candidat >= 95%, autres < 70%)\n")
+        console.print(f"[bold cyan]Auto-validation[/bold cyan]: {len(auto_validated)} fichier(s) (haute confiance)\n")
         for pending in auto_validated:
             candidate = pending.candidates[0]
             filename = pending.video_file.filename if pending.video_file else "?"
@@ -333,7 +436,7 @@ async def _validate_manual_async() -> None:
                 search_result = candidate
 
             details = await service.validate_candidate(pending, search_result)
-            console.print(f"[green]{filename}[/green] -> {details.title} ({candidate.get('score', 0):.0f}%)")
+            console.print(f"[green]{filename}[/green] -> {details.title} ({get_score(candidate):.0f}%)")
 
         console.print()
 
@@ -344,7 +447,19 @@ async def _validate_manual_async() -> None:
     console.print(f"[bold]{len(remaining)}[/bold] fichier(s) restant(s) a valider manuellement.\n")
 
     validated = []
+    auto_in_manual = 0
     for pending in remaining:
+        # Auto-validation si un seul candidat avec score >= 85%
+        if service.should_auto_validate(service._parse_candidates(pending.candidates)):
+            candidates = service._parse_candidates(pending.candidates)
+            candidate = candidates[0]
+            details = await service.validate_candidate(pending, candidate)
+            validated.append({"pending": pending, "details": details})
+            filename = pending.video_file.filename if pending.video_file else "?"
+            console.print(f"[green]Auto:[/green] {filename} -> {details.title} ({candidate.score:.0f}%)")
+            auto_in_manual += 1
+            continue
+
         result = await validation_loop(pending, service)
 
         if result == "quit":
@@ -358,34 +473,16 @@ async def _validate_manual_async() -> None:
             filename = pending.video_file.filename if pending.video_file else "?"
             console.print(f"[yellow]Passe:[/yellow] {filename}")
         else:
-            # result est l'ID du candidat selectionne
-            # Trouver le candidat correspondant
-            candidate = None
-            for c in pending.candidates:
-                c_id = c.id if hasattr(c, "id") else c.get("id", "")
-                if c_id == result:
-                    # Convertir dict en SearchResult si necessaire
-                    if isinstance(c, dict):
-                        from src.core.ports.api_clients import SearchResult
-                        candidate = SearchResult(
-                            id=c.get("id", ""),
-                            title=c.get("title", ""),
-                            year=c.get("year"),
-                            score=c.get("score", 0.0),
-                            source=c.get("source", ""),
-                        )
-                    else:
-                        candidate = c
-                    break
-
-            if candidate:
-                details = await service.validate_candidate(pending, candidate)
-                validated.append({"pending": pending, "details": details})
-                filename = pending.video_file.filename if pending.video_file else "?"
-                console.print(f"[green]Valide:[/green] {filename} -> {details.title}")
+            # result est le SearchResult du candidat selectionne
+            candidate = result
+            details = await service.validate_candidate(pending, candidate)
+            validated.append({"pending": pending, "details": details})
+            filename = pending.video_file.filename if pending.video_file else "?"
+            console.print(f"[green]Valide:[/green] {filename} -> {details.title}")
 
     total_validated = len(auto_validated) + len(validated)
-    console.print(f"\n[bold]Resume:[/bold] {total_validated} fichier(s) valide(s) ({len(auto_validated)} auto, {len(validated)} manuel)")
+    manual_count = len(validated) - auto_in_manual
+    console.print(f"\n[bold]Resume:[/bold] {total_validated} fichier(s) valide(s) ({len(auto_validated) + auto_in_manual} auto, {manual_count} manuel)")
 
 
 @validate_app.command("batch")
@@ -880,30 +977,12 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
                 filename = pend.video_file.filename if pend.video_file else "?"
                 console.print(f"[yellow]Passe:[/yellow] {filename}")
             else:
-                # Valide avec le candidat selectionne
-                candidate = None
-                for c in pend.candidates:
-                    c_id = c.id if hasattr(c, "id") else c.get("id", "")
-                    if c_id == result:
-                        if isinstance(c, dict):
-                            from src.core.ports.api_clients import SearchResult
-
-                            candidate = SearchResult(
-                                id=c.get("id", ""),
-                                title=c.get("title", ""),
-                                year=c.get("year"),
-                                score=c.get("score", 0.0),
-                                source=c.get("source", ""),
-                            )
-                        else:
-                            candidate = c
-                        break
-
-                if candidate:
-                    await validation_svc.validate_candidate(pend, candidate)
-                    validated_manual += 1
-                    filename = pend.video_file.filename if pend.video_file else "?"
-                    console.print(f"[green]Valide:[/green] {filename}")
+                # result est le SearchResult du candidat selectionne
+                candidate = result
+                await validation_svc.validate_candidate(pend, candidate)
+                validated_manual += 1
+                filename = pend.video_file.filename if pend.video_file else "?"
+                console.print(f"[green]Valide:[/green] {filename}")
 
         console.print(f"\n[bold]{validated_manual}[/bold] fichier(s) valide(s) manuellement")
 
@@ -1415,28 +1494,10 @@ async def _validate_file_async(file_id: str) -> None:
     elif result is None:
         console.print("[yellow]Fichier passe.[/yellow]")
     else:
-        # Valide avec le candidat selectionne
-        candidate = None
-        for c in pend.candidates:
-            c_id = c.id if hasattr(c, "id") else c.get("id", "")
-            if c_id == result:
-                if isinstance(c, dict):
-                    from src.core.ports.api_clients import SearchResult
-
-                    candidate = SearchResult(
-                        id=c.get("id", ""),
-                        title=c.get("title", ""),
-                        year=c.get("year"),
-                        score=c.get("score", 0.0),
-                        source=c.get("source", ""),
-                    )
-                else:
-                    candidate = c
-                break
-
-        if candidate:
-            details = await validation_svc.validate_candidate(pend, candidate)
-            console.print(f"[green]Fichier valide: {details.title}[/green]")
+        # result est le SearchResult du candidat selectionne
+        candidate = result
+        details = await validation_svc.validate_candidate(pend, candidate)
+        console.print(f"[green]Fichier valide: {details.title}[/green]")
 
 
 # ============================================================================
@@ -1630,6 +1691,485 @@ async def _enrich_async() -> None:
     finally:
         # Reactiver les logs
         loguru_logger.enable("src")
+
+
+# ============================================================================
+# Commande populate-movies
+# ============================================================================
+
+
+def populate_movies(
+    limit: Annotated[
+        int,
+        typer.Option(
+            "--limit", "-l",
+            help="Nombre maximum de films a traiter (0 = illimite)",
+        ),
+    ] = 0,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Simule sans modifier la base"),
+    ] = False,
+) -> None:
+    """Cree/met a jour les films dans la table movies depuis les validations."""
+    asyncio.run(_populate_movies_async(limit, dry_run))
+
+
+async def _populate_movies_async(limit: int, dry_run: bool) -> None:
+    """Implementation async de la commande populate-movies."""
+    from loguru import logger as loguru_logger
+
+    from src.core.entities.media import Movie
+    from src.core.entities.video import ValidationStatus
+
+    container = Container()
+    container.database.init()
+
+    # Recuperer les repositories
+    pending_repo = container.pending_validation_repository()
+    movie_repo = container.movie_repository()
+    tmdb_client = container.tmdb_client()
+
+    # Desactiver les logs loguru pendant l'affichage
+    loguru_logger.disable("src")
+
+    try:
+        # Lister les validations validees avec un tmdb_id
+        # limit=0 signifie illimite
+        fetch_limit = 0 if limit == 0 else limit * 2  # Marge pour filtrage
+        all_validated = pending_repo.list_validated(fetch_limit)
+        # Filtrer pour ne garder que les films (source=tmdb dans les candidats)
+        validated_movies = []
+        for p in all_validated:
+            if not p.video_file or not p.candidates:
+                continue
+            # Verifier si c'est un film (source=tmdb)
+            first_candidate = p.candidates[0] if p.candidates else None
+            if first_candidate:
+                source = first_candidate.get("source") if isinstance(first_candidate, dict) else getattr(first_candidate, "source", None)
+                if source == "tmdb":
+                    validated_movies.append(p)
+            if limit > 0 and len(validated_movies) >= limit:
+                break
+
+        if not validated_movies:
+            console.print("[yellow]Aucun film valide a traiter.[/yellow]")
+            console.print("[dim]Utilisez 'process' ou 'pending' pour valider des films.[/dim]")
+            return
+
+        console.print(
+            f"[bold cyan]Population de la table movies[/bold cyan]: {len(validated_movies)} film(s)\n"
+        )
+
+        if dry_run:
+            console.print("[yellow]Mode dry-run - aucune modification[/yellow]\n")
+
+        created = 0
+        updated = 0
+        errors = 0
+
+        for i, pending in enumerate(validated_movies, 1):
+            tmdb_id = pending.selected_candidate_id
+            filename = pending.video_file.filename if pending.video_file else "?"
+
+            try:
+                # Verifier si le film existe deja avec ce tmdb_id
+                existing = movie_repo.get_by_tmdb_id(int(tmdb_id))
+
+                if existing:
+                    console.print(f"[dim]({i}/{len(validated_movies)})[/dim] {filename} - deja en base")
+                    updated += 1
+                    continue
+
+                # Recuperer les details depuis TMDB
+                details = await tmdb_client.get_details(tmdb_id)
+
+                if not details:
+                    console.print(f"[dim]({i}/{len(validated_movies)})[/dim] [red]{filename}[/red] - TMDB introuvable")
+                    errors += 1
+                    continue
+
+                # Creer l'entite Movie avec toutes les infos
+                movie = Movie(
+                    tmdb_id=int(tmdb_id),
+                    title=details.title,
+                    original_title=details.original_title,
+                    year=details.year,
+                    genres=details.genres or (),
+                    duration_seconds=details.duration_seconds,
+                    overview=details.overview,
+                    poster_path=details.poster_url,
+                    vote_average=details.vote_average,
+                    vote_count=details.vote_count,
+                )
+
+                if not dry_run:
+                    movie_repo.save(movie)
+
+                console.print(f"[dim]({i}/{len(validated_movies)})[/dim] [green]{filename}[/green] -> {details.title} ({details.year})")
+                created += 1
+
+                # Rate limiting
+                await asyncio.sleep(0.25)
+
+            except Exception as e:
+                console.print(f"[dim]({i}/{len(validated_movies)})[/dim] [red]{filename}[/red] - Erreur: {e}")
+                errors += 1
+
+        # Resume
+        console.print(f"\n[bold]Resume:[/bold]")
+        console.print(f"  [green]{created}[/green] film(s) cree(s)")
+        console.print(f"  [yellow]{updated}[/yellow] deja en base")
+        if errors > 0:
+            console.print(f"  [red]{errors}[/red] erreur(s)")
+
+        if not dry_run and created > 0:
+            console.print("\n[dim]Utilisez 'enrich-ratings' pour enrichir les notes TMDB.[/dim]")
+
+    finally:
+        loguru_logger.enable("src")
+        if tmdb_client:
+            await tmdb_client.close()
+
+
+# ============================================================================
+# Commande enrich-ratings
+# ============================================================================
+
+
+def enrich_ratings(
+    limit: Annotated[
+        int,
+        typer.Option(
+            "--limit", "-l",
+            help="Nombre maximum de films a enrichir",
+        ),
+    ] = 100,
+) -> None:
+    """Enrichit les notes TMDB (vote_average, vote_count) pour les films sans notes."""
+    asyncio.run(_enrich_ratings_async(limit))
+
+
+async def _enrich_ratings_async(limit: int) -> None:
+    """Implementation async de la commande enrich-ratings."""
+    from loguru import logger as loguru_logger
+
+    from src.services.ratings_enricher import RatingsEnricherService
+
+    container = Container()
+    container.database.init()
+
+    # Creer le service d'enrichissement des notes
+    movie_repo = container.movie_repository()
+    tmdb_client = container.tmdb_client()
+
+    service = RatingsEnricherService(
+        movie_repo=movie_repo,
+        tmdb_client=tmdb_client,
+    )
+
+    # Verifier d'abord combien de films sont a enrichir
+    movies_to_enrich = movie_repo.list_without_ratings(limit)
+
+    if not movies_to_enrich:
+        console.print("[yellow]Aucun film a enrichir.[/yellow]")
+        console.print("[dim]Tous les films ont deja leurs notes TMDB.[/dim]")
+        return
+
+    console.print(
+        f"[bold cyan]Enrichissement des notes TMDB[/bold cyan]: {len(movies_to_enrich)} film(s)\n"
+    )
+
+    # Desactiver les logs loguru pendant l'affichage
+    loguru_logger.disable("src")
+
+    try:
+        stats = await service.enrich_ratings(limit=limit, rate_limit_seconds=0.25)
+
+        # Afficher le resume
+        console.print(f"\n[bold]Resume:[/bold]")
+        console.print(f"  [green]{stats.enriched}[/green] enrichi(s)")
+        if stats.failed > 0:
+            console.print(f"  [red]{stats.failed}[/red] echec(s)")
+        if stats.skipped > 0:
+            console.print(f"  [yellow]{stats.skipped}[/yellow] ignore(s)")
+
+    finally:
+        # Reactiver les logs
+        loguru_logger.enable("src")
+
+
+def enrich_imdb_ids(
+    limit: Annotated[
+        int,
+        typer.Option(
+            "--limit", "-l",
+            help="Nombre maximum de films a enrichir",
+        ),
+    ] = 100,
+) -> None:
+    """Recupere les imdb_id depuis TMDB pour les films sans cette information."""
+    asyncio.run(_enrich_imdb_ids_async(limit))
+
+
+async def _enrich_imdb_ids_async(limit: int) -> None:
+    """Implementation async de la commande enrich-imdb-ids."""
+    from loguru import logger as loguru_logger
+    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TaskProgressColumn, TimeRemainingColumn
+
+    from src.services.imdb_id_enricher import ImdbIdEnricherService, EnrichmentResult, ProgressInfo
+
+    container = Container()
+    container.database.init()
+
+    # Creer le service d'enrichissement des imdb_id
+    movie_repo = container.movie_repository()
+    tmdb_client = container.tmdb_client()
+
+    service = ImdbIdEnricherService(
+        movie_repo=movie_repo,
+        tmdb_client=tmdb_client,
+    )
+
+    # Verifier d'abord combien de films sont a enrichir
+    movies_to_enrich = movie_repo.list_without_imdb_id(limit)
+
+    if not movies_to_enrich:
+        console.print("[yellow]Aucun film a enrichir.[/yellow]")
+        console.print("[dim]Tous les films ont deja leur imdb_id.[/dim]")
+        return
+
+    total = len(movies_to_enrich)
+    console.print(
+        f"[bold cyan]Enrichissement des imdb_id[/bold cyan]: {total} film(s)\n"
+    )
+
+    # Desactiver les logs loguru pendant l'affichage
+    loguru_logger.disable("src")
+
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeRemainingColumn(),
+            console=console,
+            transient=False,
+        ) as progress:
+            task = progress.add_task("[cyan]Enrichissement...", total=total)
+
+            def on_progress(info: ProgressInfo) -> None:
+                """Callback de progression."""
+                # Mettre a jour la barre de progression
+                progress.update(task, completed=info.current)
+
+                # Afficher le resultat pour chaque film
+                year_str = f" ({info.movie_year})" if info.movie_year else ""
+                title = f"{info.movie_title}{year_str}"
+
+                if info.result == EnrichmentResult.SUCCESS:
+                    progress.console.print(f"  [green]✓[/green] {title} → {info.imdb_id}")
+                elif info.result == EnrichmentResult.FAILED:
+                    progress.console.print(f"  [red]✗[/red] {title} - echec API")
+                elif info.result == EnrichmentResult.NOT_FOUND:
+                    progress.console.print(f"  [yellow]?[/yellow] {title} - pas d'imdb_id sur TMDB")
+                elif info.result == EnrichmentResult.SKIPPED:
+                    progress.console.print(f"  [dim]-[/dim] {title} - ignore (sans tmdb_id)")
+
+            stats = await service.enrich_imdb_ids(
+                limit=limit,
+                rate_limit_seconds=0.25,
+                on_progress=on_progress,
+            )
+
+        # Afficher le resume
+        console.print(f"\n[bold]Resume:[/bold]")
+        console.print(f"  [green]{stats.enriched}[/green] enrichi(s)")
+        if stats.failed > 0:
+            console.print(f"  [red]{stats.failed}[/red] echec(s) API")
+        if stats.not_found > 0:
+            console.print(f"  [yellow]{stats.not_found}[/yellow] sans imdb_id sur TMDB")
+        if stats.skipped > 0:
+            console.print(f"  [dim]{stats.skipped}[/dim] ignore(s) (sans tmdb_id)")
+
+    finally:
+        # Reactiver les logs
+        loguru_logger.enable("src")
+
+
+# ============================================================================
+# Commandes IMDb
+# ============================================================================
+
+# Application Typer pour les commandes IMDb
+imdb_app = typer.Typer(
+    name="imdb",
+    help="Commandes de gestion des datasets IMDb",
+    rich_markup_mode="rich",
+)
+
+
+@imdb_app.command("import")
+def imdb_import(
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force", "-f",
+            help="Force le re-telechargement meme si le fichier est recent",
+        ),
+    ] = False,
+) -> None:
+    """Telecharge et importe les notes IMDb depuis les datasets publics."""
+    asyncio.run(_imdb_import_async(force))
+
+
+async def _imdb_import_async(force: bool) -> None:
+    """Implementation async de la commande imdb import."""
+    from loguru import logger as loguru_logger
+    from rich.status import Status
+
+    from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
+
+    container = Container()
+    container.database.init()
+
+    # Repertoire de cache pour les datasets
+    cache_dir = Path(".cache/imdb")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    session = container.session()
+    importer = IMDbDatasetImporter(cache_dir=cache_dir, session=session)
+
+    # Desactiver les logs loguru pendant l'affichage
+    loguru_logger.disable("src")
+
+    try:
+        ratings_file = cache_dir / "title.ratings.tsv.gz"
+
+        # Verifier si un telechargement est necessaire
+        if force or importer.needs_update(ratings_file, max_age_days=7):
+            with Status("[cyan]Telechargement du dataset title.ratings...", console=console):
+                ratings_file = await importer.download_dataset("title.ratings")
+            console.print("[green]Telechargement termine.[/green]")
+        else:
+            console.print("[yellow]Dataset recent, pas de telechargement necessaire.[/yellow]")
+            console.print("[dim]Utilisez --force pour forcer le re-telechargement.[/dim]")
+
+        # Import en base
+        with Status("[cyan]Import des notes en base...", console=console):
+            stats = importer.import_ratings(ratings_file)
+
+        console.print(f"\n[bold]Resume de l'import:[/bold]")
+        console.print(f"  [green]{stats.imported:,}[/green] notes importees")
+        if stats.errors > 0:
+            console.print(f"  [red]{stats.errors:,}[/red] erreurs")
+
+    finally:
+        loguru_logger.enable("src")
+
+
+@imdb_app.command("sync")
+def imdb_sync(
+    limit: Annotated[
+        int,
+        typer.Option(
+            "--limit", "-l",
+            help="Nombre maximum de films a synchroniser",
+        ),
+    ] = 100,
+) -> None:
+    """Synchronise les notes IMDb avec les films en base."""
+    asyncio.run(_imdb_sync_async(limit))
+
+
+async def _imdb_sync_async(limit: int) -> None:
+    """Implementation async de la commande imdb sync."""
+    from loguru import logger as loguru_logger
+
+    from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
+
+    container = Container()
+    container.database.init()
+
+    # Recuperer les repositories
+    movie_repo = container.movie_repository()
+    session = container.session()
+
+    cache_dir = Path(".cache/imdb")
+    importer = IMDbDatasetImporter(cache_dir=cache_dir, session=session)
+
+    # Desactiver les logs loguru pendant l'affichage
+    loguru_logger.disable("src")
+
+    try:
+        # Lister les films avec imdb_id mais sans imdb_rating
+        from sqlmodel import select
+        from src.infrastructure.persistence.models import MovieModel
+
+        statement = (
+            select(MovieModel)
+            .where(MovieModel.imdb_id.isnot(None))
+            .where(MovieModel.imdb_rating.is_(None))
+            .limit(limit)
+        )
+        movies_to_sync = session.exec(statement).all()
+
+        if not movies_to_sync:
+            console.print("[yellow]Aucun film a synchroniser.[/yellow]")
+            console.print("[dim]Tous les films avec imdb_id ont deja leurs notes IMDb.[/dim]")
+            return
+
+        console.print(f"[bold cyan]Synchronisation IMDb[/bold cyan]: {len(movies_to_sync)} film(s)\n")
+
+        synced = 0
+        not_found = 0
+
+        for movie in movies_to_sync:
+            rating = importer.get_rating(movie.imdb_id)
+
+            if rating:
+                movie.imdb_rating = rating[0]
+                movie.imdb_votes = rating[1]
+                session.add(movie)
+                synced += 1
+                console.print(f"  [green]✓[/green] {movie.title} - {rating[0]}/10 ({rating[1]:,} votes)")
+            else:
+                not_found += 1
+                console.print(f"  [yellow]?[/yellow] {movie.title} - non trouve dans le cache IMDb")
+
+        session.commit()
+
+        console.print(f"\n[bold]Resume:[/bold]")
+        console.print(f"  [green]{synced}[/green] synchronise(s)")
+        if not_found > 0:
+            console.print(f"  [yellow]{not_found}[/yellow] non trouve(s)")
+
+    finally:
+        loguru_logger.enable("src")
+
+
+@imdb_app.command("stats")
+def imdb_stats() -> None:
+    """Affiche les statistiques du cache IMDb local."""
+    from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
+
+    container = Container()
+    container.database.init()
+
+    cache_dir = Path(".cache/imdb")
+    session = next(container.session.provider())
+    importer = IMDbDatasetImporter(cache_dir=cache_dir, session=session)
+
+    stats = importer.get_stats()
+
+    console.print("[bold cyan]Statistiques du cache IMDb[/bold cyan]\n")
+    console.print(f"  Nombre d'enregistrements: [bold]{stats['count']:,}[/bold]")
+    if stats['last_updated']:
+        console.print(f"  Derniere mise a jour: [bold]{stats['last_updated']}[/bold]")
+    else:
+        console.print("  [yellow]Aucune donnee importee.[/yellow]")
+        console.print("  [dim]Utilisez 'cineorg imdb import' pour importer les notes.[/dim]")
 
 
 # ============================================================================
