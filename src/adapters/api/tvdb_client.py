@@ -154,7 +154,7 @@ class TVDBClient(IMediaAPIClient):
                 "GET",
                 "/search/series",
                 params=params,
-                headers=self._get_auth_headers(),
+                headers=self._get_auth_headers(language="fr"),
             )
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
