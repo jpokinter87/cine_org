@@ -675,6 +675,19 @@ uv run cineorg -q process
 
 ## Dépannage
 
+### Warning "Ignoring unsupported Python request"
+
+Si vous voyez ce warning au lancement :
+```
+warning: Ignoring unsupported Python request `system` in version file
+```
+
+Le fichier `.python-version` contient une valeur non supportée par `uv`. Remplacez `system` par la version Python réelle :
+
+```bash
+echo "3.13" > .python-version
+```
+
 ### "No module named..."
 
 ```bash
