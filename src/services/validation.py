@@ -198,6 +198,21 @@ class ValidationService:
         pending.validation_status = ValidationStatus.VALIDATED
         pending.selected_candidate_id = candidate.id
 
+        # S'assurer que le candidat est dans la liste (pour les auto-validations)
+        candidate_ids = [
+            c.id if hasattr(c, "id") else c.get("id", "")
+            for c in pending.candidates
+        ]
+        if candidate.id not in candidate_ids:
+            # Ajouter le candidat sous forme de dict pour la serialisation
+            pending.candidates.append({
+                "id": candidate.id,
+                "title": candidate.title,
+                "year": candidate.year,
+                "score": candidate.score,
+                "source": candidate.source,
+            })
+
         # Persister les changements
         self._pending_repo.save(pending)
 
