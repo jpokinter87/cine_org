@@ -193,6 +193,9 @@ class TVDBClient(IMediaAPIClient):
         """
         Recupere les details complets d'une serie.
 
+        Privilegie le titre en francais, avec fallback sur l'anglais
+        si la traduction francaise n'existe pas.
+
         Verifie le cache avant d'appeler l'API. Les details sont caches
         pendant 7 jours.
 
@@ -212,21 +215,20 @@ class TVDBClient(IMediaAPIClient):
         await self._ensure_token()
         client = await self._get_client()
 
-        try:
-            # API v3: endpoint /series/{id}
-            response = await request_with_retry(
-                client,
-                "GET",
-                f"/series/{media_id}",
-                headers=self._get_auth_headers(),
-            )
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                return None
-            raise
+        # Essayer d'abord en francais
+        series = await self._fetch_series_details(client, media_id, language="fr")
+        if series is None:
+            return None
 
-        data = response.json()
-        series = data.get("data", {})
+        # Si le titre francais est vide, essayer en anglais
+        title = series.get("seriesName", "")
+        if not title:
+            series_en = await self._fetch_series_details(client, media_id, language="en")
+            if series_en:
+                title = series_en.get("seriesName", "")
+                # Utiliser les autres donnees anglaises si meilleures
+                if not series.get("overview") and series_en.get("overview"):
+                    series = series_en
 
         # Extraire l'annee depuis firstAired (format: YYYY-MM-DD)
         year = None
@@ -244,7 +246,7 @@ class TVDBClient(IMediaAPIClient):
         # Construire MediaDetails
         details = MediaDetails(
             id=str(series["id"]),
-            title=series.get("seriesName", ""),
+            title=title or series.get("seriesName", ""),
             original_title=series.get("aliases", [None])[0] if series.get("aliases") else None,
             year=year,
             genres=genres,
@@ -256,6 +258,38 @@ class TVDBClient(IMediaAPIClient):
         # Cacher les details
         await self._cache.set_details(cache_key, details)
         return details
+
+    async def _fetch_series_details(
+        self,
+        client: httpx.AsyncClient,
+        media_id: str,
+        language: str,
+    ) -> Optional[dict]:
+        """
+        Recupere les donnees brutes d'une serie depuis l'API.
+
+        Args:
+            client: Client HTTP
+            media_id: ID TVDB de la serie
+            language: Code langue (fr, en)
+
+        Returns:
+            Dictionnaire des donnees serie ou None
+        """
+        try:
+            response = await request_with_retry(
+                client,
+                "GET",
+                f"/series/{media_id}",
+                headers=self._get_auth_headers(language=language),
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            raise
+
+        data = response.json()
+        return data.get("data", {})
 
     async def get_episode_details(
         self,
