@@ -832,6 +832,58 @@ async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
 
     console.print(f"[bold]{len(scan_results)}[/bold] fichier(s) trouve(s)")
 
+    # Detecter les fichiers sous le seuil de taille
+    undersized_results = list(scanner.scan_undersized_files())
+
+    # Filtrer selon filter_type
+    undersized_results = [
+        r for r in undersized_results
+        if not (filter_type == MediaFilter.MOVIES and r.detected_type != MediaType.MOVIE)
+        and not (filter_type == MediaFilter.SERIES and r.detected_type != MediaType.SERIES)
+    ]
+
+    if undersized_results:
+        # Grouper par titre (serie) ou par fichier (film)
+        from collections import defaultdict
+        undersized_groups: dict[str, list] = defaultdict(list)
+        config = container.config()
+
+        for result in undersized_results:
+            # Utiliser le titre parse comme cle de groupe
+            title = result.parsed_info.title or "Inconnu"
+            undersized_groups[title].append(result)
+
+        console.print(f"\n[yellow]⚠ {len(undersized_results)} fichier(s) sous le seuil de {config.min_file_size_mb} Mo detecte(s)[/yellow]")
+
+        # Pour chaque groupe, demander si on veut les traiter
+        for title, group in undersized_groups.items():
+            total_size_mb = sum(r.video_file.size_bytes for r in group) / (1024 * 1024)
+            file_count = len(group)
+
+            # Determiner le type (serie ou film)
+            is_series = group[0].detected_type == MediaType.SERIES
+
+            if is_series:
+                console.print(f"\n[bold]{title}[/bold] - {file_count} episode(s), {total_size_mb:.1f} Mo total")
+            else:
+                console.print(f"\n[bold]{title}[/bold] - {total_size_mb:.1f} Mo")
+
+            # Afficher quelques exemples
+            for r in group[:3]:
+                size_mb = r.video_file.size_bytes / (1024 * 1024)
+                console.print(f"  [dim]{r.video_file.filename} ({size_mb:.1f} Mo)[/dim]")
+            if len(group) > 3:
+                console.print(f"  [dim]... et {len(group) - 3} autre(s)[/dim]")
+
+            if Confirm.ask(f"Traiter {'cette serie' if is_series else 'ce fichier'} ?", default=False):
+                scan_results.extend(group)
+                console.print(f"  [green]✓[/green] {file_count} fichier(s) ajoute(s) au traitement")
+            else:
+                console.print(f"  [dim]Ignore(s)[/dim]")
+
+        if scan_results:
+            console.print(f"\n[bold]{len(scan_results)}[/bold] fichier(s) total a traiter")
+
     if not scan_results:
         console.print("[yellow]Aucun fichier a traiter.[/yellow]")
         return

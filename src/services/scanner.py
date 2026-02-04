@@ -227,3 +227,66 @@ class ScannerService:
 
         # Verifier si le type detecte correspond au type attendu
         return detected_type != type_hint
+
+    def scan_undersized_files(self) -> Iterator[ScanResult]:
+        """
+        Scanne les fichiers video sous le seuil de taille minimum.
+
+        Permet de detecter les fichiers qui seraient normalement ignores
+        (ex: episodes de series Arte en 720p) pour proposer a l'utilisateur
+        de les traiter quand meme.
+
+        Yields:
+            ScanResult pour chaque fichier video sous le seuil
+        """
+        downloads = self._settings.downloads_dir
+        subdirs_with_hints: list[tuple[list[str], MediaType]] = [
+            (["Films"], MediaType.MOVIE),
+            (["Séries", "Series"], MediaType.SERIES),
+        ]
+
+        for subdir_variants, type_hint in subdirs_with_hints:
+            for subdir_name in subdir_variants:
+                source_dir = downloads / subdir_name
+                if source_dir.exists():
+                    yield from self._scan_undersized_in_directory(
+                        source_dir, subdir_name, type_hint
+                    )
+                    break
+
+    def _scan_undersized_in_directory(
+        self,
+        directory: Path,
+        source_name: str,
+        type_hint: MediaType,
+    ) -> Iterator[ScanResult]:
+        """
+        Scanne les fichiers sous le seuil dans un repertoire.
+
+        Args:
+            directory: Chemin du repertoire a scanner
+            source_name: Nom du repertoire source ("Films" ou "Series")
+            type_hint: Type de media attendu dans ce repertoire
+
+        Yields:
+            ScanResult pour chaque fichier video sous le seuil
+        """
+        from src.adapters.file_system import IGNORED_PATTERNS, VIDEO_EXTENSIONS
+
+        min_size_bytes = self._settings.min_file_size_mb * 1024 * 1024
+
+        for path in directory.rglob("*"):
+            if path.is_dir():
+                continue
+            if path.is_symlink():
+                continue
+            if path.suffix.lower() not in VIDEO_EXTENSIONS:
+                continue
+            filename_lower = path.name.lower()
+            if any(pattern in filename_lower for pattern in IGNORED_PATTERNS):
+                continue
+
+            file_size = self._file_system.get_size(path)
+            # Ne retourner que les fichiers SOUS le seuil (mais > 0)
+            if 0 < file_size < min_size_bytes:
+                yield self._process_file(path, source_name, type_hint)
