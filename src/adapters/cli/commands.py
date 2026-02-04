@@ -681,7 +681,13 @@ async def _validate_batch_async() -> None:
 
             # Sauvegarder le film dans la base de donnees
             movie_repo = container.movie_repository()
-            movie_repo.save(movie)
+            saved_movie = movie_repo.save(movie)
+
+            # Afficher le feedback de sauvegarde avec les notes
+            year_str = f" ({movie.year})" if movie.year else ""
+            tmdb_str = f"TMDB: {movie.vote_average:.1f}/10" if movie.vote_average else "TMDB: -"
+            imdb_str = f"IMDb: {movie.imdb_rating:.1f}/10" if movie.imdb_rating else "IMDb: -"
+            console.print(f"  [green]✓[/green] [bold]{movie.title}[/bold]{year_str} sauvegardé - {tmdb_str}, {imdb_str}")
 
             new_filename = renamer.generate_movie_filename(
                 movie=movie,
