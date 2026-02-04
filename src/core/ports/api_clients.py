@@ -55,6 +55,8 @@ class MediaDetails:
         poster_url : URL complète vers l'image poster
         director : Nom du réalisateur (pour les films)
         cast : Tuple des noms des acteurs principaux (3-5 premiers)
+        vote_average : Note moyenne de l'API (0-10)
+        vote_count : Nombre de votes sur l'API
     """
 
     id: str
@@ -67,6 +69,8 @@ class MediaDetails:
     poster_url: Optional[str] = None
     director: Optional[str] = None
     cast: tuple[str, ...] = ()
+    vote_average: Optional[float] = None
+    vote_count: Optional[int] = None
 
 
 @dataclass

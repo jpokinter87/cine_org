@@ -82,7 +82,7 @@ TMDB_SEARCH_EMPTY_RESPONSE = {
 }
 
 # Movie details for Avatar (id=19995)
-# GET /movie/19995?language=fr-FR
+# GET /movie/19995?language=fr-FR&append_to_response=credits
 TMDB_MOVIE_DETAILS_RESPONSE = {
     "adult": False,
     "backdrop_path": "/s3TBrRGB1iav7gFOCNx3H31MoES.jpg",
@@ -131,6 +131,29 @@ TMDB_MOVIE_DETAILS_RESPONSE = {
     "video": False,
     "vote_average": 7.6,
     "vote_count": 27000,
+    "credits": {
+        "cast": [
+            {"id": 17647, "name": "Sam Worthington", "character": "Jake Sully", "order": 0},
+            {"id": 8691, "name": "Zoe Saldana", "character": "Neytiri", "order": 1},
+            {"id": 10205, "name": "Sigourney Weaver", "character": "Dr. Grace Augustine", "order": 2},
+            {"id": 32747, "name": "Stephen Lang", "character": "Colonel Miles Quaritch", "order": 3},
+        ],
+        "crew": [
+            {"id": 2710, "name": "James Cameron", "job": "Director", "department": "Directing"},
+            {"id": 2710, "name": "James Cameron", "job": "Writer", "department": "Writing"},
+        ],
+    },
+}
+
+# External IDs for Avatar (id=19995)
+# GET /movie/19995/external_ids
+TMDB_EXTERNAL_IDS_RESPONSE = {
+    "id": 19995,
+    "imdb_id": "tt0499549",
+    "wikidata_id": "Q24817",
+    "facebook_id": "officialavatar",
+    "instagram_id": "avatar",
+    "twitter_id": "officialavatar",
 }
 
 # Inception movie details for additional test cases

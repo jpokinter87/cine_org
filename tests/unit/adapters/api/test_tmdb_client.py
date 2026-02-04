@@ -19,6 +19,7 @@ from src.adapters.api.retry import RateLimitError
 from src.adapters.api.tmdb_client import TMDBClient
 from src.core.ports.api_clients import IMediaAPIClient, MediaDetails, SearchResult
 from tests.fixtures.tmdb_responses import (
+    TMDB_EXTERNAL_IDS_RESPONSE,
     TMDB_MOVIE_DETAILS_RESPONSE,
     TMDB_SEARCH_EMPTY_RESPONSE,
     TMDB_SEARCH_RESPONSE,
@@ -139,7 +140,6 @@ class TestTMDBSearch:
         call_args = mock_cache.set_search.call_args
         cache_key = call_args[0][0]
         assert "tmdb:search:Avatar" in cache_key
-        assert cache_key == "tmdb:search:Avatar:None"
 
     @pytest.mark.asyncio
     @respx.mock
@@ -234,6 +234,46 @@ class TestTMDBGetDetails:
 
     @pytest.mark.asyncio
     @respx.mock
+    async def test_get_details_extracts_vote_fields(
+        self, tmdb_client: TMDBClient, mock_cache: AsyncMock
+    ):
+        """get_details() doit extraire vote_average et vote_count."""
+        # Setup mock
+        respx.get("https://api.themoviedb.org/3/movie/19995").mock(
+            return_value=httpx.Response(200, json=TMDB_MOVIE_DETAILS_RESPONSE)
+        )
+
+        # Execute
+        details = await tmdb_client.get_details("19995")
+
+        # Verify vote fields
+        assert details is not None
+        assert details.vote_average == 7.6
+        assert details.vote_count == 27000
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_details_extracts_credits(
+        self, tmdb_client: TMDBClient, mock_cache: AsyncMock
+    ):
+        """get_details() doit extraire le realisateur et le casting."""
+        # Setup mock
+        respx.get("https://api.themoviedb.org/3/movie/19995").mock(
+            return_value=httpx.Response(200, json=TMDB_MOVIE_DETAILS_RESPONSE)
+        )
+
+        # Execute
+        details = await tmdb_client.get_details("19995")
+
+        # Verify credits
+        assert details is not None
+        assert details.director == "James Cameron"
+        assert "Sam Worthington" in details.cast
+        assert "Zoe Saldana" in details.cast
+        assert len(details.cast) == 4
+
+    @pytest.mark.asyncio
+    @respx.mock
     async def test_get_details_returns_none_on_404(
         self, tmdb_client: TMDBClient, mock_cache: AsyncMock
     ):
@@ -304,6 +344,46 @@ class TestTMDBGetDetails:
         assert call_order[1][0] == "http", (
             f"Expected http second, got {call_order[1]}"
         )
+
+
+class TestTMDBGetExternalIds:
+    """Tests for TMDBClient.get_external_ids() method."""
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_external_ids_returns_imdb_id(
+        self, tmdb_client: TMDBClient, mock_cache: AsyncMock
+    ):
+        """get_external_ids() doit retourner l'ID IMDb."""
+        # Setup mock
+        respx.get("https://api.themoviedb.org/3/movie/19995/external_ids").mock(
+            return_value=httpx.Response(200, json=TMDB_EXTERNAL_IDS_RESPONSE)
+        )
+
+        # Execute
+        result = await tmdb_client.get_external_ids("19995")
+
+        # Verify
+        assert result is not None
+        assert result["imdb_id"] == "tt0499549"
+        assert result["wikidata_id"] == "Q24817"
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_external_ids_returns_none_on_404(
+        self, tmdb_client: TMDBClient, mock_cache: AsyncMock
+    ):
+        """get_external_ids() doit retourner None si non trouve."""
+        # Setup mock
+        respx.get("https://api.themoviedb.org/3/movie/99999999/external_ids").mock(
+            return_value=httpx.Response(404, json={"status_message": "Not found"})
+        )
+
+        # Execute
+        result = await tmdb_client.get_external_ids("99999999")
+
+        # Verify
+        assert result is None
 
 
 class TestTMDBRetry:

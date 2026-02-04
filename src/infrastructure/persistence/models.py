@@ -53,6 +53,10 @@ class MovieModel(SQLModel, table=True):
     resolution: str | None = None  # ex: "1920x1080"
     languages_json: str | None = None  # JSON: ["fr", "en"]
     file_size_bytes: int | None = None
+    vote_average: float | None = None  # Note moyenne TMDB (0-10)
+    vote_count: int | None = None  # Nombre de votes sur TMDB
+    imdb_rating: float | None = None  # Note moyenne IMDb (0-10)
+    imdb_votes: int | None = None  # Nombre de votes sur IMDb
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 
@@ -99,6 +103,10 @@ class SeriesModel(SQLModel, table=True):
     genres_json: str | None = None
     overview: str | None = None
     poster_path: str | None = None
+    vote_average: float | None = None  # Note moyenne (0-10)
+    vote_count: int | None = None  # Nombre de votes
+    imdb_rating: float | None = None  # Note moyenne IMDb (0-10)
+    imdb_votes: int | None = None  # Nombre de votes sur IMDb
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 
@@ -225,6 +233,22 @@ class PendingValidationModel(SQLModel, table=True):
     def candidates(self, value: list[dict[str, Any]]) -> None:
         """Serialise les candidats en JSON."""
         self.candidates_json = json.dumps(value)
+
+
+class IMDbRatingModel(SQLModel, table=True):
+    """
+    Modele representant une note IMDb dans le cache local.
+
+    Stocke les notes IMDb importees depuis les datasets publics.
+    Permet de faire des lookups locaux sans appels API.
+    """
+
+    __tablename__ = "imdb_ratings"
+
+    tconst: str = Field(primary_key=True)  # ID IMDb ex: "tt0499549"
+    average_rating: float
+    num_votes: int
+    last_updated: date | None = Field(default_factory=date.today)
 
 
 class TrashModel(SQLModel, table=True):

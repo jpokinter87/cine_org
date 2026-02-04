@@ -27,6 +27,11 @@ class Movie:
         duration_seconds : Durée en secondes
         overview : Résumé de l'intrigue
         poster_path : Chemin vers l'image poster sur le CDN TMDB
+        vote_average : Note moyenne TMDB (0-10)
+        vote_count : Nombre de votes sur TMDB
+        imdb_id : ID IMDb (ex: "tt0499549")
+        imdb_rating : Note moyenne IMDb (0-10)
+        imdb_votes : Nombre de votes sur IMDb
     """
 
     id: Optional[str] = None
@@ -38,6 +43,11 @@ class Movie:
     duration_seconds: Optional[int] = None
     overview: Optional[str] = None
     poster_path: Optional[str] = None
+    vote_average: Optional[float] = None
+    vote_count: Optional[int] = None
+    imdb_id: Optional[str] = None
+    imdb_rating: Optional[float] = None
+    imdb_votes: Optional[int] = None
 
 
 @dataclass
@@ -56,6 +66,11 @@ class Series:
         genres : Tuple des noms de genre
         overview : Description de la série
         poster_path : Chemin vers l'image poster
+        vote_average : Note moyenne (0-10)
+        vote_count : Nombre de votes
+        imdb_id : ID IMDb (ex: "tt0903747")
+        imdb_rating : Note moyenne IMDb (0-10)
+        imdb_votes : Nombre de votes sur IMDb
     """
 
     id: Optional[str] = None
@@ -66,6 +81,11 @@ class Series:
     genres: tuple[str, ...] = ()
     overview: Optional[str] = None
     poster_path: Optional[str] = None
+    vote_average: Optional[float] = None
+    vote_count: Optional[int] = None
+    imdb_id: Optional[str] = None
+    imdb_rating: Optional[float] = None
+    imdb_votes: Optional[int] = None
 
 
 @dataclass

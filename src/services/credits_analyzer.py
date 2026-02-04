@@ -133,25 +133,22 @@ class CreditsAnalyzer:
                 logger.warning("Aucune frame extraite du generique")
                 return CreditsAnalysisResult()
 
-            # OCR sur les frames (priorite: EasyOCR > Tesseract > Claude)
+            # OCR sur les frames (priorite: Tesseract > EasyOCR > Claude)
+            # Tesseract est rapide, EasyOCR plus precis mais lent
             if self._prefer_claude and self._api_key:
                 result = await self._ocr_with_claude(frames)
-            elif self._easyocr_available:
-                result = await self._ocr_with_easyocr(frames)
-                # Si confiance faible, essayer Tesseract ou Claude
-                if result.confidence < 50:
-                    if self._tesseract_available:
-                        logger.info("Confiance EasyOCR faible, essai avec Tesseract")
-                        result = await self._ocr_with_tesseract(frames)
-                    elif self._api_key:
-                        logger.info("Confiance EasyOCR faible, essai avec Claude Vision")
-                        result = await self._ocr_with_claude(frames)
             elif self._tesseract_available:
                 result = await self._ocr_with_tesseract(frames)
-                # Si confiance faible et Claude dispo, essayer Claude
-                if result.confidence < 50 and self._api_key:
-                    logger.info("Confiance Tesseract faible, essai avec Claude Vision")
-                    result = await self._ocr_with_claude(frames)
+                # Si confiance faible, essayer EasyOCR ou Claude
+                if result.confidence < 50:
+                    if self._easyocr_available:
+                        logger.info("Confiance Tesseract faible, essai avec EasyOCR")
+                        result = await self._ocr_with_easyocr(frames)
+                    elif self._api_key:
+                        logger.info("Confiance Tesseract faible, essai avec Claude Vision")
+                        result = await self._ocr_with_claude(frames)
+            elif self._easyocr_available:
+                result = await self._ocr_with_easyocr(frames)
             elif self._api_key:
                 result = await self._ocr_with_claude(frames)
             else:
@@ -212,8 +209,8 @@ class CreditsAnalyzer:
         self,
         video_path: Path,
         output_dir: Path,
-        frame_interval: int = 4,  # 1 frame toutes les 4 secondes
-        credits_duration: int = 360,  # 6 minutes de generique
+        frame_interval: int = 8,  # 1 frame toutes les 8 secondes (duree defilement)
+        credits_duration: int = 300,  # 5 minutes de generique
     ) -> list[Path]:
         """
         Extrait les frames du generique de fin.

@@ -68,6 +68,55 @@ class TestTitleSimilarity:
         # token_sort_ratio should handle word reordering
         assert score == 100.0
 
+    def test_title_similarity_accent_insensitive(self):
+        """Title matching should be accent-insensitive.
+
+        Filename 'Les Evades' should match TMDB 'Les Évadés' perfectly.
+        """
+        score = calculate_movie_score(
+            query_title="Les Evades",
+            query_year=1955,
+            query_duration=7061,  # 1h57m41s
+            candidate_title="Les Évadés",
+            candidate_year=1955,
+            candidate_duration=7020,  # 1h57m00s
+        )
+        # With accent normalization, title should match 100%
+        # Duration diff ~0.6% (within 10% tolerance) = 100%
+        # Year exact = 100%
+        # Total should be 100%
+        assert score == 100.0
+
+    def test_title_similarity_various_accents(self):
+        """Various accented characters should be normalized."""
+        # Test é, è, à, ê, etc.
+        assert calculate_movie_score(
+            query_title="Amelie",
+            query_year=2001,
+            query_duration=7200,
+            candidate_title="Amélie",
+            candidate_year=2001,
+            candidate_duration=7200,
+        ) == 100.0
+
+        assert calculate_movie_score(
+            query_title="Leon",
+            query_year=1994,
+            query_duration=6600,
+            candidate_title="Léon",
+            candidate_year=1994,
+            candidate_duration=6600,
+        ) == 100.0
+
+        assert calculate_movie_score(
+            query_title="La Haine",
+            query_year=1995,
+            query_duration=5880,
+            candidate_title="La Haïne",  # Hypothetical with ï
+            candidate_year=1995,
+            candidate_duration=5880,
+        ) == 100.0
+
 
 class TestYearScoring:
     """Tests for year matching with tolerance."""

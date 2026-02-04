@@ -102,14 +102,77 @@ def _run_migrations() -> None:
 
     engine = get_engine()
 
-    # Migration 1: Ajouter symlink_path a video_files si manquante
     with engine.connect() as conn:
-        # Verifier si la colonne existe
+        # Migration 1: Ajouter symlink_path a video_files si manquante
         result = conn.execute(text("PRAGMA table_info(video_files)"))
         columns = [row[1] for row in result.fetchall()]
 
         if "symlink_path" not in columns:
             conn.execute(
                 text("ALTER TABLE video_files ADD COLUMN symlink_path VARCHAR")
+            )
+            conn.commit()
+
+        # Migration 2: Ajouter vote_average et vote_count a movies si manquantes
+        result = conn.execute(text("PRAGMA table_info(movies)"))
+        movie_columns = [row[1] for row in result.fetchall()]
+
+        if "vote_average" not in movie_columns:
+            conn.execute(
+                text("ALTER TABLE movies ADD COLUMN vote_average REAL")
+            )
+            conn.commit()
+
+        if "vote_count" not in movie_columns:
+            conn.execute(
+                text("ALTER TABLE movies ADD COLUMN vote_count INTEGER")
+            )
+            conn.commit()
+
+        # Migration 3: Ajouter vote_average et vote_count a series si manquantes
+        result = conn.execute(text("PRAGMA table_info(series)"))
+        series_columns = [row[1] for row in result.fetchall()]
+
+        if "vote_average" not in series_columns:
+            conn.execute(
+                text("ALTER TABLE series ADD COLUMN vote_average REAL")
+            )
+            conn.commit()
+
+        if "vote_count" not in series_columns:
+            conn.execute(
+                text("ALTER TABLE series ADD COLUMN vote_count INTEGER")
+            )
+            conn.commit()
+
+        # Migration 4: Ajouter imdb_rating et imdb_votes a movies si manquantes
+        result = conn.execute(text("PRAGMA table_info(movies)"))
+        movie_columns = [row[1] for row in result.fetchall()]
+
+        if "imdb_rating" not in movie_columns:
+            conn.execute(
+                text("ALTER TABLE movies ADD COLUMN imdb_rating REAL")
+            )
+            conn.commit()
+
+        if "imdb_votes" not in movie_columns:
+            conn.execute(
+                text("ALTER TABLE movies ADD COLUMN imdb_votes INTEGER")
+            )
+            conn.commit()
+
+        # Migration 5: Ajouter imdb_rating et imdb_votes a series si manquantes
+        result = conn.execute(text("PRAGMA table_info(series)"))
+        series_columns = [row[1] for row in result.fetchall()]
+
+        if "imdb_rating" not in series_columns:
+            conn.execute(
+                text("ALTER TABLE series ADD COLUMN imdb_rating REAL")
+            )
+            conn.commit()
+
+        if "imdb_votes" not in series_columns:
+            conn.execute(
+                text("ALTER TABLE series ADD COLUMN imdb_votes INTEGER")
             )
             conn.commit()

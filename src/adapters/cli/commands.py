@@ -626,8 +626,13 @@ async def _validate_batch_async() -> None:
                 video_dir=video_dir,
             )
         else:
-            # Pour les films: recuperer les genres depuis TMDB
+            # Pour les films: recuperer les genres et notes depuis TMDB
             movie_genres: tuple[str, ...] = ()
+            movie_details = None
+            imdb_id = None
+            imdb_rating = None
+            imdb_votes = None
+
             if isinstance(candidate, dict):
                 movie_id = candidate.get("id", "")
             else:
@@ -638,14 +643,45 @@ async def _validate_batch_async() -> None:
                     movie_details = await tmdb_client.get_details(movie_id)
                     if movie_details and movie_details.genres:
                         movie_genres = movie_details.genres
-                except Exception:
-                    pass  # Garder genres vide en cas d'erreur
 
+                    # Recuperer l'imdb_id via external_ids
+                    external_ids = await tmdb_client.get_external_ids(movie_id)
+                    if external_ids:
+                        imdb_id = external_ids.get("imdb_id")
+
+                    # Recuperer la note IMDb depuis le cache local
+                    if imdb_id:
+                        from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
+                        cache_dir = Path(".cache/imdb")
+                        imdb_session = container.session()
+                        imdb_importer = IMDbDatasetImporter(cache_dir=cache_dir, session=imdb_session)
+                        rating_data = imdb_importer.get_rating(imdb_id)
+                        if rating_data:
+                            imdb_rating, imdb_votes = rating_data
+
+                except Exception:
+                    pass  # Garder les valeurs par defaut en cas d'erreur
+
+            # Creer l'entite Movie complete avec toutes les metadonnees
             movie = Movie(
+                tmdb_id=int(movie_id) if movie_id else None,
+                imdb_id=imdb_id,
                 title=candidate_title,
+                original_title=movie_details.original_title if movie_details else None,
                 year=candidate_year,
                 genres=movie_genres,
+                duration_seconds=movie_details.duration_seconds if movie_details else None,
+                overview=movie_details.overview if movie_details else None,
+                poster_path=movie_details.poster_url if movie_details else None,
+                vote_average=movie_details.vote_average if movie_details else None,
+                vote_count=movie_details.vote_count if movie_details else None,
+                imdb_rating=imdb_rating,
+                imdb_votes=imdb_votes,
             )
+
+            # Sauvegarder le film dans la base de donnees
+            movie_repo = container.movie_repository()
+            movie_repo.save(movie)
 
             new_filename = renamer.generate_movie_filename(
                 movie=movie,

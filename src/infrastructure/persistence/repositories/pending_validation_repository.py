@@ -118,6 +118,22 @@ class SQLModelPendingValidationRepository:
         models = self._session.exec(statement).all()
         return [self._to_entity(model) for model in models]
 
+    def list_validated(self, limit: int = 0) -> list[PendingValidation]:
+        """Liste les validations validees avec un selected_candidate_id.
+
+        Args:
+            limit: Nombre max de resultats (0 = illimite)
+        """
+        statement = (
+            select(PendingValidationModel)
+            .where(PendingValidationModel.validation_status == "validated")
+            .where(PendingValidationModel.selected_candidate_id.isnot(None))
+        )
+        if limit > 0:
+            statement = statement.limit(limit)
+        models = self._session.exec(statement).all()
+        return [self._to_entity(model) for model in models]
+
     def save(self, validation: PendingValidation) -> PendingValidation:
         """Sauvegarde une validation (insertion ou mise a jour)."""
         # Obtenir l'ID du VideoFile

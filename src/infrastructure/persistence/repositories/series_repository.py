@@ -52,6 +52,11 @@ class SQLModelSeriesRepository(ISeriesRepository):
             genres=tuple(genres_list),
             overview=model.overview,
             poster_path=model.poster_path,
+            vote_average=model.vote_average,
+            vote_count=model.vote_count,
+            imdb_id=model.imdb_id,
+            imdb_rating=model.imdb_rating,
+            imdb_votes=model.imdb_votes,
         )
 
     def _to_model(self, entity: Series) -> SeriesModel:
@@ -66,12 +71,17 @@ class SQLModelSeriesRepository(ISeriesRepository):
         """
         model = SeriesModel(
             tvdb_id=entity.tvdb_id,
+            imdb_id=entity.imdb_id,
             title=entity.title,
             original_title=entity.original_title,
             year=entity.year,
             genres_json=json.dumps(list(entity.genres)) if entity.genres else None,
             overview=entity.overview,
             poster_path=entity.poster_path,
+            vote_average=entity.vote_average,
+            vote_count=entity.vote_count,
+            imdb_rating=entity.imdb_rating,
+            imdb_votes=entity.imdb_votes,
         )
         if entity.id:
             model.id = int(entity.id)
@@ -121,6 +131,11 @@ class SQLModelSeriesRepository(ISeriesRepository):
             )
             existing.overview = series.overview
             existing.poster_path = series.poster_path
+            existing.vote_average = series.vote_average
+            existing.vote_count = series.vote_count
+            existing.imdb_id = series.imdb_id
+            existing.imdb_rating = series.imdb_rating
+            existing.imdb_votes = series.imdb_votes
             self._session.add(existing)
             self._session.commit()
             self._session.refresh(existing)

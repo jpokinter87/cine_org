@@ -11,10 +11,25 @@ Formules de scoring:
 Le scoring est deterministe pour des resultats reproductibles.
 """
 
+import unicodedata
 from dataclasses import replace
+
 from rapidfuzz import fuzz, utils
 
 from src.core.ports.api_clients import SearchResult
+
+
+def _normalize_accents(text: str) -> str:
+    """
+    Supprime les accents d'une chaine pour une comparaison insensible aux accents.
+
+    Utilise la decomposition NFD puis filtre les caracteres diacritiques (Mn).
+    Ex: "Les Évadés" -> "Les Evades"
+    """
+    # NFD decompose les caracteres accentues (e + accent combining)
+    normalized = unicodedata.normalize("NFD", text)
+    # Filtrer les "Nonspacing Mark" (accents, tremas, etc.)
+    return "".join(char for char in normalized if unicodedata.category(char) != "Mn")
 
 
 def _calculate_title_score(query_title: str, candidate_title: str) -> float:
@@ -23,9 +38,15 @@ def _calculate_title_score(query_title: str, candidate_title: str) -> float:
 
     Uses token_sort_ratio for word-order independence.
     Normalized via default_process (lowercase, strip whitespace).
+    Les accents sont normalises pour une comparaison insensible aux diacritiques
+    (ex: "Les Evades" vs "Les Évadés" = 100%).
     """
+    # Normaliser les accents avant comparaison
+    query_normalized = _normalize_accents(query_title)
+    candidate_normalized = _normalize_accents(candidate_title)
+
     return fuzz.token_sort_ratio(
-        query_title, candidate_title, processor=utils.default_process
+        query_normalized, candidate_normalized, processor=utils.default_process
     )
 
 

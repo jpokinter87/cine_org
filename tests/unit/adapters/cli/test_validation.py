@@ -539,7 +539,7 @@ class TestValidationLoop:
 
     @pytest.mark.asyncio
     async def test_validation_loop_select_candidate(self, pending_movie):
-        """Selection d'un candidat retourne son ID."""
+        """Selection d'un candidat retourne un SearchResult."""
         mock_service = MagicMock()
 
         # Mock Prompt.ask pour retourner "1" puis confirmer
@@ -551,8 +551,9 @@ class TestValidationLoop:
 
             result = await validation_loop(pending_movie, mock_service)
 
-        # L'ID du premier candidat
-        assert result == "1"
+        # Un SearchResult avec l'ID du premier candidat
+        assert isinstance(result, SearchResult)
+        assert result.id == "1"
 
     @pytest.mark.asyncio
     async def test_validation_loop_skip(self, pending_movie):
@@ -656,7 +657,7 @@ class TestValidationLoop:
 
     @pytest.mark.asyncio
     async def test_validation_loop_external_id_search(self, pending_movie):
-        """Commande 'i' permet la recherche par ID externe."""
+        """Commande 'i' permet la recherche par ID externe et retourne un SearchResult."""
         mock_service = MagicMock()
         mock_details = MagicMock()
         mock_details.id = "12345"
@@ -674,12 +675,17 @@ class TestValidationLoop:
 
             result = await validation_loop(pending_movie, mock_service)
 
-        assert result == "12345"
+        # Un SearchResult avec l'ID et les infos du candidat trouve
+        assert isinstance(result, SearchResult)
+        assert result.id == "12345"
+        assert result.title == "Avatar"
+        assert result.year == 2009
+        assert result.source == "tmdb"
         mock_service.search_by_external_id.assert_called_once_with("tmdb", "12345")
 
     @pytest.mark.asyncio
     async def test_validation_loop_imdb_id_search(self, pending_movie):
-        """ID IMDB detecte automatiquement sans demander la source."""
+        """ID IMDB detecte automatiquement sans demander la source et retourne un SearchResult."""
         mock_service = MagicMock()
         mock_details = MagicMock()
         mock_details.id = "tt1234567"
@@ -697,5 +703,9 @@ class TestValidationLoop:
 
             result = await validation_loop(pending_movie, mock_service)
 
-        assert result == "tt1234567"
+        # Un SearchResult avec l'ID IMDB et les infos du candidat
+        assert isinstance(result, SearchResult)
+        assert result.id == "tt1234567"
+        assert result.title == "Avatar"
+        assert result.source == "imdb"
         mock_service.search_by_external_id.assert_called_once_with("imdb", "tt1234567")

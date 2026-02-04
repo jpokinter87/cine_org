@@ -119,8 +119,8 @@ class TMDBClient(IMediaAPIClient):
         Returns:
             Liste de SearchResult (vide si aucun resultat)
         """
-        # Build cache key
-        cache_key = f"tmdb:search:{query}:{year}"
+        # Build cache key (sans l'annee car on ne filtre plus par annee)
+        cache_key = f"tmdb:search:{query}"
 
         # CACHE-FIRST: Check cache before API call
         cached = await self._cache.get(cache_key)
@@ -134,8 +134,9 @@ class TMDBClient(IMediaAPIClient):
             "language": "fr-FR",
             "include_adult": "false",
         }
-        if year is not None:
-            params["year"] = str(year)
+        # Note: On ne filtre PAS par annee dans la requete API car l'annee
+        # dans les noms de fichiers est souvent decalee de ±1 an (sortie FR
+        # vs sortie originale). L'annee est utilisee pour le scoring ensuite.
 
         response = await request_with_retry(
             client, "GET", "/search/movie", params=params
@@ -238,6 +239,10 @@ class TMDBClient(IMediaAPIClient):
         cast_list = credits_data.get("cast", [])[:4]
         cast = tuple(actor.get("name", "") for actor in cast_list if actor.get("name"))
 
+        # Extract vote data
+        vote_average = data.get("vote_average")
+        vote_count = data.get("vote_count")
+
         details = MediaDetails(
             id=str(data["id"]),
             title=data.get("title", data.get("original_title", "")),
@@ -249,12 +254,46 @@ class TMDBClient(IMediaAPIClient):
             poster_url=poster_url,
             director=director,
             cast=cast,
+            vote_average=vote_average,
+            vote_count=vote_count,
         )
 
         # Cache results
         await self._cache.set_details(cache_key, details)
 
         return details
+
+    async def get_external_ids(self, media_id: str) -> Optional[dict[str, str | None]]:
+        """
+        Recupere les IDs externes (IMDb, Wikidata, etc.) pour un film.
+
+        Args:
+            media_id: ID TMDB du film
+
+        Returns:
+            Dictionnaire avec les IDs externes, ou None si non trouve
+        """
+        client = self._get_client()
+        try:
+            response = await request_with_retry(
+                client,
+                "GET",
+                f"/movie/{media_id}/external_ids",
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            raise
+
+        data = response.json()
+
+        return {
+            "imdb_id": data.get("imdb_id"),
+            "wikidata_id": data.get("wikidata_id"),
+            "facebook_id": data.get("facebook_id"),
+            "instagram_id": data.get("instagram_id"),
+            "twitter_id": data.get("twitter_id"),
+        }
 
     async def close(self) -> None:
         """

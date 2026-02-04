@@ -14,6 +14,7 @@ Responsabilites:
 import re
 from typing import TYPE_CHECKING
 
+from guessit import guessit
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import (
@@ -29,6 +30,7 @@ from rich.tree import Tree
 
 from src.core.entities.video import PendingValidation
 from src.core.ports.api_clients import MediaDetails, SearchResult
+from src.services.matcher import MatcherService
 
 if TYPE_CHECKING:
     from src.services.transferer import (
@@ -484,7 +486,7 @@ async def _fetch_details_for_page(
 
 async def validation_loop(
     pending: PendingValidation, service: "ValidationService"
-) -> str | None:
+) -> SearchResult | str | None:
     """
     Boucle interactive de validation pour un fichier.
 
@@ -493,7 +495,7 @@ async def validation_loop(
         service: Le ValidationService pour les recherches
 
     Returns:
-        - ID du candidat selectionne si validation
+        - SearchResult du candidat selectionne si validation
         - None si skip
         - "trash" si mise en corbeille
         - "quit" si abandon
@@ -533,6 +535,7 @@ async def validation_loop(
         # Demander le choix avec les options principales visibles
         console.print(
             "[dim]Options: [cyan]1-5[/cyan]=selectionner  "
+            "[cyan]r[/cyan]=recherche  [cyan]i[/cyan]=ID  "
             "[cyan]s[/cyan]=skip  [cyan]v[/cyan]=voir  [cyan]y[/cyan]=youtube  "
             "[cyan]a[/cyan]=analyser  [cyan]?[/cyan]=aide[/dim]"
         )
@@ -552,7 +555,7 @@ async def validation_loop(
                     )
 
                     if Confirm.ask("Valider ?", default=True):
-                        return candidate.id
+                        return candidate
             else:
                 console.print("[red]Numero invalide[/red]")
 
@@ -576,7 +579,26 @@ async def validation_loop(
 
                 results = await service.search_manual(query, is_series=is_series)
                 if results:
-                    paginator = CandidatePaginator(results)
+                    # Recalculer les scores bases sur le fichier original
+                    matcher = MatcherService()
+                    video = pending.video_file
+                    # Extraire titre et annee du nom de fichier avec guessit
+                    parsed = guessit(video.filename or "")
+                    query_title = parsed.get("title", video.filename or "")
+                    query_year = parsed.get("year")
+                    query_duration = (
+                        video.media_info.duration_seconds if video.media_info else None
+                    )
+
+                    scored_results = matcher.score_results(
+                        results,
+                        query_title=query_title,
+                        query_year=query_year,
+                        query_duration=query_duration,
+                        is_series=is_series,
+                    )
+
+                    paginator = CandidatePaginator(scored_results)
                     # Reinitialiser le cache des details pour les nouveaux candidats
                     details_cache.clear()
                     console.print(f"[green]{len(results)} resultat(s) trouve(s)[/green]")
@@ -608,7 +630,14 @@ async def validation_loop(
                         console.print(f"[dim]Genres: {', '.join(details.genres)}[/dim]")
 
                     if Confirm.ask("Valider ?", default=True):
-                        return details.id
+                        # Creer un SearchResult pour le candidat selectionne par ID
+                        return SearchResult(
+                            id=id_value,
+                            title=details.title,
+                            year=details.year,
+                            score=100.0,  # Score maximal car selection manuelle directe
+                            source=id_type,  # "tmdb" ou "tvdb"
+                        )
                 else:
                     console.print("[yellow]Non trouve[/yellow]")
             else:
@@ -695,20 +724,25 @@ async def validation_loop(
                         preview = analysis.raw_text[:500].replace("\n", " ")
                         console.print(f"[dim]Texte: {preview}...[/dim]")
 
-                        # Recuperer les details des candidats pour comparaison
+                        # Recuperer les details de TOUS les candidats pour comparaison
+                        # (pas seulement la page courante)
                         candidates_details = []
-                        for i, cand in enumerate(paginator.current_items):
-                            # Recuperer les details depuis le cache ou l'API
-                            page_key = paginator.current_page
-                            if page_key in details_cache and cand.id in details_cache[page_key]:
-                                details = details_cache[page_key][cand.id]
-                                candidates_details.append({
-                                    "id": cand.id,
-                                    "title": cand.title,
-                                    "year": cand.year,
-                                    "director": details.director if details else None,
-                                    "actors": details.cast[:5] if details and details.cast else [],
-                                })
+                        console.print("[dim]Chargement des details de tous les candidats...[/dim]")
+                        for cand in paginator.candidates[:15]:  # Max 15 pour limiter les appels API
+                            try:
+                                details = await service._get_details_from_source(
+                                    cand.source, cand.id
+                                )
+                                if details:
+                                    candidates_details.append({
+                                        "id": cand.id,
+                                        "title": cand.title,
+                                        "year": cand.year,
+                                        "director": details.director if details else None,
+                                        "actors": details.cast[:5] if details and details.cast else [],
+                                    })
+                            except Exception:
+                                pass
 
                         if candidates_details:
                             matches = analyzer.match_with_candidates(analysis, candidates_details)
@@ -740,7 +774,18 @@ async def validation_loop(
                                         f"\nValider [bold]{best.candidate_title}[/bold] ?",
                                         default=True
                                     ):
-                                        return best.candidate_id
+                                        # Trouver le SearchResult correspondant
+                                        for cand in paginator.candidates:
+                                            if cand.id == best.candidate_id:
+                                                return cand
+                                        # Fallback: creer un SearchResult
+                                        return SearchResult(
+                                            id=best.candidate_id,
+                                            title=best.candidate_title,
+                                            year=best.candidate_year,
+                                            score=best.match_score,
+                                            source="tmdb",
+                                        )
                             else:
                                 console.print("[yellow]Aucune correspondance trouvee avec les candidats[/yellow]")
                         else:
@@ -785,9 +830,68 @@ def _parse_candidates_to_search_results(candidates: list) -> list[SearchResult]:
                     year=c.get("year"),
                     score=c.get("score", 0.0),
                     source=c.get("source", ""),
+                    original_title=c.get("original_title"),
                 )
             )
     return parsed
+
+
+def _rescore_candidates(
+    candidates: list[SearchResult], pending: PendingValidation
+) -> list[SearchResult]:
+    """
+    Recalcule les scores des candidats avec le MatcherService actuel.
+
+    Cela permet de beneficier des ameliorations du scoring (ex: normalisation
+    des accents) sans avoir a re-enrichir les fichiers.
+
+    Args:
+        candidates: Liste de SearchResult avec scores potentiellement obsoletes
+        pending: PendingValidation contenant les metadonnees du fichier
+
+    Returns:
+        Liste de SearchResult avec scores recalcules, triee par score decroissant
+    """
+    if not candidates or not pending.video_file:
+        return candidates
+
+    # Extraire les infos de recherche du fichier
+    query_title = ""
+    query_year = None
+    query_duration = None
+
+    # Extraire le titre et l'annee depuis le nom de fichier via guessit
+    filename = pending.video_file.filename
+    if filename:
+        try:
+            parsed = guessit(filename)
+            query_title = parsed.get("title", "")
+            query_year = parsed.get("year")
+        except Exception:
+            # Fallback: utiliser le nom sans extension
+            query_title = filename.rsplit(".", 1)[0] if "." in filename else filename
+
+    # Extraire la duree depuis media_info
+    if pending.video_file.media_info:
+        query_duration = pending.video_file.media_info.duration_seconds
+
+    if not query_title:
+        return candidates
+
+    # Detecter si c'est une serie (pattern SxxExx)
+    is_series = bool(re.search(r"[Ss]\d{1,2}[Ee]\d{1,2}", filename or ""))
+
+    # Recalculer les scores
+    matcher = MatcherService()
+    rescored = matcher.score_results(
+        results=candidates,
+        query_title=query_title,
+        query_year=query_year,
+        query_duration=query_duration,
+        is_series=is_series,
+    )
+
+    return rescored
 
 
 class ConflictResolution(str):
