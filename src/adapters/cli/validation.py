@@ -539,7 +539,9 @@ async def validation_loop(
             "[cyan]s[/cyan]=skip  [cyan]v[/cyan]=voir  [cyan]y[/cyan]=youtube  "
             "[cyan]a[/cyan]=analyser  [cyan]?[/cyan]=aide[/dim]"
         )
-        choice = Prompt.ask("[bold]Choix[/bold]", default="1")
+        # Default "r" si aucun candidat, sinon "1"
+        default_choice = "1" if paginator.candidates else "r"
+        choice = Prompt.ask("[bold]Choix[/bold]", default=default_choice)
         choice = choice.strip().lower()
 
         # Selection par numero
