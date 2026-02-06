@@ -805,10 +805,12 @@ class CleanupService:
             title = item.name
             stripped = _strip_article(title).strip()
             stripped = _normalize_sort_key(stripped)
-            if len(stripped) >= 2:
-                sort_key = stripped.upper()[:2]
+            # Filtrer la ponctuation pour l'extraction de la cle (ex: "C.B. Strike" -> "CB Strike")
+            letters_only = "".join(c for c in stripped if c.isalpha())
+            if len(letters_only) >= 2:
+                sort_key = letters_only.upper()[:2]
             else:
-                sort_key = stripped.upper().ljust(2, "A")
+                sort_key = letters_only.upper().ljust(2, "A")
             keyed.append((sort_key, item))
 
         # 3. Parser la plage du parent

@@ -2050,6 +2050,54 @@ class TestSubdivisionAlgorithmBugs:
         out_names = [item.name for _, item in plan.out_of_range_items]
         assert "De parfaites demoiselles (2020).mkv" not in out_names
 
+    def test_cb_strike_dots_stripped_in_range_c(self, cleanup_service, tmp_path):
+        """C.B. Strike : les points sont ignores, cle 'CB' dans plage C (CA-CZ)."""
+        parent = tmp_path / "Séries" / "Séries TV" / "C"
+        parent.mkdir(parents=True)
+
+        # Items dans la plage C
+        for i in range(52):
+            suffix = chr(ord("a") + (i % 26))
+            name = f"C{suffix}_Serie_{i:03d} (2020)"
+            (parent / name).mkdir()
+
+        # C.B. Strike -> sans points -> "CB Strike" -> cle "CB" -> in range
+        (parent / "C.B. Strike (2017)").mkdir()
+
+        plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
+
+        # C.B. Strike doit etre in-range (pas dans out_of_range)
+        out_names = [item.name for _, item in plan.out_of_range_items]
+        assert "C.B. Strike (2017)" not in out_names
+        # Et present dans items_to_move
+        moved_names = [src.name for src, _ in plan.items_to_move]
+        assert "C.B. Strike (2017)" in moved_names
+
+    def test_au_service_in_range_s(self, cleanup_service, tmp_path):
+        """'Au service de la France' : article 'au' strip -> cle 'SE' dans S."""
+        parent = tmp_path / "Séries" / "Séries TV" / "S"
+        parent.mkdir(parents=True)
+
+        # Items dans la plage S
+        for i in range(52):
+            suffix = chr(ord("a") + (i % 26))
+            name = f"S{suffix}_Serie_{i:03d} (2020)"
+            (parent / name).mkdir()
+
+        # "Au service de la France" -> strip "au" -> "service de la France"
+        # -> strip premier mot seulement -> cle "SE" -> in range S (SA-SZ)
+        (parent / "Au service de la France").mkdir()
+        (parent / "Au service du passé (2022)").mkdir()
+
+        plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
+
+        out_names = [item.name for _, item in plan.out_of_range_items]
+        assert "Au service de la France" not in out_names
+        assert "Au service du passé (2022)" not in out_names
+        moved_names = [src.name for src, _ in plan.items_to_move]
+        assert "Au service de la France" in moved_names
+        assert "Au service du passé (2022)" in moved_names
+
     def test_bug7_always_two_bounds(self, cleanup_service, tmp_path):
         """Bug 7 : toujours format 'Start-End' (jamais borne unique)."""
         parent = tmp_path / "Films" / "Action"

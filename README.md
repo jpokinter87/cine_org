@@ -234,7 +234,7 @@ Les articles sont **retirés du début des titres** pour le tri :
 
 | Langue | Articles ignorés |
 |--------|------------------|
-| Français | le, la, les, l', un, une, des, de, du |
+| Français | le, la, les, l', un, une, des, de, du, au, aux |
 | Anglais | the, a, an |
 | Allemand | der, die, das, ein, eine |
 | Espagnol | el, los, las |
@@ -245,6 +245,7 @@ Exemples :
 - "Les Misérables" → classé sous **M**
 - "De parfaites demoiselles" → classé sous **P** (pas D)
 - "Du plomb dans la tête" → classé sous **P** (pas D)
+- "Au service de la France" → classé sous **S** (pas A)
 
 #### Création des subdivisions
 

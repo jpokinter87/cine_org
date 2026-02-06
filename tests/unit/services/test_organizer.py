@@ -179,6 +179,18 @@ class TestGetSortLetter:
         """'de' au milieu du titre n'est pas strip : 'Valse de printemps' -> V."""
         assert get_sort_letter("Valse de printemps") == "V"
 
+    def test_sort_letter_ignores_au(self) -> None:
+        """L'article 'au' est ignoré : 'Au service de la France' -> S."""
+        assert get_sort_letter("Au service de la France") == "S"
+
+    def test_sort_letter_ignores_aux(self) -> None:
+        """L'article 'aux' est ignoré : 'Aux yeux de tous' -> Y."""
+        assert get_sort_letter("Aux yeux de tous") == "Y"
+
+    def test_sort_letter_au_not_prefix(self) -> None:
+        """'Au' dans 'Austin Powers' n'est pas strip : reste sous A."""
+        assert get_sort_letter("Austin Powers") == "A"
+
     # --- Articles espagnols ---
     def test_sort_letter_ignores_el(self) -> None:
         """L'article espagnol 'El' est ignoré."""
