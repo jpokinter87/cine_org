@@ -3323,9 +3323,25 @@ def _display_cleanup_report(report: "CleanupReport") -> None:
 
     console.print(table)
 
-    # Arbre detaille des symlinks casses
+    # Arbres detailles par categorie
     if report.broken_symlinks:
         _display_broken_symlinks_tree(report)
+    if report.misplaced_symlinks:
+        _display_misplaced_symlinks_tree(report)
+    if report.duplicate_symlinks:
+        _display_duplicate_symlinks_tree(report)
+    if report.oversized_dirs:
+        _display_oversized_dirs_tree(report)
+    if report.empty_dirs:
+        _display_empty_dirs_tree(report)
+
+
+def _rel_parent(path: Path, video_dir: Path) -> str:
+    """Chemin parent relatif a video_dir, ou absolu si hors scope."""
+    try:
+        return str(path.parent.relative_to(video_dir))
+    except ValueError:
+        return str(path.parent)
 
 
 def _display_broken_symlinks_tree(report: "CleanupReport") -> None:
@@ -3334,14 +3350,9 @@ def _display_broken_symlinks_tree(report: "CleanupReport") -> None:
 
     console.print()
 
-    # Grouper par repertoire parent relatif a video_dir
     groups: dict[str, list] = defaultdict(list)
     for b in report.broken_symlinks:
-        try:
-            rel_parent = str(b.symlink_path.parent.relative_to(report.video_dir))
-        except ValueError:
-            rel_parent = str(b.symlink_path.parent)
-        groups[rel_parent].append(b)
+        groups[_rel_parent(b.symlink_path, report.video_dir)].append(b)
 
     tree = Tree(f"[bold red]Symlinks casses ({len(report.broken_symlinks)})[/bold red]")
 
@@ -3349,7 +3360,6 @@ def _display_broken_symlinks_tree(report: "CleanupReport") -> None:
         dir_branch = tree.add(f"[cyan]{dir_path}/[/cyan]")
         for b in sorted(groups[dir_path], key=lambda x: x.symlink_path.name):
             name = b.symlink_path.name
-            # Cible originale (ou le chemin manquant)
             target_name = b.original_target.name if b.original_target != Path("") else "?"
 
             if b.best_candidate and b.candidate_score >= 90.0:
@@ -3368,5 +3378,112 @@ def _display_broken_symlinks_tree(report: "CleanupReport") -> None:
                     f"  [dim]aucun candidat[/dim]"
                 )
             dir_branch.add(label)
+
+    console.print(tree)
+
+
+def _display_misplaced_symlinks_tree(report: "CleanupReport") -> None:
+    """Affiche l'arbre des symlinks mal places avec deplacement prevu."""
+    from collections import defaultdict
+
+    console.print()
+
+    groups: dict[str, list] = defaultdict(list)
+    for m in report.misplaced_symlinks:
+        groups[_rel_parent(m.symlink_path, report.video_dir)].append(m)
+
+    tree = Tree(
+        f"[bold yellow]Symlinks mal places ({len(report.misplaced_symlinks)})[/bold yellow]"
+    )
+
+    for dir_path in sorted(groups.keys()):
+        dir_branch = tree.add(f"[cyan]{dir_path}/[/cyan]")
+        for m in sorted(groups[dir_path], key=lambda x: x.symlink_path.name):
+            try:
+                expected_rel = str(m.expected_dir.relative_to(report.video_dir))
+            except ValueError:
+                expected_rel = str(m.expected_dir)
+            dir_branch.add(
+                f"[yellow]{m.symlink_path.name}[/yellow]"
+                f"  -> [green]{expected_rel}/[/green]"
+            )
+
+    console.print(tree)
+
+
+def _display_duplicate_symlinks_tree(report: "CleanupReport") -> None:
+    """Affiche l'arbre des symlinks dupliques avec conservation/suppression."""
+    from collections import defaultdict
+
+    console.print()
+
+    groups: dict[str, list] = defaultdict(list)
+    for d in report.duplicate_symlinks:
+        try:
+            rel_dir = str(d.directory.relative_to(report.video_dir))
+        except ValueError:
+            rel_dir = str(d.directory)
+        groups[rel_dir].append(d)
+
+    total_remove = sum(len(d.remove) for d in report.duplicate_symlinks)
+    tree = Tree(
+        f"[bold magenta]Symlinks dupliques ({total_remove} a supprimer)[/bold magenta]"
+    )
+
+    for dir_path in sorted(groups.keys()):
+        dir_branch = tree.add(f"[cyan]{dir_path}/[/cyan]")
+        for d in groups[dir_path]:
+            target_branch = dir_branch.add(
+                f"[dim]cible: {d.target_path.name}[/dim]"
+            )
+            target_branch.add(f"[green]conserver: {d.keep.name}[/green]")
+            for r in sorted(d.remove, key=lambda p: p.name):
+                target_branch.add(f"[red]supprimer: {r.name}[/red]")
+
+    console.print(tree)
+
+
+def _display_oversized_dirs_tree(report: "CleanupReport") -> None:
+    """Affiche l'arbre des repertoires surcharges avec le plan de subdivision."""
+    console.print()
+
+    tree = Tree(
+        f"[bold blue]Repertoires surcharges ({len(report.oversized_dirs)})[/bold blue]"
+    )
+
+    for plan in report.oversized_dirs:
+        try:
+            rel_dir = str(plan.parent_dir.relative_to(report.video_dir))
+        except ValueError:
+            rel_dir = str(plan.parent_dir)
+
+        plan_branch = tree.add(
+            f"[cyan]{rel_dir}/[/cyan]  [dim]{plan.current_count} items (max {plan.max_allowed})[/dim]"
+        )
+        for start, end in plan.ranges:
+            range_label = f"{start}-{end}" if start != end else start
+            count = sum(
+                1 for _, dst in plan.items_to_move
+                if dst.parent.name == f"{start}-{end}" or dst.parent.name == start
+            )
+            plan_branch.add(f"[green]{range_label}/[/green]  [dim]({count} items)[/dim]")
+
+    console.print(tree)
+
+
+def _display_empty_dirs_tree(report: "CleanupReport") -> None:
+    """Affiche l'arbre des repertoires vides."""
+    console.print()
+
+    tree = Tree(
+        f"[bold dim]Repertoires vides ({len(report.empty_dirs)})[/bold dim]"
+    )
+
+    for d in sorted(report.empty_dirs):
+        try:
+            rel = str(d.relative_to(report.video_dir))
+        except ValueError:
+            rel = str(d)
+        tree.add(f"[dim]{rel}/[/dim]")
 
     console.print(tree)
