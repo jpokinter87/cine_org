@@ -76,7 +76,7 @@ class SubdivisionPlan:
     max_allowed: int
     ranges: list[tuple[str, str]]
     items_to_move: list[tuple[Path, Path]]
-    out_of_range_items: list[tuple[str, Path]] = field(default_factory=list)
+    out_of_range_items: list[tuple[Path, Path]] = field(default_factory=list)
 
 
 @dataclass
@@ -180,6 +180,36 @@ def _parse_parent_range(dir_name: str) -> tuple[str, str]:
 
     # Non-plage (genre, etc.) -> tout accepter
     return "AA", "ZZ"
+
+
+def _find_sibling_for_key(parent_dir: Path, sort_key: str) -> Path:
+    """
+    Trouve le repertoire frere (sibling) qui correspond a une cle de tri.
+
+    Parcourt les repertoires freres de parent_dir et utilise _parse_parent_range
+    pour trouver celui dont la plage contient la cle. Si aucun frere ne correspond,
+    retourne le grand-parent comme destination de repli.
+
+    Args:
+        parent_dir: Repertoire contenant l'item hors plage.
+        sort_key: Cle de tri 2 lettres (ex: "JA", "BO", "CH").
+
+    Returns:
+        Path du repertoire destination.
+    """
+    grandparent = parent_dir.parent
+    if not grandparent.exists():
+        return grandparent
+
+    for sibling in sorted(grandparent.iterdir()):
+        if not sibling.is_dir() or sibling == parent_dir:
+            continue
+        sib_start, sib_end = _parse_parent_range(sibling.name)
+        if sib_start <= sort_key <= sib_end:
+            return sibling
+
+    # Aucun frere ne correspond -> grand-parent
+    return grandparent
 
 
 class CleanupService:
@@ -728,7 +758,7 @@ class CleanupService:
                 for dest_dir in dest_dirs:
                     dest_dir.mkdir(parents=True, exist_ok=True)
 
-                # Deplacer les symlinks
+                # Deplacer les symlinks in-range vers les subdivisions
                 for source, dest in plan.items_to_move:
                     try:
                         source.rename(dest)
@@ -736,6 +766,16 @@ class CleanupService:
                         result.symlinks_redistributed += 1
                     except Exception as e:
                         result.errors.append(f"Deplacement echoue {source}: {e}")
+
+                # Deplacer les items hors-plage vers le bon repertoire
+                for source, dest in plan.out_of_range_items:
+                    try:
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        source.rename(dest)
+                        self._video_file_repo.update_symlink_path(source, dest)
+                        result.symlinks_redistributed += 1
+                    except Exception as e:
+                        result.errors.append(f"Deplacement hors-plage echoue {source}: {e}")
 
                 result.subdivisions_created += 1
             except Exception as e:
@@ -816,14 +856,15 @@ class CleanupService:
         # 3. Parser la plage du parent
         parent_start, parent_end = _parse_parent_range(parent_dir.name)
 
-        # 4. Separer items in-range / out-of-range
+        # 4. Separer items in-range / out-of-range avec destination pour hors-plage
         in_range: list[tuple[str, Path]] = []
-        out_of_range: list[tuple[str, Path]] = []
+        out_of_range: list[tuple[Path, Path]] = []
         for sort_key, item in keyed:
             if parent_start <= sort_key <= parent_end:
                 in_range.append((sort_key, item))
             else:
-                out_of_range.append((sort_key, item))
+                dest_dir = _find_sibling_for_key(parent_dir, sort_key)
+                out_of_range.append((item, dest_dir / item.name))
 
         # 5. Trier les in-range par cle normalisee
         in_range.sort(key=lambda x: x[0])
@@ -974,7 +1015,7 @@ def save_report_cache(
                     [str(src), str(dst)] for src, dst in o.items_to_move
                 ],
                 "out_of_range_items": [
-                    [key, str(item)] for key, item in o.out_of_range_items
+                    [str(src), str(dst)] for src, dst in o.out_of_range_items
                 ],
             }
             for o in report.oversized_dirs
@@ -1064,7 +1105,7 @@ def load_report_cache(
                 (Path(pair[0]), Path(pair[1])) for pair in o["items_to_move"]
             ],
             out_of_range_items=[
-                (pair[0], Path(pair[1]))
+                (Path(pair[0]), Path(pair[1]))
                 for pair in o.get("out_of_range_items", [])
             ],
         )

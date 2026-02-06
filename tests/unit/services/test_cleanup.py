@@ -815,6 +815,50 @@ class TestCalculateSubdivisionRanges:
         assert (dest_a / "Alpha (2020).mkv").is_symlink()
         assert (dest_z / "Zeta (2020).mkv").is_symlink()
 
+    def test_subdivide_moves_out_of_range_items(
+        self, cleanup_service, mock_video_file_repo, tmp_path,
+    ):
+        """subdivide_oversized_dirs deplace aussi les items hors plage."""
+        grandparent = tmp_path / "Films" / "Action"
+        parent = grandparent / "S-Z"
+        parent.mkdir(parents=True)
+        sibling = grandparent / "G-L"
+        sibling.mkdir()
+
+        # Item in-range
+        link_in = parent / "Super (2020).mkv"
+        link_in.symlink_to("/storage/super.mkv")
+        # Item hors-plage
+        link_out = parent / "Jadotville (2016).mkv"
+        link_out.symlink_to("/storage/jadotville.mkv")
+
+        dest_sub = parent / "Sa-Zz"
+
+        plans = [
+            SubdivisionPlan(
+                parent_dir=parent,
+                current_count=2,
+                max_allowed=1,
+                ranges=[("Sa", "Zz")],
+                items_to_move=[
+                    (link_in, dest_sub / "Super (2020).mkv"),
+                ],
+                out_of_range_items=[
+                    (link_out, sibling / "Jadotville (2016).mkv"),
+                ],
+            ),
+        ]
+
+        result = cleanup_service.subdivide_oversized_dirs(plans)
+
+        # L'item in-range est deplace dans la subdivision
+        assert (dest_sub / "Super (2020).mkv").is_symlink()
+        # L'item hors-plage est deplace vers le frere
+        assert (sibling / "Jadotville (2016).mkv").is_symlink()
+        assert not link_out.exists()
+        # La BDD est mise a jour pour les deux
+        assert mock_video_file_repo.update_symlink_path.call_count == 2
+
     def test_subdivide_updates_db(
         self, cleanup_service, mock_video_file_repo, tmp_path,
     ):
@@ -1912,10 +1956,14 @@ class TestSubdivisionAlgorithmBugs:
         # Dernier groupe finit a Zz
         assert plan.ranges[-1][1].upper()[:1] == "Z"
 
-    def test_bug3_out_of_range_excluded(self, cleanup_service, tmp_path):
-        """Bug 3 : Jadotville (J) dans S-Z exclu et dans out_of_range_items."""
-        parent = tmp_path / "Films" / "Action" / "S-Z"
+    def test_bug3_out_of_range_moved_to_sibling(self, cleanup_service, tmp_path):
+        """Bug 3 : Jadotville (J) dans S-Z -> deplace vers le repertoire frere J ou contenant J."""
+        grandparent = tmp_path / "Films" / "Action"
+        parent = grandparent / "S-Z"
         parent.mkdir(parents=True)
+        # Creer le repertoire frere qui devrait accueillir Jadotville
+        sibling_j = grandparent / "G-L"
+        sibling_j.mkdir()
 
         # Items dans la plage
         for i in range(55):
@@ -1929,18 +1977,30 @@ class TestSubdivisionAlgorithmBugs:
 
         plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
 
-        # Jadotville doit etre dans out_of_range_items
-        out_names = [item.name for _, item in plan.out_of_range_items]
-        assert "Jadotville (2016).mkv" in out_names
+        # Jadotville doit etre dans out_of_range_items avec une destination
+        out_sources = [src.name for src, _ in plan.out_of_range_items]
+        assert "Jadotville (2016).mkv" in out_sources
+
+        # La destination doit etre dans le repertoire frere G-L
+        jadotville_move = [
+            (src, dst) for src, dst in plan.out_of_range_items
+            if src.name == "Jadotville (2016).mkv"
+        ]
+        assert len(jadotville_move) == 1
+        assert jadotville_move[0][1].parent == sibling_j
 
         # Jadotville ne doit PAS etre dans items_to_move
         moved_names = [src.name for src, _ in plan.items_to_move]
         assert "Jadotville (2016).mkv" not in moved_names
 
     def test_bug3b_el_chapo_out_of_range_ef(self, cleanup_service, tmp_path):
-        """Bug 3b : El Chapo (article 'el' strip -> Chapo=CH) exclu de E-F."""
-        parent = tmp_path / "Films" / "Action" / "E-F"
+        """Bug 3b : El Chapo (article 'el' strip -> Chapo=CH) exclu de E-F, deplace vers C-D."""
+        grandparent = tmp_path / "Films" / "Action"
+        parent = grandparent / "E-F"
         parent.mkdir(parents=True)
+        # Repertoire frere pour C
+        sibling_cd = grandparent / "C-D"
+        sibling_cd.mkdir()
 
         # Items dans la plage E-F
         for i in range(55):
@@ -1954,13 +2014,23 @@ class TestSubdivisionAlgorithmBugs:
 
         plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
 
-        out_names = [item.name for _, item in plan.out_of_range_items]
-        assert "El Chapo (2017).mkv" in out_names
+        out_sources = [src.name for src, _ in plan.out_of_range_items]
+        assert "El Chapo (2017).mkv" in out_sources
+        # Destination dans C-D
+        chapo_move = [
+            (src, dst) for src, dst in plan.out_of_range_items
+            if src.name == "El Chapo (2017).mkv"
+        ]
+        assert chapo_move[0][1].parent == sibling_cd
 
     def test_bug3c_das_boot_out_of_range_d(self, cleanup_service, tmp_path):
-        """Bug 3c : das Boot (article 'das' strip -> Boot=BO) exclu de D."""
-        parent = tmp_path / "Films" / "Guerre" / "D"
+        """Bug 3c : das Boot (article 'das' strip -> Boot=BO) exclu de D, deplace vers B ou A-C."""
+        grandparent = tmp_path / "Films" / "Guerre"
+        parent = grandparent / "D"
         parent.mkdir(parents=True)
+        # Repertoire frere pour B
+        sibling_b = grandparent / "A-C"
+        sibling_b.mkdir()
 
         # Items dans la plage D
         for i in range(55):
@@ -1973,8 +2043,39 @@ class TestSubdivisionAlgorithmBugs:
 
         plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
 
-        out_names = [item.name for _, item in plan.out_of_range_items]
-        assert "Das Boot (1981).mkv" in out_names
+        out_sources = [src.name for src, _ in plan.out_of_range_items]
+        assert "Das Boot (1981).mkv" in out_sources
+        # Destination dans A-C
+        boot_move = [
+            (src, dst) for src, dst in plan.out_of_range_items
+            if src.name == "Das Boot (1981).mkv"
+        ]
+        assert boot_move[0][1].parent == sibling_b
+
+    def test_out_of_range_no_sibling_stays_in_grandparent(self, cleanup_service, tmp_path):
+        """Si aucun frere ne correspond, l'item va dans le grand-parent."""
+        grandparent = tmp_path / "Films" / "Action"
+        parent = grandparent / "S-Z"
+        parent.mkdir(parents=True)
+        # Pas de repertoire frere pour J
+
+        for i in range(55):
+            letter = chr(ord("S") + (i * 8 // 55))
+            suffix = chr(ord("a") + (i % 26))
+            name = f"{letter}{suffix}_Film_{i:03d} (2020).mkv"
+            (parent / name).symlink_to(f"/storage/{name}")
+
+        (parent / "Jadotville (2016).mkv").symlink_to("/storage/jadotville.mkv")
+
+        plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
+
+        jadotville_move = [
+            (src, dst) for src, dst in plan.out_of_range_items
+            if src.name == "Jadotville (2016).mkv"
+        ]
+        assert len(jadotville_move) == 1
+        # Pas de frere -> destination dans le grand-parent
+        assert jadotville_move[0][1].parent == grandparent
 
     def test_bug4_no_overlap(self, cleanup_service, tmp_path):
         """Bug 4 : pas de chevauchement entre plages."""
@@ -2047,7 +2148,7 @@ class TestSubdivisionAlgorithmBugs:
         moved_names = [src.name for src, _ in plan.items_to_move]
         assert "De parfaites demoiselles (2020).mkv" in moved_names
         # Et pas dans out_of_range
-        out_names = [item.name for _, item in plan.out_of_range_items]
+        out_names = [src.name for src, _ in plan.out_of_range_items]
         assert "De parfaites demoiselles (2020).mkv" not in out_names
 
     def test_cb_strike_dots_stripped_in_range_c(self, cleanup_service, tmp_path):
@@ -2067,7 +2168,7 @@ class TestSubdivisionAlgorithmBugs:
         plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
 
         # C.B. Strike doit etre in-range (pas dans out_of_range)
-        out_names = [item.name for _, item in plan.out_of_range_items]
+        out_names = [src.name for src, _ in plan.out_of_range_items]
         assert "C.B. Strike (2017)" not in out_names
         # Et present dans items_to_move
         moved_names = [src.name for src, _ in plan.items_to_move]
@@ -2091,7 +2192,7 @@ class TestSubdivisionAlgorithmBugs:
 
         plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
 
-        out_names = [item.name for _, item in plan.out_of_range_items]
+        out_names = [src.name for src, _ in plan.out_of_range_items]
         assert "Au service de la France" not in out_names
         assert "Au service du passé (2022)" not in out_names
         moved_names = [src.name for src, _ in plan.items_to_move]

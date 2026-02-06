@@ -3468,15 +3468,21 @@ def _display_oversized_dirs_tree(report: "CleanupReport") -> None:
             )
             plan_branch.add(f"[green]{range_label}/[/green]  [dim]({count} items)[/dim]")
 
-        # Afficher les items hors plage si present
+        # Afficher les items hors plage avec leur destination
         if hasattr(plan, "out_of_range_items") and plan.out_of_range_items:
             nb_out = len(plan.out_of_range_items)
             out_branch = plan_branch.add(
-                f"[yellow]Hors plage ({nb_out} items)[/yellow]"
+                f"[yellow]Hors plage -> transfert ({nb_out} items)[/yellow]"
             )
             max_display = 10
-            for _, item in plan.out_of_range_items[:max_display]:
-                out_branch.add(f"[yellow]{item.name}[/yellow]")
+            for src, dst in plan.out_of_range_items[:max_display]:
+                try:
+                    dest_rel = str(dst.parent.relative_to(report.video_dir))
+                except ValueError:
+                    dest_rel = dst.parent.name
+                out_branch.add(
+                    f"[yellow]{src.name}[/yellow] [dim]-> {dest_rel}/[/dim]"
+                )
             if nb_out > max_display:
                 out_branch.add(f"[dim]... et {nb_out - max_display} autres[/dim]")
 
