@@ -166,6 +166,19 @@ class TestGetSortLetter:
         """L'article allemand 'Ein' est ignoré."""
         assert get_sort_letter("Ein Freund") == "F"
 
+    # --- Articles français (de, du) ---
+    def test_sort_letter_ignores_de(self) -> None:
+        """L'article 'de' est ignoré : 'De parfaites demoiselles' -> P."""
+        assert get_sort_letter("De parfaites demoiselles") == "P"
+
+    def test_sort_letter_ignores_du(self) -> None:
+        """L'article 'du' est ignoré : 'Du plomb dans la tete' -> P."""
+        assert get_sort_letter("Du plomb dans la tete") == "P"
+
+    def test_sort_letter_de_in_middle_not_stripped(self) -> None:
+        """'de' au milieu du titre n'est pas strip : 'Valse de printemps' -> V."""
+        assert get_sort_letter("Valse de printemps") == "V"
+
     # --- Articles espagnols ---
     def test_sort_letter_ignores_el(self) -> None:
         """L'article espagnol 'El' est ignoré."""

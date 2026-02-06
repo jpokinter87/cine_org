@@ -234,7 +234,7 @@ Les articles sont **retirés du début des titres** pour le tri :
 
 | Langue | Articles ignorés |
 |--------|------------------|
-| Français | le, la, les, l', un, une, des |
+| Français | le, la, les, l', un, une, des, de, du |
 | Anglais | the, a, an |
 | Allemand | der, die, das, ein, eine |
 | Espagnol | el, los, las |
@@ -243,6 +243,8 @@ Exemples :
 - "The Matrix" → classé sous **M** (pas T)
 - "L'Odyssée" → classé sous **O** (pas L)
 - "Les Misérables" → classé sous **M**
+- "De parfaites demoiselles" → classé sous **P** (pas D)
+- "Du plomb dans la tête" → classé sous **P** (pas D)
 
 #### Création des subdivisions
 
@@ -253,6 +255,14 @@ Quand un répertoire dépasse `max_files_per_subdir` (50 par défaut), il est su
 | Peu de fichiers | Lettres simples : `A`, `B`, `C` |
 | Plus de fichiers | Plages : `A-F`, `G-M`, `N-Z` |
 | Beaucoup de fichiers | Préfixes : `Ba-Bi`, `Me-My`, `Sh-Sy` |
+
+L'algorithme de subdivision :
+- **Équilibre les groupes** : répartition homogène (pas de groupe résiduel de 9 items)
+- **Couvre la plage parente** : un sous-répertoire `S-Z` produit des plages `Sa-Te` / `Ti-Zz`
+- **Exclut les items hors plage** : un film mal classé (ex: Jadotville dans S-Z) est signalé séparément
+- **Pas de chevauchement** : les coupures se font aux frontières de clés alphabétiques
+- **Normalise les accents** : "Éternel" est trié entre D et F (pas après Z)
+- **Format cohérent** : toujours `Start-End` (jamais une borne unique)
 
 Caractère spécial `#` : pour les titres commençant par des chiffres ou symboles.
 

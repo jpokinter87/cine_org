@@ -76,6 +76,7 @@ class SubdivisionPlan:
     max_allowed: int
     ranges: list[tuple[str, str]]
     items_to_move: list[tuple[Path, Path]]
+    out_of_range_items: list[tuple[str, Path]] = field(default_factory=list)
 
 
 @dataclass
@@ -120,6 +121,65 @@ class CleanupResult:
     symlinks_redistributed: int = 0
     empty_dirs_removed: int = 0
     errors: list[str] = field(default_factory=list)
+
+
+def _normalize_sort_key(text: str) -> str:
+    """
+    Normalise un texte en supprimant les diacritiques (accents, cedilles, etc.).
+
+    Utilise la decomposition NFD pour separer les caracteres de base
+    de leurs marques diacritiques, puis supprime les marques (categorie Mn).
+
+    Args:
+        text: Texte avec potentiellement des accents.
+
+    Returns:
+        Texte sans diacritiques.
+    """
+    import unicodedata
+
+    normalized = unicodedata.normalize("NFD", text)
+    return "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+
+
+def _parse_parent_range(dir_name: str) -> tuple[str, str]:
+    """
+    Parse le nom d'un repertoire parent en plage de cles 2 lettres.
+
+    Detecte les patterns de subdivision alphabetique :
+    - Lettre simple "C" -> ("CA", "CZ")
+    - Plage "E-F" -> ("EA", "FZ")
+    - Plage avec prefixe "L-Ma" -> ("LA", "MA")
+    - Non-plage "Action", "Drame" -> ("AA", "ZZ")
+
+    Args:
+        dir_name: Nom du repertoire parent.
+
+    Returns:
+        Tuple (start, end) en majuscules, 2 caracteres chacun.
+    """
+    import re
+
+    # Normaliser les accents avant parsing
+    clean = _normalize_sort_key(dir_name)
+
+    # Plage "X-Y" ou "Xx-Yy"
+    match = re.match(r"^([A-Za-z]{1,3})-([A-Za-z]{1,3})$", clean)
+    if match:
+        start_part = match.group(1).upper()
+        end_part = match.group(2).upper()
+        start = (start_part[0] + "A") if len(start_part) == 1 else (start_part[0] + start_part[1])
+        end = (end_part[0] + "Z") if len(end_part) == 1 else (end_part[0] + end_part[1])
+        return start, end
+
+    # Lettre simple "C"
+    match = re.match(r"^([A-Za-z])$", clean)
+    if match:
+        letter = match.group(1).upper()
+        return f"{letter}A", f"{letter}Z"
+
+    # Non-plage (genre, etc.) -> tout accepter
+    return "AA", "ZZ"
 
 
 class CleanupService:
@@ -717,45 +777,134 @@ class CleanupService:
         """
         Calcule les plages de subdivision pour un repertoire surcharge.
 
+        Algorithme corrige gerant :
+        - Equilibrage des groupes (ceil(n/max) groupes)
+        - Couverture de la plage parente (Sa-Zz pour un parent S-Z)
+        - Exclusion des items hors plage (ex: Jadotville dans S-Z)
+        - Pas de chevauchement entre plages (coupure aux frontieres de cles)
+        - Normalisation des accents pour le tri
+        - Strip des articles (de, du, le, the, etc.)
+        - Toujours format "Start-End" (jamais borne unique)
+
         Args:
             parent_dir: Repertoire a subdiviser.
             max_per_subdir: Nombre max d'elements par sous-repertoire.
 
         Returns:
-            SubdivisionPlan avec les plages et les mouvements.
+            SubdivisionPlan avec les plages, mouvements et items hors plage.
         """
-        # Lister les elements directs (symlinks ou dossiers)
+        import math
+
+        # 1. Lister les elements directs (symlinks ou dossiers)
         items = sorted(parent_dir.iterdir())
         items = [i for i in items if i.is_symlink() or i.is_dir()]
 
-        # Pour chaque item, calculer la cle de tri (2 lettres)
+        # 2. Pour chaque item : strip article, normaliser accents, extraire cle 2 lettres
         keyed: list[tuple[str, Path]] = []
         for item in items:
             title = item.name
             stripped = _strip_article(title).strip()
+            stripped = _normalize_sort_key(stripped)
             if len(stripped) >= 2:
                 sort_key = stripped.upper()[:2]
             else:
                 sort_key = stripped.upper().ljust(2, "A")
             keyed.append((sort_key, item))
 
-        keyed.sort(key=lambda x: x[0])
+        # 3. Parser la plage du parent
+        parent_start, parent_end = _parse_parent_range(parent_dir.name)
 
-        # Diviser en groupes de taille max_per_subdir
+        # 4. Separer items in-range / out-of-range
+        in_range: list[tuple[str, Path]] = []
+        out_of_range: list[tuple[str, Path]] = []
+        for sort_key, item in keyed:
+            if parent_start <= sort_key <= parent_end:
+                in_range.append((sort_key, item))
+            else:
+                out_of_range.append((sort_key, item))
+
+        # 5. Trier les in-range par cle normalisee
+        in_range.sort(key=lambda x: x[0])
+
+        # Cas special : pas d'items in-range
+        if not in_range:
+            return SubdivisionPlan(
+                parent_dir=parent_dir,
+                current_count=len(keyed),
+                max_allowed=max_per_subdir,
+                ranges=[],
+                items_to_move=[],
+                out_of_range_items=out_of_range,
+            )
+
+        # 6. Calculer le nombre de groupes : ceil(total / max_per_subdir)
+        total = len(in_range)
+        num_groups = math.ceil(total / max_per_subdir)
+        if num_groups < 2:
+            num_groups = 2  # Au moins 2 groupes si on subdivise
+
+        # 7. Repartir equitablement
+        base_size = total // num_groups
+        remainder = total % num_groups
+
+        # 8. Construire les groupes avec ajustement aux frontieres de cles
         ranges: list[tuple[str, str]] = []
         moves: list[tuple[Path, Path]] = []
 
-        for i in range(0, len(keyed), max_per_subdir):
-            group = keyed[i: i + max_per_subdir]
-            start = group[0][0][0] + group[0][0][1:].lower()
-            end = group[-1][0][0] + group[-1][0][1:].lower()
-            range_label = f"{start}-{end}"
+        idx = 0
+        for g in range(num_groups):
+            group_size = base_size + (1 if g < remainder else 0)
+            if group_size == 0:
+                continue
+
+            group_end = idx + group_size
+
+            # Ajuster la coupure pour ne pas couper au milieu d'une meme cle
+            if g < num_groups - 1 and group_end < total:
+                # Deplacer la coupure au changement de cle le plus proche
+                current_key = in_range[group_end - 1][0]
+                # Si la cle suivante est la meme, avancer
+                while group_end < total and in_range[group_end][0] == current_key:
+                    group_end += 1
+                # Si on a absorbe tous les items restants, reculer
+                if group_end >= total and g < num_groups - 1:
+                    # Essayer de reculer plutot
+                    group_end = idx + group_size
+                    current_key = in_range[group_end - 1][0]
+                    while group_end > idx + 1 and in_range[group_end - 1][0] == current_key:
+                        group_end -= 1
+
+            group = in_range[idx:group_end]
+            if not group:
+                continue
+
+            # 9. Calculer les bornes du groupe
+            if g == 0:
+                start_key = parent_start
+            else:
+                start_key = group[0][0]
+
+            if g == num_groups - 1 or group_end >= total:
+                end_key = parent_end
+            else:
+                end_key = group[-1][0]
+
+            # Formater en Capitalized (premiere lettre majuscule, reste minuscule)
+            start_label = start_key[0].upper() + start_key[1:].lower()
+            end_label = end_key[0].upper() + end_key[1:].lower()
+
+            range_label = f"{start_label}-{end_label}"
             dest = parent_dir / range_label
 
             for _, item in group:
                 moves.append((item, dest / item.name))
 
-            ranges.append((start, end))
+            ranges.append((start_label, end_label))
+
+            idx = group_end
+            # Si on a epuise tous les items, on arrete
+            if idx >= total:
+                break
 
         return SubdivisionPlan(
             parent_dir=parent_dir,
@@ -763,6 +912,7 @@ class CleanupService:
             max_allowed=max_per_subdir,
             ranges=ranges,
             items_to_move=moves,
+            out_of_range_items=out_of_range,
         )
 
 
@@ -820,6 +970,9 @@ def save_report_cache(
                 "ranges": o.ranges,
                 "items_to_move": [
                     [str(src), str(dst)] for src, dst in o.items_to_move
+                ],
+                "out_of_range_items": [
+                    [key, str(item)] for key, item in o.out_of_range_items
                 ],
             }
             for o in report.oversized_dirs
@@ -907,6 +1060,10 @@ def load_report_cache(
             ranges=[tuple(r) for r in o["ranges"]],
             items_to_move=[
                 (Path(pair[0]), Path(pair[1])) for pair in o["items_to_move"]
+            ],
+            out_of_range_items=[
+                (pair[0], Path(pair[1]))
+                for pair in o.get("out_of_range_items", [])
             ],
         )
         for o in data.get("oversized_dirs", [])

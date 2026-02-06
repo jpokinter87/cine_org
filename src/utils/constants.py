@@ -72,6 +72,8 @@ IGNORED_ARTICLES = frozenset({
     "un",
     "une",
     "des",
+    "de",
+    "du",
     # Anglais
     "the",
     "a",

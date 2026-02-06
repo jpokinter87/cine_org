@@ -3461,12 +3461,24 @@ def _display_oversized_dirs_tree(report: "CleanupReport") -> None:
             f"[cyan]{rel_dir}/[/cyan]  [dim]{plan.current_count} items (max {plan.max_allowed})[/dim]"
         )
         for start, end in plan.ranges:
-            range_label = f"{start}-{end}" if start != end else start
+            range_label = f"{start}-{end}"
             count = sum(
                 1 for _, dst in plan.items_to_move
-                if dst.parent.name == f"{start}-{end}" or dst.parent.name == start
+                if dst.parent.name == range_label
             )
             plan_branch.add(f"[green]{range_label}/[/green]  [dim]({count} items)[/dim]")
+
+        # Afficher les items hors plage si present
+        if hasattr(plan, "out_of_range_items") and plan.out_of_range_items:
+            nb_out = len(plan.out_of_range_items)
+            out_branch = plan_branch.add(
+                f"[yellow]Hors plage ({nb_out} items)[/yellow]"
+            )
+            max_display = 10
+            for _, item in plan.out_of_range_items[:max_display]:
+                out_branch.add(f"[yellow]{item.name}[/yellow]")
+            if nb_out > max_display:
+                out_branch.add(f"[dim]... et {nb_out - max_display} autres[/dim]")
 
     console.print(tree)
 

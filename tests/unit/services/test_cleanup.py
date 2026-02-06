@@ -27,6 +27,8 @@ from src.services.cleanup import (
     DuplicateSymlink,
     MisplacedSymlink,
     SubdivisionPlan,
+    _normalize_sort_key,
+    _parse_parent_range,
 )
 
 
@@ -1797,3 +1799,276 @@ class TestAnalyzeIncludesDuplicates:
 
         assert len(report.duplicate_symlinks) == 1
         assert report.total_issues >= 1
+
+
+# ============================================================================
+# Phase 10 : Helpers subdivision (_normalize_sort_key, _parse_parent_range)
+# ============================================================================
+
+
+class TestNormalizeSortKey:
+    """Tests pour _normalize_sort_key (suppression des diacritiques)."""
+
+    def test_accent_aigu(self):
+        """'Eternel' (accent aigu) -> 'Eternel'."""
+        assert _normalize_sort_key("Éternel") == "Eternel"
+
+    def test_accent_grave(self):
+        """'A' (accent grave) -> 'A'."""
+        assert _normalize_sort_key("À bout de souffle") == "A bout de souffle"
+
+    def test_cedille(self):
+        """'Français' (cedille) -> 'Francais'."""
+        assert _normalize_sort_key("Français") == "Francais"
+
+    def test_trema(self):
+        """'Noël' (trema) -> 'Noel'."""
+        assert _normalize_sort_key("Noël") == "Noel"
+
+    def test_ascii_inchange(self):
+        """Un texte ASCII reste inchange."""
+        assert _normalize_sort_key("Matrix") == "Matrix"
+
+
+class TestParseParentRange:
+    """Tests pour _parse_parent_range (parsing du nom de repertoire en plage)."""
+
+    def test_lettre_simple(self):
+        """Lettre simple 'C' -> ('CA', 'CZ')."""
+        assert _parse_parent_range("C") == ("CA", "CZ")
+
+    def test_plage_simple(self):
+        """Plage 'E-F' -> ('EA', 'FZ')."""
+        assert _parse_parent_range("E-F") == ("EA", "FZ")
+
+    def test_plage_large(self):
+        """Plage 'S-Z' -> ('SA', 'ZZ')."""
+        assert _parse_parent_range("S-Z") == ("SA", "ZZ")
+
+    def test_plage_prefixe(self):
+        """Plage avec prefixe 'L-Ma' -> ('LA', 'MA')."""
+        assert _parse_parent_range("L-Ma") == ("LA", "MA")
+
+    def test_non_plage(self):
+        """Nom de genre 'Action' -> ('AA', 'ZZ') (tout accepter)."""
+        assert _parse_parent_range("Action") == ("AA", "ZZ")
+
+
+# ============================================================================
+# Phase 11 : Algorithme de subdivision corrige (7 bugs)
+# ============================================================================
+
+
+class TestSubdivisionAlgorithmBugs:
+    """Tests pour les 7 bugs identifies dans _calculate_subdivision_ranges."""
+
+    def test_bug1_balanced_splits(self, cleanup_service, tmp_path):
+        """Bug 1 : 59 items -> 2 groupes equilibres (~30+29), pas 50+9."""
+        parent = tmp_path / "Films" / "Action"
+        parent.mkdir(parents=True)
+
+        for i in range(59):
+            letter = chr(ord("A") + (i * 26 // 59))
+            suffix = chr(ord("a") + (i % 26))
+            name = f"{letter}{suffix}_Film_{i:03d} (2020).mkv"
+            (parent / name).symlink_to(f"/storage/{name}")
+
+        plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
+
+        assert len(plan.ranges) == 2
+        # Compter les items par plage
+        counts = []
+        for start, end in plan.ranges:
+            label = f"{start}-{end}"
+            count = sum(
+                1 for _, dst in plan.items_to_move
+                if dst.parent.name == label
+            )
+            counts.append(count)
+        # Chaque groupe devrait etre ~29-30, pas 50+9
+        assert all(c <= 50 for c in counts)
+        assert max(counts) - min(counts) <= 1  # equilibre
+
+    def test_bug2_ranges_cover_parent(self, cleanup_service, tmp_path):
+        """Bug 2 : parent S-Z -> premier groupe commence a Sa, dernier finit a Zz."""
+        parent = tmp_path / "Films" / "Action" / "S-Z"
+        parent.mkdir(parents=True)
+
+        # Creer 55 items dans la plage S-Z
+        names = []
+        for i, letter in enumerate("STUVWXYZ"):
+            for j in range(7):
+                suffix = chr(ord("a") + j)
+                name = f"{letter}{suffix}_Film_{i*7+j:03d} (2020).mkv"
+                names.append(name)
+        for name in names[:55]:
+            (parent / name).symlink_to(f"/storage/{name}")
+
+        plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
+
+        assert len(plan.ranges) >= 2
+        # Premier groupe commence a Sa
+        assert plan.ranges[0][0].upper()[:1] == "S"
+        # Dernier groupe finit a Zz
+        assert plan.ranges[-1][1].upper()[:1] == "Z"
+
+    def test_bug3_out_of_range_excluded(self, cleanup_service, tmp_path):
+        """Bug 3 : Jadotville (J) dans S-Z exclu et dans out_of_range_items."""
+        parent = tmp_path / "Films" / "Action" / "S-Z"
+        parent.mkdir(parents=True)
+
+        # Items dans la plage
+        for i in range(55):
+            letter = chr(ord("S") + (i * 8 // 55))
+            suffix = chr(ord("a") + (i % 26))
+            name = f"{letter}{suffix}_Film_{i:03d} (2020).mkv"
+            (parent / name).symlink_to(f"/storage/{name}")
+
+        # Item hors plage (J < S)
+        (parent / "Jadotville (2016).mkv").symlink_to("/storage/jadotville.mkv")
+
+        plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
+
+        # Jadotville doit etre dans out_of_range_items
+        out_names = [item.name for _, item in plan.out_of_range_items]
+        assert "Jadotville (2016).mkv" in out_names
+
+        # Jadotville ne doit PAS etre dans items_to_move
+        moved_names = [src.name for src, _ in plan.items_to_move]
+        assert "Jadotville (2016).mkv" not in moved_names
+
+    def test_bug3b_el_chapo_out_of_range_ef(self, cleanup_service, tmp_path):
+        """Bug 3b : El Chapo (article 'el' strip -> Chapo=CH) exclu de E-F."""
+        parent = tmp_path / "Films" / "Action" / "E-F"
+        parent.mkdir(parents=True)
+
+        # Items dans la plage E-F
+        for i in range(55):
+            letter = "E" if i < 28 else "F"
+            suffix = chr(ord("a") + (i % 26))
+            name = f"{letter}{suffix}_Film_{i:03d} (2020).mkv"
+            (parent / name).symlink_to(f"/storage/{name}")
+
+        # El Chapo : article "el" strip -> cle "CH", hors plage E-F
+        (parent / "El Chapo (2017).mkv").symlink_to("/storage/elchapo.mkv")
+
+        plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
+
+        out_names = [item.name for _, item in plan.out_of_range_items]
+        assert "El Chapo (2017).mkv" in out_names
+
+    def test_bug3c_das_boot_out_of_range_d(self, cleanup_service, tmp_path):
+        """Bug 3c : das Boot (article 'das' strip -> Boot=BO) exclu de D."""
+        parent = tmp_path / "Films" / "Guerre" / "D"
+        parent.mkdir(parents=True)
+
+        # Items dans la plage D
+        for i in range(55):
+            suffix = chr(ord("a") + (i % 26))
+            name = f"D{suffix}_Film_{i:03d} (2020).mkv"
+            (parent / name).symlink_to(f"/storage/{name}")
+
+        # das Boot : article "das" strip -> cle "BO", hors plage D
+        (parent / "Das Boot (1981).mkv").symlink_to("/storage/dasboot.mkv")
+
+        plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
+
+        out_names = [item.name for _, item in plan.out_of_range_items]
+        assert "Das Boot (1981).mkv" in out_names
+
+    def test_bug4_no_overlap(self, cleanup_service, tmp_path):
+        """Bug 4 : pas de chevauchement entre plages."""
+        parent = tmp_path / "Films" / "Action"
+        parent.mkdir(parents=True)
+
+        for i in range(120):
+            letter = chr(ord("A") + (i * 26 // 120))
+            suffix = chr(ord("a") + (i % 26))
+            name = f"{letter}{suffix}_Film_{i:03d} (2020).mkv"
+            (parent / name).symlink_to(f"/storage/{name}")
+
+        plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
+
+        assert len(plan.ranges) >= 2
+        # Verifier qu'il n'y a pas de chevauchement
+        for i in range(len(plan.ranges) - 1):
+            end_current = plan.ranges[i][1].upper()
+            start_next = plan.ranges[i + 1][0].upper()
+            # La fin d'un groupe doit etre strictement avant le debut du suivant
+            assert end_current < start_next, (
+                f"Chevauchement: {plan.ranges[i]} et {plan.ranges[i+1]}"
+            )
+
+    def test_bug5_accents_sorted_correctly(self, cleanup_service, tmp_path):
+        """Bug 5 : Eternel (E accent) trie entre D et F, pas apres Z."""
+        parent = tmp_path / "Films" / "Drame"
+        parent.mkdir(parents=True)
+
+        (parent / "Damien (2020).mkv").symlink_to("/storage/d.mkv")
+        (parent / "Éternel (2020).mkv").symlink_to("/storage/e.mkv")
+        (parent / "Fatal (2020).mkv").symlink_to("/storage/f.mkv")
+
+        plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=2)
+
+        # Eternel doit etre trie entre Damien et Fatal
+        eternel_moves = [
+            (src, dst) for src, dst in plan.items_to_move
+            if "ternel" in src.name
+        ]
+        damien_moves = [
+            (src, dst) for src, dst in plan.items_to_move
+            if "Damien" in src.name
+        ]
+        assert len(eternel_moves) == 1
+        assert len(damien_moves) == 1
+        # Damien et Eternel devraient etre dans le meme groupe (D et E consecutifs)
+        assert damien_moves[0][1].parent == eternel_moves[0][1].parent
+
+    def test_bug6_de_article_stripped(self, cleanup_service, tmp_path):
+        """Bug 6 : 'De parfaites demoiselles' dans P-Q -> in-range (cle PA)."""
+        parent = tmp_path / "Films" / "Drame" / "P-Q"
+        parent.mkdir(parents=True)
+
+        # Items dans la plage P-Q
+        for i in range(55):
+            letter = "P" if i < 28 else "Q"
+            suffix = chr(ord("a") + (i % 26))
+            name = f"{letter}{suffix}_Film_{i:03d} (2020).mkv"
+            (parent / name).symlink_to(f"/storage/{name}")
+
+        # "De parfaites demoiselles" -> article "de" strip -> "parfaites" -> cle "PA"
+        (parent / "De parfaites demoiselles (2020).mkv").symlink_to(
+            "/storage/deparfaites.mkv"
+        )
+
+        plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
+
+        # "De parfaites demoiselles" doit etre in-range (PA est dans P-Q)
+        moved_names = [src.name for src, _ in plan.items_to_move]
+        assert "De parfaites demoiselles (2020).mkv" in moved_names
+        # Et pas dans out_of_range
+        out_names = [item.name for _, item in plan.out_of_range_items]
+        assert "De parfaites demoiselles (2020).mkv" not in out_names
+
+    def test_bug7_always_two_bounds(self, cleanup_service, tmp_path):
+        """Bug 7 : toujours format 'Start-End' (jamais borne unique)."""
+        parent = tmp_path / "Films" / "Action"
+        parent.mkdir(parents=True)
+
+        # Items tous avec la meme premiere lettre -> pourrait donner "Cr" seul
+        for i in range(55):
+            suffix = chr(ord("a") + (i % 26))
+            name = f"C{suffix}_Film_{i:03d} (2020).mkv"
+            (parent / name).symlink_to(f"/storage/{name}")
+
+        plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
+
+        # Chaque plage doit avoir 2 bornes (format Start-End)
+        for start, end in plan.ranges:
+            assert start != end or len(start) >= 2, (
+                f"Borne unique detectee: {start}"
+            )
+            # Les destinations doivent utiliser le format "Start-End"
+            for _, dst in plan.items_to_move:
+                dir_name = dst.parent.name
+                assert "-" in dir_name, f"Format sans tiret: {dir_name}"
