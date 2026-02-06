@@ -3066,9 +3066,13 @@ def cleanup(
         float,
         typer.Option("--min-score", help="Score minimum pour auto-reparation (0-100)"),
     ] = 90.0,
+    max_per_dir: Annotated[
+        int,
+        typer.Option("--max-per-dir", help="Nombre max de sous-repertoires avant subdivision"),
+    ] = 50,
 ) -> None:
     """Nettoie et reorganise le repertoire video."""
-    asyncio.run(_cleanup_async(video_dir, fix, skip_repair, skip_subdivide, min_score))
+    asyncio.run(_cleanup_async(video_dir, fix, skip_repair, skip_subdivide, min_score, max_per_dir))
 
 
 async def _cleanup_async(
@@ -3077,6 +3081,7 @@ async def _cleanup_async(
     skip_repair: bool,
     skip_subdivide: bool,
     min_score: float,
+    max_per_dir: int,
 ) -> None:
     """Implementation async de la commande cleanup."""
     from loguru import logger as loguru_logger
@@ -3133,7 +3138,7 @@ async def _cleanup_async(
         # Analyse si pas de cache
         if report is None:
             with Status("[cyan]Analyse du repertoire video...", console=console):
-                report = cleanup_svc.analyze(video_dir)
+                report = cleanup_svc.analyze(video_dir, max_per_dir=max_per_dir)
 
         # Afficher le rapport
         _display_cleanup_report(report)
@@ -3155,28 +3160,45 @@ async def _cleanup_async(
         # Executer les corrections
         console.print("\n[bold cyan]Execution des corrections[/bold cyan]\n")
 
-        # 1. Reparer symlinks casses
+        # 1. Reparer symlinks casses (score >= min_score)
         if not skip_repair and report.broken_symlinks:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TaskProgressColumn(),
-                console=console,
-            ) as progress:
-                task = progress.add_task(
-                    "[cyan]Reparation des symlinks...",
-                    total=len(report.broken_symlinks),
-                )
-                result = cleanup_svc.repair_broken_symlinks(
-                    report.broken_symlinks, min_score=min_score,
-                )
-                progress.update(task, completed=len(report.broken_symlinks))
+            repairable = [
+                b for b in report.broken_symlinks
+                if b.best_candidate and b.candidate_score >= min_score
+            ]
+            unrepairable = [
+                b for b in report.broken_symlinks
+                if b.best_candidate is None or b.candidate_score < min_score
+            ]
 
-            console.print(
-                f"  Symlinks repares: [green]{result.repaired_symlinks}[/green]"
-                f"  Echecs: [red]{result.failed_repairs}[/red]"
-            )
+            if repairable:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    TaskProgressColumn(),
+                    console=console,
+                ) as progress:
+                    task = progress.add_task(
+                        "[cyan]Reparation des symlinks...",
+                        total=len(repairable),
+                    )
+                    result = cleanup_svc.repair_broken_symlinks(
+                        repairable, min_score=min_score,
+                    )
+                    progress.update(task, completed=len(repairable))
+
+                console.print(
+                    f"  Symlinks repares: [green]{result.repaired_symlinks}[/green]"
+                    f"  Echecs: [red]{result.failed_repairs}[/red]"
+                )
+
+            # 1b. Supprimer les symlinks casses irreparables
+            if unrepairable:
+                result = cleanup_svc.delete_broken_symlinks(unrepairable)
+                console.print(
+                    f"  Symlinks irreparables supprimes: [yellow]{result.broken_symlinks_deleted}[/yellow]"
+                )
 
         # 2. Corriger symlinks mal places
         if report.misplaced_symlinks:
@@ -3198,7 +3220,28 @@ async def _cleanup_async(
                 f"  Symlinks deplaces: [green]{result.moved_symlinks}[/green]"
             )
 
-        # 3. Subdiviser repertoires surcharges
+        # 3. Supprimer symlinks dupliques
+        if report.duplicate_symlinks:
+            total_remove = sum(len(d.remove) for d in report.duplicate_symlinks)
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                console=console,
+            ) as progress:
+                task = progress.add_task(
+                    "[cyan]Suppression des symlinks dupliques...",
+                    total=total_remove,
+                )
+                result = cleanup_svc.fix_duplicate_symlinks(report.duplicate_symlinks)
+                progress.update(task, completed=total_remove)
+
+            console.print(
+                f"  Symlinks dupliques supprimes: [green]{result.duplicate_symlinks_removed}[/green]"
+            )
+
+        # 4. Subdiviser repertoires surcharges
         if not skip_subdivide and report.oversized_dirs:
             with Progress(
                 SpinnerColumn(),
@@ -3219,7 +3262,7 @@ async def _cleanup_async(
                 f"  Symlinks redistribues: [green]{result.symlinks_redistributed}[/green]"
             )
 
-        # 4. Nettoyer repertoires vides
+        # 5. Nettoyer repertoires vides
         if report.empty_dirs:
             result = cleanup_svc.clean_empty_dirs(report.empty_dirs)
             console.print(
@@ -3253,6 +3296,13 @@ def _display_cleanup_report(report: "CleanupReport") -> None:
         "",
     )
     table.add_row(
+        "Symlinks dupliques",
+        str(len(report.duplicate_symlinks)),
+        ", ".join(
+            f"{d.keep.name}" for d in report.duplicate_symlinks[:3]
+        ) if report.duplicate_symlinks else "",
+    )
+    table.add_row(
         "Repertoires surcharges",
         str(len(report.oversized_dirs)),
         ", ".join(f"{p.parent_dir.name} ({p.current_count})" for p in report.oversized_dirs[:3])
@@ -3272,3 +3322,51 @@ def _display_cleanup_report(report: "CleanupReport") -> None:
         )
 
     console.print(table)
+
+    # Arbre detaille des symlinks casses
+    if report.broken_symlinks:
+        _display_broken_symlinks_tree(report)
+
+
+def _display_broken_symlinks_tree(report: "CleanupReport") -> None:
+    """Affiche l'arbre detaille des symlinks casses groupes par repertoire."""
+    from collections import defaultdict
+
+    console.print()
+
+    # Grouper par repertoire parent relatif a video_dir
+    groups: dict[str, list] = defaultdict(list)
+    for b in report.broken_symlinks:
+        try:
+            rel_parent = str(b.symlink_path.parent.relative_to(report.video_dir))
+        except ValueError:
+            rel_parent = str(b.symlink_path.parent)
+        groups[rel_parent].append(b)
+
+    tree = Tree(f"[bold red]Symlinks casses ({len(report.broken_symlinks)})[/bold red]")
+
+    for dir_path in sorted(groups.keys()):
+        dir_branch = tree.add(f"[cyan]{dir_path}/[/cyan]")
+        for b in sorted(groups[dir_path], key=lambda x: x.symlink_path.name):
+            name = b.symlink_path.name
+            # Cible originale (ou le chemin manquant)
+            target_name = b.original_target.name if b.original_target != Path("") else "?"
+
+            if b.best_candidate and b.candidate_score >= 90.0:
+                label = (
+                    f"[red]{name}[/red] -> [dim strikethrough]{target_name}[/dim strikethrough]"
+                    f"  [green]reparable ({b.candidate_score:.0f}%): {b.best_candidate.name}[/green]"
+                )
+            elif b.best_candidate:
+                label = (
+                    f"[red]{name}[/red] -> [dim strikethrough]{target_name}[/dim strikethrough]"
+                    f"  [yellow]candidat ({b.candidate_score:.0f}%): {b.best_candidate.name}[/yellow]"
+                )
+            else:
+                label = (
+                    f"[red]{name}[/red] -> [dim strikethrough]{target_name}[/dim strikethrough]"
+                    f"  [dim]aucun candidat[/dim]"
+                )
+            dir_branch.add(label)
+
+    console.print(tree)

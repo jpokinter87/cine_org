@@ -31,6 +31,7 @@ class CleanupStepType(str, Enum):
 
     BROKEN_SYMLINK = "broken_symlink"
     MISPLACED_SYMLINK = "misplaced_symlink"
+    DUPLICATE_SYMLINK = "duplicate_symlink"
     OVERSIZED_DIR = "oversized_dir"
     EMPTY_DIR = "empty_dir"
 
@@ -57,6 +58,16 @@ class MisplacedSymlink:
 
 
 @dataclass
+class DuplicateSymlink:
+    """Symlinks dupliques : plusieurs liens dans le meme repertoire pointant vers le meme fichier."""
+
+    directory: Path
+    target_path: Path
+    keep: Path
+    remove: list[Path]
+
+
+@dataclass
 class SubdivisionPlan:
     """Plan de subdivision d'un repertoire surcharge."""
 
@@ -76,6 +87,7 @@ class CleanupReport:
     misplaced_symlinks: list[MisplacedSymlink]
     oversized_dirs: list[SubdivisionPlan]
     empty_dirs: list[Path]
+    duplicate_symlinks: list[DuplicateSymlink] = field(default_factory=list)
     not_in_db_count: int = 0
 
     @property
@@ -89,6 +101,7 @@ class CleanupReport:
         return (
             len(self.broken_symlinks)
             + len(self.misplaced_symlinks)
+            + len(self.duplicate_symlinks)
             + len(self.oversized_dirs)
             + len(self.empty_dirs)
         )
@@ -100,7 +113,9 @@ class CleanupResult:
 
     repaired_symlinks: int = 0
     failed_repairs: int = 0
+    broken_symlinks_deleted: int = 0
     moved_symlinks: int = 0
+    duplicate_symlinks_removed: int = 0
     subdivisions_created: int = 0
     symlinks_redistributed: int = 0
     empty_dirs_removed: int = 0
@@ -142,13 +157,13 @@ class CleanupService:
         self._series_repo = series_repo
         self._episode_repo = episode_repo
 
-    def analyze(self, video_dir: Path, max_files: int = 50) -> CleanupReport:
+    def analyze(self, video_dir: Path, max_per_dir: int = 50) -> CleanupReport:
         """
         Analyse le repertoire video et retourne un rapport complet.
 
         Args:
             video_dir: Repertoire video a analyser.
-            max_files: Nombre max de fichiers par repertoire avant subdivision.
+            max_per_dir: Nombre max de sous-repertoires par repertoire avant subdivision.
 
         Returns:
             CleanupReport avec tous les problemes detectes.
@@ -163,13 +178,15 @@ class CleanupService:
             misplaced = misplaced_result
             not_in_db = 0
 
-        oversized = self._scan_oversized_dirs(video_dir, max_files)
+        duplicates = self._scan_duplicate_symlinks(video_dir)
+        oversized = self._scan_oversized_dirs(video_dir, max_per_dir)
         empty = self._scan_empty_dirs(video_dir)
 
         return CleanupReport(
             video_dir=video_dir,
             broken_symlinks=broken,
             misplaced_symlinks=misplaced,
+            duplicate_symlinks=duplicates,
             oversized_dirs=oversized,
             empty_dirs=empty,
             not_in_db_count=not_in_db,
@@ -370,18 +387,69 @@ class CleanupService:
 
         return None
 
-    def _scan_oversized_dirs(
-        self, video_dir: Path, max_files: int = 50
-    ) -> list[SubdivisionPlan]:
+    def _scan_duplicate_symlinks(self, video_dir: Path) -> list[DuplicateSymlink]:
         """
-        Detecte les repertoires avec trop de fichiers.
+        Detecte les symlinks dupliques dans le meme repertoire.
 
-        Parcourt recursivement video_dir et identifie les repertoires
-        feuilles contenant plus de max_files elements.
+        Deux symlinks sont dupliques s'ils sont dans le meme repertoire
+        et pointent vers le meme fichier physique (apres resolution).
+        Le symlink a conserver est celui avec le nom le plus long.
 
         Args:
             video_dir: Repertoire video a scanner.
-            max_files: Seuil de fichiers avant subdivision.
+
+        Returns:
+            Liste de DuplicateSymlink pour chaque groupe de doublons.
+        """
+        from collections import defaultdict
+
+        # Grouper les symlinks valides par (repertoire, cible resolue)
+        groups: dict[tuple[Path, Path], list[Path]] = defaultdict(list)
+
+        for path in self._iter_managed_paths(video_dir):
+            if not path.is_symlink():
+                continue
+            try:
+                resolved = path.resolve()
+                if not resolved.exists():
+                    continue
+            except OSError:
+                continue
+            groups[(path.parent, resolved)].append(path)
+
+        # Pour chaque groupe >= 2, determiner keep/remove
+        result = []
+        for (directory, target), symlinks in groups.items():
+            if len(symlinks) < 2:
+                continue
+            # Conserver le nom le plus long (plus de metadonnees)
+            symlinks.sort(key=lambda p: len(p.name), reverse=True)
+            keep = symlinks[0]
+            remove = symlinks[1:]
+            result.append(
+                DuplicateSymlink(
+                    directory=directory,
+                    target_path=target,
+                    keep=keep,
+                    remove=remove,
+                )
+            )
+
+        return result
+
+    def _scan_oversized_dirs(
+        self, video_dir: Path, max_per_dir: int = 50
+    ) -> list[SubdivisionPlan]:
+        """
+        Detecte les repertoires avec trop d'elements directs (symlinks + repertoires).
+
+        Exception : les repertoires sous Series/ ne contenant que des symlinks
+        (= episodes d'une serie) sont ignores, meme au-dela du seuil.
+        Cela protege les series animees avec beaucoup d'episodes sans saisons.
+
+        Args:
+            video_dir: Repertoire video a scanner.
+            max_per_dir: Seuil d'elements avant subdivision.
 
         Returns:
             Liste de SubdivisionPlan pour chaque repertoire surcharge.
@@ -392,23 +460,35 @@ class CleanupService:
             if not dirpath.is_dir():
                 continue
 
-            # Compter les elements directs (symlinks et repertoires)
+            # Compter tous les elements directs (symlinks et repertoires)
             items = [
                 item for item in dirpath.iterdir()
                 if item.is_symlink() or item.is_dir()
             ]
 
-            # Verifier que c'est un repertoire "feuille" :
-            # ne contient que des symlinks (pas de sous-repertoires de subdivision)
-            has_only_symlinks = all(item.is_symlink() for item in items)
-            if not has_only_symlinks or not items:
+            if not items:
                 continue
 
-            if len(items) > max_files:
-                plan = self._calculate_subdivision_ranges(dirpath, max_files)
+            # Ignorer les repertoires d'episodes sous Series/
+            # (ne contenant que des symlinks = episodes d'une serie)
+            has_only_symlinks = all(item.is_symlink() for item in items)
+            if has_only_symlinks and self._is_under_series(dirpath, video_dir):
+                continue
+
+            if len(items) > max_per_dir:
+                plan = self._calculate_subdivision_ranges(dirpath, max_per_dir)
                 plans.append(plan)
 
         return plans
+
+    def _is_under_series(self, path: Path, video_dir: Path) -> bool:
+        """Verifie si un chemin est sous le sous-repertoire Series/."""
+        try:
+            relative = path.relative_to(video_dir)
+        except ValueError:
+            return False
+        parts = relative.parts
+        return len(parts) > 0 and parts[0] == "Séries"
 
     def _scan_empty_dirs(self, video_dir: Path) -> list[Path]:
         """
@@ -484,6 +564,34 @@ class CleanupService:
 
         return result
 
+    def delete_broken_symlinks(
+        self, broken: list[BrokenSymlinkInfo]
+    ) -> CleanupResult:
+        """
+        Supprime les symlinks casses irreparables.
+
+        Utilise apres repair_broken_symlinks pour nettoyer les symlinks
+        sans candidat ou avec un score trop faible.
+
+        Args:
+            broken: Liste des symlinks casses a supprimer.
+
+        Returns:
+            CleanupResult avec le nombre de symlinks supprimes.
+        """
+        result = CleanupResult()
+
+        for info in broken:
+            try:
+                info.symlink_path.unlink()
+                result.broken_symlinks_deleted += 1
+            except FileNotFoundError:
+                result.errors.append(f"Symlink deja absent {info.symlink_path}")
+            except Exception as e:
+                result.errors.append(f"Suppression echouee {info.symlink_path}: {e}")
+
+        return result
+
     def fix_misplaced_symlinks(
         self, misplaced: list[MisplacedSymlink]
     ) -> CleanupResult:
@@ -507,6 +615,32 @@ class CleanupService:
                 result.moved_symlinks += 1
             except Exception as e:
                 result.errors.append(f"Deplacement echoue {info.symlink_path}: {e}")
+
+        return result
+
+    def fix_duplicate_symlinks(
+        self, duplicates: list[DuplicateSymlink]
+    ) -> CleanupResult:
+        """
+        Supprime les symlinks dupliques en ne gardant que le plus complet.
+
+        Args:
+            duplicates: Liste des groupes de symlinks dupliques.
+
+        Returns:
+            CleanupResult avec le nombre de symlinks supprimes.
+        """
+        result = CleanupResult()
+
+        for dup in duplicates:
+            for link in dup.remove:
+                try:
+                    link.unlink()
+                    result.duplicate_symlinks_removed += 1
+                except FileNotFoundError:
+                    result.errors.append(f"Symlink deja absent {link}")
+                except Exception as e:
+                    result.errors.append(f"Suppression echouee {link}: {e}")
 
         return result
 
@@ -691,6 +825,15 @@ def save_report_cache(
             for o in report.oversized_dirs
         ],
         "empty_dirs": [str(d) for d in report.empty_dirs],
+        "duplicate_symlinks": [
+            {
+                "directory": str(d.directory),
+                "target_path": str(d.target_path),
+                "keep": str(d.keep),
+                "remove": [str(r) for r in d.remove],
+            }
+            for d in report.duplicate_symlinks
+        ],
     }
 
     cache_file.write_text(json.dumps(data, ensure_ascii=False, indent=2))
@@ -771,10 +914,21 @@ def load_report_cache(
 
     empty = [Path(d) for d in data.get("empty_dirs", [])]
 
+    duplicates = [
+        DuplicateSymlink(
+            directory=Path(d["directory"]),
+            target_path=Path(d["target_path"]),
+            keep=Path(d["keep"]),
+            remove=[Path(r) for r in d["remove"]],
+        )
+        for d in data.get("duplicate_symlinks", [])
+    ]
+
     return CleanupReport(
         video_dir=Path(data["video_dir"]),
         broken_symlinks=broken,
         misplaced_symlinks=misplaced,
+        duplicate_symlinks=duplicates,
         oversized_dirs=oversized,
         empty_dirs=empty,
         not_in_db_count=data.get("not_in_db_count", 0),

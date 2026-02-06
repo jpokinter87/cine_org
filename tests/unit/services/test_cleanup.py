@@ -24,6 +24,7 @@ from src.services.cleanup import (
     CleanupResult,
     CleanupService,
     CleanupStepType,
+    DuplicateSymlink,
     MisplacedSymlink,
     SubdivisionPlan,
 )
@@ -361,25 +362,72 @@ class TestScanEmptyDirs:
 
 
 class TestScanOversizedDirs:
-    """Tests pour _scan_oversized_dirs."""
+    """Tests pour _scan_oversized_dirs (symlinks + repertoires, sauf episodes Series/)."""
 
-    def test_scan_oversized_dirs(self, cleanup_service, temp_dirs):
-        """Detecte les repertoires avec plus de 50 fichiers."""
+    def test_scan_oversized_films_with_symlinks(self, cleanup_service, temp_dirs):
+        """Detecte un repertoire Films/ avec trop de symlinks."""
         video_dir = temp_dirs["video"]
         genre_dir = video_dir / "Films" / "Action"
         genre_dir.mkdir(parents=True)
 
-        # Creer 55 symlinks
+        # Creer 55 symlinks de films
         for i in range(55):
             link = genre_dir / f"Film {i:03d} (2020).mkv"
             link.symlink_to(f"/storage/film{i}.mkv")
 
-        result = cleanup_service._scan_oversized_dirs(video_dir, max_files=50)
+        result = cleanup_service._scan_oversized_dirs(video_dir, max_per_dir=50)
 
         assert len(result) == 1
         assert result[0].parent_dir == genre_dir
         assert result[0].current_count == 55
         assert result[0].max_allowed == 50
+
+    def test_scan_oversized_with_subdirs(self, cleanup_service, temp_dirs):
+        """Detecte un repertoire avec trop de sous-repertoires."""
+        video_dir = temp_dirs["video"]
+        letter_dir = video_dir / "Séries" / "A"
+        letter_dir.mkdir(parents=True)
+
+        # Creer 55 sous-repertoires (ex: titres de series)
+        for i in range(55):
+            subdir = letter_dir / f"Anime {i:03d} (2020)"
+            subdir.mkdir()
+
+        result = cleanup_service._scan_oversized_dirs(video_dir, max_per_dir=50)
+
+        assert len(result) == 1
+        assert result[0].parent_dir == letter_dir
+
+    def test_scan_oversized_series_anime_not_flagged(self, cleanup_service, temp_dirs):
+        """Serie anime avec 200 episodes (symlinks) sans saisons -> pas de subdivision."""
+        video_dir = temp_dirs["video"]
+        anime_dir = video_dir / "Séries" / "N" / "Naruto (2002)"
+        anime_dir.mkdir(parents=True)
+
+        for i in range(200):
+            link = anime_dir / f"Naruto (2002) - S01E{i+1:03d} - Episode {i+1}.mkv"
+            link.symlink_to(f"/storage/naruto_ep{i}.mkv")
+
+        result = cleanup_service._scan_oversized_dirs(video_dir, max_per_dir=50)
+
+        assert len(result) == 0
+
+    def test_scan_oversized_mixed_content_flagged(self, cleanup_service, temp_dirs):
+        """Repertoire avec des symlinks ET sous-repertoires au-dela du seuil -> signale."""
+        video_dir = temp_dirs["video"]
+        genre_dir = video_dir / "Films" / "Action"
+        genre_dir.mkdir(parents=True)
+
+        # 30 symlinks + 25 sous-repertoires = 55 items
+        for i in range(30):
+            link = genre_dir / f"Film {i:03d} (2020).mkv"
+            link.symlink_to(f"/storage/film{i}.mkv")
+        for i in range(25):
+            (genre_dir / f"Aa-{chr(65+i)}z").mkdir()
+
+        result = cleanup_service._scan_oversized_dirs(video_dir, max_per_dir=50)
+
+        assert len(result) == 1
 
 
 class TestScanMisplacedSymlinks:
@@ -551,6 +599,63 @@ class TestRepairBrokenSymlinks:
 
         assert result.repaired_symlinks == 0
         mock_repair_service.repair_symlink.assert_not_called()
+
+
+class TestDeleteBrokenSymlinks:
+    """Tests pour delete_broken_symlinks (suppression des symlinks irreparables)."""
+
+    def test_delete_broken_symlinks(self, cleanup_service, tmp_path):
+        """Supprime les symlinks casses irrecuperables."""
+        action_dir = tmp_path / "video" / "Films" / "Action"
+        action_dir.mkdir(parents=True)
+
+        # Creer des symlinks casses
+        broken1 = action_dir / "film_sans_candidat.mkv"
+        broken1.symlink_to("/storage/inexistant1.mkv")
+        broken2 = action_dir / "film_score_faible.mkv"
+        broken2.symlink_to("/storage/inexistant2.mkv")
+
+        broken_list = [
+            BrokenSymlinkInfo(
+                symlink_path=broken1,
+                original_target=Path("/storage/inexistant1.mkv"),
+                best_candidate=None,
+                candidate_score=0.0,
+            ),
+            BrokenSymlinkInfo(
+                symlink_path=broken2,
+                original_target=Path("/storage/inexistant2.mkv"),
+                best_candidate=Path("/storage/maybe.mkv"),
+                candidate_score=45.0,
+            ),
+        ]
+
+        result = cleanup_service.delete_broken_symlinks(broken_list)
+
+        assert result.broken_symlinks_deleted == 2
+        assert not broken1.exists() and not broken1.is_symlink()
+        assert not broken2.exists() and not broken2.is_symlink()
+
+    def test_delete_broken_symlinks_already_gone(self, cleanup_service, tmp_path):
+        """Gere gracieusement un symlink deja supprime."""
+        ghost = tmp_path / "video" / "Films" / "ghost.mkv"
+
+        broken_list = [
+            BrokenSymlinkInfo(
+                symlink_path=ghost,
+                original_target=Path("/storage/old.mkv"),
+            ),
+        ]
+
+        result = cleanup_service.delete_broken_symlinks(broken_list)
+
+        assert result.broken_symlinks_deleted == 0
+        assert len(result.errors) == 1
+
+    def test_cleanup_result_broken_symlinks_deleted_default(self):
+        """CleanupResult a broken_symlinks_deleted=0 par defaut."""
+        result = CleanupResult()
+        assert result.broken_symlinks_deleted == 0
 
 
 class TestFixMisplacedSymlinks:
@@ -812,7 +917,13 @@ class TestCleanupCLI:
                     original_target=Path("/storage/old.mkv"),
                     best_candidate=Path("/storage/new.mkv"),
                     candidate_score=95.0,
-                )
+                ),
+                BrokenSymlinkInfo(
+                    symlink_path=Path("/video/film2.mkv"),
+                    original_target=Path("/storage/old2.mkv"),
+                    best_candidate=None,
+                    candidate_score=0.0,
+                ),
             ]
             empty = [tmp_path / "video" / "empty"]
 
@@ -827,6 +938,9 @@ class TestCleanupCLI:
             mock_cleanup_svc.repair_broken_symlinks.return_value = CleanupResult(
                 repaired_symlinks=1,
             )
+            mock_cleanup_svc.delete_broken_symlinks.return_value = CleanupResult(
+                broken_symlinks_deleted=1,
+            )
             mock_cleanup_svc.fix_misplaced_symlinks.return_value = CleanupResult()
             mock_cleanup_svc.subdivide_oversized_dirs.return_value = CleanupResult()
             mock_cleanup_svc.clean_empty_dirs.return_value = CleanupResult(
@@ -838,6 +952,12 @@ class TestCleanupCLI:
             result = runner.invoke(app, ["cleanup", "--fix"])
 
             mock_cleanup_svc.repair_broken_symlinks.assert_called_once()
+            # delete_broken_symlinks appele pour l'irreparable (score=0, pas de candidat)
+            mock_cleanup_svc.delete_broken_symlinks.assert_called_once()
+            # Verifie que seul l'irreparable est passe a delete
+            deleted_list = mock_cleanup_svc.delete_broken_symlinks.call_args[0][0]
+            assert len(deleted_list) == 1
+            assert deleted_list[0].symlink_path == Path("/video/film2.mkv")
             mock_cleanup_svc.clean_empty_dirs.assert_called_once()
 
 
@@ -902,7 +1022,7 @@ class TestScopeFilmsSeries:
         for i in range(55):
             (docs_dir / f"Doc {i:03d} (2020).mkv").symlink_to(f"/storage/d{i}.mkv")
 
-        result = cleanup_service._scan_oversized_dirs(video_dir, max_files=50)
+        result = cleanup_service._scan_oversized_dirs(video_dir, max_per_dir=50)
 
         # Seul le repertoire dans Films/ doit etre detecte
         assert len(result) == 1
@@ -1260,3 +1380,420 @@ class TestCleanupCLICache:
 
             # Pas de cache -> analyze() est appele
             mock_cleanup_svc.analyze.assert_called_once()
+
+
+# ============================================================================
+# Phase 9 : Symlinks dupliques
+# ============================================================================
+
+
+class TestDuplicateSymlinkDataclass:
+    """Tests pour la dataclass DuplicateSymlink."""
+
+    def test_duplicate_symlink_creation(self):
+        """DuplicateSymlink stocke les champs correctement."""
+        dup = DuplicateSymlink(
+            directory=Path("/video/Films/Action"),
+            target_path=Path("/storage/Films/film.mkv"),
+            keep=Path("/video/Films/Action/Film (2020) MULTi x264 1080p.mkv"),
+            remove=[Path("/video/Films/Action/Film (2020) MULTi 1080p.mkv")],
+        )
+        assert dup.directory == Path("/video/Films/Action")
+        assert dup.target_path == Path("/storage/Films/film.mkv")
+        assert len(dup.remove) == 1
+
+    def test_cleanup_report_includes_duplicate_symlinks(self):
+        """CleanupReport.total_issues inclut les symlinks dupliques."""
+        dup = DuplicateSymlink(
+            directory=Path("/video/Films/Action"),
+            target_path=Path("/storage/Films/film.mkv"),
+            keep=Path("/video/Films/Action/Film (2020) MULTi x264 1080p.mkv"),
+            remove=[Path("/video/Films/Action/Film (2020) MULTi 1080p.mkv")],
+        )
+        report = CleanupReport(
+            video_dir=Path("/video"),
+            broken_symlinks=[],
+            misplaced_symlinks=[],
+            oversized_dirs=[],
+            empty_dirs=[],
+            duplicate_symlinks=[dup],
+        )
+        assert report.has_issues is True
+        assert report.total_issues == 1
+
+    def test_cleanup_step_type_duplicate(self):
+        """CleanupStepType.DUPLICATE_SYMLINK existe."""
+        assert CleanupStepType.DUPLICATE_SYMLINK == "duplicate_symlink"
+
+
+class TestScanDuplicateSymlinks:
+    """Tests pour _scan_duplicate_symlinks."""
+
+    def test_detect_duplicate_symlinks(self, cleanup_service, temp_dirs):
+        """Deux symlinks dans le meme repertoire pointant vers la meme cible."""
+        video_dir = temp_dirs["video"]
+        storage_dir = temp_dirs["storage"]
+
+        # Creer le fichier physique cible
+        target = storage_dir / "Films" / "Action" / "film.mkv"
+        target.parent.mkdir(parents=True)
+        target.touch()
+
+        # Creer deux symlinks dans le meme repertoire pointant vers la meme cible
+        action_dir = video_dir / "Films" / "Action"
+        action_dir.mkdir(parents=True)
+
+        old_link = action_dir / "Film (2020) MULTi 1080p.mkv"
+        old_link.symlink_to(target)
+
+        new_link = action_dir / "Film (2020) MULTi x264 1080p.mkv"
+        new_link.symlink_to(target)
+
+        result = cleanup_service._scan_duplicate_symlinks(video_dir)
+
+        assert len(result) == 1
+        assert result[0].target_path == target.resolve()
+        assert result[0].keep == new_link  # Nom le plus long
+        assert old_link in result[0].remove
+
+    def test_no_duplicates(self, cleanup_service, temp_dirs):
+        """Symlinks differents vers des cibles differentes -> pas de doublon."""
+        video_dir = temp_dirs["video"]
+        storage_dir = temp_dirs["storage"]
+
+        # Creer deux fichiers physiques distincts
+        target1 = storage_dir / "Films" / "film1.mkv"
+        target1.parent.mkdir(parents=True)
+        target1.touch()
+        target2 = storage_dir / "Films" / "film2.mkv"
+        target2.touch()
+
+        action_dir = video_dir / "Films" / "Action"
+        action_dir.mkdir(parents=True)
+
+        link1 = action_dir / "Film 1 (2020).mkv"
+        link1.symlink_to(target1)
+        link2 = action_dir / "Film 2 (2020).mkv"
+        link2.symlink_to(target2)
+
+        result = cleanup_service._scan_duplicate_symlinks(video_dir)
+
+        assert len(result) == 0
+
+    def test_same_target_different_dirs_not_duplicate(self, cleanup_service, temp_dirs):
+        """Meme cible mais dans des repertoires differents -> pas de doublon."""
+        video_dir = temp_dirs["video"]
+        storage_dir = temp_dirs["storage"]
+
+        target = storage_dir / "Films" / "film.mkv"
+        target.parent.mkdir(parents=True)
+        target.touch()
+
+        # Deux symlinks vers la meme cible mais dans des repertoires differents
+        dir1 = video_dir / "Films" / "Action"
+        dir1.mkdir(parents=True)
+        dir2 = video_dir / "Films" / "Drame"
+        dir2.mkdir(parents=True)
+
+        link1 = dir1 / "Film (2020).mkv"
+        link1.symlink_to(target)
+        link2 = dir2 / "Film (2020).mkv"
+        link2.symlink_to(target)
+
+        result = cleanup_service._scan_duplicate_symlinks(video_dir)
+
+        assert len(result) == 0
+
+    def test_heuristic_keeps_longest_name(self, cleanup_service, temp_dirs):
+        """Le symlink avec le nom le plus long est conserve."""
+        video_dir = temp_dirs["video"]
+        storage_dir = temp_dirs["storage"]
+
+        target = storage_dir / "Films" / "film.mkv"
+        target.parent.mkdir(parents=True)
+        target.touch()
+
+        action_dir = video_dir / "Films" / "Action"
+        action_dir.mkdir(parents=True)
+
+        # 3 symlinks de longueurs differentes
+        short = action_dir / "Film (2020).mkv"
+        short.symlink_to(target)
+        medium = action_dir / "Film (2020) MULTi 1080p.mkv"
+        medium.symlink_to(target)
+        long = action_dir / "Film (2020) MULTi x264 DTS 1080p.mkv"
+        long.symlink_to(target)
+
+        result = cleanup_service._scan_duplicate_symlinks(video_dir)
+
+        assert len(result) == 1
+        assert result[0].keep == long
+        assert set(result[0].remove) == {short, medium}
+
+    def test_scope_ignores_outside_films_series(self, cleanup_service, temp_dirs):
+        """Les doublons hors Films/ et Series/ sont ignores."""
+        video_dir = temp_dirs["video"]
+        storage_dir = temp_dirs["storage"]
+
+        target = storage_dir / "doc.mkv"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.touch()
+
+        # Doublons hors scope (Documentaires)
+        docs_dir = video_dir / "Documentaires"
+        docs_dir.mkdir(parents=True)
+        (docs_dir / "Doc (2020).mkv").symlink_to(target)
+        (docs_dir / "Doc (2020) FR.mkv").symlink_to(target)
+
+        result = cleanup_service._scan_duplicate_symlinks(video_dir)
+
+        assert len(result) == 0
+
+    def test_broken_symlinks_ignored(self, cleanup_service, temp_dirs):
+        """Les symlinks casses ne sont pas comptes comme doublons."""
+        video_dir = temp_dirs["video"]
+        storage_dir = temp_dirs["storage"]
+
+        target = storage_dir / "Films" / "film.mkv"
+        target.parent.mkdir(parents=True)
+        target.touch()
+
+        action_dir = video_dir / "Films" / "Action"
+        action_dir.mkdir(parents=True)
+
+        # Un symlink valide
+        valid = action_dir / "Film (2020) MULTi x264 1080p.mkv"
+        valid.symlink_to(target)
+
+        # Un symlink casse (vers une cible qui n'existe pas)
+        broken = action_dir / "Film (2020) MULTi 1080p.mkv"
+        broken.symlink_to(storage_dir / "Films" / "inexistant.mkv")
+
+        result = cleanup_service._scan_duplicate_symlinks(video_dir)
+
+        assert len(result) == 0
+
+    def test_series_duplicate_symlinks(self, cleanup_service, temp_dirs):
+        """Doublons dans Séries/ sont aussi detectes."""
+        video_dir = temp_dirs["video"]
+        storage_dir = temp_dirs["storage"]
+
+        target = storage_dir / "Séries" / "episode.mkv"
+        target.parent.mkdir(parents=True)
+        target.touch()
+
+        season_dir = video_dir / "Séries" / "B" / "Breaking Bad (2008)" / "Saison 01"
+        season_dir.mkdir(parents=True)
+
+        old_link = season_dir / "Breaking Bad (2008) - S01E01 - Pilot.mkv"
+        old_link.symlink_to(target)
+        new_link = season_dir / "Breaking Bad (2008) - S01E01 - Pilot - MULTi x264 1080p.mkv"
+        new_link.symlink_to(target)
+
+        result = cleanup_service._scan_duplicate_symlinks(video_dir)
+
+        assert len(result) == 1
+        assert result[0].keep == new_link
+        assert old_link in result[0].remove
+
+
+class TestFixDuplicateSymlinks:
+    """Tests pour fix_duplicate_symlinks."""
+
+    def test_fix_removes_duplicate_symlinks(self, cleanup_service, tmp_path):
+        """fix_duplicate_symlinks supprime les doublons et garde le bon."""
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        target = storage_dir / "film.mkv"
+        target.touch()
+
+        action_dir = tmp_path / "video" / "Films" / "Action"
+        action_dir.mkdir(parents=True)
+
+        keep_link = action_dir / "Film (2020) MULTi x264 1080p.mkv"
+        keep_link.symlink_to(target)
+        remove_link = action_dir / "Film (2020) MULTi 1080p.mkv"
+        remove_link.symlink_to(target)
+
+        duplicates = [
+            DuplicateSymlink(
+                directory=action_dir,
+                target_path=target,
+                keep=keep_link,
+                remove=[remove_link],
+            ),
+        ]
+
+        result = cleanup_service.fix_duplicate_symlinks(duplicates)
+
+        assert result.duplicate_symlinks_removed == 1
+        assert keep_link.is_symlink()  # Conserve
+        assert not remove_link.exists()  # Supprime
+
+    def test_fix_multiple_removes(self, cleanup_service, tmp_path):
+        """fix_duplicate_symlinks supprime plusieurs doublons pour un meme target."""
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        target = storage_dir / "film.mkv"
+        target.touch()
+
+        action_dir = tmp_path / "video" / "Films" / "Action"
+        action_dir.mkdir(parents=True)
+
+        keep = action_dir / "Film (2020) MULTi x264 DTS 1080p.mkv"
+        keep.symlink_to(target)
+        remove1 = action_dir / "Film (2020).mkv"
+        remove1.symlink_to(target)
+        remove2 = action_dir / "Film (2020) MULTi 1080p.mkv"
+        remove2.symlink_to(target)
+
+        duplicates = [
+            DuplicateSymlink(
+                directory=action_dir,
+                target_path=target,
+                keep=keep,
+                remove=[remove1, remove2],
+            ),
+        ]
+
+        result = cleanup_service.fix_duplicate_symlinks(duplicates)
+
+        assert result.duplicate_symlinks_removed == 2
+        assert keep.is_symlink()
+        assert not remove1.exists()
+        assert not remove2.exists()
+
+    def test_fix_already_removed(self, cleanup_service, tmp_path):
+        """fix_duplicate_symlinks gere gracieusement un symlink deja supprime."""
+        action_dir = tmp_path / "video" / "Films" / "Action"
+        action_dir.mkdir(parents=True)
+
+        target = tmp_path / "storage" / "film.mkv"
+        target.parent.mkdir(parents=True)
+        target.touch()
+
+        keep = action_dir / "Film (2020) MULTi x264 1080p.mkv"
+        keep.symlink_to(target)
+
+        # Le symlink a supprimer n'existe deja plus
+        ghost = action_dir / "Film (2020).mkv"
+
+        duplicates = [
+            DuplicateSymlink(
+                directory=action_dir,
+                target_path=target,
+                keep=keep,
+                remove=[ghost],
+            ),
+        ]
+
+        result = cleanup_service.fix_duplicate_symlinks(duplicates)
+
+        # Pas d'erreur, mais pas comptabilise non plus
+        assert result.duplicate_symlinks_removed == 0
+        assert len(result.errors) == 1
+
+
+class TestCleanupResultDuplicateField:
+    """Tests pour le champ duplicate_symlinks_removed dans CleanupResult."""
+
+    def test_cleanup_result_default(self):
+        """CleanupResult a duplicate_symlinks_removed=0 par defaut."""
+        result = CleanupResult()
+        assert result.duplicate_symlinks_removed == 0
+
+
+class TestDuplicateSymlinkCache:
+    """Tests pour la serialisation/deserialisation des doublons dans le cache."""
+
+    def test_save_and_load_with_duplicates(self, tmp_path):
+        """Sauvegarde et rechargement d'un rapport avec doublons."""
+        from src.services.cleanup import save_report_cache, load_report_cache
+
+        video_dir = tmp_path / "video"
+        cache_dir = tmp_path / "cache"
+
+        dup = DuplicateSymlink(
+            directory=Path("/video/Films/Action"),
+            target_path=Path("/storage/Films/film.mkv"),
+            keep=Path("/video/Films/Action/Film (2020) MULTi x264 1080p.mkv"),
+            remove=[
+                Path("/video/Films/Action/Film (2020) MULTi 1080p.mkv"),
+                Path("/video/Films/Action/Film (2020).mkv"),
+            ],
+        )
+
+        report = CleanupReport(
+            video_dir=video_dir,
+            broken_symlinks=[],
+            misplaced_symlinks=[],
+            oversized_dirs=[],
+            empty_dirs=[],
+            duplicate_symlinks=[dup],
+        )
+
+        save_report_cache(report, cache_dir=cache_dir)
+        loaded = load_report_cache(video_dir, cache_dir=cache_dir)
+
+        assert loaded is not None
+        assert len(loaded.duplicate_symlinks) == 1
+        assert loaded.duplicate_symlinks[0].directory == Path("/video/Films/Action")
+        assert loaded.duplicate_symlinks[0].target_path == Path("/storage/Films/film.mkv")
+        assert loaded.duplicate_symlinks[0].keep == Path("/video/Films/Action/Film (2020) MULTi x264 1080p.mkv")
+        assert len(loaded.duplicate_symlinks[0].remove) == 2
+
+    def test_load_cache_without_duplicates_field(self, tmp_path):
+        """Un cache sans le champ duplicate_symlinks est charge avec une liste vide."""
+        import json
+        import time
+
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir(parents=True)
+        video_dir = tmp_path / "video"
+
+        # Ecrire un cache JSON sans le champ duplicate_symlinks (ancien format)
+        data = {
+            "video_dir": str(video_dir),
+            "not_in_db_count": 0,
+            "broken_symlinks": [],
+            "misplaced_symlinks": [],
+            "oversized_dirs": [],
+            "empty_dirs": [],
+        }
+        cache_file = cache_dir / "cleanup_report.json"
+        cache_file.write_text(json.dumps(data))
+
+        from src.services.cleanup import load_report_cache
+        loaded = load_report_cache(video_dir, cache_dir=cache_dir)
+
+        assert loaded is not None
+        assert loaded.duplicate_symlinks == []
+
+
+class TestAnalyzeIncludesDuplicates:
+    """Tests verifiant que analyze() appelle _scan_duplicate_symlinks."""
+
+    def test_analyze_includes_duplicate_scan(
+        self, cleanup_service, mock_repair_service, temp_dirs,
+    ):
+        """analyze() retourne les symlinks dupliques dans le rapport."""
+        video_dir = temp_dirs["video"]
+        storage_dir = temp_dirs["storage"]
+
+        # Creer un doublon dans Films/
+        target = storage_dir / "Films" / "film.mkv"
+        target.parent.mkdir(parents=True)
+        target.touch()
+
+        action_dir = video_dir / "Films" / "Action"
+        action_dir.mkdir(parents=True)
+
+        old_link = action_dir / "Film (2020) MULTi 1080p.mkv"
+        old_link.symlink_to(target)
+        new_link = action_dir / "Film (2020) MULTi x264 1080p.mkv"
+        new_link.symlink_to(target)
+
+        report = cleanup_service.analyze(video_dir)
+
+        assert len(report.duplicate_symlinks) == 1
+        assert report.total_issues >= 1
