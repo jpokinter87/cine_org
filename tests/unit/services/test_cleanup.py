@@ -839,3 +839,424 @@ class TestCleanupCLI:
 
             mock_cleanup_svc.repair_broken_symlinks.assert_called_once()
             mock_cleanup_svc.clean_empty_dirs.assert_called_once()
+
+
+# ============================================================================
+# Phase 7 : Scope restreint Films/Series
+# ============================================================================
+
+
+class TestScopeFilmsSeries:
+    """Tests verifiant que le scan se limite aux sous-repertoires Films/ et Series/."""
+
+    def test_scan_misplaced_ignores_outside_films_series(
+        self, cleanup_service, mock_video_file_repo, temp_dirs,
+    ):
+        """Les symlinks hors Films/ et Series/ sont ignores par _scan_misplaced_symlinks."""
+        video_dir = temp_dirs["video"]
+        storage_dir = temp_dirs["storage"]
+
+        # Creer des sous-repertoires Films et hors-scope
+        films_dir = video_dir / "Films" / "Action"
+        films_dir.mkdir(parents=True)
+        other_dir = video_dir / "Documentaires"
+        other_dir.mkdir(parents=True)
+
+        # Creer un fichier cible
+        target = storage_dir / "film.mkv"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.touch()
+
+        # Symlink dans Films (dans le scope)
+        symlink_in = films_dir / "Film (2020).mkv"
+        symlink_in.symlink_to(target)
+
+        # Symlink hors scope (Documentaires)
+        symlink_out = other_dir / "Doc (2020).mkv"
+        symlink_out.symlink_to(target)
+
+        # Mock: pas en BDD (les deux seront comptees not_in_db si visitees)
+        mock_video_file_repo.get_by_symlink_path.return_value = None
+        mock_video_file_repo.get_by_path.return_value = None
+
+        result, not_in_db = cleanup_service._scan_misplaced_symlinks(video_dir)
+
+        # Seul le symlink dans Films/ doit etre visite -> 1 not_in_db
+        assert not_in_db == 1
+
+    def test_scan_oversized_ignores_outside_films_series(
+        self, cleanup_service, temp_dirs,
+    ):
+        """Les repertoires hors Films/ et Series/ sont ignores par _scan_oversized_dirs."""
+        video_dir = temp_dirs["video"]
+
+        # Repertoire surcharge dans Films/ (dans le scope)
+        genre_dir = video_dir / "Films" / "Action"
+        genre_dir.mkdir(parents=True)
+        for i in range(55):
+            (genre_dir / f"Film {i:03d} (2020).mkv").symlink_to(f"/storage/f{i}.mkv")
+
+        # Repertoire surcharge hors scope
+        docs_dir = video_dir / "Documentaires"
+        docs_dir.mkdir(parents=True)
+        for i in range(55):
+            (docs_dir / f"Doc {i:03d} (2020).mkv").symlink_to(f"/storage/d{i}.mkv")
+
+        result = cleanup_service._scan_oversized_dirs(video_dir, max_files=50)
+
+        # Seul le repertoire dans Films/ doit etre detecte
+        assert len(result) == 1
+        assert result[0].parent_dir == genre_dir
+
+    def test_scan_empty_dirs_ignores_outside_films_series(
+        self, cleanup_service, temp_dirs,
+    ):
+        """Les repertoires vides hors Films/ et Series/ sont ignores."""
+        video_dir = temp_dirs["video"]
+
+        # Repertoire vide dans Films/ (dans le scope)
+        (video_dir / "Films" / "Action").mkdir(parents=True)
+
+        # Repertoire vide hors scope
+        (video_dir / "Documentaires" / "Nature").mkdir(parents=True)
+
+        result = cleanup_service._scan_empty_dirs(video_dir)
+
+        result_paths = {p for p in result}
+        assert video_dir / "Films" / "Action" in result_paths
+        assert video_dir / "Documentaires" / "Nature" not in result_paths
+
+    def test_scan_broken_symlinks_ignores_outside_films_series(
+        self, cleanup_service, mock_repair_service, temp_dirs,
+    ):
+        """Les symlinks casses hors Films/ et Series/ sont filtres."""
+        video_dir = temp_dirs["video"]
+
+        # Symlink casse dans Films/ (dans le scope)
+        broken_in = video_dir / "Films" / "Action" / "broken.mkv"
+        # Symlink casse hors scope
+        broken_out = video_dir / "Documentaires" / "broken_doc.mkv"
+
+        mock_repair_service.find_broken_symlinks.return_value = [
+            broken_in, broken_out,
+        ]
+        mock_repair_service.find_possible_targets.return_value = []
+
+        result = cleanup_service._scan_broken_symlinks(video_dir)
+
+        # Seul le symlink dans Films/ doit etre retourne
+        assert len(result) == 1
+        assert result[0].symlink_path == broken_in
+
+    def test_scan_includes_series_subdir(
+        self, cleanup_service, temp_dirs,
+    ):
+        """Les repertoires dans Series/ sont dans le scope."""
+        video_dir = temp_dirs["video"]
+
+        # Repertoire vide dans Series/
+        (video_dir / "Séries" / "B" / "Breaking Bad (2008)" / "Saison 01").mkdir(parents=True)
+
+        result = cleanup_service._scan_empty_dirs(video_dir)
+
+        result_paths = {p for p in result}
+        assert video_dir / "Séries" / "B" / "Breaking Bad (2008)" / "Saison 01" in result_paths
+
+
+# ============================================================================
+# Phase 8 : Cache du rapport d'analyse
+# ============================================================================
+
+
+class TestReportCache:
+    """Tests pour la serialisation/deserialisation du cache CleanupReport."""
+
+    def test_save_and_load_report_cache(self, tmp_path):
+        """Sauvegarde et rechargement d'un rapport complet."""
+        from src.services.cleanup import save_report_cache, load_report_cache
+
+        video_dir = tmp_path / "video"
+        cache_dir = tmp_path / "cache"
+
+        report = CleanupReport(
+            video_dir=video_dir,
+            broken_symlinks=[
+                BrokenSymlinkInfo(
+                    symlink_path=Path("/video/Films/broken.mkv"),
+                    original_target=Path("/storage/old.mkv"),
+                    best_candidate=Path("/storage/new.mkv"),
+                    candidate_score=95.0,
+                ),
+            ],
+            misplaced_symlinks=[
+                MisplacedSymlink(
+                    symlink_path=Path("/video/Films/Drame/film.mkv"),
+                    target_path=Path("/storage/film.mkv"),
+                    current_dir=Path("/video/Films/Drame"),
+                    expected_dir=Path("/video/Films/Action"),
+                    media_title="Film Action",
+                ),
+            ],
+            oversized_dirs=[
+                SubdivisionPlan(
+                    parent_dir=Path("/video/Films/Action"),
+                    current_count=60,
+                    max_allowed=50,
+                    ranges=[("Aa", "Am"), ("An", "Az")],
+                    items_to_move=[
+                        (Path("/video/Films/Action/Alpha.mkv"), Path("/video/Films/Action/Aa-Am/Alpha.mkv")),
+                    ],
+                ),
+            ],
+            empty_dirs=[Path("/video/Films/Vide")],
+            not_in_db_count=5,
+        )
+
+        save_report_cache(report, cache_dir=cache_dir)
+        loaded = load_report_cache(video_dir, cache_dir=cache_dir)
+
+        assert loaded is not None
+        assert loaded.video_dir == video_dir
+        assert len(loaded.broken_symlinks) == 1
+        assert loaded.broken_symlinks[0].symlink_path == Path("/video/Films/broken.mkv")
+        assert loaded.broken_symlinks[0].best_candidate == Path("/storage/new.mkv")
+        assert loaded.broken_symlinks[0].candidate_score == 95.0
+        assert len(loaded.misplaced_symlinks) == 1
+        assert loaded.misplaced_symlinks[0].media_title == "Film Action"
+        assert len(loaded.oversized_dirs) == 1
+        assert loaded.oversized_dirs[0].current_count == 60
+        assert len(loaded.oversized_dirs[0].items_to_move) == 1
+        assert len(loaded.empty_dirs) == 1
+        assert loaded.not_in_db_count == 5
+
+    def test_load_cache_expired(self, tmp_path):
+        """Un cache trop vieux est ignore."""
+        import time
+        from src.services.cleanup import save_report_cache, load_report_cache
+
+        video_dir = tmp_path / "video"
+        cache_dir = tmp_path / "cache"
+
+        report = CleanupReport(
+            video_dir=video_dir,
+            broken_symlinks=[],
+            misplaced_symlinks=[],
+            oversized_dirs=[],
+            empty_dirs=[],
+        )
+
+        save_report_cache(report, cache_dir=cache_dir)
+
+        # Modifier le mtime du fichier cache pour simuler l'expiration
+        cache_file = cache_dir / "cleanup_report.json"
+        old_time = time.time() - 20 * 60  # 20 minutes ago
+        os.utime(cache_file, (old_time, old_time))
+
+        loaded = load_report_cache(video_dir, max_age_minutes=10, cache_dir=cache_dir)
+        assert loaded is None
+
+    def test_load_cache_wrong_video_dir(self, tmp_path):
+        """Un cache pour un autre video_dir est ignore."""
+        from src.services.cleanup import save_report_cache, load_report_cache
+
+        cache_dir = tmp_path / "cache"
+
+        report = CleanupReport(
+            video_dir=tmp_path / "video_a",
+            broken_symlinks=[],
+            misplaced_symlinks=[],
+            oversized_dirs=[],
+            empty_dirs=[],
+        )
+
+        save_report_cache(report, cache_dir=cache_dir)
+
+        # Charger avec un autre video_dir
+        loaded = load_report_cache(tmp_path / "video_b", cache_dir=cache_dir)
+        assert loaded is None
+
+    def test_load_cache_missing_file(self, tmp_path):
+        """Retourne None si le fichier cache n'existe pas."""
+        from src.services.cleanup import load_report_cache
+
+        loaded = load_report_cache(tmp_path / "video", cache_dir=tmp_path / "nonexistent")
+        assert loaded is None
+
+    def test_save_report_empty(self, tmp_path):
+        """Sauvegarde et chargement d'un rapport vide."""
+        from src.services.cleanup import save_report_cache, load_report_cache
+
+        video_dir = tmp_path / "video"
+        cache_dir = tmp_path / "cache"
+
+        report = CleanupReport(
+            video_dir=video_dir,
+            broken_symlinks=[],
+            misplaced_symlinks=[],
+            oversized_dirs=[],
+            empty_dirs=[],
+            not_in_db_count=0,
+        )
+
+        save_report_cache(report, cache_dir=cache_dir)
+        loaded = load_report_cache(video_dir, cache_dir=cache_dir)
+
+        assert loaded is not None
+        assert loaded.total_issues == 0
+        assert loaded.not_in_db_count == 0
+
+    def test_broken_symlink_no_candidate(self, tmp_path):
+        """BrokenSymlinkInfo sans candidat est correctement serialise."""
+        from src.services.cleanup import save_report_cache, load_report_cache
+
+        video_dir = tmp_path / "video"
+        cache_dir = tmp_path / "cache"
+
+        report = CleanupReport(
+            video_dir=video_dir,
+            broken_symlinks=[
+                BrokenSymlinkInfo(
+                    symlink_path=Path("/video/Films/broken.mkv"),
+                    original_target=Path("/storage/old.mkv"),
+                    best_candidate=None,
+                    candidate_score=0.0,
+                ),
+            ],
+            misplaced_symlinks=[],
+            oversized_dirs=[],
+            empty_dirs=[],
+        )
+
+        save_report_cache(report, cache_dir=cache_dir)
+        loaded = load_report_cache(video_dir, cache_dir=cache_dir)
+
+        assert loaded is not None
+        assert loaded.broken_symlinks[0].best_candidate is None
+        assert loaded.broken_symlinks[0].candidate_score == 0.0
+
+
+class TestCleanupCLICache:
+    """Tests pour l'utilisation du cache dans la commande CLI."""
+
+    def test_cleanup_dry_run_saves_cache(self, tmp_path):
+        """En mode dry-run, le rapport est sauvegarde dans le cache."""
+        from typer.testing import CliRunner
+        from unittest.mock import patch, MagicMock
+
+        runner = CliRunner()
+
+        with patch("src.adapters.cli.commands.Container") as MockContainer, \
+             patch("src.adapters.cli.commands.save_report_cache") as mock_save:
+            mock_container = MagicMock()
+            MockContainer.return_value = mock_container
+
+            mock_config = MagicMock()
+            mock_config.video_dir = str(tmp_path / "video")
+            mock_config.storage_dir = str(tmp_path / "storage")
+            mock_container.config.return_value = mock_config
+
+            (tmp_path / "video").mkdir(exist_ok=True)
+            (tmp_path / "storage").mkdir(exist_ok=True)
+
+            report = CleanupReport(
+                video_dir=tmp_path / "video",
+                broken_symlinks=[],
+                misplaced_symlinks=[],
+                oversized_dirs=[],
+                empty_dirs=[],
+            )
+            mock_cleanup_svc = MagicMock()
+            mock_cleanup_svc.analyze.return_value = report
+            mock_container.cleanup_service.return_value = mock_cleanup_svc
+
+            from src.main import app
+            result = runner.invoke(app, ["cleanup"])
+
+            mock_save.assert_called_once_with(report)
+
+    def test_cleanup_fix_uses_cache(self, tmp_path):
+        """Avec --fix, utilise le cache si disponible et recent."""
+        from typer.testing import CliRunner
+        from unittest.mock import patch, MagicMock
+
+        runner = CliRunner()
+
+        cached_report = CleanupReport(
+            video_dir=tmp_path / "video",
+            broken_symlinks=[],
+            misplaced_symlinks=[],
+            oversized_dirs=[],
+            empty_dirs=[Path(tmp_path / "video" / "Films" / "Vide")],
+        )
+
+        with patch("src.adapters.cli.commands.Container") as MockContainer, \
+             patch("src.adapters.cli.commands.load_report_cache") as mock_load, \
+             patch("src.adapters.cli.commands.save_report_cache"):
+            mock_load.return_value = cached_report
+
+            mock_container = MagicMock()
+            MockContainer.return_value = mock_container
+
+            mock_config = MagicMock()
+            mock_config.video_dir = str(tmp_path / "video")
+            mock_config.storage_dir = str(tmp_path / "storage")
+            mock_container.config.return_value = mock_config
+
+            (tmp_path / "video").mkdir(exist_ok=True)
+            (tmp_path / "storage").mkdir(exist_ok=True)
+
+            mock_cleanup_svc = MagicMock()
+            mock_cleanup_svc.clean_empty_dirs.return_value = CleanupResult(
+                empty_dirs_removed=1,
+            )
+            mock_cleanup_svc.repair_broken_symlinks.return_value = CleanupResult()
+            mock_cleanup_svc.fix_misplaced_symlinks.return_value = CleanupResult()
+            mock_cleanup_svc.subdivide_oversized_dirs.return_value = CleanupResult()
+            mock_container.cleanup_service.return_value = mock_cleanup_svc
+
+            from src.main import app
+            result = runner.invoke(app, ["cleanup", "--fix"])
+
+            # Le cache est utilise, analyze() n'est PAS appele
+            mock_cleanup_svc.analyze.assert_not_called()
+            mock_cleanup_svc.clean_empty_dirs.assert_called_once()
+
+    def test_cleanup_fix_no_cache_runs_analysis(self, tmp_path):
+        """Avec --fix sans cache, lance l'analyse normalement."""
+        from typer.testing import CliRunner
+        from unittest.mock import patch, MagicMock
+
+        runner = CliRunner()
+
+        with patch("src.adapters.cli.commands.Container") as MockContainer, \
+             patch("src.adapters.cli.commands.load_report_cache") as mock_load, \
+             patch("src.adapters.cli.commands.save_report_cache"):
+            mock_load.return_value = None  # Pas de cache
+
+            mock_container = MagicMock()
+            MockContainer.return_value = mock_container
+
+            mock_config = MagicMock()
+            mock_config.video_dir = str(tmp_path / "video")
+            mock_config.storage_dir = str(tmp_path / "storage")
+            mock_container.config.return_value = mock_config
+
+            (tmp_path / "video").mkdir(exist_ok=True)
+            (tmp_path / "storage").mkdir(exist_ok=True)
+
+            report = CleanupReport(
+                video_dir=tmp_path / "video",
+                broken_symlinks=[],
+                misplaced_symlinks=[],
+                oversized_dirs=[],
+                empty_dirs=[],
+            )
+            mock_cleanup_svc = MagicMock()
+            mock_cleanup_svc.analyze.return_value = report
+            mock_container.cleanup_service.return_value = mock_cleanup_svc
+
+            from src.main import app
+            result = runner.invoke(app, ["cleanup", "--fix"])
+
+            # Pas de cache -> analyze() est appele
+            mock_cleanup_svc.analyze.assert_called_once()

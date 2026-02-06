@@ -13,7 +13,7 @@ Scope : symlinks video/ uniquement (pas les fichiers physiques dans storage/).
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 from loguru import logger
 from sqlmodel import select
@@ -22,6 +22,8 @@ from src.core.entities.media import Movie, Series
 from src.core.entities.video import VideoFile
 from src.infrastructure.persistence.models import MovieModel, EpisodeModel, SeriesModel
 from src.services.organizer import _strip_article
+
+MANAGED_SUBDIRS = ("Films", "Séries")
 
 
 class CleanupStepType(str, Enum):
@@ -174,6 +176,26 @@ class CleanupService:
         )
 
     # ------------------------------------------------------------------
+    # Utilitaires scope
+    # ------------------------------------------------------------------
+
+    def _iter_managed_paths(self, video_dir: Path) -> Iterator[Path]:
+        """Itere recursivement sur les fichiers/dossiers dans Films/ et Series/ uniquement."""
+        for subdir_name in MANAGED_SUBDIRS:
+            subdir = video_dir / subdir_name
+            if subdir.exists():
+                yield from subdir.rglob("*")
+
+    def _is_in_managed_scope(self, path: Path, video_dir: Path) -> bool:
+        """Verifie si un chemin est sous l'un des sous-repertoires geres."""
+        try:
+            relative = path.relative_to(video_dir)
+        except ValueError:
+            return False
+        parts = relative.parts
+        return len(parts) > 0 and parts[0] in MANAGED_SUBDIRS
+
+    # ------------------------------------------------------------------
     # Analyse
     # ------------------------------------------------------------------
 
@@ -191,6 +213,9 @@ class CleanupService:
         result = []
 
         for link in broken_links:
+            # Filtrer les liens hors du scope gere (Films/, Series/)
+            if not self._is_in_managed_scope(link, video_dir):
+                continue
             # Lire la cible originale
             try:
                 original_target = link.readlink()
@@ -235,7 +260,7 @@ class CleanupService:
         misplaced = []
         not_in_db = 0
 
-        for symlink in video_dir.rglob("*"):
+        for symlink in self._iter_managed_paths(video_dir):
             if not symlink.is_symlink():
                 continue
 
@@ -363,7 +388,7 @@ class CleanupService:
         """
         plans = []
 
-        for dirpath in video_dir.rglob("*"):
+        for dirpath in self._iter_managed_paths(video_dir):
             if not dirpath.is_dir():
                 continue
 
@@ -402,7 +427,7 @@ class CleanupService:
 
         # Parcours bottom-up : trier par profondeur decroissante
         all_dirs = sorted(
-            [d for d in video_dir.rglob("*") if d.is_dir()],
+            [d for d in self._iter_managed_paths(video_dir) if d.is_dir()],
             key=lambda p: len(p.parts),
             reverse=True,
         )
@@ -605,3 +630,152 @@ class CleanupService:
             ranges=ranges,
             items_to_move=moves,
         )
+
+
+# ------------------------------------------------------------------
+# Cache du rapport d'analyse
+# ------------------------------------------------------------------
+
+_DEFAULT_CACHE_DIR = Path.home() / ".cineorg"
+_CACHE_FILENAME = "cleanup_report.json"
+
+
+def save_report_cache(
+    report: CleanupReport, cache_dir: Optional[Path] = None
+) -> None:
+    """
+    Sauvegarde le rapport d'analyse en JSON pour reutilisation ulterieure.
+
+    Args:
+        report: Le rapport a sauvegarder.
+        cache_dir: Repertoire du cache (defaut: ~/.cineorg).
+    """
+    import json
+
+    cache_dir = cache_dir or _DEFAULT_CACHE_DIR
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_file = cache_dir / _CACHE_FILENAME
+
+    data = {
+        "video_dir": str(report.video_dir),
+        "not_in_db_count": report.not_in_db_count,
+        "broken_symlinks": [
+            {
+                "symlink_path": str(b.symlink_path),
+                "original_target": str(b.original_target),
+                "best_candidate": str(b.best_candidate) if b.best_candidate else None,
+                "candidate_score": b.candidate_score,
+            }
+            for b in report.broken_symlinks
+        ],
+        "misplaced_symlinks": [
+            {
+                "symlink_path": str(m.symlink_path),
+                "target_path": str(m.target_path),
+                "current_dir": str(m.current_dir),
+                "expected_dir": str(m.expected_dir),
+                "media_title": m.media_title,
+            }
+            for m in report.misplaced_symlinks
+        ],
+        "oversized_dirs": [
+            {
+                "parent_dir": str(o.parent_dir),
+                "current_count": o.current_count,
+                "max_allowed": o.max_allowed,
+                "ranges": o.ranges,
+                "items_to_move": [
+                    [str(src), str(dst)] for src, dst in o.items_to_move
+                ],
+            }
+            for o in report.oversized_dirs
+        ],
+        "empty_dirs": [str(d) for d in report.empty_dirs],
+    }
+
+    cache_file.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def load_report_cache(
+    video_dir: Path,
+    max_age_minutes: int = 10,
+    cache_dir: Optional[Path] = None,
+) -> Optional[CleanupReport]:
+    """
+    Charge le rapport d'analyse depuis le cache s'il existe et est recent.
+
+    Args:
+        video_dir: Repertoire video attendu (doit correspondre au cache).
+        max_age_minutes: Age maximum du cache en minutes.
+        cache_dir: Repertoire du cache (defaut: ~/.cineorg).
+
+    Returns:
+        CleanupReport si le cache est valide, None sinon.
+    """
+    import json
+    import time
+
+    cache_dir = cache_dir or _DEFAULT_CACHE_DIR
+    cache_file = cache_dir / _CACHE_FILENAME
+
+    if not cache_file.exists():
+        return None
+
+    # Verifier l'age du cache
+    age_seconds = time.time() - cache_file.stat().st_mtime
+    if age_seconds > max_age_minutes * 60:
+        return None
+
+    try:
+        data = json.loads(cache_file.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    # Verifier que le video_dir correspond
+    if data.get("video_dir") != str(video_dir):
+        return None
+
+    broken = [
+        BrokenSymlinkInfo(
+            symlink_path=Path(b["symlink_path"]),
+            original_target=Path(b["original_target"]),
+            best_candidate=Path(b["best_candidate"]) if b["best_candidate"] else None,
+            candidate_score=b["candidate_score"],
+        )
+        for b in data.get("broken_symlinks", [])
+    ]
+
+    misplaced = [
+        MisplacedSymlink(
+            symlink_path=Path(m["symlink_path"]),
+            target_path=Path(m["target_path"]),
+            current_dir=Path(m["current_dir"]),
+            expected_dir=Path(m["expected_dir"]),
+            media_title=m.get("media_title", ""),
+        )
+        for m in data.get("misplaced_symlinks", [])
+    ]
+
+    oversized = [
+        SubdivisionPlan(
+            parent_dir=Path(o["parent_dir"]),
+            current_count=o["current_count"],
+            max_allowed=o["max_allowed"],
+            ranges=[tuple(r) for r in o["ranges"]],
+            items_to_move=[
+                (Path(pair[0]), Path(pair[1])) for pair in o["items_to_move"]
+            ],
+        )
+        for o in data.get("oversized_dirs", [])
+    ]
+
+    empty = [Path(d) for d in data.get("empty_dirs", [])]
+
+    return CleanupReport(
+        video_dir=Path(data["video_dir"]),
+        broken_symlinks=broken,
+        misplaced_symlinks=misplaced,
+        oversized_dirs=oversized,
+        empty_dirs=empty,
+        not_in_db_count=data.get("not_in_db_count", 0),
+    )

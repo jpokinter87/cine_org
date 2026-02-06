@@ -30,6 +30,7 @@ from rich.prompt import Confirm
 from rich.tree import Tree
 
 from src.core.value_objects.parsed_info import MediaType
+from src.services.cleanup import save_report_cache, load_report_cache
 
 
 # Pattern pour extraire saison/episode d'un nom de fichier
@@ -3119,12 +3120,27 @@ async def _cleanup_async(
 
         console.print(f"[bold cyan]Index:[/bold cyan] {file_count} fichiers indexes\n")
 
-        # Analyse
-        with Status("[cyan]Analyse du repertoire video...", console=console):
-            report = cleanup_svc.analyze(video_dir)
+        # En mode --fix, tenter de charger le cache
+        report = None
+        if fix:
+            cached = load_report_cache(video_dir)
+            if cached is not None:
+                console.print(
+                    "[bold cyan]Utilisation de l'analyse en cache[/bold cyan]\n"
+                )
+                report = cached
+
+        # Analyse si pas de cache
+        if report is None:
+            with Status("[cyan]Analyse du repertoire video...", console=console):
+                report = cleanup_svc.analyze(video_dir)
 
         # Afficher le rapport
         _display_cleanup_report(report)
+
+        if not fix:
+            # Sauvegarder le cache pour un futur --fix
+            save_report_cache(report)
 
         if not report.has_issues:
             console.print("[green]Aucun probleme detecte.[/green]")
