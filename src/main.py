@@ -11,6 +11,7 @@ from loguru import logger
 
 from .adapters.cli.commands import (
     check,
+    cleanup,
     consolidate,
     enrich,
     enrich_imdb_ids,
@@ -71,6 +72,7 @@ app.command(name="enrich-imdb-ids")(enrich_imdb_ids)
 app.command(name="repair-links")(repair_links)
 app.command()(consolidate)
 app.command()(check)
+app.command()(cleanup)
 
 # Monter validate_app comme sous-commande
 app.add_typer(validate_app, name="validate")

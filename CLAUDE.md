@@ -128,6 +128,10 @@ TV: `{Title} ({Year}) - {SxxExx} - {EpisodeTitle} - {Language} {AudioCodec} {Vid
 - TV Shows: `storage/Séries/{Letter}/{Subdivision}/{Title} ({Year})/Saison XX/`
 - Symlinks mirror this structure in `video/`
 
+## Bonnes pratiques post-implémentation
+
+Après chaque nouvelle fonctionnalité intégrée (nouvelle commande CLI, nouveau service, changement de comportement visible), **mettre à jour le README.md** : documenter la commande/fonctionnalité (usage, options, exemples, explication du fonctionnement). Ajouter une entrée dans la table des matières si pertinent, et mentionner la fonctionnalité dans la section Dépannage si applicable.
+
 ## Testing Strategy (TDD)
 
 - Write tests BEFORE implementation code

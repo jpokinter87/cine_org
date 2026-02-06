@@ -25,6 +25,7 @@ from .infrastructure.persistence.repositories import (
 from .infrastructure.persistence.hash_service import compute_file_hash
 from .services.enricher import EnricherService
 from .services.importer import ImporterService
+from .services.cleanup import CleanupService
 from .services.integrity import IntegrityChecker, RepairService
 from .services.matcher import MatcherService
 from .services.scanner import ScannerService
@@ -182,4 +183,15 @@ class Container(containers.DeclarativeContainer):
         RepairService,
         file_system=file_system,
         video_file_repo=video_file_repository,
+    )
+
+    # Service de cleanup - Factory
+    # Note: repair_service doit etre passe explicitement (necessite storage_dir/video_dir)
+    cleanup_service = providers.Factory(
+        CleanupService,
+        organizer_service=organizer_service,
+        video_file_repo=video_file_repository,
+        movie_repo=movie_repository,
+        series_repo=series_repository,
+        episode_repo=episode_repository,
     )

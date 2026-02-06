@@ -214,6 +214,29 @@ class SQLModelVideoFileRepository(IVideoFileRepository):
             return True
         return False
 
+    def get_by_symlink_path(self, symlink_path: Path) -> Optional[VideoFile]:
+        """Recupere un fichier video par le chemin de son symlink."""
+        statement = select(VideoFileModel).where(
+            VideoFileModel.symlink_path == str(symlink_path)
+        )
+        model = self._session.exec(statement).first()
+        if model:
+            return self._to_entity(model)
+        return None
+
+    def update_symlink_path(self, old_path: Path, new_path: Path) -> bool:
+        """Met a jour le chemin du symlink. Retourne True si mis a jour."""
+        statement = select(VideoFileModel).where(
+            VideoFileModel.symlink_path == str(old_path)
+        )
+        model = self._session.exec(statement).first()
+        if model:
+            model.symlink_path = str(new_path)
+            self._session.add(model)
+            self._session.commit()
+            return True
+        return False
+
     def list_pending(self) -> list[PendingValidation]:
         """Liste tous les fichiers video avec une validation en attente."""
         statement = select(PendingValidationModel).where(

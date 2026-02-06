@@ -19,6 +19,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Notes TMDB](#notes-tmdb)
   - [Notes IMDb](#notes-imdb)
 - [Commandes](#commandes)
+  - [Nettoyage et réorganisation](#nettoyage-et-réorganisation)
   - [Réparation des symlinks cassés](#réparation-des-symlinks-cassés)
   - [Consolidation des fichiers externes](#consolidation-des-fichiers-externes)
 - [Format de nommage](#format-de-nommage)
@@ -545,6 +546,58 @@ uv run cineorg check --verify-hash
 uv run cineorg check --json
 ```
 
+### Nettoyage et réorganisation
+
+La commande `cleanup` détecte et corrige tous les problèmes structurels du répertoire `video/` en une seule passe : symlinks cassés, symlinks mal placés (mauvais genre/subdivision), répertoires surchargés non subdivisés, et répertoires vides résiduels.
+
+**Scope :** Seuls les symlinks dans `video/` sont affectés — les fichiers physiques dans `storage/` ne sont jamais touchés.
+
+```bash
+# Analyser sans modifier (rapport uniquement)
+uv run cineorg cleanup
+
+# Analyser un répertoire spécifique
+uv run cineorg cleanup /chemin/vers/video
+
+# Exécuter les corrections
+uv run cineorg cleanup --fix
+
+# Exécuter sans réparer les symlinks cassés
+uv run cineorg cleanup --fix --skip-repair
+
+# Exécuter sans subdiviser les répertoires surchargés
+uv run cineorg cleanup --fix --skip-subdivide
+
+# Ajuster le score minimum pour l'auto-réparation (défaut: 90%)
+uv run cineorg cleanup --fix --min-score 85
+```
+
+**Étapes du nettoyage :**
+
+1. **Symlinks cassés** : Détection via l'index de fichiers et réparation automatique si un candidat est trouvé avec un score suffisant (≥ 90% par défaut).
+
+2. **Symlinks mal placés** : Pour chaque symlink valide, le chemin attendu est recalculé à partir des métadonnées en base (genre du film, type de série). Si le symlink est dans le mauvais répertoire, il est déplacé et la base de données est mise à jour.
+
+3. **Répertoires surchargés** : Les répertoires contenant plus de 50 symlinks sont automatiquement subdivisés en plages alphabétiques (ex: `Aa-Am`, `An-Az`). Les articles (Le, La, The...) sont ignorés pour le tri.
+
+4. **Répertoires vides** : Suppression bottom-up des répertoires vides laissés après les déplacements.
+
+**Exemple de rapport :**
+
+```
+        Rapport de nettoyage
+┏━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━┓
+┃ Catégorie              ┃ Nombre ┃ Détails       ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━┩
+│ Symlinks cassés        │      3 │ 2 réparables  │
+│ Symlinks mal placés    │      5 │               │
+│ Répertoires surchargés │      1 │ Action (67)   │
+│ Répertoires vides      │      8 │               │
+└────────────────────────┴────────┴───────────────┘
+
+Pour corriger : cineorg cleanup --fix
+```
+
 ### Réparation des symlinks cassés
 
 La commande `repair-links` détecte les symlinks cassés dans `video/` et recherche automatiquement les fichiers correspondants dans `storage/` grâce à une recherche floue intelligente.
@@ -708,7 +761,10 @@ uv sync  # Réinstaller les dépendances
 ### Symlinks cassés après déplacement
 
 ```bash
-# Réparation automatique
+# Nettoyage complet (symlinks cassés + mal placés + répertoires vides)
+uv run cineorg cleanup --fix
+
+# Ou réparation ciblée des symlinks uniquement
 uv run cineorg repair-links --auto
 
 # Forcer la reconstruction de l'index de recherche
@@ -727,6 +783,13 @@ uv run cineorg import  # Réimporter la vidéothèque
 ### Fichier classé dans le mauvais genre
 
 Le genre est déterminé par la **hiérarchie de priorité**. Si un film "Action/Drame" est dans "Action" au lieu de "Drame", c'est le comportement attendu (Action a une priorité plus élevée).
+
+Si les genres ont été corrigés en base mais que le symlink est resté dans l'ancien répertoire :
+
+```bash
+# Détecter et corriger les symlinks mal placés
+uv run cineorg cleanup --fix
+```
 
 ## Licence
 

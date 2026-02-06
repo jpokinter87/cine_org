@@ -51,6 +51,16 @@ class IVideoFileRepository(ABC):
         """Liste tous les fichiers vidéo avec une validation en attente."""
         ...
 
+    @abstractmethod
+    def get_by_symlink_path(self, symlink_path: Path) -> Optional[VideoFile]:
+        """Récupère un fichier vidéo par le chemin de son symlink."""
+        ...
+
+    @abstractmethod
+    def update_symlink_path(self, old_path: Path, new_path: Path) -> bool:
+        """Met à jour le chemin du symlink. Retourne True si mis à jour."""
+        ...
+
 
 class IMovieRepository(ABC):
     """
