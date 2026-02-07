@@ -361,14 +361,11 @@ def validate_batch() -> None:
 @with_container()
 async def _validate_batch_async(container) -> None:
     """Implementation async du batch de transferts."""
-    config = container.config()
+    from src.adapters.cli.batch_builder import build_transfers_batch
+    from rich.prompt import Confirm
 
-    # Recuperer les services necessaires
+    config = container.config()
     service = container.validation_service()
-    renamer = container.renamer_service()
-    organizer = container.organizer_service()
-    tvdb_client = container.tvdb_client()
-    tmdb_client = container.tmdb_client()
 
     # Recuperer TransfererService avec les paths de config
     transferer = container.transferer_service(
@@ -384,206 +381,16 @@ async def _validate_batch_async(container) -> None:
         console.print("Utilisez 'validate auto' ou 'validate manual' d'abord.")
         return
 
-    # Construire la liste des transferts
-    transfers = []
+    # Construire la liste des transferts en utilisant batch_builder
     storage_dir = Path(config.storage_dir)
+    video_dir = Path(config.video_dir)
 
-    for pending in validated_list:
-        # Recuperer le candidat selectionne
-        candidate = None
-        for c in pending.candidates:
-            c_id = c.id if hasattr(c, "id") else c.get("id", "")
-            if c_id == pending.selected_candidate_id:
-                candidate = c
-                break
-
-        if candidate is None:
-            filename = pending.video_file.filename if pending.video_file else "?"
-            console.print(f"[red]Erreur:[/red] Candidat non trouve pour {filename}")
-            continue
-
-        # Extraire les infos du candidat (dict ou SearchResult)
-        if isinstance(candidate, dict):
-            candidate_title = candidate.get("title", "")
-            candidate_year = candidate.get("year")
-            candidate_source = candidate.get("source", "")
-        else:
-            candidate_title = candidate.title
-            candidate_year = candidate.year
-            candidate_source = candidate.source
-
-        # Determiner si c'est une serie
-        is_series = candidate_source == "tvdb"
-
-        # Extraire l'extension du fichier source
-        source_path = pending.video_file.path if pending.video_file else None
-        if source_path is None:
-            filename = pending.video_file.filename if pending.video_file else "?"
-            console.print(f"[red]Erreur:[/red] Chemin source manquant pour {filename}")
-            continue
-
-        extension = source_path.suffix if source_path.suffix else ".mkv"
-        media_info = pending.video_file.media_info if pending.video_file else None
-        video_dir = Path(config.video_dir)
-
-        # Extraire la langue du nom de fichier (fallback si mediainfo n'a pas de langue)
-        original_filename = pending.video_file.filename if pending.video_file else ""
-        fallback_language = _extract_language_from_filename(original_filename)
-
-        # Generer le nouveau nom et chemin de destination
-        if is_series:
-            # Pour les series: extraire saison/episode du nom de fichier
-            filename = pending.video_file.filename if pending.video_file else ""
-            season_num, episode_num = _extract_series_info(filename)
-
-            # Recuperer le titre d'episode et les genres depuis TVDB
-            episode_title = ""
-            series_genres: tuple[str, ...] = ()
-            if isinstance(candidate, dict):
-                series_id = candidate.get("id", "")
-            else:
-                series_id = candidate.id
-
-            if tvdb_client and getattr(tvdb_client, "_api_key", None) and series_id:
-                try:
-                    # Recuperer les details de la serie (genres)
-                    series_details = await tvdb_client.get_details(series_id)
-                    if series_details and series_details.genres:
-                        series_genres = series_details.genres
-
-                    # Recuperer le titre d'episode
-                    ep_details = await tvdb_client.get_episode_details(
-                        series_id, season_num, episode_num
-                    )
-                    if ep_details and ep_details.title:
-                        episode_title = ep_details.title
-                except Exception:
-                    pass  # Garder les valeurs par defaut en cas d'erreur
-
-            # Construire les entites Series et Episode pour renamer/organizer
-            series = Series(
-                title=candidate_title,
-                year=candidate_year,
-                genres=series_genres,
-            )
-            episode = Episode(
-                season_number=season_num,
-                episode_number=episode_num,
-                title=episode_title,
-            )
-
-            new_filename = renamer.generate_series_filename(
-                series=series,
-                episode=episode,
-                media_info=media_info,
-                extension=extension,
-                fallback_language=fallback_language,
-            )
-            dest_dir = organizer.get_series_destination(
-                series=series,
-                season_number=season_num,
-                storage_dir=storage_dir,
-                video_dir=video_dir,
-            )
-            # Chemin personnalise pour le symlink (avec type de serie)
-            symlink_dir = organizer.get_series_video_destination(
-                series=series,
-                season_number=season_num,
-                video_dir=video_dir,
-            )
-        else:
-            # Pour les films: recuperer les genres et notes depuis TMDB
-            movie_genres: tuple[str, ...] = ()
-            movie_details = None
-            imdb_id = None
-            imdb_rating = None
-            imdb_votes = None
-
-            if isinstance(candidate, dict):
-                movie_id = candidate.get("id", "")
-            else:
-                movie_id = candidate.id
-
-            if tmdb_client and getattr(tmdb_client, "_api_key", None) and movie_id:
-                try:
-                    movie_details = await tmdb_client.get_details(movie_id)
-                    if movie_details and movie_details.genres:
-                        movie_genres = movie_details.genres
-
-                    # Recuperer l'imdb_id via external_ids
-                    external_ids = await tmdb_client.get_external_ids(movie_id)
-                    if external_ids:
-                        imdb_id = external_ids.get("imdb_id")
-
-                    # Recuperer la note IMDb depuis le cache local
-                    if imdb_id:
-                        from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
-                        cache_dir = Path(".cache/imdb")
-                        imdb_session = container.session()
-                        imdb_importer = IMDbDatasetImporter(cache_dir=cache_dir, session=imdb_session)
-                        rating_data = imdb_importer.get_rating(imdb_id)
-                        if rating_data:
-                            imdb_rating, imdb_votes = rating_data
-
-                except Exception:
-                    pass  # Garder les valeurs par defaut en cas d'erreur
-
-            # Creer l'entite Movie complete avec toutes les metadonnees
-            movie = Movie(
-                tmdb_id=int(movie_id) if movie_id else None,
-                imdb_id=imdb_id,
-                title=candidate_title,
-                original_title=movie_details.original_title if movie_details else None,
-                year=candidate_year,
-                genres=movie_genres,
-                duration_seconds=movie_details.duration_seconds if movie_details else None,
-                overview=movie_details.overview if movie_details else None,
-                poster_path=movie_details.poster_url if movie_details else None,
-                vote_average=movie_details.vote_average if movie_details else None,
-                vote_count=movie_details.vote_count if movie_details else None,
-                imdb_rating=imdb_rating,
-                imdb_votes=imdb_votes,
-            )
-
-            # Sauvegarder le film dans la base de donnees
-            movie_repo = container.movie_repository()
-            saved_movie = movie_repo.save(movie)
-
-            # Afficher le feedback de sauvegarde avec les notes
-            year_str = f" ({movie.year})" if movie.year else ""
-            tmdb_str = f"TMDB: {movie.vote_average:.1f}/10" if movie.vote_average else "TMDB: -"
-            imdb_str = f"IMDb: {movie.imdb_rating:.1f}/10" if movie.imdb_rating else "IMDb: -"
-            console.print(f"  [green]✓[/green] [bold]{movie.title}[/bold]{year_str} sauvegardé - {tmdb_str}, {imdb_str}")
-
-            new_filename = renamer.generate_movie_filename(
-                movie=movie,
-                media_info=media_info,
-                extension=extension,
-                fallback_language=fallback_language,
-            )
-            dest_dir = organizer.get_movie_destination(
-                movie=movie,
-                storage_dir=storage_dir,
-                video_dir=video_dir,
-            )
-            # Chemin personnalise pour le symlink (avec genre et subdivisions)
-            video_dir = Path(config.video_dir)
-            symlink_dir = organizer.get_movie_video_destination(
-                movie=movie,
-                video_dir=video_dir,
-            )
-
-        transfer_data = {
-            "pending": pending,
-            "source": source_path,
-            "destination": dest_dir / new_filename,
-            "new_filename": new_filename,
-            "action": "move+symlink",
-        }
-        # Ajouter le chemin de symlink personnalise pour les series
-        if symlink_dir:
-            transfer_data["symlink_destination"] = symlink_dir / new_filename
-        transfers.append(transfer_data)
+    transfers = await build_transfers_batch(
+        validated_list,
+        container,
+        storage_dir,
+        video_dir,
+    )
 
     if not transfers:
         console.print("[yellow]Aucun transfert a effectuer.[/yellow]")
