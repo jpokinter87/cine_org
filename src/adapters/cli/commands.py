@@ -1460,9 +1460,22 @@ async def _repair_links_async(
 ) -> None:
     """Implementation async de la commande repair-links."""
     from loguru import logger as loguru_logger
-    from rich.prompt import Prompt
+    from rich.progress import (
+        BarColumn,
+        Progress,
+        SpinnerColumn,
+        TaskProgressColumn,
+        TextColumn,
+    )
     from rich.status import Status
 
+    from src.adapters.cli.repair_helpers import (
+        CustomSearch,
+        CandidateDisplay,
+        RepairSummary,
+        display_broken_link_info,
+        extract_series_name,
+    )
     from src.services.integrity import RepairAction, RepairActionType
 
     container = Container()
@@ -1583,24 +1596,6 @@ async def _repair_links_async(
             series_failures: dict[str, int] = {}  # {nom_serie: nb_echecs}
             skipped_series: set[str] = set()  # Series a ignorer completement
 
-            def extract_series_name(path: Path) -> str | None:
-                """Extrait le nom de la serie depuis le chemin du symlink."""
-                parts = path.parts
-                for i, part in enumerate(parts):
-                    if part.lower() in ("séries", "series"):
-                        # Le nom de la serie est generalement 2-3 niveaux apres
-                        # Ex: Séries/Séries TV/A-M/Breaking Bad/Saison 01/...
-                        for j in range(i + 1, min(i + 5, len(parts))):
-                            # Ignorer les subdivisions alphabetiques et types
-                            if parts[j] in ("Séries TV", "Animation", "Mangas"):
-                                continue
-                            if len(parts[j]) <= 3 and "-" in parts[j]:
-                                continue  # Subdivision A-M, etc.
-                            if parts[j].startswith("Saison"):
-                                break
-                            return parts[j]
-                return None
-
             for i, link in enumerate(broken, 1):
                 # Verifier si cette serie doit etre ignoree
                 series_name = extract_series_name(link)
@@ -1609,41 +1604,17 @@ async def _repair_links_async(
                     continue
 
                 # Afficher les infos du lien
-                try:
-                    original_target = link.readlink()
-                except OSError:
-                    original_target = Path("<inconnu>")
-
                 console.print(f"\n[dim]({i}/{len(broken)})[/dim]")
 
                 # Chercher des cibles possibles avec recherche floue
                 with console.status(f"[cyan]Recherche de candidats pour {link.name}..."):
                     targets_with_scores = repair.find_possible_targets(link, min_score=min_score)
 
-                # Afficher le panel
-                panel_content = [
-                    f"[bold]{link.name}[/bold]",
-                    f"Chemin: {link}",
-                    f"Cible originale: [red]{original_target}[/red]",
-                ]
-                console.print(Panel("\n".join(panel_content), title="Symlink casse"))
+                # Afficher le panel avec les infos du lien
+                display_broken_link_info(console, link)
 
-                # Affichage pagine des candidats
-                page_size = 5
+                # Pagination des candidats
                 page_start = 0
-
-                def display_candidates(start: int) -> None:
-                    """Affiche une page de candidats."""
-                    end = min(start + page_size, len(targets_with_scores))
-                    for j, (target, score) in enumerate(targets_with_scores[start:end], start + 1):
-                        score_color = "green" if score >= 80 else "yellow" if score >= 60 else "red"
-                        console.print(
-                            f"  {j}. [{score_color}]{score:.0f}%[/{score_color}] {target.name}"
-                        )
-                        console.print(f"     [dim]{target.parent}[/dim]")
-                    remaining = len(targets_with_scores) - end
-                    if remaining > 0:
-                        console.print(f"  [dim]... et {remaining} autre(s) (tapez 'plus' pour voir)[/dim]")
 
                 if targets_with_scores:
                     # Auto-reparation si score = 100%
@@ -1670,13 +1641,13 @@ async def _repair_links_async(
                         continue  # Passer au symlink suivant
 
                     console.print(f"\n[green]{len(targets_with_scores)}[/green] cible(s) possible(s):")
-                    display_candidates(page_start)
+                    CandidateDisplay.display(console, targets_with_scores, page_start)
 
                 # Boucle pour gerer la pagination et recherche par titre
                 while True:
                     # Prompt interactif avec raccourcis
                     valid_choices = {"r", "s", "i", "q", "t"}  # t = rechercher par titre
-                    has_more = targets_with_scores and page_start + page_size < len(targets_with_scores)
+                    has_more = CandidateDisplay.has_more(targets_with_scores, page_start)
                     if has_more:
                         valid_choices.add("p")
 
@@ -1704,48 +1675,24 @@ async def _repair_links_async(
                         if custom_title:
                             console.print(f"[cyan]Recherche de '{custom_title}'...[/cyan]")
 
-                            # Detecter le type de media pour filtrer
-                            link_str = str(link).lower()
-                            is_film = "/films/" in link_str
-                            is_series = "/séries/" in link_str or "/series/" in link_str
-
-                            # Recherche dans l'index avec le titre personnalise
-                            from difflib import SequenceMatcher
-                            custom_clean = repair._extract_clean_title(custom_title)
-                            custom_results: list[tuple[Path, float]] = []
-
-                            for candidate_path, candidate_norm, candidate_clean in repair._file_index:
-                                # Filtrer par type de media
-                                candidate_str = str(candidate_path).lower()
-                                if is_film and ("/séries/" in candidate_str or "/series/" in candidate_str):
-                                    continue
-                                if is_series and "/films/" in candidate_str:
-                                    continue
-
-                                # Calculer la similarite avec le titre personnalise (utiliser clean_title)
-                                ratio = SequenceMatcher(None, custom_clean, candidate_clean).ratio()
-                                score = ratio * 100
-                                if score >= min_score:
-                                    custom_results.append((candidate_path, score))
-
-                            custom_results.sort(key=lambda x: x[1], reverse=True)
-                            custom_results = custom_results[:15]
+                            # Utiliser CustomSearch pour la recherche
+                            custom_results = CustomSearch.search(repair, custom_title, link, min_score)
 
                             if custom_results:
                                 targets_with_scores = custom_results
                                 page_start = 0
-                                media_label = "films" if is_film else "séries" if is_series else "tous"
+                                media_label = "films" if "/films/" in str(link).lower() else "séries" if "/séries/" in str(link).lower() or "/series/" in str(link).lower() else "tous"
                                 console.print(f"\n[green]{len(targets_with_scores)}[/green] resultat(s) pour '{custom_title}' ({media_label}):")
-                                display_candidates(page_start)
+                                CandidateDisplay.display(console, targets_with_scores, page_start)
                             else:
                                 console.print(f"[red]Aucun resultat pour '{custom_title}'[/red]")
                         continue
 
                     # Gerer la pagination
                     if choice == "p":
-                        page_start += page_size
+                        page_start += CandidateDisplay.PAGE_SIZE
                         console.print("")
-                        display_candidates(page_start)
+                        CandidateDisplay.display(console, targets_with_scores, page_start)
                         continue
                     else:
                         break
@@ -1857,15 +1804,8 @@ async def _repair_links_async(
             if log_path:
                 console.print(f"\n[dim]Log sauvegarde: {log_path}[/dim]")
 
-        # Resume
-        repaired = sum(1 for a in actions if a.action == RepairActionType.REPAIRED)
-        orphaned = sum(1 for a in actions if a.action == RepairActionType.ORPHANED)
-        skipped = sum(1 for a in actions if a.action == RepairActionType.SKIPPED)
-
-        console.print("\n[bold]Resume:[/bold]")
-        console.print(f"  [green]{repaired}[/green] repare(s)")
-        console.print(f"  [yellow]{orphaned}[/yellow] deplace(s) vers orphans")
-        console.print(f"  [dim]{skipped} ignore(s)[/dim]")
+        # Afficher le resume
+        RepairSummary.display(console, actions)
 
     finally:
         # Reactiver les logs loguru
