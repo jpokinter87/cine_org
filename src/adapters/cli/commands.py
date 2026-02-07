@@ -1880,8 +1880,8 @@ async def _cleanup_async(
     """Implementation async de la commande cleanup."""
     from loguru import logger as loguru_logger
     from rich.status import Status
-    from rich.table import Table
 
+    from src.adapters.cli.cleanup_helpers import CleanupCache, display_cleanup_report
     from src.services.cleanup import CleanupReport, CleanupResult
 
     container = Container()
@@ -1922,7 +1922,7 @@ async def _cleanup_async(
         # En mode --fix, tenter de charger le cache
         report = None
         if fix:
-            cached = load_report_cache(video_dir)
+            cached = CleanupCache.load(video_dir)
             if cached is not None:
                 console.print(
                     "[bold cyan]Utilisation de l'analyse en cache[/bold cyan]\n"
@@ -1935,11 +1935,11 @@ async def _cleanup_async(
                 report = cleanup_svc.analyze(video_dir, max_per_dir=max_per_dir)
 
         # Afficher le rapport
-        _display_cleanup_report(report)
+        display_cleanup_report(report, video_dir)
 
         if not fix:
             # Sauvegarder le cache pour un futur --fix
-            save_report_cache(report)
+            CleanupCache.save(report)
 
         if not report.has_issues:
             console.print("[green]Aucun probleme detecte.[/green]")
@@ -2069,68 +2069,6 @@ async def _cleanup_async(
         loguru_logger.enable("src")
 
 
-def _display_cleanup_report(report: "CleanupReport") -> None:
-    """Affiche le rapport de cleanup sous forme de tableau Rich."""
-    from rich.table import Table
-
-    table = Table(title="Rapport de nettoyage", show_header=True)
-    table.add_column("Categorie", style="cyan")
-    table.add_column("Nombre", justify="right")
-    table.add_column("Details", style="dim")
-
-    table.add_row(
-        "Symlinks casses",
-        str(len(report.broken_symlinks)),
-        f"{sum(1 for b in report.broken_symlinks if b.best_candidate)} reparables"
-        if report.broken_symlinks else "",
-    )
-    table.add_row(
-        "Symlinks mal places",
-        str(len(report.misplaced_symlinks)),
-        "",
-    )
-    table.add_row(
-        "Symlinks dupliques",
-        str(len(report.duplicate_symlinks)),
-        ", ".join(
-            f"{d.keep.name}" for d in report.duplicate_symlinks[:3]
-        ) if report.duplicate_symlinks else "",
-    )
-    table.add_row(
-        "Repertoires surcharges",
-        str(len(report.oversized_dirs)),
-        ", ".join(f"{p.parent_dir.name} ({p.current_count})" for p in report.oversized_dirs[:3])
-        if report.oversized_dirs else "",
-    )
-    table.add_row(
-        "Repertoires vides",
-        str(len(report.empty_dirs)),
-        "",
-    )
-
-    if report.not_in_db_count > 0:
-        table.add_row(
-            "Non references en BDD",
-            str(report.not_in_db_count),
-            "(ignores)",
-        )
-
-    console.print(table)
-
-    # Arbres detailles par categorie
-    if report.broken_symlinks:
-        _display_broken_symlinks_tree(report)
-    if report.misplaced_symlinks:
-        _display_misplaced_symlinks_tree(report)
-    if report.duplicate_symlinks:
-        _display_duplicate_symlinks_tree(report)
-    if report.oversized_dirs:
-        _display_oversized_dirs_tree(report)
-    if report.empty_dirs:
-        _display_empty_dirs_tree(report)
-
-
-def _rel_parent(path: Path, video_dir: Path) -> str:
     """Chemin parent relatif a video_dir, ou absolu si hors scope."""
     try:
         return str(path.parent.relative_to(video_dir))
