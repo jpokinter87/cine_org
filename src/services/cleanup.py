@@ -204,12 +204,103 @@ def _find_sibling_for_key(parent_dir: Path, sort_key: str) -> Path:
     for sibling in sorted(grandparent.iterdir()):
         if not sibling.is_dir() or sibling == parent_dir:
             continue
+        # Ignorer les repertoires non-alphabetiques (ex: '#') dont la plage
+        # fallback ("AA","ZZ") capturerait toutes les cles alphabetiques
+        if not sibling.name[0].isalpha():
+            continue
         sib_start, sib_end = _parse_parent_range(sibling.name)
         if sib_start <= sort_key <= sib_end:
             return sibling
 
     # Aucun frere ne correspond -> grand-parent
     return grandparent
+
+
+def _refine_out_of_range_dest(planned_dest: Path) -> Path:
+    """
+    Affine la destination d'un item hors-plage apres subdivision.
+
+    Si le repertoire cible a ete subdivise, redirige vers la bonne
+    sous-division. Ex: C/El Chapo -> C/Ca-Ch/El Chapo.
+
+    Args:
+        planned_dest: Destination initialement planifiee (sibling/item_name).
+
+    Returns:
+        Destination affinee (dans une subdivision si elle existe).
+    """
+    target_dir = planned_dest.parent
+    item_name = planned_dest.name
+
+    if not target_dir.exists():
+        return planned_dest
+
+    # Chercher des sous-repertoires de subdivision (format "Xx-Yy" uniquement)
+    # Ignore les repertoires de contenu (series, films) qui ne sont pas des subdivisions
+    subdirs = [
+        d for d in sorted(target_dir.iterdir())
+        if d.is_dir() and not d.is_symlink()
+        and _parse_parent_range(d.name) != ("AA", "ZZ")
+    ]
+    if not subdirs:
+        return planned_dest
+
+    # Calculer la cle de tri de l'item
+    stripped = _strip_article(item_name).strip()
+    stripped = _normalize_sort_key(stripped)
+    letters_only = "".join(c for c in stripped if c.isalpha())
+    if len(letters_only) >= 2:
+        sort_key = letters_only.upper()[:2]
+    else:
+        sort_key = letters_only.upper().ljust(2, "A")
+
+    # Trouver la subdivision correspondante
+    for subdir in subdirs:
+        sub_start, sub_end = _parse_parent_range(subdir.name)
+        if sub_start <= sort_key <= sub_end:
+            return subdir / item_name
+
+    # Aucune subdivision ne correspond, garder la destination planifiee
+    return planned_dest
+
+
+def _refine_plans_destinations(plans: list[SubdivisionPlan]) -> None:
+    """
+    Affine les destinations hors-plage en utilisant les donnees des autres plans.
+
+    Si un item hors-plage est destine a un repertoire qui sera lui-meme
+    subdivise, la destination est mise a jour pour pointer vers la bonne
+    subdivision.
+
+    Modifie les plans in-place.
+    """
+    plan_map = {plan.parent_dir: plan for plan in plans}
+
+    for plan in plans:
+        refined = []
+        for source, dest in plan.out_of_range_items:
+            target_dir = dest.parent
+            item_name = dest.name
+
+            if target_dir in plan_map:
+                target_plan = plan_map[target_dir]
+                # Calculer la cle de tri (meme logique que _calculate_subdivision_ranges)
+                stripped = _strip_article(item_name).strip()
+                stripped = _normalize_sort_key(stripped)
+                letters_only = "".join(c for c in stripped if c.isalpha())
+                sort_key = letters_only.upper()[:2] if len(letters_only) >= 2 else letters_only.upper().ljust(2, "A")
+
+                # Trouver la subdivision correspondante dans le plan cible
+                for start, end in target_plan.ranges:
+                    range_start = (start[0] + "A") if len(start) == 1 else start.upper()
+                    range_end = (end[0] + "Z") if len(end) == 1 else end.upper()
+                    if range_start <= sort_key <= range_end:
+                        range_label = f"{start}-{end}"
+                        dest = target_dir / range_label / item_name
+                        break
+
+            refined.append((source, dest))
+        plan.out_of_range_items = refined
 
 
 class CleanupService:
@@ -569,6 +660,7 @@ class CleanupService:
                 plan = self._calculate_subdivision_ranges(dirpath, max_per_dir)
                 plans.append(plan)
 
+        _refine_plans_destinations(plans)
         return plans
 
     def _is_under_series(self, path: Path, video_dir: Path) -> bool:
@@ -740,6 +832,11 @@ class CleanupService:
         """
         Subdivise les repertoires surcharges selon les plans fournis.
 
+        Deux phases pour garantir que les items hors-plage atterrissent dans
+        les nouvelles subdivisions (et non a la racine du frere) :
+        1. Creer toutes les subdivisions et deplacer les items in-range
+        2. Deplacer les items hors-plage en recalculant la destination
+
         Args:
             plans: Liste des plans de subdivision.
 
@@ -748,6 +845,8 @@ class CleanupService:
         """
         result = CleanupResult()
 
+        # Phase 1 : toutes les subdivisions d'abord
+        all_out_of_range: list[tuple[Path, Path]] = []
         for plan in plans:
             try:
                 # Creer les sous-repertoires
@@ -767,19 +866,22 @@ class CleanupService:
                     except Exception as e:
                         result.errors.append(f"Deplacement echoue {source}: {e}")
 
-                # Deplacer les items hors-plage vers le bon repertoire
-                for source, dest in plan.out_of_range_items:
-                    try:
-                        dest.parent.mkdir(parents=True, exist_ok=True)
-                        source.rename(dest)
-                        self._video_file_repo.update_symlink_path(source, dest)
-                        result.symlinks_redistributed += 1
-                    except Exception as e:
-                        result.errors.append(f"Deplacement hors-plage echoue {source}: {e}")
-
+                all_out_of_range.extend(plan.out_of_range_items)
                 result.subdivisions_created += 1
             except Exception as e:
                 result.errors.append(f"Subdivision echouee {plan.parent_dir}: {e}")
+
+        # Phase 2 : deplacer les items hors-plage
+        # Les siblings sont maintenant subdivises, recalculer la destination
+        for source, planned_dest in all_out_of_range:
+            actual_dest = _refine_out_of_range_dest(planned_dest)
+            try:
+                actual_dest.parent.mkdir(parents=True, exist_ok=True)
+                source.rename(actual_dest)
+                self._video_file_repo.update_symlink_path(source, actual_dest)
+                result.symlinks_redistributed += 1
+            except Exception as e:
+                result.errors.append(f"Deplacement hors-plage echoue {source}: {e}")
 
         return result
 

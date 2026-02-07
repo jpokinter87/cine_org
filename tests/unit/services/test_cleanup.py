@@ -27,8 +27,11 @@ from src.services.cleanup import (
     DuplicateSymlink,
     MisplacedSymlink,
     SubdivisionPlan,
+    _find_sibling_for_key,
     _normalize_sort_key,
     _parse_parent_range,
+    _refine_out_of_range_dest,
+    _refine_plans_destinations,
 )
 
 
@@ -888,6 +891,117 @@ class TestCalculateSubdivisionRanges:
         mock_video_file_repo.update_symlink_path.assert_called_once_with(
             link, dest / "Film (2020).mkv",
         )
+
+    def test_subdivide_out_of_range_lands_in_new_subdivision(
+        self, cleanup_service, mock_video_file_repo, tmp_path,
+    ):
+        """Bug 9 : les hors-plage doivent atterrir dans les nouvelles subdivisions.
+
+        Scenario : E-F et C sont tous les deux surcharges.
+        El Chapo est hors plage de E-F (cle CH -> C).
+        C est subdivise en Ca-Ch et Ci-Cz.
+        El Chapo doit finir dans C/Ca-Ch/, pas a la racine de C/.
+        """
+        grandparent = tmp_path / "Séries" / "Séries TV"
+        grandparent.mkdir(parents=True)
+        (grandparent / "#").mkdir()
+
+        # Parent E-F : contient El Chapo (hors plage)
+        parent_ef = grandparent / "E-F"
+        parent_ef.mkdir()
+        link_echo = parent_ef / "Echo (2020)"
+        link_echo.mkdir()
+        link_el_chapo = parent_ef / "El Chapo (2017)"
+        link_el_chapo.mkdir()
+
+        # Parent C : surcharge, sera subdivise
+        parent_c = grandparent / "C"
+        parent_c.mkdir()
+        link_cal = parent_c / "Californication (2007)"
+        link_cal.mkdir()
+        link_csi = parent_c / "CSI Miami (2002)"
+        link_csi.mkdir()
+
+        # Plan pour C : subdivise en Ca-Ch et Ci-Cz
+        dest_ca_ch = parent_c / "Ca-Ch"
+        dest_ci_cz = parent_c / "Ci-Cz"
+
+        plan_c = SubdivisionPlan(
+            parent_dir=parent_c,
+            current_count=2,
+            max_allowed=1,
+            ranges=[("Ca", "Ch"), ("Ci", "Cz")],
+            items_to_move=[
+                (link_cal, dest_ca_ch / "Californication (2007)"),
+                (link_csi, dest_ci_cz / "CSI Miami (2002)"),
+            ],
+        )
+
+        # Plan pour E-F : El Chapo hors plage -> destination C/
+        dest_ea = parent_ef / "Ea-Ea"
+        plan_ef = SubdivisionPlan(
+            parent_dir=parent_ef,
+            current_count=2,
+            max_allowed=1,
+            ranges=[("Ea", "Ea")],
+            items_to_move=[
+                (link_echo, dest_ea / "Echo (2020)"),
+            ],
+            out_of_range_items=[
+                (link_el_chapo, parent_c / "El Chapo (2017)"),
+            ],
+        )
+
+        # L'ordre des plans ne doit pas importer :
+        # E-F est traite avant C, mais El Chapo doit quand meme
+        # atterrir dans la subdivision de C
+        result = cleanup_service.subdivide_oversized_dirs([plan_ef, plan_c])
+
+        # El Chapo doit etre dans C/Ca-Ch/, pas dans C/
+        assert (dest_ca_ch / "El Chapo (2017)").exists(), (
+            "El Chapo devrait etre dans C/Ca-Ch/"
+        )
+        assert not (parent_c / "El Chapo (2017)").exists(), (
+            "El Chapo ne devrait PAS etre a la racine de C/"
+        )
+
+    def test_subdivide_out_of_range_no_subdivision_stays_in_sibling(
+        self, cleanup_service, mock_video_file_repo, tmp_path,
+    ):
+        """Si le sibling n'a pas ete subdivise, le hors-plage reste a sa racine."""
+        grandparent = tmp_path / "Films" / "Action"
+        parent = grandparent / "S-Z"
+        parent.mkdir(parents=True)
+        sibling = grandparent / "G-L"
+        sibling.mkdir()
+
+        link_in = parent / "Super (2020).mkv"
+        link_in.symlink_to("/storage/super.mkv")
+        link_out = parent / "Jadotville (2016).mkv"
+        link_out.symlink_to("/storage/jadotville.mkv")
+
+        dest_sub = parent / "Sa-Zz"
+
+        plans = [
+            SubdivisionPlan(
+                parent_dir=parent,
+                current_count=2,
+                max_allowed=1,
+                ranges=[("Sa", "Zz")],
+                items_to_move=[
+                    (link_in, dest_sub / "Super (2020).mkv"),
+                ],
+                out_of_range_items=[
+                    (link_out, sibling / "Jadotville (2016).mkv"),
+                ],
+            ),
+        ]
+
+        result = cleanup_service.subdivide_oversized_dirs(plans)
+
+        # Sibling G-L non subdivise -> Jadotville a la racine
+        assert (sibling / "Jadotville (2016).mkv").is_symlink()
+        assert not link_out.exists()
 
 
 # ============================================================================
@@ -2221,3 +2335,946 @@ class TestSubdivisionAlgorithmBugs:
             for _, dst in plan.items_to_move:
                 dir_name = dst.parent.name
                 assert "-" in dir_name, f"Format sans tiret: {dir_name}"
+
+    def test_bug8_hash_sibling_does_not_capture_all(self, cleanup_service, tmp_path):
+        """Bug 8 : le repertoire '#' ne doit pas capturer les items alphabetiques hors plage.
+
+        Le repertoire '#' (non-alphabetique) retourne la plage ("AA", "ZZ") via
+        _parse_parent_range, et comme '#' trie avant les lettres, il est le premier
+        sibling teste -> il capture tout. Les items doivent aller vers le bon frere
+        alphabetique.
+        """
+        grandparent = tmp_path / "Séries" / "Séries TV"
+        grandparent.mkdir(parents=True)
+
+        # Creer les repertoires freres incluant '#'
+        (grandparent / "#").mkdir()
+        sibling_cd = grandparent / "C-D"
+        sibling_cd.mkdir()
+        sibling_ik = grandparent / "I-K"
+        sibling_ik.mkdir()
+        sibling_b = grandparent / "B"
+        sibling_b.mkdir()
+        sibling_s = grandparent / "S"
+        sibling_s.mkdir()
+
+        # Le parent surcharge E-F
+        parent = grandparent / "E-F"
+        parent.mkdir()
+
+        # Items dans la plage E-F
+        for i in range(55):
+            letter = "E" if i < 28 else "F"
+            suffix = chr(ord("a") + (i % 26))
+            name = f"{letter}{suffix}_Serie_{i:03d} (2020)"
+            (parent / name).mkdir()
+
+        # Items hors plage avec articles
+        (parent / "El Chapo (2017)").mkdir()       # El strip -> CH -> C-D
+        (parent / "El jardinero (2025)").mkdir()    # El strip -> JA -> I-K
+
+        plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
+
+        # El Chapo doit aller vers C-D, PAS vers #
+        chapo_move = [
+            (src, dst) for src, dst in plan.out_of_range_items
+            if "El Chapo" in src.name
+        ]
+        assert len(chapo_move) == 1
+        assert chapo_move[0][1].parent == sibling_cd, (
+            f"El Chapo devrait aller dans C-D, pas {chapo_move[0][1].parent.name}"
+        )
+
+        # El jardinero doit aller vers I-K, PAS vers #
+        jardinero_move = [
+            (src, dst) for src, dst in plan.out_of_range_items
+            if "El jardinero" in src.name
+        ]
+        assert len(jardinero_move) == 1
+        assert jardinero_move[0][1].parent == sibling_ik, (
+            f"El jardinero devrait aller dans I-K, pas {jardinero_move[0][1].parent.name}"
+        )
+
+    def test_bug8b_hash_sibling_all_article_cases(self, cleanup_service, tmp_path):
+        """Bug 8b : tous les cas d'articles avec # present comme frere."""
+        grandparent = tmp_path / "Séries" / "Séries TV"
+        grandparent.mkdir(parents=True)
+
+        # Creer les repertoires freres incluant '#'
+        (grandparent / "#").mkdir()
+        sibling_b = grandparent / "A-B"
+        sibling_b.mkdir()
+        sibling_gh = grandparent / "G-H"
+        sibling_gh.mkdir()
+        sibling_mz = grandparent / "Me-Mz"
+        sibling_mz.mkdir()
+        sibling_s = grandparent / "S"
+        sibling_s.mkdir()
+
+        # Le parent surcharge D
+        parent = grandparent / "D"
+        parent.mkdir()
+
+        for i in range(55):
+            suffix = chr(ord("a") + (i % 26))
+            name = f"D{suffix}_Serie_{i:03d} (2020)"
+            (parent / name).mkdir()
+
+        # Cas varies d'articles
+        (parent / "Das Boot (1981)").mkdir()             # Das strip -> BO -> A-B
+        (parent / "La Servante écarlate (2017)").mkdir()  # La strip -> SE -> S
+        (parent / "Los mil días de allende").mkdir()      # Los strip -> MI -> Me-Mz
+
+        plan = cleanup_service._calculate_subdivision_ranges(parent, max_per_subdir=50)
+
+        # Das Boot -> A-B
+        boot_move = [
+            (src, dst) for src, dst in plan.out_of_range_items
+            if "Das Boot" in src.name
+        ]
+        assert len(boot_move) == 1
+        assert boot_move[0][1].parent == sibling_b, (
+            f"Das Boot devrait aller dans A-B, pas {boot_move[0][1].parent.name}"
+        )
+
+        # La Servante -> S
+        servante_move = [
+            (src, dst) for src, dst in plan.out_of_range_items
+            if "Servante" in src.name
+        ]
+        assert len(servante_move) == 1
+        assert servante_move[0][1].parent == sibling_s, (
+            f"La Servante devrait aller dans S, pas {servante_move[0][1].parent.name}"
+        )
+
+        # Los mil dias -> Me-Mz (Los strip -> mil -> MI)
+        allende_move = [
+            (src, dst) for src, dst in plan.out_of_range_items
+            if "allende" in src.name
+        ]
+        assert len(allende_move) == 1
+        assert allende_move[0][1].parent == sibling_mz, (
+            f"Los mil dias devrait aller dans Me-Mz, pas {allende_move[0][1].parent.name}"
+        )
+
+
+# ============================================================================
+# Phase 12 : Tests de couverture supplementaires
+# ============================================================================
+
+
+class TestRefineOutOfRangeDest:
+    """Tests pour _refine_out_of_range_dest (affinage de destination hors-plage)."""
+
+    def test_target_dir_does_not_exist(self, tmp_path):
+        """Si le repertoire cible n'existe pas, retourne la destination planifiee."""
+        planned_dest = tmp_path / "inexistant" / "Film (2020)"
+        result = _refine_out_of_range_dest(planned_dest)
+        assert result == planned_dest
+
+    def test_target_dir_exists_no_subdirs(self, tmp_path):
+        """Si le repertoire cible existe mais sans subdivisions, retourne la destination planifiee."""
+        target_dir = tmp_path / "C"
+        target_dir.mkdir()
+        planned_dest = target_dir / "Film (2020)"
+        result = _refine_out_of_range_dest(planned_dest)
+        assert result == planned_dest
+
+    def test_target_dir_with_matching_subdivision(self, tmp_path):
+        """Si le repertoire cible a une subdivision correspondante, redirige vers elle."""
+        target_dir = tmp_path / "C"
+        target_dir.mkdir()
+        sub_ca_ch = target_dir / "Ca-Ch"
+        sub_ca_ch.mkdir()
+        sub_ci_cz = target_dir / "Ci-Cz"
+        sub_ci_cz.mkdir()
+
+        # "Californication" -> cle "CA" -> devrait aller dans Ca-Ch
+        planned_dest = target_dir / "Californication (2007)"
+        result = _refine_out_of_range_dest(planned_dest)
+        assert result == sub_ca_ch / "Californication (2007)"
+
+    def test_no_matching_subdivision(self, tmp_path):
+        """Si aucune subdivision ne correspond a la cle, retourne la destination planifiee."""
+        target_dir = tmp_path / "C"
+        target_dir.mkdir()
+        # Subdivisions qui ne couvrent pas "ZA"
+        sub_ca_ch = target_dir / "Ca-Ch"
+        sub_ca_ch.mkdir()
+        sub_ci_cz = target_dir / "Ci-Cz"
+        sub_ci_cz.mkdir()
+
+        # "Zorro" -> cle "ZO" -> aucune subdivision ne correspond
+        planned_dest = target_dir / "Zorro (1998)"
+        result = _refine_out_of_range_dest(planned_dest)
+        assert result == planned_dest
+
+    def test_short_sort_key_padded(self, tmp_path):
+        """Un item avec une seule lettre produit une cle paddee (ex: 'X' -> 'XA')."""
+        target_dir = tmp_path / "X"
+        target_dir.mkdir()
+        sub = target_dir / "Xa-Xz"
+        sub.mkdir()
+
+        # "X (2011)" -> stripped "X" -> letters_only "X" -> cle "XA"
+        planned_dest = target_dir / "X (2011)"
+        result = _refine_out_of_range_dest(planned_dest)
+        assert result == sub / "X (2011)"
+
+    def test_item_with_article_stripped(self, tmp_path):
+        """Un item avec article est correctement strip pour la cle de tri."""
+        target_dir = tmp_path / "S"
+        target_dir.mkdir()
+        sub_sa_sm = target_dir / "Sa-Sm"
+        sub_sa_sm.mkdir()
+        sub_sn_sz = target_dir / "Sn-Sz"
+        sub_sn_sz.mkdir()
+
+        # "La Servante" -> strip "La" -> "Servante" -> cle "SE" -> Sa-Sm
+        planned_dest = target_dir / "La Servante ecarlate (2017)"
+        result = _refine_out_of_range_dest(planned_dest)
+        assert result == sub_sa_sm / "La Servante ecarlate (2017)"
+
+    def test_content_dirs_not_treated_as_subdivisions(self, tmp_path):
+        """Les repertoires de contenu (series, films) ne doivent pas etre pris pour des subdivisions.
+
+        Bug : apres affinage par _refine_plans_destinations, la destination est
+        C/Ca-Ch/El Chapo. Le fallback _refine_out_of_range_dest voit les series
+        dans Ca-Ch/ (C.B. Strike, Californication) et les prend pour des
+        subdivisions, redirigeant El Chapo dans le premier repertoire alphabetique.
+        """
+        target_dir = tmp_path / "C" / "Ca-Ch"
+        target_dir.mkdir(parents=True)
+        # Contenu : series deja deplacees dans Ca-Ch
+        (target_dir / "C.B. Strike (2017)").mkdir()
+        (target_dir / "Californication (2007)").mkdir()
+        (target_dir / "Charmed (1998)").mkdir()
+
+        # El Chapo deja affine vers Ca-Ch/
+        planned_dest = target_dir / "El Chapo (2017)"
+        result = _refine_out_of_range_dest(planned_dest)
+        # Ne doit PAS aller dans C.B. Strike/, doit rester dans Ca-Ch/
+        assert result == planned_dest
+
+    def test_mixed_subdivisions_and_content(self, tmp_path):
+        """Si un repertoire contient a la fois des subdivisions et du contenu,
+        seules les subdivisions sont considerees."""
+        target_dir = tmp_path / "M"
+        target_dir.mkdir()
+        # Subdivision valide
+        sub_me_mz = target_dir / "Me-Mz"
+        sub_me_mz.mkdir()
+        # Contenu direct (pas une subdivision)
+        (target_dir / "Matrix (1999)").mkdir()
+
+        planned_dest = target_dir / "Los mil dias de allende (2023)"
+        result = _refine_out_of_range_dest(planned_dest)
+        # "Los mil dias" -> strip "Los" -> "mil dias" -> cle "MI" -> Me-Mz
+        assert result == sub_me_mz / "Los mil dias de allende (2023)"
+
+
+class TestFindSiblingForKeyGrandparentMissing:
+    """Tests pour _find_sibling_for_key quand le grand-parent n'existe pas."""
+
+    def test_grandparent_does_not_exist(self, tmp_path):
+        """Si le grand-parent n'existe pas, retourne le chemin du grand-parent."""
+        # parent_dir pointe vers un chemin dont le parent n'existe pas
+        parent_dir = tmp_path / "inexistant" / "enfant"
+        # Ne pas creer les repertoires
+        result = _find_sibling_for_key(parent_dir, "AB")
+        assert result == parent_dir.parent
+
+
+class TestCleanupEdgeCases:
+    """Tests pour les chemins d'erreur non couverts du CleanupService."""
+
+    # ------------------------------------------------------------------
+    # analyze() - _scan_misplaced_symlinks retourne une liste (pas tuple)
+    # ------------------------------------------------------------------
+
+    def test_analyze_misplaced_returns_list(
+        self, cleanup_service, temp_dirs,
+    ):
+        """analyze() gere le cas ou _scan_misplaced_symlinks retourne une liste."""
+        video_dir = temp_dirs["video"]
+        # Creer Films/ pour eviter des erreurs
+        (video_dir / "Films").mkdir(parents=True, exist_ok=True)
+
+        # Mocker _scan_misplaced_symlinks pour retourner une liste (pas un tuple)
+        misplaced_item = MisplacedSymlink(
+            symlink_path=Path("/video/Films/film.mkv"),
+            target_path=Path("/storage/film.mkv"),
+            current_dir=Path("/video/Films/Drame"),
+            expected_dir=Path("/video/Films/Action"),
+        )
+        with patch.object(
+            cleanup_service, "_scan_misplaced_symlinks", return_value=[misplaced_item]
+        ):
+            report = cleanup_service.analyze(video_dir)
+
+        assert len(report.misplaced_symlinks) == 1
+        assert report.not_in_db_count == 0
+
+    # ------------------------------------------------------------------
+    # _is_in_managed_scope - ValueError quand path n'est pas relatif a video_dir
+    # ------------------------------------------------------------------
+
+    def test_is_in_managed_scope_unrelated_path(self, cleanup_service):
+        """Un chemin non relatif a video_dir retourne False."""
+        result = cleanup_service._is_in_managed_scope(
+            Path("/other/random/path"), Path("/video")
+        )
+        assert result is False
+
+    # ------------------------------------------------------------------
+    # _scan_misplaced_symlinks - symlinks casses/OSError ignores
+    # ------------------------------------------------------------------
+
+    def test_scan_misplaced_skips_broken_symlinks(
+        self, cleanup_service, mock_video_file_repo, temp_dirs,
+    ):
+        """Les symlinks casses sont ignores lors du scan des mal-places."""
+        video_dir = temp_dirs["video"]
+        action_dir = video_dir / "Films" / "Action"
+        action_dir.mkdir(parents=True)
+
+        # Creer un symlink casse (cible inexistante)
+        broken_link = action_dir / "Film Casse (2020).mkv"
+        broken_link.symlink_to("/storage/inexistant.mkv")
+
+        result, not_in_db = cleanup_service._scan_misplaced_symlinks(video_dir)
+
+        # Le symlink casse est ignore, pas de MisplacedSymlink ni not_in_db
+        assert len(result) == 0
+        assert not_in_db == 0
+
+    # ------------------------------------------------------------------
+    # _find_expected_dir - episode path lookup (bloc episode complet)
+    # ------------------------------------------------------------------
+
+    def test_find_expected_dir_episode(
+        self, cleanup_service, mock_movie_repo, mock_episode_repo,
+        mock_series_repo, mock_organizer_service,
+    ):
+        """_find_expected_dir trouve un episode et retourne le bon repertoire."""
+        video_dir = Path("/video")
+        video_file = VideoFile(
+            id="1",
+            path=Path("/storage/series/episode.mkv"),
+            filename="episode.mkv",
+            size_bytes=1000,
+        )
+
+        # Mock: pas de film trouve
+        mock_movie_repo._session.exec.return_value.first.return_value = None
+
+        # Mock: episode trouve
+        mock_episode_model = MagicMock(
+            id=1,
+            series_id=42,
+            season_number=2,
+            episode_number=5,
+            title="Pilot",
+            file_path="/storage/series/episode.mkv",
+        )
+        mock_episode_repo._session.exec.return_value.first.return_value = mock_episode_model
+
+        # Mock: serie trouvee
+        mock_series_model = MagicMock(
+            id=42,
+            tvdb_id=12345,
+            title="Breaking Bad",
+            original_title="Breaking Bad",
+            year=2008,
+            genres_json='["Drame", "Thriller"]',
+        )
+        mock_series_repo._session.exec.return_value.first.return_value = mock_series_model
+
+        # Mock: destination attendue
+        expected_dir = Path("/video/Séries/B/Breaking Bad (2008)/Saison 02")
+        mock_organizer_service.get_series_video_destination.return_value = expected_dir
+
+        result = cleanup_service._find_expected_dir(video_file, video_dir)
+
+        assert result == expected_dir
+        mock_organizer_service.get_series_video_destination.assert_called_once()
+
+    def test_find_expected_dir_episode_no_series(
+        self, cleanup_service, mock_movie_repo, mock_episode_repo,
+        mock_series_repo,
+    ):
+        """_find_expected_dir retourne None si l'episode n'a pas de serie associee."""
+        video_dir = Path("/video")
+        video_file = VideoFile(
+            id="1",
+            path=Path("/storage/series/episode.mkv"),
+            filename="episode.mkv",
+            size_bytes=1000,
+        )
+
+        # Mock: pas de film
+        mock_movie_repo._session.exec.return_value.first.return_value = None
+
+        # Mock: episode trouve mais pas de serie
+        mock_episode_model = MagicMock(
+            id=1, series_id=42, season_number=1, episode_number=1,
+            title="Pilot", file_path="/storage/series/episode.mkv",
+        )
+        mock_episode_repo._session.exec.return_value.first.return_value = mock_episode_model
+
+        # Mock: serie introuvable
+        mock_series_repo._session.exec.return_value.first.return_value = None
+
+        result = cleanup_service._find_expected_dir(video_file, video_dir)
+
+        assert result is None
+
+    def test_find_expected_dir_episode_series_no_genres(
+        self, cleanup_service, mock_movie_repo, mock_episode_repo,
+        mock_series_repo, mock_organizer_service,
+    ):
+        """_find_expected_dir gere une serie sans genres_json (None)."""
+        video_dir = Path("/video")
+        video_file = VideoFile(
+            id="1",
+            path=Path("/storage/series/episode.mkv"),
+            filename="episode.mkv",
+            size_bytes=1000,
+        )
+
+        # Mock: pas de film
+        mock_movie_repo._session.exec.return_value.first.return_value = None
+
+        # Mock: episode trouve
+        mock_episode_model = MagicMock(
+            id=1, series_id=42, season_number=1, episode_number=1,
+            title="Pilot", file_path="/storage/series/episode.mkv",
+        )
+        mock_episode_repo._session.exec.return_value.first.return_value = mock_episode_model
+
+        # Mock: serie avec genres_json=None
+        mock_series_model = MagicMock(
+            id=42, tvdb_id=12345, title="Test Show",
+            original_title=None, year=2020, genres_json=None,
+        )
+        mock_series_repo._session.exec.return_value.first.return_value = mock_series_model
+
+        expected_dir = Path("/video/Séries/T/Test Show (2020)/Saison 01")
+        mock_organizer_service.get_series_video_destination.return_value = expected_dir
+
+        result = cleanup_service._find_expected_dir(video_file, video_dir)
+
+        assert result == expected_dir
+
+    def test_find_expected_dir_episode_exception(
+        self, cleanup_service, mock_movie_repo, mock_episode_repo,
+    ):
+        """_find_expected_dir retourne None si une exception survient lors de la recherche d'episode."""
+        video_dir = Path("/video")
+        video_file = VideoFile(
+            id="1",
+            path=Path("/storage/series/episode.mkv"),
+            filename="episode.mkv",
+            size_bytes=1000,
+        )
+
+        # Mock: pas de film
+        mock_movie_repo._session.exec.return_value.first.return_value = None
+
+        # Mock: exception lors de la recherche d'episode
+        mock_episode_repo._session.exec.side_effect = Exception("DB error")
+
+        result = cleanup_service._find_expected_dir(video_file, video_dir)
+
+        assert result is None
+
+    # ------------------------------------------------------------------
+    # _scan_duplicate_symlinks - OSError lors de la resolution
+    # ------------------------------------------------------------------
+
+    def test_scan_duplicate_skips_oserror(self, cleanup_service, temp_dirs):
+        """Les symlinks provoquant une OSError lors de la resolution sont ignores."""
+        video_dir = temp_dirs["video"]
+        action_dir = video_dir / "Films" / "Action"
+        action_dir.mkdir(parents=True)
+
+        # Creer un symlink valide
+        storage_dir = temp_dirs["storage"]
+        target = storage_dir / "film.mkv"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.touch()
+        valid_link = action_dir / "Film (2020).mkv"
+        valid_link.symlink_to(target)
+
+        # Mocker _iter_managed_paths pour inclure un path qui leve OSError
+        original_iter = cleanup_service._iter_managed_paths
+
+        def patched_iter(vdir):
+            yield from original_iter(vdir)
+            # Creer un mock qui se comporte comme un symlink mais leve OSError sur resolve
+            mock_path = MagicMock(spec=Path)
+            mock_path.is_symlink.return_value = True
+            mock_path.resolve.side_effect = OSError("Erreur I/O")
+            mock_path.parent = action_dir
+            yield mock_path
+
+        with patch.object(cleanup_service, "_iter_managed_paths", side_effect=patched_iter):
+            result = cleanup_service._scan_duplicate_symlinks(video_dir)
+
+        # Pas de doublon puisque le mock est ignore
+        assert len(result) == 0
+
+    # ------------------------------------------------------------------
+    # _is_under_series - ValueError quand path n'est pas relatif
+    # ------------------------------------------------------------------
+
+    def test_is_under_series_unrelated_path(self, cleanup_service):
+        """_is_under_series retourne False si le chemin n'est pas relatif a video_dir."""
+        result = cleanup_service._is_under_series(
+            Path("/other/random/path"), Path("/video")
+        )
+        assert result is False
+
+    # ------------------------------------------------------------------
+    # _scan_empty_dirs - PermissionError
+    # ------------------------------------------------------------------
+
+    def test_scan_empty_dirs_permission_error(self, cleanup_service, temp_dirs):
+        """PermissionError lors de iterdir() est gracieusement ignore."""
+        video_dir = temp_dirs["video"]
+        films_dir = video_dir / "Films"
+        films_dir.mkdir(parents=True)
+
+        # Creer un repertoire normal vide
+        empty_dir = films_dir / "Vide"
+        empty_dir.mkdir()
+
+        # Creer un repertoire qui va lever PermissionError
+        perm_dir = films_dir / "Protege"
+        perm_dir.mkdir()
+
+        # Mocker iterdir pour lever PermissionError sur le repertoire protege
+        original_iterdir = Path.iterdir
+
+        def patched_iterdir(self_path):
+            if self_path == perm_dir:
+                raise PermissionError("Acces refuse")
+            return original_iterdir(self_path)
+
+        with patch.object(Path, "iterdir", patched_iterdir):
+            result = cleanup_service._scan_empty_dirs(video_dir)
+
+        # Seul le repertoire vide accessible est detecte
+        assert empty_dir in result
+        assert perm_dir not in result
+
+    # ------------------------------------------------------------------
+    # repair_broken_symlinks - echec et exception
+    # ------------------------------------------------------------------
+
+    def test_repair_broken_symlinks_failure(
+        self, cleanup_service, mock_repair_service,
+    ):
+        """repair_symlink retourne False -> incremente failed_repairs."""
+        mock_repair_service.repair_symlink.return_value = False
+        broken = [
+            BrokenSymlinkInfo(
+                symlink_path=Path("/video/Films/film.mkv"),
+                original_target=Path("/storage/old.mkv"),
+                best_candidate=Path("/storage/new.mkv"),
+                candidate_score=95.0,
+            ),
+        ]
+
+        result = cleanup_service.repair_broken_symlinks(broken, min_score=90.0)
+
+        assert result.repaired_symlinks == 0
+        assert result.failed_repairs == 1
+
+    def test_repair_broken_symlinks_exception(
+        self, cleanup_service, mock_repair_service,
+    ):
+        """Exception lors de repair_symlink -> incremente failed_repairs et ajoute erreur."""
+        mock_repair_service.repair_symlink.side_effect = OSError("Erreur disque")
+        broken = [
+            BrokenSymlinkInfo(
+                symlink_path=Path("/video/Films/film.mkv"),
+                original_target=Path("/storage/old.mkv"),
+                best_candidate=Path("/storage/new.mkv"),
+                candidate_score=95.0,
+            ),
+        ]
+
+        result = cleanup_service.repair_broken_symlinks(broken, min_score=90.0)
+
+        assert result.repaired_symlinks == 0
+        assert result.failed_repairs == 1
+        assert len(result.errors) == 1
+        assert "Reparation echouee" in result.errors[0]
+
+    # ------------------------------------------------------------------
+    # delete_broken_symlinks - exception non-FileNotFoundError
+    # ------------------------------------------------------------------
+
+    def test_delete_broken_symlinks_generic_exception(self, cleanup_service, tmp_path):
+        """Exception autre que FileNotFoundError lors de la suppression."""
+        broken_link = tmp_path / "video" / "Films" / "film.mkv"
+        broken_link.parent.mkdir(parents=True)
+        broken_link.symlink_to("/storage/inexistant.mkv")
+
+        broken = [
+            BrokenSymlinkInfo(
+                symlink_path=broken_link,
+                original_target=Path("/storage/inexistant.mkv"),
+            ),
+        ]
+
+        # Mocker unlink pour lever PermissionError
+        with patch.object(Path, "unlink", side_effect=PermissionError("Acces refuse")):
+            result = cleanup_service.delete_broken_symlinks(broken)
+
+        assert result.broken_symlinks_deleted == 0
+        assert len(result.errors) == 1
+        assert "Suppression echouee" in result.errors[0]
+
+    # ------------------------------------------------------------------
+    # fix_misplaced_symlinks - exception lors du deplacement
+    # ------------------------------------------------------------------
+
+    def test_fix_misplaced_symlinks_exception(self, cleanup_service, tmp_path):
+        """Exception lors du rename -> ajoute erreur sans crash."""
+        current_dir = tmp_path / "video" / "Films" / "Drame"
+        current_dir.mkdir(parents=True)
+        target = tmp_path / "storage" / "film.mkv"
+        target.parent.mkdir(parents=True)
+        target.touch()
+
+        symlink = current_dir / "Film (2020).mkv"
+        symlink.symlink_to(target)
+
+        misplaced = [
+            MisplacedSymlink(
+                symlink_path=symlink,
+                target_path=target,
+                current_dir=current_dir,
+                expected_dir=Path("/repertoire/impossible"),
+            ),
+        ]
+
+        # Le rename echouera car le repertoire cible n'est pas creeable
+        # (on mock mkdir pour qu'il passe, mais rename echoue)
+        with patch.object(Path, "rename", side_effect=OSError("Deplacement impossible")):
+            result = cleanup_service.fix_misplaced_symlinks(misplaced)
+
+        assert result.moved_symlinks == 0
+        assert len(result.errors) == 1
+        assert "Deplacement echoue" in result.errors[0]
+
+    # ------------------------------------------------------------------
+    # subdivide_oversized_dirs - chemins d'erreur
+    # ------------------------------------------------------------------
+
+    def test_subdivide_in_range_move_exception(
+        self, cleanup_service, mock_video_file_repo, tmp_path,
+    ):
+        """Exception lors du deplacement d'un item in-range -> erreur enregistree."""
+        parent = tmp_path / "Films" / "Action"
+        parent.mkdir(parents=True)
+
+        link = parent / "Film (2020).mkv"
+        link.symlink_to("/storage/film.mkv")
+
+        dest = parent / "Fi-Fi"
+
+        plans = [
+            SubdivisionPlan(
+                parent_dir=parent,
+                current_count=1,
+                max_allowed=1,
+                ranges=[("Fi", "Fi")],
+                items_to_move=[
+                    (link, dest / "Film (2020).mkv"),
+                ],
+            ),
+        ]
+
+        # Mocker rename pour lever une exception
+        with patch.object(Path, "rename", side_effect=OSError("Erreur deplacement")):
+            result = cleanup_service.subdivide_oversized_dirs(plans)
+
+        assert result.subdivisions_created == 1  # La subdivision est comptee
+        assert result.symlinks_redistributed == 0
+        assert len(result.errors) == 1
+        assert "Deplacement echoue" in result.errors[0]
+
+    def test_subdivide_plan_exception(
+        self, cleanup_service, mock_video_file_repo, tmp_path,
+    ):
+        """Exception lors de la creation des repertoires -> erreur enregistree."""
+        parent = tmp_path / "Films" / "Action"
+        # Ne pas creer parent pour que mkdir echoue...
+        # En fait mkdir avec parents=True ne devrait pas echouer.
+        # On mock plutot mkdir pour lever une exception
+
+        plans = [
+            SubdivisionPlan(
+                parent_dir=parent,
+                current_count=1,
+                max_allowed=1,
+                ranges=[("Fi", "Fi")],
+                items_to_move=[
+                    (Path("/fake/source"), Path("/fake/dest/Film.mkv")),
+                ],
+            ),
+        ]
+
+        with patch.object(Path, "mkdir", side_effect=OSError("Creation impossible")):
+            result = cleanup_service.subdivide_oversized_dirs(plans)
+
+        assert result.subdivisions_created == 0
+        assert len(result.errors) == 1
+        assert "Subdivision echouee" in result.errors[0]
+
+    def test_subdivide_out_of_range_move_exception(
+        self, cleanup_service, mock_video_file_repo, tmp_path,
+    ):
+        """Exception lors du deplacement d'un item hors-plage -> erreur enregistree."""
+        parent = tmp_path / "Films" / "Action" / "S-Z"
+        parent.mkdir(parents=True)
+        sibling = tmp_path / "Films" / "Action" / "G-L"
+        sibling.mkdir()
+
+        link_in = parent / "Super (2020).mkv"
+        link_in.symlink_to("/storage/super.mkv")
+        link_out = parent / "Jadotville (2016).mkv"
+        link_out.symlink_to("/storage/jadotville.mkv")
+
+        dest_sub = parent / "Sa-Zz"
+
+        plans = [
+            SubdivisionPlan(
+                parent_dir=parent,
+                current_count=2,
+                max_allowed=1,
+                ranges=[("Sa", "Zz")],
+                items_to_move=[
+                    (link_in, dest_sub / "Super (2020).mkv"),
+                ],
+                out_of_range_items=[
+                    (link_out, sibling / "Jadotville (2016).mkv"),
+                ],
+            ),
+        ]
+
+        # Autoriser le rename pour l'item in-range, puis faire echouer pour le hors-plage
+        original_rename = Path.rename
+        call_count = [0]
+
+        def selective_rename(self_path, target):
+            call_count[0] += 1
+            if call_count[0] <= 1:
+                return original_rename(self_path, target)
+            raise OSError("Deplacement hors-plage impossible")
+
+        with patch.object(Path, "rename", selective_rename):
+            result = cleanup_service.subdivide_oversized_dirs(plans)
+
+        assert result.subdivisions_created == 1
+        assert len(result.errors) == 1
+        assert "Deplacement hors-plage echoue" in result.errors[0]
+
+
+# ============================================================================
+# Phase 14 : Affinage cross-plan des destinations hors-plage
+# ============================================================================
+
+
+class TestRefinePlansDestinations:
+    """Tests pour _refine_plans_destinations (affinage cross-plan)."""
+
+    def test_refine_plans_cross_plan_destination(self, tmp_path):
+        """El Chapo hors-plage de E-F -> C/ qui est subdivise en Ca-Ch/Ci-Cz/.
+
+        La destination doit etre affinee vers C/Ca-Ch/El Chapo (2017).
+        """
+        grandparent = tmp_path / "Séries TV"
+        parent_c = grandparent / "C"
+        parent_ef = grandparent / "E-F"
+
+        plan_c = SubdivisionPlan(
+            parent_dir=parent_c,
+            current_count=60,
+            max_allowed=50,
+            ranges=[("Ca", "Ch"), ("Ci", "Cz")],
+            items_to_move=[],
+        )
+
+        plan_ef = SubdivisionPlan(
+            parent_dir=parent_ef,
+            current_count=55,
+            max_allowed=50,
+            ranges=[("Ea", "Fz")],
+            items_to_move=[],
+            out_of_range_items=[
+                (parent_ef / "El Chapo (2017)", parent_c / "El Chapo (2017)"),
+            ],
+        )
+
+        _refine_plans_destinations([plan_ef, plan_c])
+
+        assert len(plan_ef.out_of_range_items) == 1
+        source, dest = plan_ef.out_of_range_items[0]
+        assert source == parent_ef / "El Chapo (2017)"
+        assert dest == parent_c / "Ca-Ch" / "El Chapo (2017)"
+
+    def test_refine_plans_la_servante_to_subdivided_s(self, tmp_path):
+        """La Servante hors-plage de G-H -> S/ subdivise en Sa-So/Sp-Sz/.
+
+        'La Servante' -> strip article -> 'Servante' -> cle 'SE' -> Sa-So.
+        """
+        grandparent = tmp_path / "Séries TV"
+        parent_s = grandparent / "S"
+        parent_gh = grandparent / "G-H"
+
+        plan_s = SubdivisionPlan(
+            parent_dir=parent_s,
+            current_count=70,
+            max_allowed=50,
+            ranges=[("Sa", "So"), ("Sp", "Sz")],
+            items_to_move=[],
+        )
+
+        plan_gh = SubdivisionPlan(
+            parent_dir=parent_gh,
+            current_count=55,
+            max_allowed=50,
+            ranges=[("Ga", "Hz")],
+            items_to_move=[],
+            out_of_range_items=[
+                (parent_gh / "La Servante ecarlate (2017)", parent_s / "La Servante ecarlate (2017)"),
+            ],
+        )
+
+        _refine_plans_destinations([plan_gh, plan_s])
+
+        source, dest = plan_gh.out_of_range_items[0]
+        assert dest == parent_s / "Sa-So" / "La Servante ecarlate (2017)"
+
+    def test_refine_plans_no_subdivision_unchanged(self, tmp_path):
+        """Si la destination n'a pas de plan de subdivision, la destination reste inchangee."""
+        grandparent = tmp_path / "Séries TV"
+        parent_b = grandparent / "B"
+        parent_ef = grandparent / "E-F"
+
+        # Pas de plan pour B
+        plan_ef = SubdivisionPlan(
+            parent_dir=parent_ef,
+            current_count=55,
+            max_allowed=50,
+            ranges=[("Ea", "Fz")],
+            items_to_move=[],
+            out_of_range_items=[
+                (parent_ef / "Das Boot (2018)", parent_b / "Das Boot (2018)"),
+            ],
+        )
+
+        _refine_plans_destinations([plan_ef])
+
+        source, dest = plan_ef.out_of_range_items[0]
+        assert dest == parent_b / "Das Boot (2018)"
+
+    def test_refine_plans_no_matching_range(self, tmp_path):
+        """Si aucune plage du plan cible ne correspond a la cle, destination inchangee."""
+        grandparent = tmp_path / "Séries TV"
+        parent_c = grandparent / "C"
+        parent_ef = grandparent / "E-F"
+
+        # Plan C ne couvre que Ca-Cb et Cc-Cd (pas les cles CH+)
+        plan_c = SubdivisionPlan(
+            parent_dir=parent_c,
+            current_count=60,
+            max_allowed=50,
+            ranges=[("Ca", "Cb"), ("Cc", "Cd")],
+            items_to_move=[],
+        )
+
+        plan_ef = SubdivisionPlan(
+            parent_dir=parent_ef,
+            current_count=55,
+            max_allowed=50,
+            ranges=[("Ea", "Fz")],
+            items_to_move=[],
+            out_of_range_items=[
+                (parent_ef / "El Chapo (2017)", parent_c / "El Chapo (2017)"),
+            ],
+        )
+
+        _refine_plans_destinations([plan_ef, plan_c])
+
+        source, dest = plan_ef.out_of_range_items[0]
+        # Cle "CH" ne correspond a aucune plage -> destination inchangee
+        assert dest == parent_c / "El Chapo (2017)"
+
+    def test_scan_oversized_dirs_calls_refine(
+        self, cleanup_service, tmp_path,
+    ):
+        """Verifier que _scan_oversized_dirs retourne des plans avec destinations deja affinees."""
+        video_dir = tmp_path / "video"
+        video_dir.mkdir()
+        series_dir = video_dir / "Séries"
+        series_dir.mkdir()
+        grandparent = series_dir / "Séries TV"
+        grandparent.mkdir()
+
+        # Creer C/ avec >3 items couvrant Ca-Ch et Ci-Cz (on utilise max_per_dir=3)
+        parent_c = grandparent / "C"
+        parent_c.mkdir()
+        for name in [
+            "Californication (2007)", "Castle (2009)", "Charmed (1998)",
+            "Chicago Fire (2012)", "Cobra Kai (2018)", "CSI (2000)",
+        ]:
+            d = parent_c / name
+            d.mkdir()
+
+        # Creer E-F/ avec >3 items dont El Chapo hors plage
+        parent_ef = grandparent / "E-F"
+        parent_ef.mkdir()
+        for name in ["Echo (2020)", "Empire (2015)", "Fargo (2014)", "El Chapo (2017)"]:
+            d = parent_ef / name
+            d.mkdir()
+
+        plans = cleanup_service._scan_oversized_dirs(video_dir, max_per_dir=3)
+
+        # On doit avoir 2 plans (C et E-F)
+        assert len(plans) == 2
+
+        # Trouver le plan E-F
+        plan_ef = next(p for p in plans if p.parent_dir == parent_ef)
+
+        # Trouver le plan C pour verifier ses ranges
+        plan_c = next(p for p in plans if p.parent_dir == parent_c)
+
+        # Verifier que le plan C couvre bien la cle CH
+        has_ch_range = any(
+            start.upper() <= "CH" <= end.upper()
+            for start, end in plan_c.ranges
+        )
+        assert has_ch_range, (
+            f"Le plan C devrait avoir une plage couvrant CH, "
+            f"ranges actuelles: {plan_c.ranges}"
+        )
+
+        # El Chapo doit etre hors plage et sa destination doit etre affinee
+        # vers une subdivision de C (pas juste C/)
+        el_chapo_items = [
+            (s, d) for s, d in plan_ef.out_of_range_items
+            if "El Chapo" in s.name
+        ]
+        assert el_chapo_items, "El Chapo devrait etre hors plage de E-F"
+        source, dest = el_chapo_items[0]
+        # La destination doit pointer vers une subdivision de C/
+        # (ex: C/Ca-Ch/El Chapo) et non C/El Chapo
+        assert dest.parent.parent == parent_c, (
+            f"El Chapo devrait etre dans une subdivision de C/, "
+            f"pas dans {dest.parent}"
+        )
