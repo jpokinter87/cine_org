@@ -21,7 +21,7 @@ from sqlmodel import select
 from src.core.entities.media import Movie, Series
 from src.core.entities.video import VideoFile
 from src.infrastructure.persistence.models import MovieModel, EpisodeModel, SeriesModel
-from src.services.organizer import _strip_article
+from src.utils.helpers import normalize_accents, strip_article as _strip_article
 
 MANAGED_SUBDIRS = ("Films", "Séries")
 
@@ -123,23 +123,7 @@ class CleanupResult:
     errors: list[str] = field(default_factory=list)
 
 
-def _normalize_sort_key(text: str) -> str:
-    """
-    Normalise un texte en supprimant les diacritiques (accents, cedilles, etc.).
-
-    Utilise la decomposition NFD pour separer les caracteres de base
-    de leurs marques diacritiques, puis supprime les marques (categorie Mn).
-
-    Args:
-        text: Texte avec potentiellement des accents.
-
-    Returns:
-        Texte sans diacritiques.
-    """
-    import unicodedata
-
-    normalized = unicodedata.normalize("NFD", text)
-    return "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+_normalize_sort_key = normalize_accents
 
 
 def _parse_parent_range(dir_name: str) -> tuple[str, str]:

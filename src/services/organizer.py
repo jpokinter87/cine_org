@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import Optional
 
 from src.core.entities.media import Movie, Series
-from src.utils.constants import IGNORED_ARTICLES, GENRE_HIERARCHY, GENRE_FOLDER_MAPPING
+from src.utils.constants import GENRE_HIERARCHY, GENRE_FOLDER_MAPPING
+from src.utils.helpers import strip_article as _strip_article  # noqa: F401
 
 
 @dataclass(frozen=True)
@@ -40,45 +41,6 @@ class SubdivisionRange:
     def label(self) -> str:
         """Retourne le libellé de la plage (ex: 'A-C')."""
         return f"{self.start}-{self.end}"
-
-
-def _strip_article(title: str) -> str:
-    """
-    Retire l'article initial d'un titre.
-
-    Gère les articles français, anglais, allemands et espagnols.
-    Gère également l'apostrophe (L'Odyssée -> Odyssée).
-
-    Args:
-        title: Titre complet.
-
-    Returns:
-        Titre sans l'article initial.
-    """
-    if not title:
-        return title
-
-    # Conversion en minuscules pour la comparaison
-    title_lower = title.lower()
-
-    # Cas spécial de l'apostrophe (L'Odyssée, L'Amour, etc.)
-    for article in IGNORED_ARTICLES:
-        if article.endswith("'"):
-            # Articles avec apostrophe (l', d')
-            if title_lower.startswith(article):
-                rest = title[len(article):]
-                if rest:  # S'assurer qu'il reste quelque chose
-                    return rest
-
-    # Articles standards (séparés par espace)
-    words = title.split(None, 1)  # Split en max 2 parties
-    if len(words) >= 2:
-        first_word = words[0].lower()
-        if first_word in IGNORED_ARTICLES:
-            return words[1]
-
-    # Pas d'article trouvé, retourner le titre original
-    return title
 
 
 def _strip_invisible_chars(text: str) -> str:

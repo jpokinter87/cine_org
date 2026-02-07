@@ -31,6 +31,7 @@ from rich.tree import Tree
 from src.core.entities.video import PendingValidation
 from src.core.ports.api_clients import MediaDetails, SearchResult
 from src.services.matcher import MatcherService
+from src.utils.helpers import parse_candidates
 
 if TYPE_CHECKING:
     from src.services.transferer import (
@@ -808,34 +809,8 @@ async def validation_loop(
 
 
 def _parse_candidates_to_search_results(candidates: list) -> list[SearchResult]:
-    """
-    Parse les candidats depuis leur forme stockee en SearchResult.
-
-    Args:
-        candidates: Liste de candidats (dict ou SearchResult)
-
-    Returns:
-        Liste de SearchResult
-    """
-    if not candidates:
-        return []
-
-    parsed = []
-    for c in candidates:
-        if isinstance(c, SearchResult):
-            parsed.append(c)
-        elif isinstance(c, dict):
-            parsed.append(
-                SearchResult(
-                    id=c.get("id", ""),
-                    title=c.get("title", ""),
-                    year=c.get("year"),
-                    score=c.get("score", 0.0),
-                    source=c.get("source", ""),
-                    original_title=c.get("original_title"),
-                )
-            )
-    return parsed
+    """Parse les candidats depuis leur forme stockee en SearchResult."""
+    return parse_candidates(candidates)
 
 
 def _rescore_candidates(

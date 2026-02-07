@@ -38,6 +38,10 @@ credits = [
 [project.scripts]
 cineorg = "src.main:main"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "strict"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

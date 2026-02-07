@@ -19,6 +19,7 @@ from src.infrastructure.persistence.repositories.pending_validation_repository i
     SQLModelPendingValidationRepository,
 )
 from src.services.matcher import MatcherService
+from src.utils.helpers import parse_candidates
 
 
 # Seuil d'auto-validation (score minimum en pourcentage)
@@ -137,33 +138,9 @@ class ValidationService:
         """
         Parse les candidats depuis leur forme stockee en SearchResult.
 
-        Les candidats peuvent etre stockes sous forme de dict (JSON) ou
-        deja etre des SearchResult.
-
-        Args:
-            candidates: Liste de candidats (dict ou SearchResult)
-
-        Returns:
-            Liste de SearchResult
+        Delegue a src.utils.helpers.parse_candidates.
         """
-        if not candidates:
-            return []
-
-        parsed = []
-        for c in candidates:
-            if isinstance(c, SearchResult):
-                parsed.append(c)
-            elif isinstance(c, dict):
-                parsed.append(
-                    SearchResult(
-                        id=c.get("id", ""),
-                        title=c.get("title", ""),
-                        year=c.get("year"),
-                        score=c.get("score", 0.0),
-                        source=c.get("source", ""),
-                    )
-                )
-        return parsed
+        return parse_candidates(candidates)
 
     async def validate_candidate(
         self, pending: PendingValidation, candidate: SearchResult
