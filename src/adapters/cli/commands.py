@@ -1658,8 +1658,15 @@ def consolidate(
       cineorg consolidate --consolidate --dry-run  # Simulation
     """
     from rich.status import Status
-    from rich.table import Table
 
+    from src.adapters.cli.consolidation_helpers import (
+        ConsolidationProgress,
+        display_consolidation_prompt,
+        display_examples,
+        display_final_summary,
+        display_inaccessible_warning,
+        display_summary,
+    )
     from src.services.consolidation import (
         ConsolidationService,
         ConsolidationStatus,
@@ -1693,48 +1700,18 @@ def consolidate(
     # Afficher le resume par volume
     summary = service.get_summary(symlinks)
 
-    console.print(f"\n[bold]Symlinks externes:[/bold] {len(symlinks)}\n")
-
-    table = Table(title="Resume par volume")
-    table.add_column("Volume", style="cyan")
-    table.add_column("Total", justify="right")
-    table.add_column("Accessibles", justify="right", style="green")
-    table.add_column("Inaccessibles", justify="right", style="red")
-    table.add_column("Taille", justify="right")
-
-    for volume, stats in summary.items():
-        size_gb = stats["total_size"] / (1024**3) if stats["total_size"] else 0
-        table.add_row(
-            volume,
-            str(stats["count"]),
-            str(stats["accessible"]),
-            str(stats["inaccessible"]),
-            f"{size_gb:.1f} Go",
-        )
-
-    console.print(table)
+    display_summary(symlinks, summary)
 
     # Compter les accessibles et inaccessibles
     accessible = [s for s in symlinks if s.status == ConsolidationStatus.ACCESSIBLE]
     inaccessible = [s for s in symlinks if s.status == ConsolidationStatus.INACCESSIBLE]
 
-    if inaccessible:
-        console.print(f"\n[yellow]Attention:[/yellow] {len(inaccessible)} fichiers inaccessibles")
-        console.print("[dim]Volumes non montes ou permissions insuffisantes[/dim]")
+    display_inaccessible_warning(len(inaccessible))
 
     # Si pas de consolidation demandee, afficher quelques exemples
     if not do_consolidate:
-        console.print("\n[dim]Exemples de symlinks externes:[/dim]")
-        for s in symlinks[:5]:
-            status_icon = "[green]✓[/green]" if s.status == ConsolidationStatus.ACCESSIBLE else "[red]✗[/red]"
-            console.print(f"  {status_icon} {s.symlink_path.name}")
-            console.print(f"    [dim]-> {s.target_path}[/dim]")
-
-        if len(symlinks) > 5:
-            console.print(f"  [dim]... et {len(symlinks) - 5} autres[/dim]")
-
-        console.print(f"\n[cyan]Pour rapatrier les fichiers accessibles:[/cyan]")
-        console.print(f"  cineorg consolidate --consolidate")
+        display_examples(symlinks)
+        display_consolidation_prompt()
         return
 
     # Effectuer la consolidation
@@ -1742,8 +1719,7 @@ def consolidate(
         console.print("\n[yellow]Aucun fichier accessible a rapatrier.[/yellow]")
         return
 
-    mode_label = "[dim](dry-run)[/dim] " if dry_run else ""
-    console.print(f"\n[bold cyan]{mode_label}Rapatriement de {len(accessible)} fichiers...[/bold cyan]\n")
+    ConsolidationProgress.display_initial_message(len(accessible), dry_run)
 
     consolidated = 0
     errors = 0
@@ -1766,18 +1742,14 @@ def consolidate(
                 consolidated += 1
             elif result.status == ConsolidationStatus.ERROR:
                 errors += 1
-                console.print(f"[red]Erreur:[/red] {symlink.symlink_path.name}: {result.error_message}")
+                ConsolidationProgress.display_error(symlink.symlink_path.name, result.error_message)
 
             progress.advance(task)
 
         progress.update(task, description="[green]Termine")
 
     # Resume
-    console.print(f"\n[bold]Resume:[/bold]")
-    console.print(f"  [green]{consolidated}[/green] fichier(s) rapatrie(s)")
-    if errors:
-        console.print(f"  [red]{errors}[/red] erreur(s)")
-    console.print(f"  [yellow]{len(inaccessible)}[/yellow] inaccessible(s)")
+    display_final_summary(consolidated, errors, len(inaccessible), dry_run)
 
 
 # ============================================================================
