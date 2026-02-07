@@ -443,3 +443,169 @@ class TestSubdivisionRange:
         subdivision = SubdivisionRange(start="A", end="C")
         with pytest.raises(AttributeError):
             subdivision.start = "B"  # type: ignore[misc]
+
+
+# ====================
+# Tests navigation subdivisions multi-niveaux
+# ====================
+
+class TestSeriesSubdivisionNavigation:
+    """Tests pour la navigation récursive dans les subdivisions de séries."""
+
+    def test_series_navigates_to_leaf_subdivision(self, tmp_path: Path) -> None:
+        """Une série navigue jusqu'à la subdivision feuille (Di-Dz et non D)."""
+        from src.services.organizer import get_series_video_destination
+
+        # Créer la structure : Séries TV/D/Di-Dz/
+        series_type_dir = tmp_path / "Séries" / "Séries TV"
+        d_dir = series_type_dir / "D"
+        di_dz_dir = d_dir / "Di-Dz"
+        di_dz_dir.mkdir(parents=True)
+
+        # Série "Downtown Cemetery" -> lettre D -> doit aller dans Di-Dz
+        series = Series(title="Downtown Cemetery", year=2025, genres=("Drame",))
+
+        path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
+
+        # Vérifier que le chemin utilise Di-Dz (feuille) et non D (parent)
+        assert path == tmp_path / "Séries" / "Séries TV" / "D" / "Di-Dz" / "Downtown Cemetery (2025)" / "Saison 01"
+
+    def test_series_navigues_pa_to_po_leaf(self, tmp_path: Path) -> None:
+        """Une série P-Q navigue jusqu'à Pa-Po et non P-Q."""
+        from src.services.organizer import get_series_video_destination
+
+        # Créer la structure : Séries TV/P-Q/Pa-Po/
+        series_type_dir = tmp_path / "Séries" / "Séries TV"
+        pq_dir = series_type_dir / "P-Q"
+        pa_po_dir = pq_dir / "Pa-Po"
+        pa_po_dir.mkdir(parents=True)
+
+        # Série "Polar Park" -> lettre P -> doit aller dans Pa-Po
+        series = Series(title="Polar Park", year=2025, genres=("Drame",))
+
+        path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
+
+        # Vérifier que le chemin utilise Pa-Po (feuille)
+        assert path == tmp_path / "Séries" / "Séries TV" / "P-Q" / "Pa-Po" / "Polar Park (2025)" / "Saison 01"
+
+    def test_series_navigues_sa_to_so_leaf(self, tmp_path: Path) -> None:
+        """Une série S avec préfixe Sa-So navigue jusqu'à Sa-So et non S."""
+        from src.services.organizer import get_series_video_destination
+
+        # Créer la structure : Séries TV/S/Sa-So/
+        series_type_dir = tmp_path / "Séries" / "Séries TV"
+        s_dir = series_type_dir / "S"
+        sa_so_dir = s_dir / "Sa-So"
+        sa_so_dir.mkdir(parents=True)
+
+        # Série "Sanctuary" -> préfixe Sa -> doit aller dans Sa-So
+        series = Series(title="Sanctuary", year=2025, genres=("Drame",))
+
+        path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
+
+        # Vérifier que le chemin utilise Sa-So (feuille)
+        assert path == tmp_path / "Séries" / "Séries TV" / "S" / "Sa-So" / "Sanctuary (2025)" / "Saison 01"
+
+    def test_series_navigues_sp_to_sz_leaf(self, tmp_path: Path) -> None:
+        """Une série S avec préfixe St navigue jusqu'à Sp-Sz."""
+        from src.services.organizer import get_series_video_destination
+
+        # Créer la structure : Séries TV/S/Sp-Sz/
+        series_type_dir = tmp_path / "Séries" / "Séries TV"
+        s_dir = series_type_dir / "S"
+        sp_sz_dir = s_dir / "Sp-Sz"
+        sp_sz_dir.mkdir(parents=True)
+
+        # Série "Station Eleven" -> préfixe St -> doit aller dans Sp-Sz
+        series = Series(title="Station Eleven", year=2025, genres=("Drame",))
+
+        path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
+
+        # Vérifier que le chemin utilise Sp-Sz (feuille)
+        assert path == tmp_path / "Séries" / "Séries TV" / "S" / "Sp-Sz" / "Station Eleven (2025)" / "Saison 01"
+
+    def test_series_three_level_subdivision_navigation(self, tmp_path: Path) -> None:
+        """Navigation à travers 3 niveaux de subdivisions."""
+        from src.services.organizer import get_series_video_destination
+
+        # Créer une structure profonde : D/Da-Di/Di-Dz/
+        series_type_dir = tmp_path / "Séries" / "Séries TV"
+        d_dir = series_type_dir / "D"
+        da_di_dir = d_dir / "Da-Di"
+        di_dz_dir = da_di_dir / "Di-Dz"
+        di_dz_dir.mkdir(parents=True)
+
+        # Série "Downtown Abbey" -> lettre D -> Da-Di -> Di-Dz
+        series = Series(title="Downtown Abbey", year=2025, genres=("Drame",))
+
+        path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
+
+        # Vérifier qu'on descend jusqu'au niveau le plus profond (Di-Dz)
+        assert path == tmp_path / "Séries" / "Séries TV" / "D" / "Da-Di" / "Di-Dz" / "Downtown Abbey (2025)" / "Saison 01"
+
+    def test_series_fallback_to_letter_when_no_subdivision(self, tmp_path: Path) -> None:
+        """Sans subdivisions existantes, place directement dans le type_dir."""
+        from src.services.organizer import get_series_video_destination
+
+        # Créer seulement le répertoire type sans subdivisions
+        series_type_dir = tmp_path / "Séries" / "Séries TV"
+        series_type_dir.mkdir(parents=True)
+
+        # Série "Alpha" -> lettre A
+        series = Series(title="Alpha", year=2025, genres=("Drame",))
+
+        path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
+
+        # Fallback : place directement dans le répertoire type (pas de lettre)
+        assert path == tmp_path / "Séries" / "Séries TV" / "Alpha (2025)" / "Saison 01"
+
+    def test_series_type_manga(self, tmp_path: Path) -> None:
+        """Les mangas utilisent le type Mangas."""
+        from src.services.organizer import get_series_video_destination
+
+        # Créer la structure : Mangas/D/Di-Dz/
+        manga_dir = tmp_path / "Séries" / "Mangas" / "D" / "Di-Dz"
+        manga_dir.mkdir(parents=True)
+
+        # Série "Death Note" -> Anime -> Mangas
+        series = Series(title="Death Note", year=2005, genres=("Anime", "Action"))
+
+        path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
+
+        # Vérifier l'utilisation du type Mangas
+        assert path == tmp_path / "Séries" / "Mangas" / "D" / "Di-Dz" / "Death Note (2005)" / "Saison 01"
+
+    def test_series_type_animation(self, tmp_path: Path) -> None:
+        """Les séries d'animation utilisent le type Animation."""
+        from src.services.organizer import get_series_video_destination
+
+        # Créer la structure : Animation/S/Sa-Sm/
+        animation_dir = tmp_path / "Séries" / "Animation" / "S" / "Sa-Sm"
+        animation_dir.mkdir(parents=True)
+
+        # Série "Spider-Man" -> Animation (pas Anime)
+        series = Series(title="Spider-Man", year=2025, genres=("Animation", "Action"))
+
+        path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
+
+        # Vérifier l'utilisation du type Animation
+        assert path == tmp_path / "Séries" / "Animation" / "S" / "Sa-Sm" / "Spider-Man (2025)" / "Saison 01"
+
+    def test_series_chooses_correct_subdivision_when_multiple_exist(self, tmp_path: Path) -> None:
+        """Quand plusieurs subdivisions existent, choisit la bonne (Sp-Sz et non Sa-So)."""
+        from src.services.organizer import get_series_video_destination
+
+        # Créer la structure avec les deux subdivisions : S/Sa-So/ et S/Sp-Sz/
+        series_type_dir = tmp_path / "Séries" / "Séries TV" / "S"
+        sa_so_dir = series_type_dir / "Sa-So"
+        sp_sz_dir = series_type_dir / "Sp-Sz"
+        sp_sz_dir.mkdir(parents=True)
+        sa_so_dir.mkdir(parents=True)
+
+        # Série "Station Eleven" -> préfixe St -> doit choisir Sp-Sz (pas Sa-So)
+        series = Series(title="Station Eleven", year=2025, genres=("Drame",))
+
+        path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
+
+        # Vérifier que le chemin utilise Sp-Sz (le bon choix)
+        assert path == tmp_path / "Séries" / "Séries TV" / "S" / "Sp-Sz" / "Station Eleven (2025)" / "Saison 01"

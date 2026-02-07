@@ -163,14 +163,14 @@ def _letter_matches_range(letter: str, range_name: str) -> bool:
 
     Gère UNIQUEMENT les formats de lettres simples :
     - Lettre simple : "A", "B", "#"
-    - Plage de lettres simples : "A-I", "J-Z", "E-F"
+    - Plage de lettres simples : "A-I", "J-Z", "Sa-So", "Di-Dz"
 
-    NE GÈRE PAS les plages de préfixes (Ba-Bi, Me-My, Mab-Man)
+    NE GÈRE PAS les plages de préfixes (Mab-Man, Mo-My, etc.)
     qui doivent être traitées par _title_matches_range().
 
     Args:
         letter: Lettre de tri du titre (majuscule).
-        range_name: Nom du répertoire (ex: "A-I", "B").
+        range_name: Nom du répertoire (ex: "A-I", "Sa-So", "B").
 
     Returns:
         True si la lettre est dans la plage de lettres simples.
@@ -189,18 +189,26 @@ def _letter_matches_range(letter: str, range_name: str) -> bool:
     if len(range_upper) == 1:
         return letter_upper == range_upper
 
-    # Plage de lettres simples (A-I, J-Z, etc.)
+    # Plage de lettres simples (A-I, J-Z, Sa-So, Di-Dz, etc.)
     # NE PAS matcher les plages de préfixes (Mab-Man, Mo-My, etc.)
     if "-" in range_name:
         parts = range_upper.split("-")
         if len(parts) == 2:
             start_part, end_part = parts[0], parts[1]
-            # Si les parties ont plus d'un caractère, c'est une plage de préfixes
+            # Une plage de lettres simples a des parties de 1-2 caractères max
+            # Si une partie a plus de 2 caractères, c'est une plage de préfixes
             # -> ne pas matcher ici, laisser _title_matches_range() gérer
-            if len(start_part) > 1 or len(end_part) > 1:
+            if len(start_part) > 2 or len(end_part) > 2:
                 return False
-            # Plage de lettres simples (ex: A-I, J-Z)
-            return start_part <= letter_upper <= end_part
+            # Extraire la première lettre de chaque partie
+            # Sa-So -> S à S, Di-Dz -> D à D
+            start_letter = start_part[0] if start_part else ""
+            end_letter = end_part[0] if end_part else ""
+            # Vérifier que les parties sont alphabétiques
+            if not (start_letter.isalpha() and end_letter.isalpha()):
+                return False
+            # Plage de lettres simples (ex: A-I, Sa-So)
+            return start_letter <= letter_upper <= end_letter
 
     return False
 
@@ -258,6 +266,8 @@ def _find_matching_subdir(parent: Path, title: str) -> Optional[Path]:
 
     Parcourt les sous-répertoires du parent et retourne celui
     qui correspond au titre (par lettre ou plage).
+    Préfère les plages (Sa-So) aux lettres simples (S) pour
+    naviguer jusqu'aux feuilles de l'arborescence.
 
     Args:
         parent: Répertoire parent à explorer.
@@ -271,16 +281,22 @@ def _find_matching_subdir(parent: Path, title: str) -> Optional[Path]:
 
     letter = get_sort_letter(title)
 
+    # Premier passage : chercher les plages (plus spécifiques)
     for subdir in sorted(parent.iterdir()):
         if not subdir.is_dir():
             continue
 
-        # Essayer le matching par lettre d'abord
-        if _letter_matches_range(letter, subdir.name):
+        # Préférer les plages de préfixes (Sa-So, Di-Dz, etc.)
+        if _title_matches_range(title, subdir.name):
             return subdir
 
-        # Puis par titre complet (pour les plages de préfixes)
-        if _title_matches_range(title, subdir.name):
+    # Deuxième passage : chercher les lettres simples (fallback)
+    for subdir in sorted(parent.iterdir()):
+        if not subdir.is_dir():
+            continue
+
+        # Lettre simple exacte (S, D, etc.)
+        if _letter_matches_range(letter, subdir.name):
             return subdir
 
     return None
@@ -312,20 +328,24 @@ def _navigate_to_leaf(start_dir: Path, title: str) -> Path:
             # ou le répertoire n'existe pas encore
             break
 
-        # Vérifier si c'est un répertoire de subdivision (lettres/plages)
-        # et non un répertoire de contenu (titre de film/série)
-        subdir_names = [d.name for d in matching.iterdir() if d.is_dir()]
+        # Vérifier si on est entré dans un répertoire de contenu (films/séries)
+        #而不是 un répertoire de subdivision (lettres/plages)
+        # Un répertoire de contenu a généralement un nom long (titre)
+        # et peut contenir des fichiers médias
+        has_media_files = any(
+            f.suffix.lower() in (".mkv", ".mp4", ".avi", ".mov", ".m4v")
+            for f in matching.iterdir() if f.is_file()
+        )
 
-        # Heuristique : si les sous-répertoires ressemblent à des plages/lettres
-        # (courts, avec tirets ou lettres simples), on continue à descendre
-        looks_like_subdivision = any(
-            len(name) <= 5 or "-" in name[:6]
-            for name in subdir_names[:5]
-        ) if subdir_names else False
+        # Heuristique : si le nom ressemble à un titre de film/série
+        # (long, sans tiret de plage), on s'arrête
+        name_looks_like_content = (
+            len(matching.name) > 10  # Titres généralement plus longs que "A-C" ou "Di-Dz"
+            and "-" not in matching.name[:10]  # Pas de plage au début
+        )
 
-        if not looks_like_subdivision:
-            # Les sous-répertoires ne sont pas des subdivisions
-            # On a trouvé le bon niveau
+        if name_looks_like_content or has_media_files:
+            # On est dans un répertoire de contenu, pas une subdivision
             current = matching
             break
 
@@ -495,13 +515,8 @@ def get_series_video_destination(
         letter = get_sort_letter(series.title)
         return type_dir / letter / series_folder / season_folder
 
-    # Naviguer pour trouver le bon répertoire de lettre/plage
-    letter_dir = _find_matching_subdir(type_dir, series.title)
-
-    if letter_dir is None:
-        # Aucune subdivision ne correspond, utiliser la lettre
-        letter = get_sort_letter(series.title)
-        return type_dir / letter / series_folder / season_folder
+    # Naviguer récursivement jusqu'à la bonne subdivision
+    letter_dir = _navigate_to_leaf(type_dir, series.title)
 
     # Retourner le chemin complet
     return letter_dir / series_folder / season_folder
