@@ -34,6 +34,7 @@ from .services.organizer import OrganizerService
 from .services.quality_scorer import QualityScorerService
 from .services.transferer import TransfererService
 from .services.validation import ValidationService
+from .services.workflow import WorkflowService
 
 
 class Container(containers.DeclarativeContainer):
@@ -195,3 +196,7 @@ class Container(containers.DeclarativeContainer):
         series_repo=series_repository,
         episode_repo=episode_repository,
     )
+
+    # Service de workflow - Factory pour nouvelle instance a chaque execution
+    # Orchestre le workflow complet de traitement des videos
+    workflow_service = providers.Factory(WorkflowService)

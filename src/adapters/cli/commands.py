@@ -222,10 +222,14 @@ from src.adapters.cli.validation import (
     prompt_conflict_resolution,
     validation_loop,
 )
+from src.adapters.cli.helpers import suppress_loguru, with_container
+from src.adapters.cli.auto_validator import auto_validate_files, ValidationResult
+from src.adapters.cli.batch_builder import build_transfers_batch
 from src.services.transferer import ExistingFileInfo, SimilarContentInfo
 from src.container import Container
 from src.core.entities.media import Episode, Movie, Series
 from src.core.entities.video import ValidationStatus
+from src.utils.helpers import parse_candidate
 
 
 class MediaFilter(str, Enum):
@@ -250,11 +254,9 @@ def validate_auto() -> None:
     asyncio.run(_validate_auto_async())
 
 
-async def _validate_auto_async() -> None:
+@with_container()
+async def _validate_auto_async(container) -> None:
     """Implementation async de la validation automatique."""
-    container = Container()
-    container.database.init()
-
     service = container.validation_service()
     pending_list = service.list_pending()
 
@@ -281,193 +283,34 @@ def validate_manual() -> None:
     asyncio.run(_validate_manual_async())
 
 
-async def _validate_manual_async() -> None:
+@with_container()
+async def _validate_manual_async(container) -> None:
     """Implementation async de la validation manuelle."""
-    container = Container()
-    container.database.init()
-
     service = container.validation_service()
     tmdb_client = container.tmdb_client()
     pending_list = service.list_pending()
-
-    # Filtrer les non-auto-valides (status PENDING)
-    pending_list = [
-        p for p in pending_list
-        if p.validation_status == ValidationStatus.PENDING and not p.auto_validated
-    ]
 
     if not pending_list:
         console.print("[yellow]Aucun fichier en attente de validation manuelle.[/yellow]")
         return
 
-    console.print(f"[bold]{len(pending_list)}[/bold] fichier(s) a valider.\n")
+    # Etape 1: Auto-validation par score et duree (delegue a auto_validator)
+    result: ValidationResult = await auto_validate_files(pending_list, service, tmdb_client)
 
-    # Auto-valider les cas evidents:
-    # - 1 seul candidat avec score >= 95%
-    # - Plusieurs candidats mais le 1er >= 95% et les autres < 70%
-    # - Premier >= 90% et ecart >= 12 points avec le 2eme
-    auto_validated = []
-    remaining = []
-
-    def get_score(candidate: dict | object) -> float:
-        return candidate.get("score", 0) if isinstance(candidate, dict) else getattr(candidate, "score", 0)
-
-    for pending in pending_list:
-        if not pending.candidates:
-            remaining.append(pending)
-            continue
-
-        first_score = get_score(pending.candidates[0])
-
-        # Cas 1: un seul candidat >= 95%
-        if len(pending.candidates) == 1 and first_score >= 95:
-            auto_validated.append(pending)
-            continue
-
-        # Cas 2: premier >= 95% et tous les autres < 70% (haute confiance)
-        if first_score >= 95 and len(pending.candidates) > 1:
-            others_low = all(get_score(c) < 70 for c in pending.candidates[1:])
-            if others_low:
-                auto_validated.append(pending)
-                continue
-
-        # Cas 3: premier >= 90% et ecart >= 12 points avec le 2eme
-        if first_score >= 90 and len(pending.candidates) > 1:
-            second_score = get_score(pending.candidates[1])
-            if first_score - second_score >= 12:
-                auto_validated.append(pending)
-                continue
-
-        remaining.append(pending)
-
-    # Cas 4: Un seul candidat avec duree compatible (±30%)
-    # Necessite des appels API pour recuperer la duree TMDB
-    if remaining and tmdb_client:
-        duration_validated = []
-        still_remaining = []
-
-        def is_duration_compatible(file_duration: int, tmdb_duration: int) -> bool:
-            """Verifie si la duree TMDB est compatible (±30%) avec la duree fichier."""
-            if not file_duration or not tmdb_duration:
-                return False
-            ratio = tmdb_duration / file_duration
-            return 0.7 <= ratio <= 1.3
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            TextColumn("[dim]{task.fields[status]}[/dim]"),
-            console=console,
-        ) as progress:
-            task = progress.add_task(
-                "Verification durees TMDB...",
-                total=len(remaining),
-                status=""
-            )
-
-            for pending in remaining:
-                # Mettre a jour la barre de progression
-                filename = pending.video_file.filename[:40] if pending.video_file else "?"
-                progress.update(task, advance=1, status=filename)
-
-                # Verifier qu'on a la duree du fichier
-                file_duration = None
-                if pending.video_file and pending.video_file.media_info:
-                    file_duration = pending.video_file.media_info.duration_seconds
-
-                if not file_duration or len(pending.candidates) < 2:
-                    still_remaining.append(pending)
-                    continue
-
-                # Recuperer la duree TMDB des 3 premiers candidats
-                compatible_candidates = []
-                for candidate in pending.candidates[:3]:
-                    candidate_id = candidate.get("id") if isinstance(candidate, dict) else candidate.id
-                    candidate_source = candidate.get("source", "") if isinstance(candidate, dict) else getattr(candidate, "source", "")
-
-                    # Ne traiter que les candidats TMDB (pas TVDB pour les series)
-                    if candidate_source != "tmdb":
-                        continue
-
-                    try:
-                        details = await tmdb_client.get_details(str(candidate_id))
-                        if details and details.duration_seconds:
-                            if is_duration_compatible(file_duration, details.duration_seconds):
-                                compatible_candidates.append((candidate, details))
-                    except Exception:
-                        pass
-
-                # Si UN SEUL candidat a une duree compatible, auto-valider
-                if len(compatible_candidates) == 1:
-                    candidate, details = compatible_candidates[0]
-                    # Stocker le candidat compatible pour validation
-                    pending._duration_validated_candidate = candidate
-                    duration_validated.append(pending)
-                else:
-                    still_remaining.append(pending)
-
-        # Ajouter les valides par duree a la liste
-        if duration_validated:
-            console.print(f"[bold cyan]Auto-validation (duree)[/bold cyan]: {len(duration_validated)} fichier(s) (1 seul candidat avec duree compatible)\n")
-            for pending in duration_validated:
-                candidate = pending._duration_validated_candidate
-                filename = pending.video_file.filename if pending.video_file else "?"
-
-                if isinstance(candidate, dict):
-                    from src.core.ports.api_clients import SearchResult
-                    search_result = SearchResult(
-                        id=candidate.get("id", ""),
-                        title=candidate.get("title", ""),
-                        year=candidate.get("year"),
-                        score=candidate.get("score", 0.0),
-                        source=candidate.get("source", ""),
-                    )
-                else:
-                    search_result = candidate
-
-                details = await service.validate_candidate(pending, search_result)
-                console.print(f"[green]{filename}[/green] -> {details.title} (duree compatible)")
-
-            auto_validated.extend(duration_validated)
-
-        remaining = still_remaining
-
-    # Valider automatiquement les cas evidents
-    if auto_validated:
-        console.print(f"[bold cyan]Auto-validation[/bold cyan]: {len(auto_validated)} fichier(s) (haute confiance)\n")
-        for pending in auto_validated:
-            candidate = pending.candidates[0]
-            filename = pending.video_file.filename if pending.video_file else "?"
-
-            # Convertir dict en SearchResult si necessaire
-            if isinstance(candidate, dict):
-                from src.core.ports.api_clients import SearchResult
-                search_result = SearchResult(
-                    id=candidate.get("id", ""),
-                    title=candidate.get("title", ""),
-                    year=candidate.get("year"),
-                    score=candidate.get("score", 0.0),
-                    source=candidate.get("source", ""),
-                )
-            else:
-                search_result = candidate
-
-            details = await service.validate_candidate(pending, search_result)
-            console.print(f"[green]{filename}[/green] -> {details.title} ({get_score(candidate):.0f}%)")
-
-        console.print()
-
-    if not remaining:
-        console.print(f"[bold]{len(auto_validated)}[/bold] fichier(s) valide(s) automatiquement.")
+    if not result.remaining:
+        console.print(
+            f"[bold]{len(result.auto_validated)}[/bold] fichier(s) valide(s) automatiquement."
+        )
         return
 
-    console.print(f"[bold]{len(remaining)}[/bold] fichier(s) restant(s) a valider manuellement.\n")
+    # Etape 2: Validation manuelle pour les fichiers restants
+    console.print(
+        f"[bold]{len(result.remaining)}[/bold] fichier(s) restant(s) a valider manuellement.\n"
+    )
 
     validated = []
     auto_in_manual = 0
-    for pending in remaining:
+    for pending in result.remaining:
         # Auto-validation si un seul candidat avec score >= 85%
         if service.should_auto_validate(service._parse_candidates(pending.candidates)):
             candidates = service._parse_candidates(pending.candidates)
@@ -475,33 +318,38 @@ async def _validate_manual_async() -> None:
             details = await service.validate_candidate(pending, candidate)
             validated.append({"pending": pending, "details": details})
             filename = pending.video_file.filename if pending.video_file else "?"
-            console.print(f"[green]Auto:[/green] {filename} -> {details.title} ({candidate.score:.0f}%)")
+            console.print(
+                f"[green]Auto:[/green] {filename} -> {details.title} ({candidate.score:.0f}%)"
+            )
             auto_in_manual += 1
             continue
 
-        result = await validation_loop(pending, service)
+        result_loop = await validation_loop(pending, service)
 
-        if result == "quit":
+        if result_loop == "quit":
             console.print("[yellow]Validation interrompue.[/yellow]")
             break
-        elif result == "trash":
+        elif result_loop == "trash":
             service.reject_pending(pending)
             filename = pending.video_file.filename if pending.video_file else "?"
             console.print(f"[red]Corbeille:[/red] {filename}")
-        elif result is None:
+        elif result_loop is None:
             filename = pending.video_file.filename if pending.video_file else "?"
             console.print(f"[yellow]Passe:[/yellow] {filename}")
         else:
-            # result est le SearchResult du candidat selectionne
-            candidate = result
+            # result_loop est le SearchResult du candidat selectionne
+            candidate = result_loop
             details = await service.validate_candidate(pending, candidate)
             validated.append({"pending": pending, "details": details})
             filename = pending.video_file.filename if pending.video_file else "?"
             console.print(f"[green]Valide:[/green] {filename} -> {details.title}")
 
-    total_validated = len(auto_validated) + len(validated)
+    total_validated = len(result.auto_validated) + len(validated)
     manual_count = len(validated) - auto_in_manual
-    console.print(f"\n[bold]Resume:[/bold] {total_validated} fichier(s) valide(s) ({len(auto_validated) + auto_in_manual} auto, {manual_count} manuel)")
+    console.print(
+        f"\n[bold]Resume:[/bold] {total_validated} fichier(s) valide(s) "
+        f"({len(result.auto_validated) + auto_in_manual} auto, {manual_count} manuel)"
+    )
 
 
 @validate_app.command("batch")
@@ -510,11 +358,10 @@ def validate_batch() -> None:
     asyncio.run(_validate_batch_async())
 
 
-async def _validate_batch_async() -> None:
+@with_container()
+async def _validate_batch_async(container) -> None:
     """Implementation async du batch de transferts."""
-    container = Container()
     config = container.config()
-    container.database.init()
 
     # Recuperer les services necessaires
     service = container.validation_service()
@@ -788,775 +635,26 @@ def process(
     asyncio.run(_process_async(filter_type, dry_run))
 
 
-async def _process_async(filter_type: MediaFilter, dry_run: bool) -> None:
+@with_container()
+async def _process_async(container, filter_type: MediaFilter, dry_run: bool) -> None:
     """Implementation async du workflow complet."""
-    container = Container()
-    config = container.config()
-    container.database.init()
+    from src.services.workflow import WorkflowService, WorkflowConfig
 
-    scanner = container.scanner_service()
-    validation_svc = container.validation_service()
+    config_obj = container.config()
 
-    # Nettoyage des enregistrements orphelins (runs precedents interrompus)
-    pending_repo = container.pending_validation_repository()
-    video_file_repo = container.video_file_repository()
-    orphan_count = 0
-    # Recuperer les pending et validated (tout sauf TRANSFERRED)
-    orphans = validation_svc.list_pending() + validation_svc.list_validated()
-    for pv in orphans:
-        if pv.id:
-            pending_repo.delete(pv.id)
-        if pv.video_file and pv.video_file.id:
-            video_file_repo.delete(pv.video_file.id)
-        orphan_count += 1
-    if orphan_count > 0:
-        console.print(
-            f"[dim]Nettoyage: {orphan_count} enregistrement(s) orphelin(s) supprime(s)[/dim]\n"
-        )
-
-    # 1. Scan avec Progress
-    console.print("\n[bold cyan]Etape 1/4: Scan des telechargements[/bold cyan]\n")
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        console=console,
-    ) as progress:
-        scan_task = progress.add_task("[cyan]Scan en cours...", total=None)
-        scan_results = []
-
-        for result in scanner.scan_downloads():
-            # Filtrer selon filter_type
-            if (
-                filter_type == MediaFilter.MOVIES
-                and result.detected_type != MediaType.MOVIE
-            ):
-                continue
-            if (
-                filter_type == MediaFilter.SERIES
-                and result.detected_type != MediaType.SERIES
-            ):
-                continue
-
-            scan_results.append(result)
-            progress.update(
-                scan_task, description=f"[cyan]{result.video_file.filename}"
-            )
-
-        progress.update(
-            scan_task, total=len(scan_results), completed=len(scan_results)
-        )
-
-    console.print(f"[bold]{len(scan_results)}[/bold] fichier(s) trouve(s)")
-
-    # Detecter les fichiers sous le seuil de taille
-    undersized_results = list(scanner.scan_undersized_files())
-
-    # Filtrer selon filter_type
-    undersized_results = [
-        r for r in undersized_results
-        if not (filter_type == MediaFilter.MOVIES and r.detected_type != MediaType.MOVIE)
-        and not (filter_type == MediaFilter.SERIES and r.detected_type != MediaType.SERIES)
-    ]
-
-    if undersized_results:
-        # Grouper par titre (serie) ou par fichier (film)
-        from collections import defaultdict
-        undersized_groups: dict[str, list] = defaultdict(list)
-        config = container.config()
-
-        for result in undersized_results:
-            # Utiliser le titre parse comme cle de groupe
-            title = result.parsed_info.title or "Inconnu"
-            undersized_groups[title].append(result)
-
-        console.print(f"\n[yellow]⚠ {len(undersized_results)} fichier(s) sous le seuil de {config.min_file_size_mb} Mo detecte(s)[/yellow]")
-
-        # Pour chaque groupe, demander si on veut les traiter
-        for title, group in undersized_groups.items():
-            total_size_mb = sum(r.video_file.size_bytes for r in group) / (1024 * 1024)
-            file_count = len(group)
-
-            # Determiner le type (serie ou film)
-            is_series = group[0].detected_type == MediaType.SERIES
-
-            if is_series:
-                console.print(f"\n[bold]{title}[/bold] - {file_count} episode(s), {total_size_mb:.1f} Mo total")
-            else:
-                console.print(f"\n[bold]{title}[/bold] - {total_size_mb:.1f} Mo")
-
-            # Afficher quelques exemples
-            for r in group[:3]:
-                size_mb = r.video_file.size_bytes / (1024 * 1024)
-                console.print(f"  [dim]{r.video_file.filename} ({size_mb:.1f} Mo)[/dim]")
-            if len(group) > 3:
-                console.print(f"  [dim]... et {len(group) - 3} autre(s)[/dim]")
-
-            if Confirm.ask(f"Traiter {'cette serie' if is_series else 'ce fichier'} ?", default=False):
-                scan_results.extend(group)
-                console.print(f"  [green]✓[/green] {file_count} fichier(s) ajoute(s) au traitement")
-            else:
-                console.print(f"  [dim]Ignore(s)[/dim]")
-
-        if scan_results:
-            console.print(f"\n[bold]{len(scan_results)}[/bold] fichier(s) total a traiter")
-
-    if not scan_results:
-        console.print("[yellow]Aucun fichier a traiter.[/yellow]")
-        return
-
-    # 2. Matching et creation des PendingValidation
-    console.print("\n[bold cyan]Etape 2/4: Matching avec les APIs[/bold cyan]\n")
-
-    pending_repo = container.pending_validation_repository()
-    video_file_repo = container.video_file_repository()
-    tmdb_client = container.tmdb_client()
-    tvdb_client = container.tvdb_client()
-    matcher = container.matcher_service()
-
-    # Liste pour collecter les IDs crees pendant le scan (pour nettoyage dry-run)
-    created_video_file_ids: list[str] = []
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        console=console,
-    ) as progress:
-        match_task = progress.add_task("[green]Matching...", total=len(scan_results))
-
-        for result in scan_results:
-            progress.update(
-                match_task, description=f"[green]{result.video_file.filename}"
-            )
-
-            # Sauvegarder le VideoFile et creer un PendingValidation
-            from src.core.entities.video import PendingValidation, VideoFile
-
-            # Creer le VideoFile avec les infos extraites
-            video_file = VideoFile(
-                path=result.video_file.path,
-                filename=result.video_file.filename,
-                media_info=result.media_info,
-            )
-            saved_vf = video_file_repo.save(video_file)
-
-            # Collecter l'ID pour nettoyage en cas de dry-run
-            if saved_vf.id:
-                created_video_file_ids.append(saved_vf.id)
-
-            # Rechercher les candidats via API
-            candidates = []
-            title = result.parsed_info.title
-            year = result.parsed_info.year
-
-            if result.detected_type == MediaType.MOVIE:
-                # Film -> TMDB
-                if tmdb_client and getattr(tmdb_client, "_api_key", None):
-                    try:
-                        api_results = await tmdb_client.search(title, year=year)
-                        duration = None
-                        if result.media_info and result.media_info.duration_seconds:
-                            duration = result.media_info.duration_seconds
-
-                        # Premier scoring sans duree API (utilise coefficients fallback)
-                        candidates = matcher.score_results(
-                            api_results, title, year, duration
-                        )
-
-                        # Enrichir les top 3 candidats avec leurs details (duree)
-                        # puis re-scorer avec les coefficients complets
-                        if candidates and duration:
-                            top_candidates = candidates[:3]
-                            enriched_candidates = []
-
-                            for cand in top_candidates:
-                                try:
-                                    details = await tmdb_client.get_details(cand.id)
-                                    if details and details.duration_seconds:
-                                        # Re-scorer avec la duree API et titre original
-                                        from src.services.matcher import calculate_movie_score
-                                        new_score = calculate_movie_score(
-                                            query_title=title,
-                                            query_year=year,
-                                            query_duration=duration,
-                                            candidate_title=cand.title,
-                                            candidate_year=cand.year,
-                                            candidate_duration=details.duration_seconds,
-                                            candidate_original_title=cand.original_title or details.original_title,
-                                        )
-                                        from dataclasses import replace
-                                        cand = replace(cand, score=new_score)
-                                except Exception:
-                                    pass  # Garder le score fallback
-                                enriched_candidates.append(cand)
-
-                            # Remplacer les top candidats et re-trier
-                            candidates = enriched_candidates + candidates[3:]
-                            candidates.sort(key=lambda c: c.score, reverse=True)
-
-                    except Exception as e:
-                        console.print(f"[yellow]Erreur TMDB pour {title}: {e}[/yellow]")
-            else:
-                # Serie -> TVDB
-                if tvdb_client and getattr(tvdb_client, "_api_key", None):
-                    try:
-                        api_results = await tvdb_client.search(title, year=year)
-                        # Scorer les resultats (series: 100% titre)
-                        candidates = matcher.score_results(
-                            api_results, title, year, None, is_series=True
-                        )
-                    except Exception as e:
-                        console.print(f"[yellow]Erreur TVDB pour {title}: {e}[/yellow]")
-
-            # Convertir les candidats en format dict pour stockage
-            candidates_data = [
-                {
-                    "id": c.id,
-                    "title": c.title,
-                    "year": c.year,
-                    "score": c.score,
-                    "source": c.source,
-                }
-                for c in candidates
-            ]
-
-            # Creer le PendingValidation avec les candidats
-            pending = PendingValidation(
-                video_file=saved_vf,
-                candidates=candidates_data,
-            )
-            pending_repo.save(pending)
-
-            progress.advance(match_task)
-
-    console.print(
-        f"[bold]{len(scan_results)}[/bold] fichier(s) en attente de validation"
+    workflow_config = WorkflowConfig(
+        filter_type=filter_type.value,
+        dry_run=dry_run,
+        storage_dir=Path(config_obj.storage_dir),
+        video_dir=Path(config_obj.video_dir),
     )
 
-    # 3. Auto-validation
-    console.print("\n[bold cyan]Etape 3/4: Auto-validation[/bold cyan]\n")
-
-    pending_list = validation_svc.list_pending()
-    auto_count = 0
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        console=console,
-    ) as progress:
-        auto_task = progress.add_task(
-            "[magenta]Auto-validation...", total=len(pending_list)
-        )
-
-        for pend in pending_list:
-            result = await validation_svc.process_auto_validation(pend)
-            if result.auto_validated:
-                auto_count += 1
-            progress.advance(auto_task)
-
-    console.print(f"[bold]{auto_count}[/bold] fichier(s) auto-valide(s)")
-
-    # 4. Validation manuelle interactive (si pas dry_run)
-    remaining = [
-        p
-        for p in validation_svc.list_pending()
-        if p.validation_status == ValidationStatus.PENDING and not p.auto_validated
-    ]
-
-    if remaining and not dry_run:
-        console.print(
-            f"\n[bold cyan]Etape 4/4: Validation manuelle[/bold cyan]"
-            f" ({len(remaining)} fichier(s))\n"
-        )
-
-        validated_manual = 0
-        # Set des IDs deja traites (pour eviter de retraiter les episodes auto-valides)
-        processed_ids: set[str] = set()
-
-        for pend in remaining:
-            # Skip si deja traite (auto-validation d'episode)
-            if pend.id and pend.id in processed_ids:
-                continue
-
-            result = await validation_loop(pend, validation_svc)
-
-            if result == "quit":
-                console.print("[yellow]Validation interrompue.[/yellow]")
-                break
-            elif result == "trash":
-                validation_svc.reject_pending(pend)
-                filename = pend.video_file.filename if pend.video_file else "?"
-                console.print(f"[red]Corbeille:[/red] {filename}")
-            elif result is None:
-                filename = pend.video_file.filename if pend.video_file else "?"
-                console.print(f"[yellow]Passe:[/yellow] {filename}")
-            else:
-                # result est le SearchResult du candidat selectionne
-                candidate = result
-                await validation_svc.validate_candidate(pend, candidate)
-                validated_manual += 1
-                filename = pend.video_file.filename if pend.video_file else "?"
-                console.print(f"[green]Valide:[/green] {filename}")
-
-                # Auto-validation des autres episodes de la meme serie
-                if candidate.source == "tvdb":
-                    current_folder = _get_series_folder(pend)
-                    if current_folder:
-                        auto_validated_episodes = 0
-                        for other in remaining:
-                            # Skip le fichier courant et ceux deja traites
-                            if other.id == pend.id or (other.id and other.id in processed_ids):
-                                continue
-                            # Meme repertoire parent = meme serie
-                            other_folder = _get_series_folder(other)
-                            if other_folder == current_folder:
-                                await validation_svc.validate_candidate(other, candidate)
-                                processed_ids.add(other.id)
-                                validated_manual += 1
-                                auto_validated_episodes += 1
-                                other_filename = other.video_file.filename if other.video_file else "?"
-                                console.print(f"[green]  ↳ Auto-valide:[/green] {other_filename}")
-
-                        if auto_validated_episodes > 0:
-                            console.print(
-                                f"[cyan]{auto_validated_episodes} autre(s) episode(s) "
-                                f"auto-valide(s) pour cette serie[/cyan]"
-                            )
-
-        console.print(f"\n[bold]{validated_manual}[/bold] fichier(s) valide(s) manuellement")
-
-    # 5. Batch transfer (ou affichage dry-run)
-    validated_list = validation_svc.list_validated()
-
-    # Construire la liste des transferts (pour dry-run et execution)
-    renamer = container.renamer_service()
-    organizer = container.organizer_service()
-    storage_dir = Path(config.storage_dir)
-    video_dir = Path(config.video_dir)
-    # Deux repertoires staging separes
-    # Video: au niveau parent (ex: /media/Serveur/test -> /media/Serveur/staging)
-    # Storage: a la racine du stockage (ex: /media/NAS64 -> /media/NAS64/staging)
-    video_staging_dir = video_dir.parent / "staging"
-    storage_staging_dir = storage_dir / "staging"
-
-    # Creer le transferer pour la detection de conflits
-    transferer = container.transferer_service(
-        storage_dir=storage_dir,
-        video_dir=video_dir,
-    )
-
-    transfers = []
-    # Cache des decisions de conflit par serie/saison (cle: "titre|annee|saison")
-    conflict_decisions: dict[str, str] = {}
-    # Cache des infos de conflit similaire deja detectes
-    similar_cache: dict[str, "SimilarContentInfo | None"] = {}
-
-    for pend in validated_list:
-        # Ne traiter que les fichiers de cette session (pas les anciens de la DB)
-        if not pend.video_file or not pend.video_file.id:
-            continue
-        if pend.video_file.id not in created_video_file_ids:
-            continue
-
-        candidate = None
-        for c in pend.candidates:
-            c_id = c.id if hasattr(c, "id") else c.get("id", "")
-            if c_id == pend.selected_candidate_id:
-                candidate = c
-                break
-
-        if candidate is None:
-            continue
-
-        if isinstance(candidate, dict):
-            candidate_title = candidate.get("title", "")
-            candidate_year = candidate.get("year")
-            candidate_source = candidate.get("source", "")
-        else:
-            candidate_title = candidate.title
-            candidate_year = candidate.year
-            candidate_source = candidate.source
-
-        is_series = candidate_source == "tvdb"
-        source_path = pend.video_file.path if pend.video_file else None
-        if source_path is None:
-            continue
-
-        extension = source_path.suffix if source_path.suffix else ".mkv"
-        media_info = pend.video_file.media_info if pend.video_file else None
-
-        # Extraire la langue du nom de fichier (fallback si mediainfo n'a pas de langue)
-        original_filename = pend.video_file.filename if pend.video_file else ""
-        fallback_language = _extract_language_from_filename(original_filename)
-
-        if is_series:
-            filename = pend.video_file.filename if pend.video_file else ""
-            season_num, episode_num = _extract_series_info(filename)
-
-            # Recuperer le titre d'episode et les genres depuis TVDB
-            episode_title = ""
-            series_genres: tuple[str, ...] = ()
-            if isinstance(candidate, dict):
-                series_id = candidate.get("id", "")
-            else:
-                series_id = candidate.id
-
-            if tvdb_client and getattr(tvdb_client, "_api_key", None) and series_id:
-                try:
-                    # Recuperer les details de la serie (genres)
-                    series_details = await tvdb_client.get_details(series_id)
-                    if series_details and series_details.genres:
-                        series_genres = series_details.genres
-
-                    # Recuperer le titre d'episode
-                    ep_details = await tvdb_client.get_episode_details(
-                        series_id, season_num, episode_num
-                    )
-                    if ep_details and ep_details.title:
-                        episode_title = ep_details.title
-                except Exception:
-                    pass  # Garder les valeurs par defaut en cas d'erreur
-
-            series = Series(
-                title=candidate_title,
-                year=candidate_year,
-                genres=series_genres,
-            )
-            episode = Episode(
-                season_number=season_num,
-                episode_number=episode_num,
-                title=episode_title,
-            )
-            new_filename = renamer.generate_series_filename(
-                series=series,
-                episode=episode,
-                media_info=media_info,
-                extension=extension,
-                fallback_language=fallback_language,
-            )
-            dest_dir = organizer.get_series_destination(
-                series=series,
-                season_number=season_num,
-                storage_dir=storage_dir,
-                video_dir=video_dir,
-            )
-            # Chemin personnalise pour le symlink (avec type de serie)
-            symlink_dir = organizer.get_series_video_destination(
-                series=series,
-                season_number=season_num,
-                video_dir=video_dir,
-            )
-        else:
-            # Pour les films: recuperer les genres et notes depuis TMDB
-            movie_genres: tuple[str, ...] = ()
-            movie_details = None
-            imdb_id = None
-            imdb_rating = None
-            imdb_votes = None
-
-            if isinstance(candidate, dict):
-                movie_id = candidate.get("id", "")
-            else:
-                movie_id = candidate.id
-
-            if tmdb_client and getattr(tmdb_client, "_api_key", None) and movie_id:
-                try:
-                    movie_details = await tmdb_client.get_details(movie_id)
-                    if movie_details and movie_details.genres:
-                        movie_genres = movie_details.genres
-
-                    # Recuperer l'imdb_id via external_ids
-                    external_ids = await tmdb_client.get_external_ids(movie_id)
-                    if external_ids:
-                        imdb_id = external_ids.get("imdb_id")
-
-                    # Recuperer la note IMDb depuis le cache local
-                    if imdb_id:
-                        from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
-                        cache_dir = Path(".cache/imdb")
-                        imdb_session = container.session()
-                        imdb_importer = IMDbDatasetImporter(cache_dir=cache_dir, session=imdb_session)
-                        rating_data = imdb_importer.get_rating(imdb_id)
-                        if rating_data:
-                            imdb_rating, imdb_votes = rating_data
-
-                except Exception:
-                    pass  # Garder les valeurs par defaut en cas d'erreur
-
-            # Creer l'entite Movie complete avec toutes les metadonnees
-            movie = Movie(
-                tmdb_id=int(movie_id) if movie_id else None,
-                imdb_id=imdb_id,
-                title=candidate_title,
-                original_title=movie_details.original_title if movie_details else None,
-                year=candidate_year,
-                genres=movie_genres,
-                duration_seconds=movie_details.duration_seconds if movie_details else None,
-                overview=movie_details.overview if movie_details else None,
-                poster_path=movie_details.poster_url if movie_details else None,
-                vote_average=movie_details.vote_average if movie_details else None,
-                vote_count=movie_details.vote_count if movie_details else None,
-                imdb_rating=imdb_rating,
-                imdb_votes=imdb_votes,
-            )
-
-            # Sauvegarder le film dans la base de donnees
-            movie_repo = container.movie_repository()
-            movie_repo.save(movie)
-
-            # Afficher le feedback de sauvegarde avec les notes
-            year_str = f" ({movie.year})" if movie.year else ""
-            tmdb_str = f"TMDB: {movie.vote_average:.1f}/10" if movie.vote_average else "TMDB: -"
-            imdb_str = f"IMDb: {movie.imdb_rating:.1f}/10" if movie.imdb_rating else "IMDb: -"
-            console.print(f"  [green]✓[/green] [bold]{movie.title}[/bold]{year_str} sauvegardé - {tmdb_str}, {imdb_str}")
-
-            new_filename = renamer.generate_movie_filename(
-                movie=movie,
-                media_info=media_info,
-                extension=extension,
-                fallback_language=fallback_language,
-            )
-            dest_dir = organizer.get_movie_destination(
-                movie=movie,
-                storage_dir=storage_dir,
-                video_dir=video_dir,
-            )
-            # Chemin personnalise pour le symlink (avec genre et subdivisions)
-            symlink_dir = organizer.get_movie_video_destination(
-                movie=movie,
-                video_dir=video_dir,
-            )
-
-        # Detection de contenu similaire
-        skip_transfer = False
-
-        # Cle de cache: serie+saison ou film
-        if is_series:
-            cache_key = f"{candidate_title}|{candidate_year}|{season_num}"
-        else:
-            cache_key = f"{candidate_title}|{candidate_year}"
-
-        # Verifier si on a deja une decision pour ce groupe
-        if cache_key in conflict_decisions:
-            # Appliquer la decision deja prise
-            cached_resolution = conflict_decisions[cache_key]
-            if cached_resolution in (ConflictResolution.SKIP, ConflictResolution.KEEP_OLD):
-                skip_transfer = True
-            # KEEP_NEW et KEEP_BOTH: on continue le transfert
-        else:
-            # Premiere rencontre de ce groupe: detecter les conflits
-            if is_series:
-                search_dir = symlink_dir.parent.parent  # Lettre/Serie/Saison -> Lettre
-            else:
-                search_dir = symlink_dir
-
-            # Verifier le cache de detection (eviter de rescanner le meme repertoire)
-            if cache_key not in similar_cache:
-                similar_cache[cache_key] = transferer.find_similar_content(
-                    title=candidate_title,
-                    year=candidate_year,
-                    destination_dir=search_dir,
-                    is_series=is_series,
-                )
-
-            similar = similar_cache[cache_key]
-
-            if similar:
-                # Compter tous les fichiers du meme groupe dans validated_list
-                new_files_count = 0
-                new_files_total_size = 0
-                new_files_resolutions: set[str] = set()
-                new_files_video_codecs: set[str] = set()
-                new_files_audio_codecs: set[str] = set()
-
-                for other_pend in validated_list:
-                    # Ne compter que les fichiers de cette session
-                    if not other_pend.video_file or not other_pend.video_file.id:
-                        continue
-                    if other_pend.video_file.id not in created_video_file_ids:
-                        continue
-
-                    # Recuperer les infos du candidat
-                    other_candidate = None
-                    for c in other_pend.candidates:
-                        c_id = c.id if hasattr(c, "id") else c.get("id", "")
-                        if c_id == other_pend.selected_candidate_id:
-                            other_candidate = c
-                            break
-                    if other_candidate is None:
-                        continue
-
-                    if isinstance(other_candidate, dict):
-                        other_title = other_candidate.get("title", "")
-                        other_year = other_candidate.get("year")
-                        other_source = other_candidate.get("source", "")
-                    else:
-                        other_title = other_candidate.title
-                        other_year = other_candidate.year
-                        other_source = other_candidate.source
-
-                    other_is_series = other_source == "tvdb"
-
-                    # Construire la cle de l'autre fichier
-                    if other_is_series:
-                        other_filename = other_pend.video_file.filename if other_pend.video_file else ""
-                        other_season, _ = _extract_series_info(other_filename)
-                        other_key = f"{other_title}|{other_year}|{other_season}"
-                    else:
-                        other_key = f"{other_title}|{other_year}"
-
-                    # Si meme groupe, agreger les infos
-                    if other_key == cache_key:
-                        new_files_count += 1
-                        other_path = other_pend.video_file.path
-                        if other_path and other_path.exists():
-                            new_files_total_size += other_path.stat().st_size
-                        other_media = other_pend.video_file.media_info
-                        if other_media:
-                            if other_media.resolution:
-                                new_files_resolutions.add(other_media.resolution.label)
-                            if other_media.video_codec:
-                                new_files_video_codecs.add(other_media.video_codec.name)
-                            if other_media.audio_codecs:
-                                new_files_audio_codecs.add(other_media.audio_codecs[0].name)
-
-                # Creer les infos agregees du nouveau contenu
-                new_file_info = ExistingFileInfo(
-                    path=source_path,
-                    size_bytes=new_files_total_size,
-                    resolution=", ".join(sorted(new_files_resolutions)) or None,
-                    video_codec=", ".join(sorted(new_files_video_codecs)) or None,
-                    audio_codec=", ".join(sorted(new_files_audio_codecs)) or None,
-                    duration_seconds=None,
-                )
-
-                # Afficher le conflit et demander la resolution
-                display_similar_content_conflict(similar, new_file_info, new_file_count=new_files_count)
-                resolution = prompt_conflict_resolution()
-
-                # Cacher la decision pour les autres fichiers du groupe
-                conflict_decisions[cache_key] = resolution
-
-                if resolution == ConflictResolution.SKIP:
-                    console.print(f"[yellow]Groupe passe ({new_files_count} fichier(s))[/yellow]")
-                    skip_transfer = True
-                elif resolution == ConflictResolution.KEEP_OLD:
-                    console.print(f"[yellow]Nouveau contenu ignore ({new_files_count} fichier(s))[/yellow]")
-                    skip_transfer = True
-                elif resolution == ConflictResolution.KEEP_NEW:
-                    if dry_run:
-                        console.print(f"[dim]Dry-run: l'ancien serait deplace vers staging[/dim]")
-                    else:
-                        console.print(f"[cyan]Deplacement de l'ancien vers staging...[/cyan]")
-                        try:
-                            # 1. Collecter les mappings symlink -> cible AVANT de deplacer
-                            symlink_mappings: list[tuple[Path, Path]] = []
-                            storage_source_dir = None
-                            for item in similar.existing_dir.rglob("*"):
-                                if item.is_symlink():
-                                    target = item.resolve()
-                                    symlink_mappings.append((item, target))
-                                    if storage_source_dir is None:
-                                        # Remonter au niveau du repertoire serie/film
-                                        storage_source_dir = target.parent.parent
-
-                            # 2. Deplacer le stockage vers storage_staging_dir
-                            storage_staging_path = None
-                            if storage_source_dir and storage_source_dir.exists():
-                                storage_staging_path = transferer.move_to_staging(
-                                    storage_source_dir, storage_staging_dir, preserve_structure=True
-                                )
-
-                            # 3. Deplacer les symlinks vers video_staging_dir
-                            video_staging_path = transferer.move_to_staging(
-                                similar.existing_dir, video_staging_dir, preserve_structure=True
-                            )
-
-                            # 4. Mettre a jour les symlinks pour pointer vers le nouveau stockage
-                            if storage_staging_path and video_staging_path:
-                                for old_symlink, old_target in symlink_mappings:
-                                    # Calculer le nouveau chemin du symlink
-                                    rel_to_existing = old_symlink.relative_to(similar.existing_dir)
-                                    new_symlink = video_staging_path / rel_to_existing
-                                    # Calculer le nouveau chemin de la cible
-                                    rel_to_storage = old_target.relative_to(storage_source_dir)
-                                    new_target = storage_staging_path / rel_to_storage
-                                    # Recréer le symlink
-                                    if new_symlink.exists() or new_symlink.is_symlink():
-                                        new_symlink.unlink()
-                                    new_symlink.symlink_to(new_target)
-
-                            console.print(f"[green]Ancien contenu deplace vers staging[/green]")
-                        except (ValueError, OSError) as e:
-                            console.print(f"[yellow]Avertissement: erreur lors du deplacement: {e}[/yellow]")
-                elif resolution == ConflictResolution.KEEP_BOTH:
-                    console.print(f"[green]Les deux versions seront conservees[/green]")
-
-        if skip_transfer:
-            continue
-
-        transfer_data = {
-            "pending": pend,
-            "source": source_path,
-            "destination": dest_dir / new_filename,
-            "new_filename": new_filename,
-            "is_series": is_series,
-            "title": candidate_title,
-            "year": candidate_year,
-        }
-        # Ajouter le chemin de symlink personnalise
-        if symlink_dir:
-            transfer_data["symlink_destination"] = symlink_dir / new_filename
-        transfers.append(transfer_data)
-
-    if dry_run:
-        console.print("\n[yellow]Mode dry-run - aucun transfert effectue[/yellow]")
-        console.print(f"[dim]{len(transfers)} fichier(s) seraient transferes[/dim]\n")
-
-        # Afficher l'arborescence des transferts (symlinks dans video_dir)
-        if transfers:
-            _display_transfer_tree(transfers, storage_dir, video_dir)
-    elif transfers:
-        console.print(f"\n[bold cyan]Transfert des fichiers valides[/bold cyan]\n")
-        # Ajouter action pour le transferer (transferer deja cree plus haut)
-        for t in transfers:
-            t["action"] = "move+symlink"
-
-        display_batch_summary(transfers)
-        if Confirm.ask("\n[bold]Executer le transfert ?[/bold]", default=False):
-            results = await execute_batch_transfer(transfers, transferer)
-            success_count = sum(1 for r in results if r.get("success", False))
-            console.print(
-                f"\n[bold green]{success_count}[/bold green] fichier(s) transfere(s)"
-            )
-
-    # 6. Resume final
-    console.print("\n[bold]Resume:[/bold]")
-    console.print(f"  Scannes: {len(scan_results)}")
-    console.print(f"  Auto-valides: {auto_count}")
-    if validated_list:
-        console.print(f"  Total valides: {len(validated_list)}")
-
-    # 7. Nettoyage dry-run : supprimer les donnees creees pendant le scan
-    if dry_run and created_video_file_ids:
-        # Supprimer d'abord les PendingValidation (cle etrangere vers VideoFile)
-        for vf_id in created_video_file_ids:
-            pv = pending_repo.get_by_video_file_id(vf_id)
-            if pv and pv.id:
-                pending_repo.delete(pv.id)
-        # Puis supprimer les VideoFile
-        for vf_id in created_video_file_ids:
-            video_file_repo.delete(vf_id)
-        console.print(
-            f"\n[dim]Dry-run: {len(created_video_file_ids)} enregistrement(s) "
-            f"temporaire(s) nettoye(s)[/dim]"
-        )
+    workflow = WorkflowService(container, console=console)
+    result = await workflow.execute(workflow_config)
+
+    if not result.success:
+        console.print(f"[red]Erreur lors du workflow: {result.errors}[/red]")
+        raise typer.Exit(1)
 
 
 def pending(
@@ -1569,10 +667,9 @@ def pending(
     asyncio.run(_pending_async(all_files))
 
 
-async def _pending_async(all_files: bool) -> None:
+@with_container()
+async def _pending_async(container, all_files: bool) -> None:
     """Implementation async de la commande pending."""
-    container = Container()
-    container.database.init()
 
     validation_svc = container.validation_service()
     pending_list = validation_svc.list_pending()
@@ -1650,10 +747,9 @@ def validate_file(
     asyncio.run(_validate_file_async(file_id))
 
 
-async def _validate_file_async(file_id: str) -> None:
+@with_container()
+async def _validate_file_async(container, file_id: str) -> None:
     """Implementation async de validate file."""
-    container = Container()
-    container.database.init()
 
     validation_svc = container.validation_service()
 
@@ -1723,15 +819,14 @@ def import_library(
     asyncio.run(_import_library_async(source_dir, dry_run, from_symlinks))
 
 
+@with_container()
 async def _import_library_async(
-    source_dir: Optional[Path], dry_run: bool, from_symlinks: bool
+    container, source_dir: Optional[Path], dry_run: bool, from_symlinks: bool
 ) -> None:
     """Implementation async de la commande import."""
     from src.services.importer import ImportDecision
 
-    container = Container()
     config = container.config()
-    container.database.init()
 
     # Determiner le repertoire source selon le mode
     if source_dir is None:
@@ -1824,12 +919,9 @@ def enrich() -> None:
     asyncio.run(_enrich_async())
 
 
-async def _enrich_async() -> None:
+@with_container()
+async def _enrich_async(container) -> None:
     """Implementation async de la commande enrich."""
-    from loguru import logger as loguru_logger
-
-    container = Container()
-    container.database.init()
 
     enricher = container.enricher_service()
 
@@ -1843,10 +935,7 @@ async def _enrich_async() -> None:
 
     console.print(f"[bold cyan]Enrichissement API[/bold cyan]: {len(pending)} fichier(s)\n")
 
-    # Desactiver les logs loguru pendant l'affichage pour eviter le melange
-    loguru_logger.disable("src")
-
-    try:
+    with suppress_loguru():
         enriched_count = 0
         failed_count = 0
 
@@ -1876,10 +965,6 @@ async def _enrich_async() -> None:
         # Afficher le resume
         console.print(f"\n[bold]Resume:[/bold] [green]{enriched_count}[/green] enrichi(s), [red]{failed_count}[/red] echec(s)")
 
-    finally:
-        # Reactiver les logs
-        loguru_logger.enable("src")
-
 
 # ============================================================================
 # Commande populate-movies
@@ -1903,25 +988,18 @@ def populate_movies(
     asyncio.run(_populate_movies_async(limit, dry_run))
 
 
-async def _populate_movies_async(limit: int, dry_run: bool) -> None:
+@with_container()
+async def _populate_movies_async(container, limit: int, dry_run: bool) -> None:
     """Implementation async de la commande populate-movies."""
-    from loguru import logger as loguru_logger
-
     from src.core.entities.media import Movie
     from src.core.entities.video import ValidationStatus
-
-    container = Container()
-    container.database.init()
 
     # Recuperer les repositories
     pending_repo = container.pending_validation_repository()
     movie_repo = container.movie_repository()
     tmdb_client = container.tmdb_client()
 
-    # Desactiver les logs loguru pendant l'affichage
-    loguru_logger.disable("src")
-
-    try:
+    with suppress_loguru():
         # Lister les validations validees avec un tmdb_id
         # limit=0 signifie illimite
         fetch_limit = 0 if limit == 0 else limit * 2  # Marge pour filtrage
@@ -2014,8 +1092,6 @@ async def _populate_movies_async(limit: int, dry_run: bool) -> None:
         if not dry_run and created > 0:
             console.print("\n[dim]Utilisez 'enrich-ratings' pour enrichir les notes TMDB.[/dim]")
 
-    finally:
-        loguru_logger.enable("src")
         if tmdb_client:
             await tmdb_client.close()
 
@@ -2038,14 +1114,10 @@ def enrich_ratings(
     asyncio.run(_enrich_ratings_async(limit))
 
 
-async def _enrich_ratings_async(limit: int) -> None:
+@with_container()
+async def _enrich_ratings_async(container, limit: int) -> None:
     """Implementation async de la commande enrich-ratings."""
-    from loguru import logger as loguru_logger
-
     from src.services.ratings_enricher import RatingsEnricherService
-
-    container = Container()
-    container.database.init()
 
     # Creer le service d'enrichissement des notes
     movie_repo = container.movie_repository()
@@ -2068,10 +1140,7 @@ async def _enrich_ratings_async(limit: int) -> None:
         f"[bold cyan]Enrichissement des notes TMDB[/bold cyan]: {len(movies_to_enrich)} film(s)\n"
     )
 
-    # Desactiver les logs loguru pendant l'affichage
-    loguru_logger.disable("src")
-
-    try:
+    with suppress_loguru():
         stats = await service.enrich_ratings(limit=limit, rate_limit_seconds=0.25)
 
         # Afficher le resume
@@ -2081,10 +1150,6 @@ async def _enrich_ratings_async(limit: int) -> None:
             console.print(f"  [red]{stats.failed}[/red] echec(s)")
         if stats.skipped > 0:
             console.print(f"  [yellow]{stats.skipped}[/yellow] ignore(s)")
-
-    finally:
-        # Reactiver les logs
-        loguru_logger.enable("src")
 
 
 def enrich_imdb_ids(
@@ -2100,15 +1165,12 @@ def enrich_imdb_ids(
     asyncio.run(_enrich_imdb_ids_async(limit))
 
 
-async def _enrich_imdb_ids_async(limit: int) -> None:
+@with_container()
+async def _enrich_imdb_ids_async(container, limit: int) -> None:
     """Implementation async de la commande enrich-imdb-ids."""
-    from loguru import logger as loguru_logger
     from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TaskProgressColumn, TimeRemainingColumn
 
     from src.services.imdb_id_enricher import ImdbIdEnricherService, EnrichmentResult, ProgressInfo
-
-    container = Container()
-    container.database.init()
 
     # Creer le service d'enrichissement des imdb_id
     movie_repo = container.movie_repository()
@@ -2132,10 +1194,7 @@ async def _enrich_imdb_ids_async(limit: int) -> None:
         f"[bold cyan]Enrichissement des imdb_id[/bold cyan]: {total} film(s)\n"
     )
 
-    # Desactiver les logs loguru pendant l'affichage
-    loguru_logger.disable("src")
-
-    try:
+    with suppress_loguru():
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -2181,10 +1240,6 @@ async def _enrich_imdb_ids_async(limit: int) -> None:
         if stats.skipped > 0:
             console.print(f"  [dim]{stats.skipped}[/dim] ignore(s) (sans tmdb_id)")
 
-    finally:
-        # Reactiver les logs
-        loguru_logger.enable("src")
-
 
 # ============================================================================
 # Commandes IMDb
@@ -2212,15 +1267,12 @@ def imdb_import(
     asyncio.run(_imdb_import_async(force))
 
 
-async def _imdb_import_async(force: bool) -> None:
+@with_container()
+async def _imdb_import_async(container, force: bool) -> None:
     """Implementation async de la commande imdb import."""
-    from loguru import logger as loguru_logger
     from rich.status import Status
 
     from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
-
-    container = Container()
-    container.database.init()
 
     # Repertoire de cache pour les datasets
     cache_dir = Path(".cache/imdb")
@@ -2229,10 +1281,7 @@ async def _imdb_import_async(force: bool) -> None:
     session = container.session()
     importer = IMDbDatasetImporter(cache_dir=cache_dir, session=session)
 
-    # Desactiver les logs loguru pendant l'affichage
-    loguru_logger.disable("src")
-
-    try:
+    with suppress_loguru():
         ratings_file = cache_dir / "title.ratings.tsv.gz"
 
         # Verifier si un telechargement est necessaire
@@ -2253,9 +1302,6 @@ async def _imdb_import_async(force: bool) -> None:
         if stats.errors > 0:
             console.print(f"  [red]{stats.errors:,}[/red] erreurs")
 
-    finally:
-        loguru_logger.enable("src")
-
 
 @imdb_app.command("sync")
 def imdb_sync(
@@ -2271,14 +1317,12 @@ def imdb_sync(
     asyncio.run(_imdb_sync_async(limit))
 
 
-async def _imdb_sync_async(limit: int) -> None:
+@with_container()
+async def _imdb_sync_async(container, limit: int) -> None:
     """Implementation async de la commande imdb sync."""
     from loguru import logger as loguru_logger
 
     from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
-
-    container = Container()
-    container.database.init()
 
     # Recuperer les repositories
     movie_repo = container.movie_repository()
@@ -2340,10 +1384,13 @@ async def _imdb_sync_async(limit: int) -> None:
 @imdb_app.command("stats")
 def imdb_stats() -> None:
     """Affiche les statistiques du cache IMDb local."""
-    from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
+    asyncio.run(_imdb_stats_async())
 
-    container = Container()
-    container.database.init()
+
+@with_container()
+async def _imdb_stats_async(container) -> None:
+    """Implementation async de la commande imdb stats."""
+    from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
 
     cache_dir = Path(".cache/imdb")
     session = next(container.session.provider())
