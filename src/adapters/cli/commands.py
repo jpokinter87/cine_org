@@ -1230,6 +1230,13 @@ def repair_links(
             help="Simule sans modifier les symlinks",
         ),
     ] = False,
+    scan_all: Annotated[
+        bool,
+        typer.Option(
+            "--scan-all",
+            help="Indexer tout le stockage (pas seulement Films/Series)",
+        ),
+    ] = False,
 ) -> None:
     """
     Detecte et repare les symlinks casses.
@@ -1241,12 +1248,14 @@ def repair_links(
       cineorg repair-links /path/to/Films     # Scan un repertoire specifique
       cineorg repair-links --auto             # Reparation automatique (score >= 90%)
       cineorg repair-links --auto --dry-run   # Simulation sans modification
+      cineorg repair-links --scan-all         # Indexer toutes les categories NAS
     """
-    asyncio.run(_repair_links_async(scan_dir, auto, min_score, dry_run))
+    asyncio.run(_repair_links_async(scan_dir, auto, min_score, dry_run, scan_all))
 
 
 async def _repair_links_async(
-    scan_dir: Optional[Path], auto_repair: bool, min_score: float, dry_run: bool
+    scan_dir: Optional[Path], auto_repair: bool, min_score: float, dry_run: bool,
+    scan_all: bool = False,
 ) -> None:
     """Implementation async de la commande repair-links."""
     from loguru import logger as loguru_logger
@@ -1256,12 +1265,21 @@ async def _repair_links_async(
         AutoRepair,
         InteractiveRepair,
         RepairSummary,
+        TitleResolver,
     )
     from src.services.integrity import RepairAction, RepairActionType
 
     container = Container()
     config = container.config()
     container.database.init()
+
+    # Creer le resolveur de titres TMDB (optionnel)
+    tmdb_client = None
+    try:
+        tmdb_client = container.tmdb_client()
+    except Exception:
+        pass
+    title_resolver = TitleResolver(tmdb_client) if tmdb_client else None
 
     # Determiner le repertoire a scanner
     video_dir = scan_dir if scan_dir else Path(config.video_dir)
@@ -1296,28 +1314,33 @@ async def _repair_links_async(
 
         # Construire l'index des fichiers pour optimiser les recherches
         storage_dir = Path(config.storage_dir)
-        with Status(f"[cyan]Indexation du stockage ({storage_dir})...", console=console) as status:
+        scope_label = "complet" if scan_all else "Films/Séries"
+        with Status(f"[cyan]Indexation du stockage ({storage_dir}, {scope_label})...", console=console) as status:
             def update_status(count: int, msg: str) -> None:
                 status.update(f"[cyan]Indexation du stockage: {count} fichiers...")
 
-            file_count = repair.build_file_index(progress_callback=update_status)
+            file_count = repair.build_file_index(
+                progress_callback=update_status,
+                scan_all=scan_all,
+            )
 
-        console.print(f"[bold cyan]Index:[/bold cyan] {file_count} fichiers dans {storage_dir}")
+        console.print(f"[bold cyan]Index:[/bold cyan] {file_count} fichiers dans {storage_dir} ({scope_label})")
 
         mode_label = "[dim](dry-run)[/dim] " if dry_run else ""
-        console.print(f"\n{mode_label}[dim]Recherche progressive: genre -> type -> base[/dim]\n")
+        tmdb_label = " + TMDB" if title_resolver else ""
+        console.print(f"\n{mode_label}[dim]Recherche: regroup cible -> index{tmdb_label}[/dim]\n")
 
         # Mode automatique avec AutoRepair
         if auto_repair:
             actions, auto_repaired, no_match_count = await AutoRepair.run(
-                repair, broken, min_score, dry_run
+                repair, broken, min_score, dry_run, title_resolver
             )
             AutoRepair.display_summary(auto_repaired, len(broken), no_match_count)
 
         # Mode interactif avec InteractiveRepair
         else:
             interactive = InteractiveRepair()
-            actions = await interactive.run(repair, broken, min_score, dry_run)
+            actions = await interactive.run(repair, broken, min_score, dry_run, title_resolver)
 
         # Sauvegarder le log
         if actions:

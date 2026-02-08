@@ -577,6 +577,530 @@ class TestIntegrityEdgeCases:
 
         assert result is None
 
+# ============================================================================
+# Tests: RepairService - _find_regroup_candidates (recherche ciblée)
+# ============================================================================
+
+
+class TestFindRegroupCandidates:
+    """Tests pour la recherche ciblée dans le répertoire NAS parent."""
+
+    def test_finds_candidates_in_nas_parent_directory(
+        self, mock_file_system, mock_video_file_repo, tmp_path
+    ):
+        """Trouve les fichiers dans le répertoire NAS parent quand le préfixe n'existe pas."""
+        storage = tmp_path / "storage"
+        video = tmp_path / "video"
+        storage.mkdir()
+        video.mkdir()
+
+        # Structure NAS : les fichiers sont dans Fantomas/ (pas dans Fantomas/Fantômas/)
+        nas_dir = storage / "Films" / "Comédie" / "A-H" / "F" / "Fantomas"
+        nas_dir.mkdir(parents=True)
+        (nas_dir / "Fantomas.1964.FRENCH.1080p.HEVC.mkv").write_text("video1")
+        (nas_dir / "Fantomas.contre.Scotland.Yard.1967.FRENCH.1080p.mkv").write_text("video2")
+        (nas_dir / "Fantomas.se.dechaine.1965.FRENCH.1080p.mkv").write_text("video3")
+
+        # Symlink brisé : pointe vers .../Fantomas/Fantômas/filename (n'existe pas)
+        video_dir = video / "Films" / "Comédie" / "A-H" / "F" / "Fantomas" / "Fantômas"
+        video_dir.mkdir(parents=True)
+        broken_link = video_dir / "Fantômas (1964) FR HEVC 1080p.mkv"
+        broken_target = nas_dir / "Fantômas" / "Fantômas (1964) FR HEVC 1080p.mkv"
+        broken_link.symlink_to(broken_target)
+
+        service = RepairService(
+            file_system=mock_file_system,
+            video_file_repo=mock_video_file_repo,
+            storage_dir=storage,
+            video_dir=video,
+        )
+
+        candidates = service._find_regroup_candidates(broken_link)
+
+        # Doit trouver les 3 fichiers du répertoire parent
+        assert len(candidates) == 3
+        filenames = [p.name for p, _ in candidates]
+        assert "Fantomas.1964.FRENCH.1080p.HEVC.mkv" in filenames
+
+    def test_finds_candidates_when_parent_exists_with_other_files(
+        self, mock_file_system, mock_video_file_repo, tmp_path
+    ):
+        """Trouve les fichiers dans le parent quand le fichier cible manque."""
+        storage = tmp_path / "storage"
+        video = tmp_path / "video"
+        storage.mkdir()
+        video.mkdir()
+
+        # Le répertoire cible existe avec un autre fichier
+        nas_dir = storage / "Films" / "existing"
+        nas_dir.mkdir(parents=True)
+        (nas_dir / "somefile.mkv").write_text("video")
+
+        # Symlink qui pointe vers un fichier manquant DANS un répertoire existant
+        video_dir = video / "Films"
+        video_dir.mkdir(parents=True)
+        broken_link = video_dir / "missing.mkv"
+        broken_link.symlink_to(nas_dir / "missing.mkv")
+
+        service = RepairService(
+            file_system=mock_file_system,
+            video_file_repo=mock_video_file_repo,
+            storage_dir=storage,
+            video_dir=video,
+        )
+
+        candidates = service._find_regroup_candidates(broken_link)
+
+        # Le parent existe et contient un fichier → candidat proposé
+        assert len(candidates) == 1
+        assert candidates[0][0].name == "somefile.mkv"
+
+    def test_returns_empty_when_grandparent_missing(
+        self, mock_file_system, mock_video_file_repo, tmp_path
+    ):
+        """Pas de candidats si le grand-parent n'existe pas non plus."""
+        storage = tmp_path / "storage"
+        video = tmp_path / "video"
+        storage.mkdir()
+        video.mkdir()
+
+        video_dir = video / "Films"
+        video_dir.mkdir(parents=True)
+        broken_link = video_dir / "test.mkv"
+        # Cible avec deux niveaux manquants
+        broken_link.symlink_to(storage / "missing1" / "missing2" / "test.mkv")
+
+        service = RepairService(
+            file_system=mock_file_system,
+            video_file_repo=mock_video_file_repo,
+            storage_dir=storage,
+            video_dir=video,
+        )
+
+        candidates = service._find_regroup_candidates(broken_link)
+
+        assert len(candidates) == 0
+
+    def test_candidates_sorted_by_score(
+        self, mock_file_system, mock_video_file_repo, tmp_path
+    ):
+        """Les candidats sont triés par score de similarité décroissant."""
+        storage = tmp_path / "storage"
+        video = tmp_path / "video"
+        storage.mkdir()
+        video.mkdir()
+
+        nas_dir = storage / "Films" / "F"
+        nas_dir.mkdir(parents=True)
+        # Fichier très similaire
+        (nas_dir / "Fantomas.1964.FRENCH.mkv").write_text("video1")
+        # Fichier moins similaire
+        (nas_dir / "Totally.Different.Movie.2020.mkv").write_text("video2")
+
+        video_dir = video / "Films" / "F" / "Fantomas"
+        video_dir.mkdir(parents=True)
+        broken_link = video_dir / "Fantômas (1964) FR 1080p.mkv"
+        broken_link.symlink_to(nas_dir / "Fantomas" / "Fantômas (1964) FR 1080p.mkv")
+
+        service = RepairService(
+            file_system=mock_file_system,
+            video_file_repo=mock_video_file_repo,
+            storage_dir=storage,
+            video_dir=video,
+        )
+
+        candidates = service._find_regroup_candidates(broken_link)
+
+        assert len(candidates) == 2
+        # Le plus similaire en premier
+        assert "Fantomas" in candidates[0][0].name
+        assert candidates[0][1] >= candidates[1][1]
+
+    def test_only_video_files_returned(
+        self, mock_file_system, mock_video_file_repo, tmp_path
+    ):
+        """Seuls les fichiers vidéo sont retournés comme candidats."""
+        storage = tmp_path / "storage"
+        video = tmp_path / "video"
+        storage.mkdir()
+        video.mkdir()
+
+        nas_dir = storage / "Films" / "F"
+        nas_dir.mkdir(parents=True)
+        (nas_dir / "Fantomas.mkv").write_text("video")
+        (nas_dir / "Fantomas.nfo").write_text("info")
+        (nas_dir / "Fantomas.srt").write_text("subs")
+        (nas_dir / "cover.jpg").write_bytes(b"image")
+
+        video_dir = video / "Films" / "F" / "Fantomas"
+        video_dir.mkdir(parents=True)
+        broken_link = video_dir / "Fantômas (1964).mkv"
+        broken_link.symlink_to(nas_dir / "Fantomas" / "Fantômas (1964).mkv")
+
+        service = RepairService(
+            file_system=mock_file_system,
+            video_file_repo=mock_video_file_repo,
+            storage_dir=storage,
+            video_dir=video,
+        )
+
+        candidates = service._find_regroup_candidates(broken_link)
+
+        assert len(candidates) == 1
+        assert candidates[0][0].name == "Fantomas.mkv"
+
+    def test_finds_candidates_when_parent_exists_with_files(
+        self, mock_file_system, mock_video_file_repo, tmp_path
+    ):
+        """Trouve les fichiers dans le parent NAS existant quand le fichier cible manque."""
+        storage = tmp_path / "storage"
+        video = tmp_path / "video"
+        storage.mkdir()
+        video.mkdir()
+
+        # Le répertoire préfixe NAS EXISTE et contient des fichiers
+        nas_prefix_dir = storage / "Documentaire" / "DCDL"
+        nas_prefix_dir.mkdir(parents=True)
+        (nas_prefix_dir / "DCDL.Ils.Etaient.La.France.Libre.FRENCH.720p.avi").write_text("v1")
+        (nas_prefix_dir / "DCDL.Le.Jour.J.FRENCH.720p.avi").write_text("v2")
+
+        # Symlink brisé : pointe vers un fichier avec nom différent dans le même répertoire
+        video_dir = video / "Documentaire" / "DCDL"
+        video_dir.mkdir(parents=True)
+        broken_link = video_dir / "DCDL - Ils étaient la France libre.avi"
+        broken_link.symlink_to(nas_prefix_dir / "DCDL - Ils étaient la France libre.avi")
+
+        service = RepairService(
+            file_system=mock_file_system,
+            video_file_repo=mock_video_file_repo,
+            storage_dir=storage,
+            video_dir=video,
+        )
+
+        candidates = service._find_regroup_candidates(broken_link)
+
+        # Doit trouver les 2 fichiers du répertoire
+        assert len(candidates) == 2
+        filenames = [p.name for p, _ in candidates]
+        assert "DCDL.Ils.Etaient.La.France.Libre.FRENCH.720p.avi" in filenames
+
+    def test_returns_empty_when_parent_exists_but_empty(
+        self, mock_file_system, mock_video_file_repo, tmp_path
+    ):
+        """Pas de candidats si le parent existe mais est vide."""
+        storage = tmp_path / "storage"
+        video = tmp_path / "video"
+        storage.mkdir()
+        video.mkdir()
+
+        # Répertoire vide sur NAS
+        nas_prefix_dir = storage / "Documentaire" / "Prefix"
+        nas_prefix_dir.mkdir(parents=True)
+
+        video_dir = video / "Documentaire" / "Prefix"
+        video_dir.mkdir(parents=True)
+        broken_link = video_dir / "Some File (2020).mkv"
+        broken_link.symlink_to(nas_prefix_dir / "Some File (2020).mkv")
+
+        service = RepairService(
+            file_system=mock_file_system,
+            video_file_repo=mock_video_file_repo,
+            storage_dir=storage,
+            video_dir=video,
+        )
+
+        candidates = service._find_regroup_candidates(broken_link)
+
+        assert len(candidates) == 0
+
+    def test_searches_both_parent_and_grandparent(
+        self, mock_file_system, mock_video_file_repo, tmp_path
+    ):
+        """Cherche dans parent ET grand-parent quand le parent existe."""
+        storage = tmp_path / "storage"
+        video = tmp_path / "video"
+        storage.mkdir()
+        video.mkdir()
+
+        # Grand-parent : contient le vrai fichier (nom original)
+        grandparent_dir = storage / "Films" / "Policier" / "A"
+        grandparent_dir.mkdir(parents=True)
+        (grandparent_dir / "Fallen.Angels.1995.MULTi.1080p.mkv").write_text("video1")
+
+        # Parent (préfixe) : existe mais contient un autre film
+        parent_dir = grandparent_dir / "Ange"
+        parent_dir.mkdir()
+        (parent_dir / "Les Anges de la nuit (1990).mkv").write_text("video2")
+
+        # Symlink brisé pointe vers parent/nom_absent
+        video_dir = video / "Films" / "Policier" / "A" / "Ange"
+        video_dir.mkdir(parents=True)
+        broken_link = video_dir / "Les Anges déchus (1995).mkv"
+        broken_link.symlink_to(parent_dir / "Les Anges déchus (1995).mkv")
+
+        service = RepairService(
+            file_system=mock_file_system,
+            video_file_repo=mock_video_file_repo,
+            storage_dir=storage,
+            video_dir=video,
+        )
+
+        candidates = service._find_regroup_candidates(broken_link)
+
+        # Doit trouver les fichiers des DEUX répertoires
+        assert len(candidates) == 2
+        filenames = [p.name for p, _ in candidates]
+        assert "Fallen.Angels.1995.MULTi.1080p.mkv" in filenames
+        assert "Les Anges de la nuit (1990).mkv" in filenames
+
+    def test_alternative_names_improves_matching(
+        self, mock_file_system, mock_video_file_repo, tmp_path
+    ):
+        """Les titres alternatifs (ex: titre original TMDB) améliorent le scoring."""
+        storage = tmp_path / "storage"
+        video = tmp_path / "video"
+        storage.mkdir()
+        video.mkdir()
+
+        # NAS : fichier avec le titre original anglais
+        nas_dir = storage / "Films" / "A"
+        nas_dir.mkdir(parents=True)
+        (nas_dir / "Fallen.Angels.1995.MULTi.1080p.BluRay.mkv").write_text("video")
+
+        # Symlink brisé avec le titre français
+        video_dir = video / "Films" / "A" / "Ange"
+        video_dir.mkdir(parents=True)
+        broken_link = video_dir / "Les Anges déchus (1995) MULTi HEVC 1080p.mkv"
+        broken_link.symlink_to(nas_dir / "Ange" / "Les Anges déchus (1995) MULTi HEVC 1080p.mkv")
+
+        service = RepairService(
+            file_system=mock_file_system,
+            video_file_repo=mock_video_file_repo,
+            storage_dir=storage,
+            video_dir=video,
+        )
+
+        # Sans titre alternatif : score bas (FR vs EN)
+        candidates_without = service._find_regroup_candidates(broken_link)
+        score_without = candidates_without[0][1] if candidates_without else 0
+
+        # Avec titre original : score amélioré
+        candidates_with = service._find_regroup_candidates(
+            broken_link, alternative_names=["Fallen Angels (1995).mkv"]
+        )
+        score_with = candidates_with[0][1] if candidates_with else 0
+
+        assert score_with > score_without
+
+    def test_find_possible_targets_tries_regroup_first(
+        self, mock_file_system, mock_video_file_repo, tmp_path
+    ):
+        """find_possible_targets essaie d'abord la recherche regroup ciblée."""
+        storage = tmp_path / "storage"
+        video = tmp_path / "video"
+        storage.mkdir()
+        video.mkdir()
+
+        # Fichier NAS dans le répertoire parent
+        nas_dir = storage / "Films" / "F"
+        nas_dir.mkdir(parents=True)
+        (nas_dir / "Fantomas.1964.FRENCH.1080p.mkv").write_text("video")
+
+        # Symlink brisé par regroup
+        video_dir = video / "Films" / "F" / "Fantomas"
+        video_dir.mkdir(parents=True)
+        broken_link = video_dir / "Fantômas (1964) FR 1080p.mkv"
+        broken_link.symlink_to(nas_dir / "Fantomas" / "Fantômas (1964) FR 1080p.mkv")
+
+        service = RepairService(
+            file_system=mock_file_system,
+            video_file_repo=mock_video_file_repo,
+            storage_dir=storage,
+            video_dir=video,
+        )
+
+        # Pas besoin de build_file_index : la recherche regroup est directe
+        candidates = service.find_possible_targets(broken_link)
+
+        assert len(candidates) >= 1
+        assert "Fantomas.1964.FRENCH.1080p.mkv" in candidates[0][0].name
+
+
+# ============================================================================
+# Tests: RepairService - build_file_index avec scan_all
+# ============================================================================
+
+
+class TestBuildFileIndex:
+    """Tests pour build_file_index avec paramètre scan_all."""
+
+    def test_build_file_index_default_scans_films_series_only(
+        self, mock_file_system, mock_video_file_repo, tmp_path
+    ):
+        """Par défaut, seuls Films/ et Séries/ sont scannés."""
+        storage = tmp_path / "storage"
+        storage.mkdir()
+
+        # Créer des fichiers dans Films et Documentaire
+        films_dir = storage / "Films"
+        films_dir.mkdir()
+        (films_dir / "Avatar (2009).mkv").write_text("video")
+
+        doc_dir = storage / "Documentaire"
+        doc_dir.mkdir()
+        (doc_dir / "Planet Earth (2006).mkv").write_text("video")
+
+        service = RepairService(
+            file_system=mock_file_system,
+            video_file_repo=mock_video_file_repo,
+            storage_dir=storage,
+            video_dir=tmp_path / "video",
+        )
+
+        count = service.build_file_index(force_rebuild=True)
+
+        # Seul Films est scanné
+        assert count == 1
+        paths = [str(p) for p, _, _ in service._file_index]
+        assert any("Avatar" in p for p in paths)
+        assert not any("Planet" in p for p in paths)
+
+    def test_build_file_index_scan_all_includes_all_categories(
+        self, mock_file_system, mock_video_file_repo, tmp_path
+    ):
+        """Avec scan_all=True, toutes les catégories sont scannées."""
+        storage = tmp_path / "storage"
+        storage.mkdir()
+
+        # Créer des fichiers dans différentes catégories
+        for category, filename in [
+            ("Films", "Avatar (2009).mkv"),
+            ("Séries", "Breaking Bad S01E01.mkv"),
+            ("Documentaire", "Planet Earth (2006).mkv"),
+            ("Éducatif", "Cours de Python (2024).mkv"),
+            ("Musique", "Concert Live (2023).mkv"),
+        ]:
+            cat_dir = storage / category
+            cat_dir.mkdir()
+            (cat_dir / filename).write_text("video")
+
+        service = RepairService(
+            file_system=mock_file_system,
+            video_file_repo=mock_video_file_repo,
+            storage_dir=storage,
+            video_dir=tmp_path / "video",
+        )
+
+        count = service.build_file_index(force_rebuild=True, scan_all=True)
+
+        # Tous les fichiers de toutes les catégories sont scannés
+        assert count == 5
+        paths = [str(p) for p, _, _ in service._file_index]
+        assert any("Avatar" in p for p in paths)
+        assert any("Breaking" in p for p in paths)
+        assert any("Planet" in p for p in paths)
+        assert any("Cours" in p for p in paths)
+        assert any("Concert" in p for p in paths)
+
+    def test_build_file_index_scan_all_excludes_non_video_files(
+        self, mock_file_system, mock_video_file_repo, tmp_path
+    ):
+        """scan_all=True n'indexe que les fichiers vidéo."""
+        storage = tmp_path / "storage"
+        storage.mkdir()
+
+        doc_dir = storage / "Documentaire"
+        doc_dir.mkdir()
+        (doc_dir / "Planet Earth (2006).mkv").write_text("video")
+        (doc_dir / "readme.txt").write_text("text")
+        (doc_dir / "cover.jpg").write_bytes(b"image")
+
+        service = RepairService(
+            file_system=mock_file_system,
+            video_file_repo=mock_video_file_repo,
+            storage_dir=storage,
+            video_dir=tmp_path / "video",
+        )
+
+        count = service.build_file_index(force_rebuild=True, scan_all=True)
+
+        assert count == 1
+        assert any("Planet" in str(p) for p, _, _ in service._file_index)
+
+    def test_build_file_index_scan_all_skips_symlinks(
+        self, mock_file_system, mock_video_file_repo, tmp_path
+    ):
+        """scan_all=True ignore les symlinks dans storage."""
+        storage = tmp_path / "storage"
+        storage.mkdir()
+
+        doc_dir = storage / "Documentaire"
+        doc_dir.mkdir()
+        real_file = doc_dir / "Planet Earth (2006).mkv"
+        real_file.write_text("video")
+        (doc_dir / "Planet Earth Link.mkv").symlink_to(real_file)
+
+        service = RepairService(
+            file_system=mock_file_system,
+            video_file_repo=mock_video_file_repo,
+            storage_dir=storage,
+            video_dir=tmp_path / "video",
+        )
+
+        count = service.build_file_index(force_rebuild=True, scan_all=True)
+
+        # Seul le fichier réel est indexé, pas le symlink
+        assert count == 1
+
+    def test_build_file_index_scan_all_with_subdirectories(
+        self, mock_file_system, mock_video_file_repo, tmp_path
+    ):
+        """scan_all=True scanne récursivement les sous-répertoires."""
+        storage = tmp_path / "storage"
+        storage.mkdir()
+
+        # Structure : Documentaire/Science/sous-dossier/
+        deep_dir = storage / "Documentaire" / "Science" / "Espace"
+        deep_dir.mkdir(parents=True)
+        (deep_dir / "Cosmos (2014).mkv").write_text("video")
+
+        service = RepairService(
+            file_system=mock_file_system,
+            video_file_repo=mock_video_file_repo,
+            storage_dir=storage,
+            video_dir=tmp_path / "video",
+        )
+
+        count = service.build_file_index(force_rebuild=True, scan_all=True)
+
+        assert count == 1
+        assert any("Cosmos" in str(p) for p, _, _ in service._file_index)
+
+    def test_build_file_index_fallback_without_films_series(
+        self, mock_file_system, mock_video_file_repo, tmp_path
+    ):
+        """Sans Films/Séries et sans scan_all, fallback sur storage_dir complet."""
+        storage = tmp_path / "storage"
+        storage.mkdir()
+
+        # Pas de Films ni Séries
+        doc_dir = storage / "Documentaire"
+        doc_dir.mkdir()
+        (doc_dir / "Planet Earth (2006).mkv").write_text("video")
+
+        service = RepairService(
+            file_system=mock_file_system,
+            video_file_repo=mock_video_file_repo,
+            storage_dir=storage,
+            video_dir=tmp_path / "video",
+        )
+
+        count = service.build_file_index(force_rebuild=True)
+
+        # Fallback: scanne tout storage_dir
+        assert count == 1
+
+
     def test_issue_to_dict(self):
         """IntegrityIssue.to_dict() retourne un dict serialisable."""
         issue = IntegrityIssue(

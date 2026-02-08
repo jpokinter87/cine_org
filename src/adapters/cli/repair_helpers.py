@@ -35,7 +35,8 @@ def extract_series_name(path: Path) -> Optional[str]:
     Extrait le nom de la serie depuis le chemin du symlink.
 
     Analyse le chemin pour trouver le nom de la serie en ignorant
-    les subdivisions alphabetiques et les types de series.
+    les subdivisions alphabetiques, les types de series et les
+    sous-genres documentaires (mots simples comme Science, Geographie...).
 
     Args:
         path: Chemin du symlink
@@ -48,16 +49,114 @@ def extract_series_name(path: Path) -> Optional[str]:
         if part.lower() in ("séries", "series"):
             # Le nom de la serie est generalement 2-3 niveaux apres
             # Ex: Séries/Séries TV/A-M/Breaking Bad/Saison 01/...
-            for j in range(i + 1, min(i + 5, len(parts))):
-                # Ignorer les subdivisions alphabetiques et types
+            is_documentary = False
+            for j in range(i + 1, min(i + 7, len(parts))):
+                # Ignorer les subdivisions alphabetiques et types connus
                 if parts[j] in ("Séries TV", "Animation", "Mangas"):
                     continue
-                if len(parts[j]) <= 3 and "-" in parts[j]:
-                    continue  # Subdivision A-M, etc.
+                if parts[j].startswith(("Animation ", "Mangas ")):
+                    continue
+                # Categorie documentaire : activer le filtrage des sous-genres
+                if parts[j].startswith("Séries "):
+                    is_documentary = True
+                    continue
+                if len(parts[j]) <= 3 and ("-" in parts[j] or len(parts[j]) == 1):
+                    continue  # Subdivision A-M, lettre unique, etc.
                 if parts[j].startswith("Saison"):
                     break
+                # Sous-genres documentaires : mots simples sans espace ni chiffre
+                if is_documentary and " " not in parts[j] and not any(c.isdigit() for c in parts[j]):
+                    continue
                 return parts[j]
     return None
+
+
+class TitleResolver:
+    """
+    Resolution de titres alternatifs via TMDB.
+
+    Extrait le titre d'un fichier via guessit, recherche sur TMDB,
+    et retourne les titres alternatifs (titre original, etc.).
+    Utilise un cache pour eviter les appels API redondants.
+    """
+
+    def __init__(self, tmdb_client=None) -> None:
+        """
+        Args:
+            tmdb_client: Client TMDB optionnel. Si None, pas de lookup.
+        """
+        self._tmdb = tmdb_client
+        self._cache: dict[str, list[str]] = {}
+
+    async def get_alternative_names(self, link: Path) -> list[str]:
+        """
+        Retourne les noms alternatifs pour un symlink via TMDB.
+
+        Args:
+            link: Chemin du symlink casse
+
+        Returns:
+            Liste de noms alternatifs (vide si pas de TMDB ou pas de resultat)
+        """
+        if not self._tmdb:
+            return []
+
+        from guessit import guessit
+
+        # Extraire titre et annee via guessit
+        try:
+            info = guessit(link.name)
+        except Exception:
+            return []
+
+        title = info.get("title", "")
+        if not title:
+            return []
+
+        year = info.get("year")
+
+        # Verifier le cache
+        cache_key = f"{title}:{year}"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
+        # Recherche TMDB (fr-FR : retourne titre original)
+        try:
+            results = await self._tmdb.search(title, year=year)
+        except Exception:
+            self._cache[cache_key] = []
+            return []
+
+        alternatives: list[str] = []
+        seen_titles: set[str] = {title.lower()}
+
+        for result in results[:3]:
+            if result.original_title:
+                orig = result.original_title
+                if orig.lower() not in seen_titles:
+                    alt_name = f"{orig} ({year})" if year else orig
+                    alternatives.append(alt_name)
+                    seen_titles.add(orig.lower())
+
+        # Recherche supplementaire en anglais pour les films non-latins
+        # (ex: film HK dont l'original_title est en chinois mais le NAS utilise le titre EN)
+        try:
+            import httpx
+            client = self._tmdb._get_client()
+            params = {"query": title, "language": "en-US", "include_adult": "false"}
+            response = await client.get("/search/movie", params=params)
+            if response.status_code == 200:
+                for item in response.json().get("results", [])[:3]:
+                    en_title = item.get("title", "")
+                    if en_title and en_title.lower() not in seen_titles:
+                        alt_name = f"{en_title} ({year})" if year else en_title
+                        alternatives.append(alt_name)
+                        seen_titles.add(en_title.lower())
+        except Exception:
+            pass
+
+        self._cache[cache_key] = alternatives
+        return alternatives
 
 
 class AutoRepair:
@@ -76,6 +175,7 @@ class AutoRepair:
         broken: list[Path],
         min_score: float,
         dry_run: bool,
+        title_resolver: "TitleResolver | None" = None,
     ) -> tuple[list[RepairAction], int, int]:
         """
         Exécute le mode automatique de réparation.
@@ -85,6 +185,7 @@ class AutoRepair:
             broken: Liste des symlinks casses
             min_score: Score minimum pour réparation
             dry_run: Mode simulation
+            title_resolver: Resolveur de titres TMDB optionnel
 
         Returns:
             Tuple (actions, auto_repaired, no_match_count)
@@ -108,8 +209,15 @@ class AutoRepair:
                 short_name = link.name[:60]
                 progress.update(task, description=f"[cyan]{short_name}]")
 
+                # Obtenir les titres alternatifs via TMDB
+                alt_names = []
+                if title_resolver:
+                    alt_names = await title_resolver.get_alternative_names(link)
+
                 # Chercher des cibles possibles avec recherche floue
-                targets_with_scores = repair.find_possible_targets(link, min_score=min_score)
+                targets_with_scores = repair.find_possible_targets(
+                    link, min_score=min_score, alternative_names=alt_names or None
+                )
 
                 # Reparer si score >= 90%
                 if targets_with_scores and targets_with_scores[0][1] >= 90:
@@ -178,8 +286,110 @@ class InteractiveRepair:
 
     def __init__(self) -> None:
         """Initialise le gestionnaire interactif."""
-        self.series_failures: dict[str, int] = {}
         self.skipped_series: set[str] = set()
+        self.confirmed_series: dict[str, Path] = {}
+
+    def _get_nas_series_dir(self, target: Path) -> Path:
+        """
+        Extrait le repertoire serie NAS depuis le chemin d'une cible.
+
+        Cherche le composant 'Saison' dans le chemin et retourne son parent.
+        Si aucun composant 'Saison' n'est trouve (ex: documentaires sans
+        structure Saison), retourne target.parent comme fallback.
+
+        Args:
+            target: Chemin du fichier cible sur le NAS
+
+        Returns:
+            Le repertoire de la serie sur le NAS
+        """
+        for i, part in enumerate(target.parts):
+            if part.startswith("Saison"):
+                return Path(*target.parts[:i])
+        return target.parent
+
+    def _register_confirmed_series(self, link: Path, target: Path) -> None:
+        """
+        Enregistre une serie comme confirmee apres validation utilisateur.
+
+        Utilise link.parent comme cle (unique par repertoire d'episodes)
+        et le repertoire serie NAS comme valeur.
+
+        Args:
+            link: Chemin du symlink confirme
+            target: Chemin du fichier cible confirme sur le NAS
+        """
+        nas_dir = self._get_nas_series_dir(target)
+        self.confirmed_series[str(link.parent)] = nas_dir
+
+    def _find_episode_in_nas_dir(self, link: Path, nas_dir: Path) -> Path | None:
+        """
+        Recherche directe d'un episode par numero SxxExx dans le repertoire NAS.
+
+        Utilise quand la recherche standard ne trouve pas de candidat dans
+        le repertoire confirme (ex: nom trop court comme "HPI").
+
+        Args:
+            link: Chemin du symlink casse (pour extraire le SxxExx)
+            nas_dir: Repertoire NAS confirme de la serie
+
+        Returns:
+            Le chemin du fichier correspondant ou None
+        """
+        import re
+
+        match = re.search(r"S(\d+)E(\d+)", link.name, re.IGNORECASE)
+        if not match:
+            return None
+
+        episode_id = match.group(0).upper()
+
+        if not nas_dir.exists():
+            return None
+
+        for candidate in nas_dir.rglob("*"):
+            if candidate.is_file() and not candidate.is_symlink():
+                if episode_id in candidate.name.upper():
+                    return candidate
+
+        return None
+
+    def _check_series_auto_repair(
+        self,
+        series_name: str | None,
+        link: Path,
+        targets_with_scores: list[tuple[Path, float]],
+    ) -> Path | None:
+        """
+        Verifie si un episode peut etre auto-repare grace a une confirmation precedente.
+
+        Utilise link.parent comme cle de recherche dans confirmed_series.
+        Cherche d'abord parmi les candidats fournis, puis en fallback
+        directement dans le repertoire NAS confirme par numero d'episode.
+
+        Args:
+            series_name: Nom de la serie (ou None pour les films)
+            link: Chemin du symlink casse
+            targets_with_scores: Liste des (cible, score)
+
+        Returns:
+            Le chemin cible a utiliser pour l'auto-reparation, ou None
+        """
+        if not series_name:
+            return None
+
+        nas_dir = self.confirmed_series.get(str(link.parent))
+        if not nas_dir:
+            return None
+
+        # Chercher le meilleur candidat dans le repertoire confirme
+        nas_dir_str = str(nas_dir)
+        for candidate, score in targets_with_scores:
+            if str(candidate).startswith(nas_dir_str):
+                return candidate
+
+        # Fallback: recherche directe par numero d'episode dans le NAS
+        return self._find_episode_in_nas_dir(link, nas_dir)
 
     async def run(
         self,
@@ -187,6 +397,7 @@ class InteractiveRepair:
         broken: list[Path],
         min_score: float,
         dry_run: bool,
+        title_resolver: "TitleResolver | None" = None,
     ) -> list[RepairAction]:
         """
         Exécute le mode interactif de réparation.
@@ -196,6 +407,7 @@ class InteractiveRepair:
             broken: Liste des symlinks casses
             min_score: Score minimum
             dry_run: Mode simulation
+            title_resolver: Resolveur de titres TMDB optionnel
 
         Returns:
             Liste des actions effectuées
@@ -206,18 +418,47 @@ class InteractiveRepair:
         actions: list[RepairAction] = []
 
         for i, link in enumerate(broken, 1):
-            # Verifier si cette serie doit etre ignoree
+            # Verifier si ce repertoire doit etre ignore (serie skippee)
             series_name = extract_series_name(link)
-            if series_name and series_name in self.skipped_series:
+            if series_name and str(link.parent) in self.skipped_series:
                 actions.append(RepairAction(link=link, action=RepairActionType.SKIPPED))
                 continue
 
             # Afficher les infos du lien
             console.print(f"\n[dim]({i}/{len(broken)})[/dim]")
 
+            # Obtenir les titres alternatifs via TMDB
+            alt_names = []
+            if title_resolver:
+                alt_names = await title_resolver.get_alternative_names(link)
+
             # Chercher des cibles possibles avec recherche floue
             with console.status(f"[cyan]Recherche de candidats pour {link.name}..."):
-                targets_with_scores = repair.find_possible_targets(link, min_score=min_score)
+                targets_with_scores = repair.find_possible_targets(
+                    link, min_score=min_score, alternative_names=alt_names or None
+                )
+
+            # Auto-reparation si serie deja confirmee
+            auto_target = self._check_series_auto_repair(series_name, link, targets_with_scores)
+            if auto_target:
+                if not dry_run:
+                    success = repair.repair_symlink(link, auto_target)
+                else:
+                    success = True
+
+                if success:
+                    actions.append(
+                        RepairAction(
+                            link=link,
+                            action=RepairActionType.REPAIRED,
+                            new_target=auto_target,
+                        )
+                    )
+                    console.print(
+                        f"[dim]({i}/{len(broken)})[/dim] "
+                        f"[green]✓ Auto-serie[/green] {link.name}"
+                    )
+                    continue
 
             # Afficher le panel avec les infos du lien
             display_broken_link_info(console, link)
@@ -243,9 +484,9 @@ class InteractiveRepair:
                                 new_target=best_target,
                             )
                         )
-                        # Reinitialiser le compteur d'echecs pour cette serie
-                        if series_name and series_name in self.series_failures:
-                            self.series_failures[series_name] = 0
+                        # Enregistrer la serie comme confirmee
+                        if series_name:
+                            self._register_confirmed_series(link, best_target)
                         console.print(f"[green]✓ Auto-repare -> {best_target.name}[/green]\n")
                     else:
                         console.print("[red]Echec de la reparation automatique[/red]\n")
@@ -264,12 +505,8 @@ class InteractiveRepair:
                 break
             elif result == "repair":
                 actions.append(result["action"])
-                if series_name:
-                    self.series_failures[series_name] = 0
             elif result == "skip":
                 actions.append(result["action"])
-                if series_name:
-                    self._handle_skip(series_name)
             elif result == "orphan":
                 actions.append(result["action"])
 
@@ -351,13 +588,9 @@ class InteractiveRepair:
                 action = RepairAction(link=link, action=RepairActionType.SKIPPED)
                 console.print("[dim]Ignore[/dim]")
 
-                # Compter les echecs pour cette serie
+                # Proposer d'ignorer toute la serie
                 if series_name:
-                    self.series_failures[series_name] = self.series_failures.get(series_name, 0) + 1
-
-                    # Apres 3 echecs, proposer d'ignorer toute la serie
-                    if self.series_failures[series_name] == 3:
-                        await self._propose_skip_series(link, series_name, dry_run)
+                    self._propose_skip_series(console, link)
                 console.print("")
                 return {"action": action, "series_name": series_name}
 
@@ -389,43 +622,31 @@ class InteractiveRepair:
                     new_target, score = targets_with_scores[target_idx]
 
                     if dry_run:
+                        if series_name:
+                            self._register_confirmed_series(link, new_target)
                         console.print(f"[cyan](dry-run)[/cyan] Reparation: {new_target.name}\n")
                         return {"action": RepairAction(link=link, action=RepairActionType.REPAIRED, new_target=new_target)}
                     else:
                         success = repair.repair_symlink(link, new_target)
 
                         if success:
-                            # Reinitialiser le compteur d'echecs
-                            if series_name and series_name in self.series_failures:
-                                self.series_failures[series_name] = 0
+                            # Enregistrer la serie comme confirmee
+                            if series_name:
+                                self._register_confirmed_series(link, new_target)
                             console.print(f"[green]Repare -> {new_target.name}[/green]\n")
                             return {"action": RepairAction(link=link, action=RepairActionType.REPAIRED, new_target=new_target)}
                         else:
                             console.print("[red]Echec de la reparation[/red]\n")
                             return {"action": RepairAction(link=link, action=RepairActionType.SKIPPED)}
 
-    async def _propose_skip_series(self, link: Path, series_name: str, dry_run: bool) -> None:
-        """Propose d'ignorer toute la série après 3 échecs."""
-        # Compter combien d'episodes restants pour cette serie
-        # (ceci nécessite la liste complète des broken, que nous n'avons pas ici)
-        # Pour simplifier, nous allons juste proposer d'ignorer
-        console.print(
-            f"\n[yellow]3 echecs consecutifs pour '{series_name}'.[/yellow]"
-        )
-
-        # Utiliser la même fonction que dans le code original pour compter les episodes restants
-        # (nous avons besoin de la liste complète, ce qui n'est pas passée en paramètre)
-
+    def _propose_skip_series(self, console, link: Path) -> None:
+        """Propose d'ignorer les episodes restants du meme repertoire."""
         skip_all = input(
-            f"Ignorer les episodes restants de cette serie ? (o/n) [n]: "
-        ).strip().lower()
-        if skip_all == "o" or skip_all == "oui":
-            self.skipped_series.add(series_name)
-            console.print(f"[dim]Serie '{series_name}' ignoree.[/dim]")
-
-    def _handle_skip(self, series_name: str) -> None:
-        """Gère le compteur d'échecs pour une série."""
-        self.series_failures[series_name] = self.series_failures.get(series_name, 0) + 1
+            "Ignorer les episodes restants de cette serie ? (o/n) [o]: "
+        ).strip().lower() or "o"
+        if skip_all in ("o", "oui"):
+            self.skipped_series.add(str(link.parent))
+            console.print(f"[dim]Serie ignoree ({link.parent.name})[/dim]")
 
     async def _handle_orphan(self, repair: "RepairService", link: Path, dry_run: bool) -> RepairAction | None:
         """Gère le déplacement vers orphans."""

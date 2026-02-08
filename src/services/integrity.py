@@ -430,17 +430,22 @@ class RepairService:
         self._index_built = False
 
     def _get_index_cache_path(self) -> Path:
-        """Retourne le chemin du fichier cache de l'index."""
+        """Retourne le chemin du fichier cache de l'index, unique par storage_dir."""
+        import hashlib
+
         cache_dir = Path.home() / ".cineorg"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        return cache_dir / "file_index.json"
+        # Hash du storage_dir pour eviter les collisions (tests vs production)
+        dir_hash = hashlib.md5(str(self._storage_dir).encode()).hexdigest()[:8]
+        return cache_dir / f"file_index_{dir_hash}.json"
 
-    def _load_cached_index(self, max_age_hours: int = 24) -> bool:
+    def _load_cached_index(self, max_age_hours: int = 24, scan_all: bool = False) -> bool:
         """
         Charge l'index depuis le cache s'il existe et n'est pas trop vieux.
 
         Args:
             max_age_hours: Age maximum du cache en heures
+            scan_all: Le scope demande (doit correspondre au cache)
 
         Returns:
             True si l'index a ete charge depuis le cache
@@ -466,32 +471,43 @@ class RepairService:
                 logger.debug("Cache d'index pour un autre storage_dir")
                 return False
 
-            # Verifier la version du cache (version 2 requis pour clean_title)
+            # Verifier la version du cache (version 3 requis pour scan_all)
             cache_version = data.get("version", 1)
-            if cache_version < 2:
+            if cache_version < 3:
                 logger.debug("Cache d'index version obsolete, reconstruction necessaire")
                 return False
 
-            # Charger l'index (version 2 avec clean_title)
+            # Verifier que le scope correspond
+            cached_scan_all = data.get("scan_all", False)
+            if scan_all and not cached_scan_all:
+                # On demande scan_all mais le cache est partiel → reconstruire
+                logger.debug("Cache partiel, scan_all demande → reconstruction")
+                return False
+            # Note: un cache scan_all=True est reutilisable pour scan_all=False
+            # car il contient un surensemble des fichiers
+
+            # Charger l'index
             self._file_index = [
                 (Path(item["path"]), item["normalized"], item.get("clean_title", ""))
                 for item in data.get("files", [])
             ]
             self._index_built = True
-            logger.debug(f"Index charge depuis le cache: {len(self._file_index)} fichiers")
+            scope = "complet" if cached_scan_all else "Films/Séries"
+            logger.debug(f"Index charge depuis le cache ({scope}): {len(self._file_index)} fichiers")
             return True
 
         except (json.JSONDecodeError, KeyError, OSError) as e:
             logger.debug(f"Erreur chargement cache d'index: {e}")
             return False
 
-    def _save_index_to_cache(self) -> None:
+    def _save_index_to_cache(self, scan_all: bool = False) -> None:
         """Sauvegarde l'index dans le cache."""
         cache_path = self._get_index_cache_path()
         try:
             data = {
-                "version": 2,  # Version du format de cache
+                "version": 3,
                 "storage_dir": str(self._storage_dir),
+                "scan_all": scan_all,
                 "files": [
                     {"path": str(path), "normalized": norm, "clean_title": clean}
                     for path, norm, clean in self._file_index
@@ -508,17 +524,20 @@ class RepairService:
         progress_callback: Optional[callable] = None,
         force_rebuild: bool = False,
         max_cache_age_hours: int = 24,
+        scan_all: bool = False,
     ) -> int:
         """
         Construit un index de tous les fichiers video dans storage.
 
         Utilise un cache persistant pour eviter de rescanner a chaque commande.
-        Limite l'indexation aux repertoires Films et Series.
+        Par defaut, limite l'indexation aux repertoires Films et Series.
+        Avec scan_all=True, scanne tous les sous-repertoires de storage.
 
         Args:
             progress_callback: Fonction appelee avec (fichiers_indexes, message)
             force_rebuild: Force la reconstruction meme si le cache est valide
             max_cache_age_hours: Age maximum du cache en heures (defaut: 24h)
+            scan_all: Scanner tous les sous-repertoires (pas seulement Films/Series)
 
         Returns:
             Nombre de fichiers indexes
@@ -529,7 +548,7 @@ class RepairService:
             return 0
 
         # Essayer de charger depuis le cache
-        if not force_rebuild and self._load_cached_index(max_cache_age_hours):
+        if not force_rebuild and self._load_cached_index(max_cache_age_hours, scan_all=scan_all):
             if progress_callback:
                 progress_callback(len(self._file_index), f"Index charge (cache): {len(self._file_index)} fichiers")
             return len(self._file_index)
@@ -537,18 +556,24 @@ class RepairService:
         self._file_index = []
         count = 0
 
-        # Limiter aux repertoires de videos (Films et Series)
-        media_dirs = []
-        for subdir in ["Films", "Séries", "Series"]:
-            media_path = self._storage_dir / subdir
-            if media_path.exists():
-                media_dirs.append(media_path)
-                if progress_callback:
-                    progress_callback(count, f"Scan: {media_path}")
-
-        # Fallback: si aucun sous-repertoire Films/Series, scanner storage_dir
-        if not media_dirs:
+        if scan_all:
+            # Scanner tous les sous-repertoires de storage
             media_dirs = [self._storage_dir]
+            if progress_callback:
+                progress_callback(count, f"Scan complet: {self._storage_dir}")
+        else:
+            # Limiter aux repertoires de videos (Films et Series)
+            media_dirs = []
+            for subdir in ["Films", "Séries", "Series"]:
+                media_path = self._storage_dir / subdir
+                if media_path.exists():
+                    media_dirs.append(media_path)
+                    if progress_callback:
+                        progress_callback(count, f"Scan: {media_path}")
+
+            # Fallback: si aucun sous-repertoire Films/Series, scanner storage_dir
+            if not media_dirs:
+                media_dirs = [self._storage_dir]
 
         for media_dir in media_dirs:
             for candidate in media_dir.rglob("*"):
@@ -579,7 +604,7 @@ class RepairService:
         self._index_built = True
 
         # Sauvegarder dans le cache
-        self._save_index_to_cache()
+        self._save_index_to_cache(scan_all=scan_all)
 
         if progress_callback:
             progress_callback(count, f"Index construit: {count} fichiers")
@@ -701,20 +726,136 @@ class RepairService:
 
         return self._file_system.find_broken_links(self._video_dir)
 
+    def _find_regroup_candidates(
+        self, link: Path, min_score: float = 0.0,
+        alternative_names: list[str] | None = None,
+    ) -> list[tuple[Path, float]]:
+        """
+        Recherche ciblee pour les symlinks brises par le bug regroup.
+
+        Le bug regroup ajoutait un sous-repertoire prefixe dans le chemin NAS
+        de la cible sans y deplacer les fichiers. Les fichiers sont restes
+        dans le repertoire parent ou le grand-parent.
+
+        Strategie de recherche :
+        1. Parent et/ou grand-parent de la cible
+        2. Scoring multi-criteres : nom du symlink, nom de la cible, titres alternatifs
+
+        Args:
+            link: Chemin du symlink casse
+            min_score: Score minimum (defaut 0 car l'espace de recherche est restreint)
+            alternative_names: Noms alternatifs pour le scoring (ex: titre original TMDB)
+
+        Returns:
+            Liste de tuples (chemin, score) triee par score decroissant
+        """
+        from src.adapters.file_system import VIDEO_EXTENSIONS
+
+        try:
+            original_target = link.readlink()
+        except OSError:
+            return []
+
+        target_parent = original_target.parent
+        target_grandparent = target_parent.parent
+
+        # Collecter les repertoires a scanner (parent et/ou grand-parent)
+        search_dirs: list[Path] = []
+        if target_parent.exists():
+            search_dirs.append(target_parent)
+        if target_grandparent.exists() and target_grandparent != target_parent:
+            search_dirs.append(target_grandparent)
+
+        if not search_dirs:
+            return []
+
+        # Preparer les noms de comparaison (symlink + cible originale + alternatifs)
+        link_name = link.name
+        target_name = original_target.name
+        clean_link = self._extract_clean_title(link_name)
+        clean_target = self._extract_clean_title(target_name) if target_name != link_name else ""
+
+        # Preparer les titres alternatifs (ex: titre original TMDB)
+        clean_alternatives: list[str] = []
+        if alternative_names:
+            for alt_name in alternative_names:
+                clean_alt = self._extract_clean_title(alt_name)
+                if clean_alt and clean_alt != clean_link:
+                    clean_alternatives.append(clean_alt)
+
+        # Lister les fichiers video dans les repertoires de recherche
+        candidates: list[tuple[Path, float]] = []
+        seen: set[str] = set()
+
+        for search_dir in search_dirs:
+            try:
+                for f in search_dir.iterdir():
+                    try:
+                        if f.is_symlink() or f.is_dir():
+                            continue
+                        if f.suffix.lower() not in VIDEO_EXTENSIONS:
+                            continue
+
+                        real = str(f)
+                        if real in seen:
+                            continue
+                        seen.add(real)
+
+                        # Match exact sur le nom
+                        if f.name == link_name or f.name == target_name:
+                            candidates.append((f, 100.0))
+                            continue
+
+                        # Calculer avec titres complets
+                        score_link = self._calculate_title_similarity(link_name, f.name)
+                        # Calculer avec titres nettoyés (guessit)
+                        clean_candidate = self._extract_clean_title(f.name)
+                        score_clean = self._calculate_similarity_fast(clean_link, clean_candidate)
+
+                        scores = [score_link, score_clean]
+
+                        # Comparer aussi avec le nom de la cible originale
+                        if clean_target:
+                            score_target = self._calculate_title_similarity(target_name, f.name)
+                            score_target_clean = self._calculate_similarity_fast(
+                                clean_target, clean_candidate
+                            )
+                            scores.extend([score_target, score_target_clean])
+
+                        # Comparer avec les titres alternatifs (ex: titre original TMDB)
+                        for clean_alt in clean_alternatives:
+                            score_alt = self._calculate_similarity_fast(
+                                clean_alt, clean_candidate
+                            )
+                            scores.append(score_alt)
+
+                        score = max(scores)
+
+                        if score >= min_score:
+                            candidates.append((f, score))
+                    except (PermissionError, OSError):
+                        continue
+            except (PermissionError, OSError):
+                continue
+
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        return candidates
+
     def find_possible_targets(
-        self, link: Path, min_score: float = 50.0
+        self, link: Path, min_score: float = 50.0,
+        alternative_names: list[str] | None = None,
     ) -> list[tuple[Path, float]]:
         """
         Cherche des cibles possibles pour un symlink casse avec recherche floue.
 
         Strategie de recherche progressive:
-        1. Meme genre (Films/Drame, Series/Animation, etc.)
-        2. Meme type (Films ou Series)
-        3. Toute la base de stockage
+        1. Recherche ciblee regroup (repertoire NAS parent/grand-parent)
+        2. Recherche floue dans toute la base de stockage
 
         Args:
             link: Chemin du symlink casse
             min_score: Score minimum de similarite (0-100)
+            alternative_names: Noms alternatifs pour le scoring (ex: titre original TMDB)
 
         Returns:
             Liste de tuples (chemin, score) triee par score decroissant
@@ -722,16 +863,34 @@ class RepairService:
         if not self._storage_dir or not self._storage_dir.exists():
             return []
 
-        # Detecter le type et genre depuis le chemin du symlink
-        media_type, genre = self._detect_media_context(link)
+        # Phase 1 : recherche ciblee regroup (peu de candidats, rapide)
+        regroup_candidates = self._find_regroup_candidates(
+            link, alternative_names=alternative_names
+        )
 
-        # Toujours chercher dans toute la base avec filtre par type de media
-        # La recherche progressive causait des problemes car elle s'arretait trop tot
-        # (ex: fichier dans "non detectes" avec 100% de match non trouve car
-        # un autre fichier dans le genre avec 75% stoppait la recherche)
-        return self._search_in_directory(
+        # Utiliser les candidats regroup seulement si le meilleur score est bon
+        # Sinon, la recherche dans l'index complet peut trouver un match exact
+        # dans une autre categorie (ex: fichier dans Action & Aventure au lieu de Policier)
+        if regroup_candidates and regroup_candidates[0][1] >= 60:
+            return regroup_candidates
+
+        # Phase 2 : recherche floue dans toute la base
+        media_type, genre = self._detect_media_context(link)
+        index_candidates = self._search_in_directory(
             link, self._storage_dir, min_score, media_type_filter=media_type
         )
+
+        # Fusionner : si les deux phases ont des resultats, combiner sans doublons
+        if regroup_candidates and index_candidates:
+            seen = {str(p) for p, _ in index_candidates}
+            merged = list(index_candidates)
+            for path, score in regroup_candidates:
+                if str(path) not in seen:
+                    merged.append((path, score))
+            merged.sort(key=lambda x: x[1], reverse=True)
+            return merged[:15]
+
+        return index_candidates or regroup_candidates
 
     def _detect_media_context(self, link: Path) -> tuple[str | None, str | None]:
         """
