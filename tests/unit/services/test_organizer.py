@@ -13,8 +13,12 @@ from src.services.organizer import (
     get_sort_letter,
     get_priority_genre,
     get_movie_destination,
+    get_movie_video_destination,
     get_series_destination,
     SubdivisionRange,
+    _title_matches_prefix_dir,
+    _find_matching_subdir,
+    _is_range_dir,
 )
 
 
@@ -609,3 +613,205 @@ class TestSeriesSubdivisionNavigation:
 
         # Vérifier que le chemin utilise Sp-Sz (le bon choix)
         assert path == tmp_path / "Séries" / "Séries TV" / "S" / "Sp-Sz" / "Station Eleven (2025)" / "Saison 01"
+
+
+# ====================
+# Tests _is_range_dir
+# ====================
+
+class TestIsRangeDir:
+    """Tests pour la détection des répertoires de plage alphabétique."""
+
+    def test_simple_range(self) -> None:
+        """A-G est une plage."""
+        assert _is_range_dir("A-G") is True
+
+    def test_two_letter_range(self) -> None:
+        """Ba-Bi est une plage."""
+        assert _is_range_dir("Ba-Bi") is True
+
+    def test_three_letter_range(self) -> None:
+        """Mab-Man est une plage."""
+        assert _is_range_dir("Mab-Man") is True
+
+    def test_single_letter_not_range(self) -> None:
+        """A n'est pas une plage."""
+        assert _is_range_dir("A") is False
+
+    def test_no_dash(self) -> None:
+        """American n'est pas une plage."""
+        assert _is_range_dir("American") is False
+
+    def test_compound_word_not_range(self) -> None:
+        """Au-delà n'est pas une plage (non alphabétique pur)."""
+        assert _is_range_dir("Au-delà") is False
+
+    def test_long_word_with_dash(self) -> None:
+        """Sous-titre n'est pas une plage (parties trop longues)."""
+        assert _is_range_dir("Sous-titre") is False
+
+    def test_numeric_range_not_range(self) -> None:
+        """1-9 n'est pas une plage alphabétique."""
+        assert _is_range_dir("1-9") is False
+
+    def test_hash_not_range(self) -> None:
+        """# n'est pas une plage."""
+        assert _is_range_dir("#") is False
+
+
+# ====================
+# Tests _title_matches_prefix_dir
+# ====================
+
+class TestTitleMatchesPrefixDir:
+    """Tests pour le matching titre -> répertoire préfixe."""
+
+    def test_basic_match(self) -> None:
+        """'American Beauty' matche 'American'."""
+        assert _title_matches_prefix_dir("American Beauty", "American") is True
+
+    def test_with_article_l_apostrophe(self) -> None:
+        """'L'Amant' matche 'Amant' (article L' strippé)."""
+        assert _title_matches_prefix_dir("L'Amant", "Amant") is True
+
+    def test_with_article_les_prefix(self) -> None:
+        """'Les Amants' matche 'Amant' (prefix, 'Amants' commence par 'Amant')."""
+        assert _title_matches_prefix_dir("Les Amants", "Amant") is True
+
+    def test_no_match(self) -> None:
+        """'Batman' ne matche pas 'American'."""
+        assert _title_matches_prefix_dir("Batman", "American") is False
+
+    def test_excludes_ranges(self) -> None:
+        """Ne matche pas les plages alphabétiques comme 'Ba-Bi'."""
+        assert _title_matches_prefix_dir("Batman", "Ba-Bi") is False
+
+    def test_excludes_single_letter(self) -> None:
+        """Ne matche pas les lettres simples comme 'A'."""
+        assert _title_matches_prefix_dir("American Beauty", "A") is False
+
+    def test_case_insensitive(self) -> None:
+        """Le matching est insensible à la casse."""
+        assert _title_matches_prefix_dir("american beauty", "American") is True
+
+    def test_with_article_le(self) -> None:
+        """'Le Monde' matche 'Monde'."""
+        assert _title_matches_prefix_dir("Le Monde", "Monde") is True
+
+    def test_compound_word_prefix(self) -> None:
+        """'Au-delà des Murs' matche 'Au-delà' (mot composé)."""
+        assert _title_matches_prefix_dir("Au-delà des Murs", "Au-delà") is True
+
+    def test_exact_prefix_match(self) -> None:
+        """'American' seul matche 'American'."""
+        assert _title_matches_prefix_dir("American", "American") is True
+
+    def test_empty_title(self) -> None:
+        """Titre vide ne matche rien."""
+        assert _title_matches_prefix_dir("", "American") is False
+
+    def test_empty_dirname(self) -> None:
+        """Nom de répertoire vide ne matche rien."""
+        assert _title_matches_prefix_dir("American Beauty", "") is False
+
+
+# ====================
+# Tests _find_matching_subdir avec préfixes
+# ====================
+
+class TestFindMatchingSubdirPrefix:
+    """Tests pour _find_matching_subdir avec des répertoires préfixe."""
+
+    def test_prefix_directory_match(self, tmp_path: Path) -> None:
+        """Un répertoire 'American' matche le titre 'American Beauty'."""
+        parent = tmp_path / "A-Ami"
+        american_dir = parent / "American"
+        american_dir.mkdir(parents=True)
+
+        result = _find_matching_subdir(parent, "American Beauty")
+        assert result == american_dir
+
+    def test_prefix_preferred_over_nothing(self, tmp_path: Path) -> None:
+        """Un préfixe est trouvé même sans plage correspondante."""
+        parent = tmp_path / "test"
+        prefix_dir = parent / "Amour"
+        prefix_dir.mkdir(parents=True)
+
+        result = _find_matching_subdir(parent, "L'Amour Fou")
+        assert result == prefix_dir
+
+    def test_range_takes_priority_over_prefix(self, tmp_path: Path) -> None:
+        """Une plage qui matche est préférée au préfixe (pass 1 avant pass 2)."""
+        parent = tmp_path / "test"
+        range_dir = parent / "Am-An"
+        prefix_dir = parent / "American"
+        range_dir.mkdir(parents=True)
+        prefix_dir.mkdir(parents=True)
+
+        # La plage Am-An matche "American Beauty" en pass 1 → on ne teste pas le préfixe
+        result = _find_matching_subdir(parent, "American Beauty")
+        assert result == range_dir
+
+    def test_prefix_not_matched_when_unrelated(self, tmp_path: Path) -> None:
+        """Un préfixe qui ne correspond pas n'est pas retourné."""
+        parent = tmp_path / "test"
+        prefix_dir = parent / "Barbara"
+        prefix_dir.mkdir(parents=True)
+
+        result = _find_matching_subdir(parent, "Batman Begins")
+        assert result is None
+
+
+# ====================
+# Tests navigation complète avec préfixes
+# ====================
+
+class TestNavigateToLeafWithPrefix:
+    """Tests pour _navigate_to_leaf traversant des répertoires préfixe."""
+
+    def test_navigate_into_prefix_dir(self, tmp_path: Path) -> None:
+        """Descente dans A-Ami/American/ pour 'American Beauty'."""
+        from src.services.organizer import _navigate_to_leaf
+
+        # Structure : genre/A-Ami/American/
+        genre_dir = tmp_path / "Films" / "Drame"
+        a_ami_dir = genre_dir / "A-Ami"
+        american_dir = a_ami_dir / "American"
+        american_dir.mkdir(parents=True)
+        # Ajouter un fichier media pour que has_media_files = True
+        (american_dir / "American Beauty (1999) MULTi HEVC 1080p.mkv").touch()
+
+        result = _navigate_to_leaf(genre_dir, "American Beauty")
+        assert result == american_dir
+
+    def test_navigate_prefix_with_article(self, tmp_path: Path) -> None:
+        """Descente dans A-Ami/Amant/ pour 'L'Amant (1992)'."""
+        from src.services.organizer import _navigate_to_leaf
+
+        # Structure : genre/A-Ami/Amant/
+        genre_dir = tmp_path / "Films" / "Drame"
+        a_ami_dir = genre_dir / "A-Ami"
+        amant_dir = a_ami_dir / "Amant"
+        amant_dir.mkdir(parents=True)
+        (amant_dir / "L'Amant (1992) FR HEVC 1080p.mkv").touch()
+
+        result = _navigate_to_leaf(genre_dir, "L'Amant")
+        assert result == amant_dir
+
+    def test_movie_destination_with_prefix_dir(self, tmp_path: Path) -> None:
+        """Test intégré complet : get_movie_video_destination avec structure préfixe."""
+        # Structure : video/Films/Drame/A-Ami/American/
+        genre_dir = tmp_path / "Films" / "Drame"
+        a_ami_dir = genre_dir / "A-Ami"
+        american_dir = a_ami_dir / "American"
+        american_dir.mkdir(parents=True)
+        (american_dir / "American History X (1998) MULTi HEVC 1080p.mkv").touch()
+
+        movie = Movie(
+            title="American Beauty",
+            year=1999,
+            genres=("Drame",),
+        )
+
+        result = get_movie_video_destination(movie, tmp_path)
+        assert result == american_dir

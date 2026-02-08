@@ -157,6 +157,62 @@ def _map_genre_to_folder(genre: str) -> str:
     return GENRE_FOLDER_MAPPING.get(genre_lower, "Drame")
 
 
+def _is_range_dir(name: str) -> bool:
+    """
+    Vérifie si un nom de répertoire est une plage alphabétique.
+
+    Reconnaît les formats : A-G, Ba-Bi, Mab-Man, etc.
+    Exclut les mots composés (Au-delà), les lettres simples (A),
+    et les noms sans tiret (American).
+
+    Args:
+        name: Nom du répertoire.
+
+    Returns:
+        True si le nom est une plage alphabétique.
+    """
+    if "-" not in name:
+        return False
+    parts = name.split("-")
+    if len(parts) != 2:
+        return False
+    return all(len(p) <= 3 and p.isalpha() for p in parts)
+
+
+def _title_matches_prefix_dir(title: str, dir_name: str) -> bool:
+    """
+    Vérifie si un titre correspond à un répertoire de regroupement par préfixe.
+
+    Exclut les lettres simples (A, B) et les plages alphabétiques (Ba-Bi).
+    Strippe l'article du titre avant comparaison.
+
+    Args:
+        title: Titre complet du film/série.
+        dir_name: Nom du répertoire candidat.
+
+    Returns:
+        True si le titre strippé commence par dir_name.
+    """
+    if not title or not dir_name:
+        return False
+
+    # Exclure les lettres simples
+    if len(dir_name) <= 1:
+        return False
+
+    # Exclure les plages alphabétiques
+    if _is_range_dir(dir_name):
+        return False
+
+    # Stripper l'article du titre
+    stripped = _strip_article(title).strip()
+    if not stripped:
+        return False
+
+    # Comparaison insensible à la casse
+    return stripped.upper().startswith(dir_name.upper())
+
+
 def _letter_matches_range(letter: str, range_name: str) -> bool:
     """
     Vérifie si une lettre correspond à une plage de répertoire.
@@ -290,7 +346,15 @@ def _find_matching_subdir(parent: Path, title: str) -> Optional[Path]:
         if _title_matches_range(title, subdir.name):
             return subdir
 
-    # Deuxième passage : chercher les lettres simples (fallback)
+    # Deuxième passage : chercher les répertoires de préfixe de titre
+    for subdir in sorted(parent.iterdir()):
+        if not subdir.is_dir():
+            continue
+
+        if _title_matches_prefix_dir(title, subdir.name):
+            return subdir
+
+    # Troisième passage : chercher les lettres simples (fallback)
     for subdir in sorted(parent.iterdir()):
         if not subdir.is_dir():
             continue

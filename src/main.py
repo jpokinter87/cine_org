@@ -21,6 +21,7 @@ from .adapters.cli.commands import (
     pending,
     populate_movies,
     process,
+    regroup,
     repair_links,
     validate_app,
 )
@@ -73,6 +74,7 @@ app.command(name="repair-links")(repair_links)
 app.command()(consolidate)
 app.command()(check)
 app.command()(cleanup)
+app.command()(regroup)
 
 # Monter validate_app comme sous-commande
 app.add_typer(validate_app, name="validate")
