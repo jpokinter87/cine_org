@@ -20,6 +20,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Notes IMDb](#notes-imdb)
 - [Commandes](#commandes)
   - [Nettoyage et réorganisation](#nettoyage-et-réorganisation)
+  - [Regroupement par préfixe de titre](#regroupement-par-préfixe-de-titre)
   - [Réparation des symlinks cassés](#réparation-des-symlinks-cassés)
   - [Consolidation des fichiers externes](#consolidation-des-fichiers-externes)
 - [Format de nommage](#format-de-nommage)
@@ -266,6 +267,26 @@ L'algorithme de subdivision :
 - **Format cohérent** : toujours `Start-End` (jamais une borne unique)
 
 Caractère spécial `#` : pour les titres commençant par des chiffres ou symboles.
+
+#### Sous-répertoires de préfixe de titre
+
+En complément des plages alphabétiques, CineOrg reconnaît les **sous-répertoires de regroupement par préfixe de titre**. Quand plusieurs films partagent le même premier mot (après suppression de l'article), ils peuvent être regroupés dans un sous-répertoire portant ce préfixe.
+
+```
+video/Films/Drame/A-Ami/
+├── American/                      # Préfixe de titre
+│   ├── American Beauty (1999) MULTi HEVC 1080p.mkv
+│   ├── American History X (1998) MULTi HEVC 1080p.mkv
+│   └── American Son (2019) MULTi x264 1080p.mkv
+├── Amant/                         # Regroupe L'Amant, Les Amants, etc.
+│   ├── L'Amant (1992) FR HEVC 1080p.mkv
+│   └── Les Amants (1958) FR HEVC 1080p.mkv
+└── Amadeus (1984) MULTi HEVC 1080p.mkv
+```
+
+La navigation récursive reconnaît automatiquement ces répertoires : un nouveau film "American Gangster" sera correctement dirigé vers `A-Ami/American/`.
+
+La commande `regroup` (voir ci-dessous) permet de détecter les préfixes récurrents et de créer ces regroupements automatiquement.
 
 ## Workflow de traitement
 
@@ -608,6 +629,59 @@ uv run cineorg cleanup --fix --min-score 85
 
 Pour corriger : cineorg cleanup --fix
 ```
+
+### Regroupement par préfixe de titre
+
+La commande `regroup` analyse les répertoires de symlinks pour détecter les fichiers partageant un préfixe de titre récurrent, puis les regroupe dans des sous-répertoires dédiés.
+
+```bash
+# Analyser les préfixes récurrents (mode dry-run avec arborescence projetée)
+uv run cineorg regroup
+
+# Analyser un répertoire spécifique
+uv run cineorg regroup /chemin/vers/video
+
+# Ajuster le seuil minimum de fichiers par groupe (défaut: 3)
+uv run cineorg regroup --min-count 4
+
+# Exécuter les regroupements (crée les sous-répertoires et déplace les fichiers)
+uv run cineorg regroup --fix
+
+# Spécifier le répertoire storage correspondant
+uv run cineorg regroup --fix --storage-dir /chemin/vers/storage
+```
+
+**Fonctionnement :**
+
+1. **Scan récursif** : Parcourt tous les répertoires contenant des fichiers médias.
+
+2. **Extraction des préfixes** : Pour chaque fichier, le titre est extrait (avant l'année entre parenthèses), l'article est retiré, et le premier mot est utilisé comme clé de regroupement.
+
+3. **Fusion des variantes** : Les clés partageant un préfixe commun de 4+ caractères sont fusionnées sous le préfixe le plus court. Par exemple : "Amant", "Amants", "Amante" → regroupés sous "Amant".
+
+4. **Filtrage** : Seuls les groupes atteignant le seuil minimum (3 fichiers par défaut) sont proposés. Les fichiers déjà dans un sous-répertoire de préfixe sont ignorés.
+
+**Exemple de sortie (mode analyse) :**
+
+```
+Modifications projetees dans Films/Drame/A-Ami/ :
+  Films/Drame/A-Ami/
+  ├── American/ (nouveau)
+  │   ├── American Beauty (1999) MULTi HEVC 1080p.mkv <- deplace
+  │   ├── American History X (1998) MULTi HEVC 1080p.mkv <- deplace
+  │   ├── American Son (2019) MULTi x264 1080p.mkv <- deplace
+  │   └── American Translation (2011) FR HEVC 1080p.mkv <- deplace
+  └── Amant/ (nouveau)
+      ├── L'Amant (1992) FR HEVC 1080p.mkv <- deplace
+      ├── L'Amante (2020) FR HEVC 1080p.mkv <- deplace
+      └── Les Amants (1958) FR HEVC 1080p.mkv <- deplace
+
+Total: 2 groupe(s), 7 fichier(s) a deplacer
+
+Pour executer : cineorg regroup --fix
+```
+
+**Scope :** En mode `--fix`, les fichiers sont déplacés dans `video/` (symlinks) **et** dans `storage/` (fichiers physiques). Les symlinks sont recréés pour pointer vers le nouvel emplacement dans storage.
 
 ### Réparation des symlinks cassés
 
