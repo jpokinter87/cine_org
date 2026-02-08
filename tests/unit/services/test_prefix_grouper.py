@@ -292,8 +292,8 @@ class TestPrefixGrouperExecute:
         video_file.symlink_to(storage_file)
         return video_file, storage_file
 
-    def test_execute_creates_dirs_and_moves(self, tmp_path: Path) -> None:
-        """Vérifier la création des répertoires et le déplacement des fichiers."""
+    def test_execute_creates_dirs_and_moves_symlinks(self, tmp_path: Path) -> None:
+        """Vérifier la création du répertoire préfixe et le déplacement des symlinks."""
         video_dir = tmp_path / "video"
         storage_dir = tmp_path / "storage"
 
@@ -305,11 +305,13 @@ class TestPrefixGrouperExecute:
         ]
 
         files = []
+        original_targets = {}
         for name in filenames:
             video_file, storage_file = self._create_symlink_and_storage(
                 video_dir, storage_dir, f"{rel_dir}/{name}"
             )
             files.append(video_file)
+            original_targets[name] = storage_file
 
         group = PrefixGroup(
             parent_dir=video_dir / rel_dir,
@@ -322,30 +324,148 @@ class TestPrefixGrouperExecute:
 
         assert moved == 3
 
-        # Vérifier que les fichiers sont déplacés dans le sous-répertoire
         american_video = video_dir / rel_dir / "American"
-        american_storage = storage_dir / rel_dir / "American"
-
         assert american_video.is_dir()
-        assert american_storage.is_dir()
 
         for name in filenames:
-            # Fichier storage dans le nouveau répertoire
-            assert (american_storage / name).is_file()
-            # Symlink dans le nouveau répertoire, pointant vers storage
+            # Le fichier storage n'est PAS déplacé — il reste à son emplacement original
+            assert original_targets[name].is_file()
+
+            # Le symlink est dans le nouveau répertoire préfixe
             new_link = american_video / name
             assert new_link.is_symlink()
-            assert new_link.resolve() == (american_storage / name).resolve()
+            # Il pointe vers la même cible storage qu'avant
+            assert new_link.resolve() == original_targets[name].resolve()
 
-            # Ancien emplacement supprimé
+            # L'ancien symlink est supprimé
             assert not (video_dir / rel_dir / name).exists()
-            assert not (storage_dir / rel_dir / name).exists()
 
     def test_execute_returns_zero_for_empty_groups(self, tmp_path: Path) -> None:
         """Pas de groupes → retourne 0."""
         service = PrefixGrouperService()
         moved = service.execute([], tmp_path / "video", tmp_path / "storage")
         assert moved == 0
+
+    def test_execute_symlink_storage_never_touched(self, tmp_path: Path) -> None:
+        """Le storage (NAS) n'est jamais modifié — seuls les symlinks bougent."""
+        video_dir = tmp_path / "video"
+        storage_dir = tmp_path / "storage"
+        # Stockage réel dans un chemin DIFFÉRENT de storage_dir
+        actual_nas = tmp_path / "actual_nas"
+
+        rel_dir = "Documentaire/Arts"
+        filenames = [
+            "Art moderne (2020) FR x264 1080p.mkv",
+            "Art nouveau (2019) FR x264 1080p.mkv",
+            "Art déco (2018) FR x264 1080p.mkv",
+        ]
+
+        files = []
+        original_targets = {}
+        for name in filenames:
+            # Fichier physique sur le NAS
+            real_file = actual_nas / rel_dir / name
+            real_file.parent.mkdir(parents=True, exist_ok=True)
+            real_file.write_text("contenu")
+
+            # Symlink dans video_dir pointant vers le NAS
+            video_file = video_dir / rel_dir / name
+            video_file.parent.mkdir(parents=True, exist_ok=True)
+            video_file.symlink_to(real_file)
+            files.append(video_file)
+            original_targets[name] = real_file
+
+        group = PrefixGroup(
+            parent_dir=video_dir / rel_dir,
+            prefix="Art",
+            files=files,
+        )
+
+        service = PrefixGrouperService()
+        moved = service.execute([group], video_dir, storage_dir)
+
+        assert moved == 3
+
+        # Les fichiers NAS n'ont PAS bougé
+        for name in filenames:
+            assert original_targets[name].exists(), f"Fichier NAS déplacé par erreur: {name}"
+
+        # Les symlinks sont dans le répertoire préfixe et pointent vers les MÊMES cibles
+        for name in filenames:
+            new_link = video_dir / rel_dir / "Art" / name
+            assert new_link.is_symlink(), f"Symlink manquant: {new_link}"
+            assert new_link.resolve() == original_targets[name].resolve()
+
+    def test_execute_regular_files_moved_directly(self, tmp_path: Path) -> None:
+        """Fichiers réguliers (pas symlinks) déplacés directement dans le répertoire préfixe."""
+        video_dir = tmp_path / "video"
+        storage_dir = tmp_path / "storage"
+
+        rel_dir = "Documentaire/Histoire"
+        filenames = [
+            "Rome antique (2020) FR 1080p.mkv",
+            "Rome impériale (2019) FR 1080p.mkv",
+            "Rome, ville ouverte (1945) FR 1080p.mkv",
+        ]
+
+        files = []
+        for name in filenames:
+            video_file = video_dir / rel_dir / name
+            video_file.parent.mkdir(parents=True, exist_ok=True)
+            video_file.write_text("contenu")
+            files.append(video_file)
+
+        group = PrefixGroup(
+            parent_dir=video_dir / rel_dir,
+            prefix="Rome",
+            files=files,
+        )
+
+        service = PrefixGrouperService()
+        moved = service.execute([group], video_dir, storage_dir)
+
+        assert moved == 3
+
+        for name in filenames:
+            moved_file = video_dir / rel_dir / "Rome" / name
+            assert moved_file.exists(), f"Fichier manquant: {moved_file}"
+            assert not moved_file.is_symlink()
+            # Ancien emplacement supprimé
+            assert not (video_dir / rel_dir / name).exists()
+
+    def test_execute_progress_callback(self, tmp_path: Path) -> None:
+        """Le callback de progression est appelé pour chaque groupe."""
+        video_dir = tmp_path / "video"
+        storage_dir = tmp_path / "storage"
+
+        rel_dir = "Films/Drame/A"
+        filenames = [
+            "Alpha (2018) FR 1080p.mkv",
+            "Alpha Dog (2006) FR 1080p.mkv",
+            "Alpha et Omega (2010) FR 1080p.mkv",
+        ]
+
+        files = []
+        for name in filenames:
+            f = video_dir / rel_dir / name
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("contenu")
+            files.append(f)
+
+        group = PrefixGroup(
+            parent_dir=video_dir / rel_dir,
+            prefix="Alpha",
+            files=files,
+        )
+
+        callbacks = []
+        service = PrefixGrouperService()
+        service.execute(
+            [group], video_dir, storage_dir,
+            progress_callback=lambda p, c: callbacks.append((p, c)),
+        )
+
+        assert callbacks == [("Alpha", 3)]
 
 
 # ====================

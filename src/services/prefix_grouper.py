@@ -137,13 +137,14 @@ class PrefixGrouperService:
         """
         Exécute le regroupement : crée les répertoires et déplace les fichiers.
 
-        Pour chaque groupe, crée un sous-répertoire dans video et storage,
-        puis déplace les fichiers (symlinks dans video, fichiers réels dans storage).
+        Pour chaque groupe, crée un sous-répertoire préfixe et déplace les symlinks.
+        Seuls les symlinks sont déplacés ; les fichiers de stockage (NAS) ne sont
+        jamais touchés.
 
         Args:
             groups: Liste des groupes à exécuter.
             video_dir: Répertoire racine des symlinks.
-            storage_dir: Répertoire racine de stockage.
+            storage_dir: Répertoire racine de stockage (non modifié).
             progress_callback: Callback(prefix, files_moved) appelé après chaque groupe.
 
         Returns:
@@ -158,32 +159,28 @@ class PrefixGrouperService:
             except ValueError:
                 continue
 
-            # Créer les sous-répertoires préfixe
+            # Créer le sous-répertoire préfixe dans video
             video_prefix_dir = video_dir / rel_path / group.prefix
-            storage_prefix_dir = storage_dir / rel_path / group.prefix
             video_prefix_dir.mkdir(parents=True, exist_ok=True)
-            storage_prefix_dir.mkdir(parents=True, exist_ok=True)
 
             for video_file in group.files:
                 filename = video_file.name
 
-                # Déplacer le fichier storage d'abord
-                storage_file = storage_dir / rel_path / filename
-                storage_dest = storage_prefix_dir / filename
-                if storage_file.exists():
-                    shutil.move(str(storage_file), str(storage_dest))
-
-                # Supprimer l'ancien symlink et créer le nouveau
                 if video_file.is_symlink():
-                    video_file.unlink()
-                elif video_file.exists():
-                    shutil.move(str(video_file), str(video_prefix_dir / filename))
-                    total_moved += 1
-                    continue
+                    # Lire la cible du symlink (sans résoudre la chaîne)
+                    original_target = video_file.readlink()
 
-                # Créer le nouveau symlink
-                new_link = video_prefix_dir / filename
-                new_link.symlink_to(storage_dest)
+                    # Supprimer l'ancien symlink et créer le nouveau
+                    # pointant vers la même cible de stockage
+                    video_file.unlink()
+                    new_link = video_prefix_dir / filename
+                    new_link.symlink_to(original_target)
+
+                elif video_file.exists():
+                    # Fichier régulier : déplacer directement
+                    shutil.move(str(video_file), str(video_prefix_dir / filename))
+                else:
+                    continue
 
                 total_moved += 1
 
