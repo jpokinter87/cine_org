@@ -91,7 +91,8 @@ class GuessitFilenameParser(IFilenameParser):
         year = result.get("year")
 
         # Extraire saison/episode pour les series
-        season = result.get("season")
+        season_raw = result.get("season")
+        season = season_raw[0] if isinstance(season_raw, list) else season_raw
         episode = self._get_episode_start(result)
         episode_end = self._get_episode_end(result)
         episode_title = result.get("episode_title")

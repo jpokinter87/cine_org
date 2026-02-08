@@ -105,6 +105,23 @@ class TestGuessitFilenameParserSeries:
         assert result.episode == 3
         assert result.episode_title == "The Dundies"
 
+    def test_multi_season_returns_first(self, parser: GuessitFilenameParser) -> None:
+        """Test que quand guessit retourne plusieurs saisons, on prend la premiere."""
+        # Simuler le cas "Bref" où guessit retourne season=[1, 90]
+        from unittest.mock import patch
+
+        fake_result = {
+            "title": "Bref",
+            "season": [1, 90],
+            "episode": 56,
+            "type": "episode",
+        }
+        with patch("guessit.guessit", return_value=fake_result):
+            result = parser.parse("Bref - S01E56.mkv", MediaType.SERIES)
+
+        assert result.season == 1
+        assert result.episode == 56
+
 
 class TestGuessitFilenameParserTypeHint:
     """Tests pour le respect du type_hint fourni."""
