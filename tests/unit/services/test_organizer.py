@@ -267,7 +267,7 @@ class TestGetSortLetter:
 
 
 class TestTitleMatchesRange:
-    """Tests pour _title_matches_range avec caractères invisibles."""
+    """Tests pour _title_matches_range avec caractères invisibles et plages asymétriques."""
 
     def test_title_matches_range_invisible_not_hash(self) -> None:
         """Un titre avec caractère invisible ne doit pas matcher #."""
@@ -276,6 +276,19 @@ class TestTitleMatchesRange:
         assert _title_matches_range("\u200eZoe, mon amie morte", "#") is False
         assert _title_matches_range("\u200eZoe, mon amie morte", "R-Z") is True
         assert _title_matches_range("\u200eZoe, mon amie morte", "Z") is True
+
+    def test_asymmetric_range_a_ami(self) -> None:
+        """Plage asymétrique A-Ami : bornes correctes."""
+        from src.services.organizer import _title_matches_range
+        # Dans la plage
+        assert _title_matches_range("Alien", "A-Ami") is True
+        assert _title_matches_range("American Beauty", "A-Ami") is True
+        assert _title_matches_range("Amadeus", "A-Ami") is True
+        # Hors plage (au-delà de Ami)
+        assert _title_matches_range("Amour Fou", "A-Ami") is False
+        assert _title_matches_range("Anaconda", "A-Ami") is False
+        # Hors plage (autre lettre)
+        assert _title_matches_range("Batman", "A-Ami") is False
 
 
 # ====================

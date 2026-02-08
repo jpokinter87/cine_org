@@ -308,7 +308,9 @@ def _title_matches_range(title: str, range_name: str) -> bool:
             start_prefix = parts[0]
             end_prefix = parts[1]
             # Le titre doit commencer par un préfixe dans la plage
-            title_prefix = title_upper[:len(start_prefix)]
+            # Utiliser la longueur max pour gérer les plages asymétriques (A-Ami)
+            prefix_len = max(len(start_prefix), len(end_prefix))
+            title_prefix = title_upper[:prefix_len]
             return start_prefix <= title_prefix <= end_prefix + "Z" * 10
 
     # Lettre ou plage simple
