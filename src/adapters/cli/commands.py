@@ -1793,27 +1793,47 @@ async def _regroup_async(
     """Implementation async de la commande regroup."""
     from loguru import logger as loguru_logger
 
-    from src.services.prefix_grouper import PrefixGrouperService
+    from src.services.prefix_grouper import (
+        PrefixGrouperService,
+        load_regroup_cache,
+        save_regroup_cache,
+    )
 
     container = Container()
     config = container.config()
 
     # Resoudre les repertoires
-    video_dir = video_dir_arg if video_dir_arg else Path(config.video_dir)
     storage_dir = storage_dir_arg if storage_dir_arg else Path(config.storage_dir)
-
-    if not video_dir.exists():
-        console.print(f"[red]Erreur: Repertoire introuvable: {video_dir}[/red]")
-        raise typer.Exit(1)
 
     loguru_logger.disable("src")
 
     try:
         service = PrefixGrouperService()
+        groups = None
 
-        # Analyse
-        console.print(f"[bold cyan]Analyse des prefixes dans {video_dir}[/bold cyan]\n")
-        groups = service.analyze(video_dir, min_count=min_count)
+        # En mode --fix sans video_dir explicite, tenter de charger le cache
+        if fix and video_dir_arg is None:
+            cached = load_regroup_cache()
+            if cached is not None:
+                video_dir, cached_storage, groups = cached
+                if storage_dir_arg is None:
+                    storage_dir = cached_storage
+                console.print(
+                    f"[bold cyan]Utilisation de l'analyse en cache pour {video_dir}[/bold cyan]\n"
+                )
+
+        # Resoudre video_dir si pas encore defini par le cache
+        if groups is None:
+            video_dir = video_dir_arg if video_dir_arg else Path(config.video_dir)
+
+        if not video_dir.exists():
+            console.print(f"[red]Erreur: Repertoire introuvable: {video_dir}[/red]")
+            raise typer.Exit(1)
+
+        # Analyse si pas de cache charge
+        if groups is None:
+            console.print(f"[bold cyan]Analyse des prefixes dans {video_dir}[/bold cyan]\n")
+            groups = service.analyze(video_dir, min_count=min_count)
 
         if not groups:
             console.print("[green]Aucun regroupement detecte.[/green]")
@@ -1857,6 +1877,9 @@ async def _regroup_async(
         )
 
         if not fix:
+            # Sauvegarder le cache pour un futur --fix
+            save_regroup_cache(video_dir, storage_dir, groups)
+
             console.print(
                 "\n[dim]Pour executer : cineorg regroup --fix[/dim]"
             )

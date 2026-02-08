@@ -7,15 +7,21 @@ et les regroupe dans des sous-répertoires dédiés.
 Exemple : 4 fichiers "American *" dans A-Ami/ → création de A-Ami/American/
 """
 
+import json
 import re
 import shutil
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 from src.services.organizer import _is_range_dir
 from src.utils.constants import VIDEO_EXTENSIONS
 from src.utils.helpers import strip_article
+
+_DEFAULT_CACHE_DIR = Path.home() / ".cineorg"
+_CACHE_FILENAME = "regroup_cache.json"
 
 
 @dataclass
@@ -354,3 +360,83 @@ class PrefixGrouperService:
                 key_to_merged[key] = original_word
 
         return merged
+
+
+def save_regroup_cache(
+    video_dir: Path,
+    storage_dir: Path,
+    groups: list[PrefixGroup],
+    cache_dir: Optional[Path] = None,
+) -> None:
+    """
+    Sauvegarde l'analyse regroup en cache JSON.
+
+    Args:
+        video_dir: Répertoire vidéo analysé.
+        storage_dir: Répertoire storage correspondant.
+        groups: Groupes détectés.
+        cache_dir: Répertoire du cache (défaut: ~/.cineorg).
+    """
+    cache_dir = cache_dir or _DEFAULT_CACHE_DIR
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_file = cache_dir / _CACHE_FILENAME
+
+    data = {
+        "video_dir": str(video_dir),
+        "storage_dir": str(storage_dir),
+        "timestamp": time.time(),
+        "groups": [
+            {
+                "parent_dir": str(g.parent_dir),
+                "prefix": g.prefix,
+                "files": [str(f) for f in g.files],
+            }
+            for g in groups
+        ],
+    }
+
+    cache_file.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def load_regroup_cache(
+    max_age_minutes: int = 10,
+    cache_dir: Optional[Path] = None,
+) -> Optional[tuple[Path, Path, list[PrefixGroup]]]:
+    """
+    Charge le cache regroup s'il existe et est récent.
+
+    Args:
+        max_age_minutes: Age maximum du cache en minutes.
+        cache_dir: Répertoire du cache (défaut: ~/.cineorg).
+
+    Returns:
+        Tuple (video_dir, storage_dir, groups) si cache valide, None sinon.
+    """
+    cache_dir = cache_dir or _DEFAULT_CACHE_DIR
+    cache_file = cache_dir / _CACHE_FILENAME
+
+    if not cache_file.exists():
+        return None
+
+    try:
+        data = json.loads(cache_file.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    # Vérifier l'âge du cache
+    age_seconds = time.time() - data.get("timestamp", 0)
+    if age_seconds > max_age_minutes * 60:
+        return None
+
+    # Reconstruire les PrefixGroup
+    video_dir = Path(data["video_dir"])
+    storage_dir = Path(data["storage_dir"])
+    groups = []
+    for g in data.get("groups", []):
+        groups.append(PrefixGroup(
+            parent_dir=Path(g["parent_dir"]),
+            prefix=g["prefix"],
+            files=[Path(f) for f in g["files"]],
+        ))
+
+    return video_dir, storage_dir, groups

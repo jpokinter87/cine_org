@@ -14,6 +14,8 @@ from src.services.prefix_grouper import (
     PrefixGrouperService,
     extract_title_from_filename,
     extract_first_word,
+    save_regroup_cache,
+    load_regroup_cache,
 )
 
 
@@ -344,3 +346,50 @@ class TestPrefixGrouperExecute:
         service = PrefixGrouperService()
         moved = service.execute([], tmp_path / "video", tmp_path / "storage")
         assert moved == 0
+
+
+# ====================
+# Tests cache regroup
+# ====================
+
+class TestRegroupCache:
+    """Tests pour la sauvegarde/chargement du cache regroup."""
+
+    def test_save_and_load_cache(self, tmp_path: Path) -> None:
+        """Le cache sauvegardé est rechargé avec les mêmes données."""
+        video_dir = Path("/media/Serveur/test/Films")
+        storage_dir = Path("/media/Serveur/storage/Films")
+        groups = [
+            PrefixGroup(
+                parent_dir=Path("/media/Serveur/test/Films/Drame/A-Ami"),
+                prefix="American",
+                files=[
+                    Path("/media/Serveur/test/Films/Drame/A-Ami/American Beauty (1999).mkv"),
+                    Path("/media/Serveur/test/Films/Drame/A-Ami/American History X (1998).mkv"),
+                ],
+            ),
+        ]
+
+        save_regroup_cache(video_dir, storage_dir, groups, cache_dir=tmp_path)
+        result = load_regroup_cache(cache_dir=tmp_path)
+
+        assert result is not None
+        loaded_video, loaded_storage, loaded_groups = result
+        assert loaded_video == video_dir
+        assert loaded_storage == storage_dir
+        assert len(loaded_groups) == 1
+        assert loaded_groups[0].prefix == "American"
+        assert len(loaded_groups[0].files) == 2
+
+    def test_load_cache_expired(self, tmp_path: Path) -> None:
+        """Un cache expiré retourne None."""
+        save_regroup_cache(Path("/v"), Path("/s"), [], cache_dir=tmp_path)
+
+        # Charger avec max_age_minutes=0 → expiré immédiatement
+        result = load_regroup_cache(max_age_minutes=0, cache_dir=tmp_path)
+        assert result is None
+
+    def test_load_cache_missing(self, tmp_path: Path) -> None:
+        """Pas de fichier cache → retourne None."""
+        result = load_regroup_cache(cache_dir=tmp_path)
+        assert result is None
