@@ -32,7 +32,6 @@ from rich.progress import (
     TextColumn,
 )
 
-from src.core.entities.media import Episode, Movie, Series
 from src.core.entities.video import PendingValidation, ValidationStatus
 from src.core.value_objects.parsed_info import MediaType
 

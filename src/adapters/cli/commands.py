@@ -12,7 +12,6 @@ Ce module fournit les commandes CLI:
 """
 
 import asyncio
-import re
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, Optional
@@ -29,15 +28,7 @@ from rich.progress import (
 from rich.prompt import Confirm
 from rich.tree import Tree
 
-from src.core.value_objects.parsed_info import MediaType
 from src.services.cleanup import save_report_cache, load_report_cache
-
-
-# Pattern pour extraire saison/episode d'un nom de fichier
-SERIES_INFO_PATTERN = re.compile(
-    r"[Ss](\d{1,2})[Ee](\d{1,2})",  # S01E01, s1e1
-    re.IGNORECASE
-)
 
 
 def _extract_series_info(filename: str) -> tuple[int, int]:
@@ -207,29 +198,21 @@ def _display_transfer_tree(
                         # Trier par numero d'episode
                         episodes.sort(key=lambda e: e["new_filename"])
                         for ep in episodes:
-                            new_name = ep["new_filename"]
-                        season_sub.add(f"[green]{new_name}[/green]")
+                            season_sub.add(f"[green]{ep['new_filename']}[/green]")
 
     console.print(tree)
 
 from src.adapters.cli.validation import (
-    ConflictResolution,
     console,
     determine_is_series,
     display_batch_summary,
-    display_similar_content_conflict,
     execute_batch_transfer,
-    prompt_conflict_resolution,
     validation_loop,
 )
 from src.adapters.cli.helpers import suppress_loguru, with_container
 from src.adapters.cli.auto_validator import auto_validate_files, ValidationResult
-from src.adapters.cli.batch_builder import build_transfers_batch
-from src.services.transferer import ExistingFileInfo, SimilarContentInfo
 from src.container import Container
-from src.core.entities.media import Episode, Movie, Series
 from src.core.entities.video import ValidationStatus
-from src.utils.helpers import parse_candidate
 
 
 class MediaFilter(str, Enum):
@@ -1770,173 +1753,3 @@ async def _cleanup_async(
 
     finally:
         loguru_logger.enable("src")
-
-
-    """Chemin parent relatif a video_dir, ou absolu si hors scope."""
-    try:
-        return str(path.parent.relative_to(video_dir))
-    except ValueError:
-        return str(path.parent)
-
-
-def _display_broken_symlinks_tree(report: "CleanupReport") -> None:
-    """Affiche l'arbre detaille des symlinks casses groupes par repertoire."""
-    from collections import defaultdict
-
-    console.print()
-
-    groups: dict[str, list] = defaultdict(list)
-    for b in report.broken_symlinks:
-        groups[_rel_parent(b.symlink_path, report.video_dir)].append(b)
-
-    tree = Tree(f"[bold red]Symlinks casses ({len(report.broken_symlinks)})[/bold red]")
-
-    for dir_path in sorted(groups.keys()):
-        dir_branch = tree.add(f"[cyan]{dir_path}/[/cyan]")
-        for b in sorted(groups[dir_path], key=lambda x: x.symlink_path.name):
-            name = b.symlink_path.name
-            target_name = b.original_target.name if b.original_target != Path("") else "?"
-
-            if b.best_candidate and b.candidate_score >= 90.0:
-                label = (
-                    f"[red]{name}[/red] -> [dim strikethrough]{target_name}[/dim strikethrough]"
-                    f"  [green]reparable ({b.candidate_score:.0f}%): {b.best_candidate.name}[/green]"
-                )
-            elif b.best_candidate:
-                label = (
-                    f"[red]{name}[/red] -> [dim strikethrough]{target_name}[/dim strikethrough]"
-                    f"  [yellow]candidat ({b.candidate_score:.0f}%): {b.best_candidate.name}[/yellow]"
-                )
-            else:
-                label = (
-                    f"[red]{name}[/red] -> [dim strikethrough]{target_name}[/dim strikethrough]"
-                    f"  [dim]aucun candidat[/dim]"
-                )
-            dir_branch.add(label)
-
-    console.print(tree)
-
-
-def _display_misplaced_symlinks_tree(report: "CleanupReport") -> None:
-    """Affiche l'arbre des symlinks mal places avec deplacement prevu."""
-    from collections import defaultdict
-
-    console.print()
-
-    groups: dict[str, list] = defaultdict(list)
-    for m in report.misplaced_symlinks:
-        groups[_rel_parent(m.symlink_path, report.video_dir)].append(m)
-
-    tree = Tree(
-        f"[bold yellow]Symlinks mal places ({len(report.misplaced_symlinks)})[/bold yellow]"
-    )
-
-    for dir_path in sorted(groups.keys()):
-        dir_branch = tree.add(f"[cyan]{dir_path}/[/cyan]")
-        for m in sorted(groups[dir_path], key=lambda x: x.symlink_path.name):
-            try:
-                expected_rel = str(m.expected_dir.relative_to(report.video_dir))
-            except ValueError:
-                expected_rel = str(m.expected_dir)
-            dir_branch.add(
-                f"[yellow]{m.symlink_path.name}[/yellow]"
-                f"  -> [green]{expected_rel}/[/green]"
-            )
-
-    console.print(tree)
-
-
-def _display_duplicate_symlinks_tree(report: "CleanupReport") -> None:
-    """Affiche l'arbre des symlinks dupliques avec conservation/suppression."""
-    from collections import defaultdict
-
-    console.print()
-
-    groups: dict[str, list] = defaultdict(list)
-    for d in report.duplicate_symlinks:
-        try:
-            rel_dir = str(d.directory.relative_to(report.video_dir))
-        except ValueError:
-            rel_dir = str(d.directory)
-        groups[rel_dir].append(d)
-
-    total_remove = sum(len(d.remove) for d in report.duplicate_symlinks)
-    tree = Tree(
-        f"[bold magenta]Symlinks dupliques ({total_remove} a supprimer)[/bold magenta]"
-    )
-
-    for dir_path in sorted(groups.keys()):
-        dir_branch = tree.add(f"[cyan]{dir_path}/[/cyan]")
-        for d in groups[dir_path]:
-            target_branch = dir_branch.add(
-                f"[dim]cible: {d.target_path.name}[/dim]"
-            )
-            target_branch.add(f"[green]conserver: {d.keep.name}[/green]")
-            for r in sorted(d.remove, key=lambda p: p.name):
-                target_branch.add(f"[red]supprimer: {r.name}[/red]")
-
-    console.print(tree)
-
-
-def _display_oversized_dirs_tree(report: "CleanupReport") -> None:
-    """Affiche l'arbre des repertoires surcharges avec le plan de subdivision."""
-    console.print()
-
-    tree = Tree(
-        f"[bold blue]Repertoires surcharges ({len(report.oversized_dirs)})[/bold blue]"
-    )
-
-    for plan in report.oversized_dirs:
-        try:
-            rel_dir = str(plan.parent_dir.relative_to(report.video_dir))
-        except ValueError:
-            rel_dir = str(plan.parent_dir)
-
-        plan_branch = tree.add(
-            f"[cyan]{rel_dir}/[/cyan]  [dim]{plan.current_count} items (max {plan.max_allowed})[/dim]"
-        )
-        for start, end in plan.ranges:
-            range_label = f"{start}-{end}"
-            count = sum(
-                1 for _, dst in plan.items_to_move
-                if dst.parent.name == range_label
-            )
-            plan_branch.add(f"[green]{range_label}/[/green]  [dim]({count} items)[/dim]")
-
-        # Afficher les items hors plage avec leur destination
-        if hasattr(plan, "out_of_range_items") and plan.out_of_range_items:
-            nb_out = len(plan.out_of_range_items)
-            out_branch = plan_branch.add(
-                f"[yellow]Hors plage -> transfert ({nb_out} items)[/yellow]"
-            )
-            max_display = 10
-            for src, dst in plan.out_of_range_items[:max_display]:
-                try:
-                    dest_rel = str(dst.parent.relative_to(report.video_dir))
-                except ValueError:
-                    dest_rel = dst.parent.name
-                out_branch.add(
-                    f"[yellow]{src.name}[/yellow] [dim]-> {dest_rel}/[/dim]"
-                )
-            if nb_out > max_display:
-                out_branch.add(f"[dim]... et {nb_out - max_display} autres[/dim]")
-
-    console.print(tree)
-
-
-def _display_empty_dirs_tree(report: "CleanupReport") -> None:
-    """Affiche l'arbre des repertoires vides."""
-    console.print()
-
-    tree = Tree(
-        f"[bold dim]Repertoires vides ({len(report.empty_dirs)})[/bold dim]"
-    )
-
-    for d in sorted(report.empty_dirs):
-        try:
-            rel = str(d.relative_to(report.video_dir))
-        except ValueError:
-            rel = str(d)
-        tree.add(f"[dim]{rel}/[/dim]")
-
-    console.print(tree)

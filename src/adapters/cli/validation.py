@@ -813,64 +813,6 @@ def _parse_candidates_to_search_results(candidates: list) -> list[SearchResult]:
     return parse_candidates(candidates)
 
 
-def _rescore_candidates(
-    candidates: list[SearchResult], pending: PendingValidation
-) -> list[SearchResult]:
-    """
-    Recalcule les scores des candidats avec le MatcherService actuel.
-
-    Cela permet de beneficier des ameliorations du scoring (ex: normalisation
-    des accents) sans avoir a re-enrichir les fichiers.
-
-    Args:
-        candidates: Liste de SearchResult avec scores potentiellement obsoletes
-        pending: PendingValidation contenant les metadonnees du fichier
-
-    Returns:
-        Liste de SearchResult avec scores recalcules, triee par score decroissant
-    """
-    if not candidates or not pending.video_file:
-        return candidates
-
-    # Extraire les infos de recherche du fichier
-    query_title = ""
-    query_year = None
-    query_duration = None
-
-    # Extraire le titre et l'annee depuis le nom de fichier via guessit
-    filename = pending.video_file.filename
-    if filename:
-        try:
-            parsed = guessit(filename)
-            query_title = parsed.get("title", "")
-            query_year = parsed.get("year")
-        except Exception:
-            # Fallback: utiliser le nom sans extension
-            query_title = filename.rsplit(".", 1)[0] if "." in filename else filename
-
-    # Extraire la duree depuis media_info
-    if pending.video_file.media_info:
-        query_duration = pending.video_file.media_info.duration_seconds
-
-    if not query_title:
-        return candidates
-
-    # Detecter si c'est une serie (pattern SxxExx)
-    is_series = bool(re.search(r"[Ss]\d{1,2}[Ee]\d{1,2}", filename or ""))
-
-    # Recalculer les scores
-    matcher = MatcherService()
-    rescored = matcher.score_results(
-        results=candidates,
-        query_title=query_title,
-        query_year=query_year,
-        query_duration=query_duration,
-        is_series=is_series,
-    )
-
-    return rescored
-
-
 class ConflictResolution(str):
     """Options de resolution de conflit."""
 

@@ -24,8 +24,6 @@ from rich.progress import (
     TaskProgressColumn,
     TextColumn,
 )
-from rich.status import Status
-
 from src.services.integrity import RepairAction, RepairActionType
 
 if TYPE_CHECKING:
@@ -408,8 +406,6 @@ class InteractiveRepair:
 
     async def _propose_skip_series(self, link: Path, series_name: str, dry_run: bool) -> None:
         """Propose d'ignorer toute la série après 3 échecs."""
-        from src.adapters.cli.commands import _repair_links_async
-
         # Compter combien d'episodes restants pour cette serie
         # (ceci nécessite la liste complète des broken, que nous n'avons pas ici)
         # Pour simplifier, nous allons juste proposer d'ignorer

@@ -10,8 +10,6 @@ Responsabilites:
 - Filtrage des fichiers necessitant une validation manuelle
 """
 
-import asyncio
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from rich.console import Console
