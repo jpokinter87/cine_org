@@ -273,10 +273,23 @@ class PrefixGrouperService:
         # Fusionner les groupes dont les clés partagent un préfixe >= 4 chars
         merged = self._merge_groups(word_to_files)
 
+        # Collecter les noms d'ancêtres (strippés d'article) pour détecter la redondance
+        ancestor_words = set()
+        for parent in [directory] + list(directory.parents):
+            name = parent.name
+            if name:
+                stripped_name = strip_article(name).strip()
+                if stripped_name:
+                    first_word = stripped_name.split()[0].lower()
+                    ancestor_words.add(first_word)
+
         # Filtrer par seuil et construire les PrefixGroup
         groups: list[PrefixGroup] = []
         for prefix, files in sorted(merged.items()):
             if len(files) >= min_count:
+                # Exclure si le préfixe est redondant avec un répertoire ancêtre
+                if prefix.lower() in ancestor_words:
+                    continue
                 groups.append(PrefixGroup(
                     parent_dir=directory,
                     prefix=prefix,

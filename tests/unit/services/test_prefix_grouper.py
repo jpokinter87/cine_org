@@ -227,6 +227,33 @@ class TestPrefixGrouperAnalyze:
         # Pas de groupe car les fichiers sont déjà regroupés
         assert len(groups) == 0
 
+    def test_analyze_skips_title_directory(self, tmp_path: Path) -> None:
+        """Pas de regroupement dans un répertoire-titre (Resident Evil/, Le Seigneur des Anneaux/)."""
+        # Cas 1 : répertoire-titre simple
+        resident = tmp_path / "Pe-R" / "Resident Evil"
+        resident.mkdir(parents=True)
+        self._create_movie_file(resident, "Resident Evil  -  Damnation (2012) MULTi x264 1080p.mkv")
+        self._create_movie_file(resident, "Resident Evil  -  Degeneration (2008) MULTi x264 1080p.mkv")
+        self._create_movie_file(resident, "Resident Evil  -  Vendetta (2017) MULTi x264 1080p.mkv")
+
+        service = PrefixGrouperService()
+        groups = service.analyze(tmp_path, min_count=3)
+
+        assert len(groups) == 0
+
+    def test_analyze_skips_title_directory_with_article(self, tmp_path: Path) -> None:
+        """Pas de regroupement dans 'Le Seigneur des Anneaux/' (article strippé → Seigneur)."""
+        sda = tmp_path / "H-Z" / "S" / "Le Seigneur des Anneaux" / "1080p"
+        sda.mkdir(parents=True)
+        self._create_movie_file(sda, "Le Seigneur des anneaux  -  La Communauté de l'Anneau (2001) MULTi HEVC 1080p.mkv")
+        self._create_movie_file(sda, "Le Seigneur des anneaux  -  Le Retour du roi (2003) MULTi HEVC 1080p.mkv")
+        self._create_movie_file(sda, "Le Seigneur des anneaux  -  Les Deux Tours (2002) MULTi HEVC 1080p.mkv")
+
+        service = PrefixGrouperService()
+        groups = service.analyze(tmp_path, min_count=3)
+
+        assert len(groups) == 0
+
     def test_analyze_recurses_into_subdirs(self, tmp_path: Path) -> None:
         """L'analyse scan les sous-répertoires (plages) récursivement."""
         # Structure : genre/A-Ami/ contient des fichiers
