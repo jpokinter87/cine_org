@@ -9,6 +9,7 @@ Exemple : 4 fichiers "American *" dans A-Ami/ → création de A-Ami/American/
 
 import re
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -121,7 +122,11 @@ class PrefixGrouperService:
         return groups
 
     def execute(
-        self, groups: list[PrefixGroup], video_dir: Path, storage_dir: Path
+        self,
+        groups: list[PrefixGroup],
+        video_dir: Path,
+        storage_dir: Path,
+        progress_callback: "Callable[[str, int], None] | None" = None,
     ) -> int:
         """
         Exécute le regroupement : crée les répertoires et déplace les fichiers.
@@ -133,6 +138,7 @@ class PrefixGrouperService:
             groups: Liste des groupes à exécuter.
             video_dir: Répertoire racine des symlinks.
             storage_dir: Répertoire racine de stockage.
+            progress_callback: Callback(prefix, files_moved) appelé après chaque groupe.
 
         Returns:
             Nombre total de fichiers déplacés.
@@ -174,6 +180,9 @@ class PrefixGrouperService:
                 new_link.symlink_to(storage_dest)
 
                 total_moved += 1
+
+            if progress_callback:
+                progress_callback(group.prefix, len(group.files))
 
         return total_moved
 

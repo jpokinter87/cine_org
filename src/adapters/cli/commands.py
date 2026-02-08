@@ -1865,7 +1865,25 @@ async def _regroup_async(
         # Execution
         console.print("\n[bold cyan]Execution des regroupements[/bold cyan]\n")
 
-        moved = service.execute(groups, video_dir, storage_dir)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task(
+                "[cyan]Regroupement des fichiers...",
+                total=total_files,
+            )
+            completed = 0
+
+            def on_group_done(prefix: str, count: int) -> None:
+                nonlocal completed
+                completed += count
+                progress.update(task, completed=completed, description=f"[cyan]{prefix}/")
+
+            moved = service.execute(groups, video_dir, storage_dir, progress_callback=on_group_done)
 
         console.print(
             f"\n[bold green]Regroupement termine: {moved} fichier(s) deplace(s).[/bold green]"
