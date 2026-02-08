@@ -40,10 +40,14 @@ runner = CliRunner()
 
 @pytest.fixture
 def mock_container():
-    """Mock le Container pour les tests."""
-    with patch("src.adapters.cli.commands.Container") as mock:
+    """Mock le Container pour les tests.
+
+    Patche Container dans helpers.py car c'est la que le decorateur
+    @with_container() l'importe et l'instancie.
+    """
+    with patch("src.adapters.cli.helpers.Container") as mock_cls:
         container_instance = MagicMock()
-        mock.return_value = container_instance
+        mock_cls.return_value = container_instance
         container_instance.database.init = MagicMock()
         container_instance.config.return_value = MagicMock(
             storage_dir="/storage",
@@ -164,15 +168,10 @@ class TestRenderPendingPanel:
 
 
 class TestProcessCommand:
-    """Tests pour la commande process."""
 
     @pytest.mark.asyncio
     async def test_process_dry_run_no_files(self, mock_container):
-        """process --dry-run sans fichiers affiche message."""
-        # Setup scanner vide
-        scanner_mock = MagicMock()
-        scanner_mock.scan_downloads.return_value = iter([])
-        mock_container.scanner_service.return_value = scanner_mock
+        """process avec dry_run et aucun fichier."""
         mock_container.validation_service.return_value = MagicMock()
 
         with patch("src.adapters.cli.commands.console") as mock_console:
@@ -186,134 +185,79 @@ class TestProcessCommand:
     async def test_process_filters_movies_only(self, mock_container):
         """process --filter movies ignore les series."""
         from src.core.value_objects.parsed_info import MediaType
+        from src.services.workflow import WorkflowResult, WorkflowState
 
-        # Setup scanner avec film et serie
-        movie_result = MagicMock()
-        movie_result.detected_type = MediaType.MOVIE
-        movie_result.video_file.filename = "movie.mkv"
-        movie_result.video_file.path = Path("/downloads/movie.mkv")
-        movie_result.media_info = None
-
-        series_result = MagicMock()
-        series_result.detected_type = MediaType.SERIES
-        series_result.video_file.filename = "series.S01E01.mkv"
-
-        scanner_mock = MagicMock()
-        scanner_mock.scan_downloads.return_value = iter([movie_result, series_result])
-        mock_container.scanner_service.return_value = scanner_mock
-
-        validation_svc = MagicMock()
-        validation_svc.list_pending.return_value = []
-        validation_svc.list_validated.return_value = []
-        validation_svc.process_auto_validation = AsyncMock(
-            return_value=MagicMock(auto_validated=False)
+        # Mock WorkflowService directement car il est instancie dans _process_async
+        workflow_mock = MagicMock()
+        workflow_result = WorkflowResult(
+            success=True,
+            state=WorkflowState(
+                scan_results=[MagicMock(detected_type=MediaType.MOVIE)],
+                auto_validated_count=1,
+            ),
         )
-        mock_container.validation_service.return_value = validation_svc
+        workflow_mock.execute = AsyncMock(return_value=workflow_result)
 
-        video_file_repo = MagicMock()
-        video_file_repo.save.return_value = MagicMock(id="1")
-        mock_container.video_file_repository.return_value = video_file_repo
-
-        pending_repo = MagicMock()
-        mock_container.pending_validation_repository.return_value = pending_repo
-
-        with patch("src.adapters.cli.commands.console"):
+        with patch("src.adapters.cli.commands.console"), \
+             patch("src.services.workflow.WorkflowService", return_value=workflow_mock):
             await _process_async(MediaFilter.MOVIES, dry_run=True)
 
-        # Verifie qu'un seul fichier a ete traite (le film)
-        assert video_file_repo.save.call_count == 1
+        # Verifie que le workflow a ete execute avec le bon filtre
+        workflow_mock.execute.assert_called_once()
+        call_args = workflow_mock.execute.call_args
+        assert call_args[0][0].filter_type == "movies"  # WorkflowConfig.filter_type
 
     @pytest.mark.asyncio
     async def test_process_filters_series_only(self, mock_container):
         """process --filter series ignore les films."""
         from src.core.value_objects.parsed_info import MediaType
+        from src.services.workflow import WorkflowResult, WorkflowState
 
-        # Setup scanner avec film et serie
-        movie_result = MagicMock()
-        movie_result.detected_type = MediaType.MOVIE
-        movie_result.video_file.filename = "movie.mkv"
-
-        series_result = MagicMock()
-        series_result.detected_type = MediaType.SERIES
-        series_result.video_file.filename = "series.S01E01.mkv"
-        series_result.video_file.path = Path("/downloads/series.S01E01.mkv")
-        series_result.media_info = None
-
-        scanner_mock = MagicMock()
-        scanner_mock.scan_downloads.return_value = iter([movie_result, series_result])
-        mock_container.scanner_service.return_value = scanner_mock
-
-        validation_svc = MagicMock()
-        validation_svc.list_pending.return_value = []
-        validation_svc.list_validated.return_value = []
-        validation_svc.process_auto_validation = AsyncMock(
-            return_value=MagicMock(auto_validated=False)
+        # Mock WorkflowService directement car il est instancie dans _process_async
+        workflow_mock = MagicMock()
+        workflow_result = WorkflowResult(
+            success=True,
+            state=WorkflowState(
+                scan_results=[MagicMock(detected_type=MediaType.SERIES)],
+                auto_validated_count=1,
+            ),
         )
-        mock_container.validation_service.return_value = validation_svc
+        workflow_mock.execute = AsyncMock(return_value=workflow_result)
 
-        video_file_repo = MagicMock()
-        video_file_repo.save.return_value = MagicMock(id="1")
-        mock_container.video_file_repository.return_value = video_file_repo
-
-        pending_repo = MagicMock()
-        mock_container.pending_validation_repository.return_value = pending_repo
-
-        with patch("src.adapters.cli.commands.console"):
+        with patch("src.adapters.cli.commands.console"), \
+             patch("src.services.workflow.WorkflowService", return_value=workflow_mock):
             await _process_async(MediaFilter.SERIES, dry_run=True)
 
-        # Verifie qu'un seul fichier a ete traite (la serie)
-        assert video_file_repo.save.call_count == 1
+        # Verifie que le workflow a ete execute avec le bon filtre
+        workflow_mock.execute.assert_called_once()
+        call_args = workflow_mock.execute.call_args
+        assert call_args[0][0].filter_type == "series"  # WorkflowConfig.filter_type
 
     @pytest.mark.asyncio
     async def test_process_dry_run_no_transfer(self, mock_container):
         """process --dry-run ne lance pas le transfert."""
-        from src.core.value_objects.parsed_info import MediaType
+        from src.services.workflow import WorkflowResult, WorkflowState
 
-        # Setup scanner avec un film
-        movie_result = MagicMock()
-        movie_result.detected_type = MediaType.MOVIE
-        movie_result.video_file.filename = "movie.mkv"
-        movie_result.video_file.path = Path("/downloads/movie.mkv")
-        movie_result.media_info = None
-
-        scanner_mock = MagicMock()
-        scanner_mock.scan_downloads.return_value = iter([movie_result])
-        mock_container.scanner_service.return_value = scanner_mock
-
-        # Setup validation service avec fichier valide
-        validated_pending = MagicMock()
-        validated_pending.video_file = MagicMock()
-        validated_pending.video_file.path = Path("/downloads/movie.mkv")
-        validated_pending.candidates = []
-        validated_pending.selected_candidate_id = "1"
-
-        validation_svc = MagicMock()
-        validation_svc.list_pending.return_value = []
-        validation_svc.list_validated.return_value = [validated_pending]
-        validation_svc.process_auto_validation = AsyncMock(
-            return_value=MagicMock(auto_validated=True)
+        # Mock WorkflowService directement car il est instancie dans _process_async
+        workflow_mock = MagicMock()
+        workflow_result = WorkflowResult(
+            success=True,
+            state=WorkflowState(
+                scan_results=[MagicMock()],
+                auto_validated_count=1,
+            ),
         )
-        mock_container.validation_service.return_value = validation_svc
+        workflow_mock.execute = AsyncMock(return_value=workflow_result)
 
-        video_file_repo = MagicMock()
-        video_file_repo.save.return_value = MagicMock(id="1")
-        mock_container.video_file_repository.return_value = video_file_repo
-
-        pending_repo = MagicMock()
-        mock_container.pending_validation_repository.return_value = pending_repo
-
-        transferer_mock = MagicMock()
-        mock_container.transferer_service.return_value = transferer_mock
-
-        with patch("src.adapters.cli.commands.console") as mock_console:
+        with patch("src.adapters.cli.commands.console") as mock_console, \
+             patch("src.services.workflow.WorkflowService", return_value=workflow_mock):
             await _process_async(MediaFilter.ALL, dry_run=True)
 
-        # Verifie que le message dry-run a ete affiche
-        calls = [str(call) for call in mock_console.print.call_args_list]
-        assert any("dry-run" in str(call).lower() for call in calls)
+        # Verifie que le workflow a ete execute en mode dry-run
+        workflow_mock.execute.assert_called_once()
+        call_args = workflow_mock.execute.call_args
+        assert call_args[0][0].dry_run is True  # WorkflowConfig.dry_run
 
-        # Verifie que transferer n'a pas ete appele
-        assert not transferer_mock.transfer_file.called
 
 
 # ============================================================================

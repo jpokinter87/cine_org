@@ -1584,7 +1584,7 @@ async def _cleanup_async(
     from loguru import logger as loguru_logger
     from rich.status import Status
 
-    from src.adapters.cli.cleanup_helpers import CleanupCache, display_cleanup_report
+    from src.adapters.cli.cleanup_helpers import display_cleanup_report
     from src.services.cleanup import CleanupReport, CleanupResult
 
     container = Container()
@@ -1625,7 +1625,7 @@ async def _cleanup_async(
         # En mode --fix, tenter de charger le cache
         report = None
         if fix:
-            cached = CleanupCache.load(video_dir)
+            cached = load_report_cache(video_dir)
             if cached is not None:
                 console.print(
                     "[bold cyan]Utilisation de l'analyse en cache[/bold cyan]\n"
@@ -1642,7 +1642,7 @@ async def _cleanup_async(
 
         if not fix:
             # Sauvegarder le cache pour un futur --fix
-            CleanupCache.save(report)
+            save_report_cache(report)
 
         if not report.has_issues:
             console.print("[green]Aucun probleme detecte.[/green]")
