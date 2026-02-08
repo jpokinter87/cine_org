@@ -613,7 +613,6 @@ class WorkflowService:
         Utilise validation_loop depuis src.adapters.cli.validation.
         """
         from src.adapters.cli.validation import validation_loop
-        from src.adapters.cli.commands import _get_series_folder
 
         remaining = [
             p for p in self._validation_service.list_pending()
@@ -666,12 +665,14 @@ class WorkflowService:
     async def _auto_validate_series_episodes(
         self, pend, candidate, remaining: list, processed_ids: set, state: WorkflowState
     ) -> None:
-        """Auto-valide les autres épisodes de la même série."""
-        from src.adapters.cli.commands import _get_series_folder
+        """Auto-valide les autres épisodes de la même série.
 
-        current_folder = _get_series_folder(pend)
-        if not current_folder:
-            return
+        Vérifie que chaque fichier a le même candidat TVDB (même ID)
+        dans sa liste de candidats avant de l'auto-valider.
+        """
+        from src.utils.helpers import parse_candidates
+
+        candidate_id = candidate.id
 
         auto_validated_episodes = 0
 
@@ -679,9 +680,11 @@ class WorkflowService:
             if other.id == pend.id or (other.id and other.id in processed_ids):
                 continue
 
-            other_folder = _get_series_folder(other)
-            if other_folder == current_folder:
-                await self._validation_service.validate_candidate(other, candidate)
+            # Vérifier que le candidat sélectionné est dans les candidats de l'autre fichier
+            other_candidates = parse_candidates(other.candidates)
+            matching = [c for c in other_candidates if c.id == candidate_id]
+            if matching:
+                await self._validation_service.validate_candidate(other, matching[0])
                 processed_ids.add(other.id)
                 state.manual_validated_count += 1
                 auto_validated_episodes += 1
