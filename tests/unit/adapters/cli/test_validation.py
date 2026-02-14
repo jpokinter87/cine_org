@@ -543,8 +543,8 @@ class TestValidationLoop:
         mock_service = MagicMock()
 
         # Mock Prompt.ask pour retourner "1" puis confirmer
-        with patch("src.adapters.cli.validation.Prompt.ask") as mock_ask, \
-             patch("src.adapters.cli.validation.Confirm.ask") as mock_confirm:
+        with patch("src.adapters.cli.validation.interactive_loop.Prompt.ask") as mock_ask, \
+             patch("src.adapters.cli.validation.interactive_loop.Confirm.ask") as mock_confirm:
 
             mock_ask.return_value = "1"
             mock_confirm.return_value = True
@@ -560,7 +560,7 @@ class TestValidationLoop:
         """Commande 's' retourne None (skip)."""
         mock_service = MagicMock()
 
-        with patch("src.adapters.cli.validation.Prompt.ask") as mock_ask:
+        with patch("src.adapters.cli.validation.interactive_loop.Prompt.ask") as mock_ask:
             mock_ask.return_value = "s"
 
             result = await validation_loop(pending_movie, mock_service)
@@ -572,7 +572,7 @@ class TestValidationLoop:
         """Commande 't' retourne 'trash'."""
         mock_service = MagicMock()
 
-        with patch("src.adapters.cli.validation.Prompt.ask") as mock_ask:
+        with patch("src.adapters.cli.validation.interactive_loop.Prompt.ask") as mock_ask:
             mock_ask.return_value = "t"
 
             result = await validation_loop(pending_movie, mock_service)
@@ -584,7 +584,7 @@ class TestValidationLoop:
         """Commande 'q' retourne 'quit'."""
         mock_service = MagicMock()
 
-        with patch("src.adapters.cli.validation.Prompt.ask") as mock_ask:
+        with patch("src.adapters.cli.validation.interactive_loop.Prompt.ask") as mock_ask:
             mock_ask.return_value = "q"
 
             result = await validation_loop(pending_movie, mock_service)
@@ -597,8 +597,8 @@ class TestValidationLoop:
         mock_service = MagicMock()
         mock_service.search_manual = AsyncMock(return_value=[])
 
-        with patch("src.adapters.cli.validation.Prompt.ask") as mock_ask, \
-             patch("src.adapters.cli.validation.determine_is_series") as mock_determine:
+        with patch("src.adapters.cli.validation.interactive_loop.Prompt.ask") as mock_ask, \
+             patch("src.adapters.cli.validation.interactive_loop.determine_is_series") as mock_determine:
 
             # Simuler: "r" -> recherche "test" -> "q" pour quitter
             mock_ask.side_effect = ["r", "test query", "q"]
@@ -631,7 +631,7 @@ class TestValidationLoop:
         )
         mock_service = MagicMock()
 
-        with patch("src.adapters.cli.validation.Prompt.ask") as mock_ask:
+        with patch("src.adapters.cli.validation.interactive_loop.Prompt.ask") as mock_ask:
             # "n" pour page suivante, puis "q" pour quitter
             mock_ask.side_effect = ["n", "q"]
 
@@ -644,8 +644,8 @@ class TestValidationLoop:
         """Refuser la confirmation ne valide pas."""
         mock_service = MagicMock()
 
-        with patch("src.adapters.cli.validation.Prompt.ask") as mock_ask, \
-             patch("src.adapters.cli.validation.Confirm.ask") as mock_confirm:
+        with patch("src.adapters.cli.validation.interactive_loop.Prompt.ask") as mock_ask, \
+             patch("src.adapters.cli.validation.interactive_loop.Confirm.ask") as mock_confirm:
 
             # Selectionner 1, refuser, puis quitter
             mock_ask.side_effect = ["1", "q"]
@@ -666,8 +666,8 @@ class TestValidationLoop:
         mock_details.genres = ("Action", "Science-Fiction")
         mock_service.search_by_external_id = AsyncMock(return_value=mock_details)
 
-        with patch("src.adapters.cli.validation.Prompt.ask") as mock_ask, \
-             patch("src.adapters.cli.validation.Confirm.ask") as mock_confirm:
+        with patch("src.adapters.cli.validation.interactive_loop.Prompt.ask") as mock_ask, \
+             patch("src.adapters.cli.validation.interactive_loop.Confirm.ask") as mock_confirm:
 
             # "i" -> ID "12345" -> source "tmdb" -> confirmer
             mock_ask.side_effect = ["i", "12345", "tmdb"]
@@ -694,8 +694,8 @@ class TestValidationLoop:
         mock_details.genres = ()
         mock_service.search_by_external_id = AsyncMock(return_value=mock_details)
 
-        with patch("src.adapters.cli.validation.Prompt.ask") as mock_ask, \
-             patch("src.adapters.cli.validation.Confirm.ask") as mock_confirm:
+        with patch("src.adapters.cli.validation.interactive_loop.Prompt.ask") as mock_ask, \
+             patch("src.adapters.cli.validation.interactive_loop.Confirm.ask") as mock_confirm:
 
             # "i" -> ID IMDB -> confirmer (pas de demande de source)
             mock_ask.side_effect = ["i", "tt1234567"]
