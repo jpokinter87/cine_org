@@ -146,18 +146,31 @@ def calculate_movie_score(
     return round(total, 2)
 
 
-def calculate_series_score(query_title: str, candidate_title: str) -> float:
+def calculate_series_score(
+    query_title: str,
+    candidate_title: str,
+    candidate_original_title: str | None = None,
+) -> float:
     """
     Calculate series match score using 100% title similarity.
 
+    Score le titre sur les deux versions (localisee et originale) et garde le meilleur,
+    comme pour les films.
+
     Args:
         query_title: Title from parsed filename
-        candidate_title: Title from API result
+        candidate_title: Localized title from API result
+        candidate_original_title: Original title from API (for bilingual matching)
 
     Returns:
         Match score from 0.0 to 100.0, rounded to 2 decimals
     """
     score = _calculate_title_score(query_title, candidate_title)
+
+    if candidate_original_title:
+        original_score = _calculate_title_score(query_title, candidate_original_title)
+        score = max(score, original_score)
+
     return round(score, 2)
 
 
@@ -199,7 +212,9 @@ class MatcherService:
         scored_results = []
         for result in results:
             if is_series:
-                score = calculate_series_score(query_title, result.title)
+                score = calculate_series_score(
+                    query_title, result.title, result.original_title
+                )
             else:
                 score = calculate_movie_score(
                     query_title=query_title,

@@ -343,6 +343,35 @@ class TestSeriesScoring:
         # token_sort_ratio will give high score for subset
         assert score >= 70.0
 
+    def test_series_score_bilingual_original_title(self):
+        """Series scoring should use original_title for bilingual matching."""
+        # Titre FR ne correspond pas, mais titre EN (original) oui
+        score = calculate_series_score(
+            query_title="The Night Manager",
+            candidate_title="L'Espion aux deux visages",
+            candidate_original_title="The Night Manager",
+        )
+        assert score == 100.0
+
+    def test_series_score_bilingual_keeps_best(self):
+        """Series scoring should keep the best score between title and original_title."""
+        # Le titre FR correspond deja bien
+        score = calculate_series_score(
+            query_title="Breaking Bad",
+            candidate_title="Breaking Bad",
+            candidate_original_title="Some Other Title",
+        )
+        assert score == 100.0
+
+    def test_series_score_bilingual_none_original(self):
+        """Series scoring should work when original_title is None."""
+        score = calculate_series_score(
+            query_title="Breaking Bad",
+            candidate_title="Breaking Bad",
+            candidate_original_title=None,
+        )
+        assert score == 100.0
+
 
 class TestScoreResults:
     """Tests for score_results method."""

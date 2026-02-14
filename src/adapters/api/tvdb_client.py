@@ -164,6 +164,22 @@ class TVDBClient(IMediaAPIClient):
 
         data = response.json()
 
+        # Aussi rechercher en anglais pour obtenir le titre original
+        en_names: dict[str, str] = {}
+        try:
+            en_response = await request_with_retry(
+                client,
+                "GET",
+                "/search/series",
+                params=params,
+                headers=self._get_auth_headers(language="en"),
+            )
+            en_data = en_response.json()
+            for item in en_data.get("data", []):
+                en_names[str(item["id"])] = item.get("seriesName", "")
+        except Exception:
+            pass  # Si la requete EN echoue, on continue sans
+
         # API v3: resultats dans "data" array
         results = []
         for item in data.get("data", []):
@@ -175,11 +191,20 @@ class TVDBClient(IMediaAPIClient):
             if year and item_year and item_year != year:
                 continue
 
+            series_id = str(item["id"])
+            fr_title = item.get("seriesName", "")
+            # Titre anglais depuis la recherche EN, sinon fallback sur aliases
+            en_title = en_names.get(series_id)
+            if not en_title or en_title == fr_title:
+                # Pas de titre EN different, essayer les aliases
+                aliases = item.get("aliases", [])
+                en_title = aliases[0] if aliases else None
+
             results.append(
                 SearchResult(
-                    id=str(item["id"]),
-                    title=item.get("seriesName", ""),
-                    original_title=item.get("aliases", [None])[0] if item.get("aliases") else None,
+                    id=series_id,
+                    title=fr_title,
+                    original_title=en_title,
                     year=item_year,
                     source="tvdb",
                 )
