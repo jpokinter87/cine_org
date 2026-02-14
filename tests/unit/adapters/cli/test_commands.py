@@ -29,6 +29,10 @@ from src.adapters.cli.commands import (
 from src.core.entities.video import PendingValidation, ValidationStatus, VideoFile
 from src.core.ports.api_clients import SearchResult
 
+# Chemins de patch pour les sous-modules refactores
+_WORKFLOW = "src.adapters.cli.commands.workflow_commands"
+_VALIDATE = "src.adapters.cli.commands.validate_commands"
+_IMPORT = "src.adapters.cli.commands.import_commands"
 
 runner = CliRunner()
 
@@ -174,7 +178,7 @@ class TestProcessCommand:
         """process avec dry_run et aucun fichier."""
         mock_container.validation_service.return_value = MagicMock()
 
-        with patch("src.adapters.cli.commands.console") as mock_console:
+        with patch(f"{_WORKFLOW}.console") as mock_console:
             await _process_async(MediaFilter.ALL, dry_run=True)
 
         # Verifie qu'un message a ete affiche
@@ -198,7 +202,7 @@ class TestProcessCommand:
         )
         workflow_mock.execute = AsyncMock(return_value=workflow_result)
 
-        with patch("src.adapters.cli.commands.console"), \
+        with patch(f"{_WORKFLOW}.console"), \
              patch("src.services.workflow.WorkflowService", return_value=workflow_mock):
             await _process_async(MediaFilter.MOVIES, dry_run=True)
 
@@ -224,7 +228,7 @@ class TestProcessCommand:
         )
         workflow_mock.execute = AsyncMock(return_value=workflow_result)
 
-        with patch("src.adapters.cli.commands.console"), \
+        with patch(f"{_WORKFLOW}.console"), \
              patch("src.services.workflow.WorkflowService", return_value=workflow_mock):
             await _process_async(MediaFilter.SERIES, dry_run=True)
 
@@ -249,7 +253,7 @@ class TestProcessCommand:
         )
         workflow_mock.execute = AsyncMock(return_value=workflow_result)
 
-        with patch("src.adapters.cli.commands.console") as mock_console, \
+        with patch(f"{_WORKFLOW}.console") as mock_console, \
              patch("src.services.workflow.WorkflowService", return_value=workflow_mock):
             await _process_async(MediaFilter.ALL, dry_run=True)
 
@@ -275,7 +279,7 @@ class TestPendingCommand:
         validation_svc.list_pending.return_value = []
         mock_container.validation_service.return_value = validation_svc
 
-        with patch("src.adapters.cli.commands.console") as mock_console:
+        with patch(f"{_WORKFLOW}.console") as mock_console:
             # typer.Exit lance une exception click.exceptions.Exit
             from click.exceptions import Exit
             with pytest.raises(Exit) as exc_info:
@@ -297,7 +301,7 @@ class TestPendingCommand:
 
         printed_panels = []
 
-        with patch("src.adapters.cli.commands.console") as mock_console:
+        with patch(f"{_WORKFLOW}.console") as mock_console:
             def capture_print(*args, **kwargs):
                 if args:
                     printed_panels.append(str(args[0]))
@@ -342,7 +346,7 @@ class TestPendingCommand:
 
         panel_count = 0
 
-        with patch("src.adapters.cli.commands.console") as mock_console:
+        with patch(f"{_WORKFLOW}.console") as mock_console:
             def count_panels(*args, **kwargs):
                 nonlocal panel_count
                 from rich.panel import Panel
@@ -378,7 +382,7 @@ class TestPendingCommand:
 
         panel_count = 0
 
-        with patch("src.adapters.cli.commands.console") as mock_console:
+        with patch(f"{_WORKFLOW}.console") as mock_console:
             def count_panels(*args, **kwargs):
                 nonlocal panel_count
                 from rich.panel import Panel
@@ -406,7 +410,7 @@ class TestValidateFileCommand:
         validation_svc.get_pending_by_id.return_value = None
         mock_container.validation_service.return_value = validation_svc
 
-        with patch("src.adapters.cli.commands.console") as mock_console:
+        with patch(f"{_VALIDATE}.console") as mock_console:
             # typer.Exit lance une exception click.exceptions.Exit
             from click.exceptions import Exit
             with pytest.raises(Exit) as exc_info:
@@ -423,9 +427,9 @@ class TestValidateFileCommand:
         validation_svc.get_pending_by_id.return_value = pending_movie
         mock_container.validation_service.return_value = validation_svc
 
-        with patch("src.adapters.cli.commands.validation_loop") as mock_loop:
+        with patch(f"{_VALIDATE}.validation_loop") as mock_loop:
             mock_loop.return_value = "quit"
-            with patch("src.adapters.cli.commands.console"):
+            with patch(f"{_VALIDATE}.console"):
                 await _validate_file_async("1")
 
         mock_loop.assert_called_once()
@@ -437,9 +441,9 @@ class TestValidateFileCommand:
         validation_svc.get_pending_by_id.return_value = pending_movie
         mock_container.validation_service.return_value = validation_svc
 
-        with patch("src.adapters.cli.commands.validation_loop") as mock_loop:
+        with patch(f"{_VALIDATE}.validation_loop") as mock_loop:
             mock_loop.return_value = "trash"
-            with patch("src.adapters.cli.commands.console"):
+            with patch(f"{_VALIDATE}.console"):
                 await _validate_file_async("1")
 
         validation_svc.reject_pending.assert_called_once_with(pending_movie)
@@ -451,9 +455,9 @@ class TestValidateFileCommand:
         validation_svc.get_pending_by_id.return_value = pending_movie
         mock_container.validation_service.return_value = validation_svc
 
-        with patch("src.adapters.cli.commands.validation_loop") as mock_loop:
+        with patch(f"{_VALIDATE}.validation_loop") as mock_loop:
             mock_loop.return_value = None  # Skip
-            with patch("src.adapters.cli.commands.console") as mock_console:
+            with patch(f"{_VALIDATE}.console") as mock_console:
                 await _validate_file_async("1")
 
         calls = [str(call) for call in mock_console.print.call_args_list]
@@ -469,9 +473,9 @@ class TestValidateFileCommand:
         validation_svc.validate_candidate = AsyncMock(return_value=mock_details)
         mock_container.validation_service.return_value = validation_svc
 
-        with patch("src.adapters.cli.commands.validation_loop") as mock_loop:
+        with patch(f"{_VALIDATE}.validation_loop") as mock_loop:
             mock_loop.return_value = "1"  # ID du candidat
-            with patch("src.adapters.cli.commands.console") as mock_console:
+            with patch(f"{_VALIDATE}.console") as mock_console:
                 await _validate_file_async("1")
 
         validation_svc.validate_candidate.assert_called_once()
@@ -497,9 +501,9 @@ class TestValidateFileCommand:
         validation_svc.get_pending_by_id.return_value = pend
         mock_container.validation_service.return_value = validation_svc
 
-        with patch("src.adapters.cli.commands.validation_loop") as mock_loop:
+        with patch(f"{_VALIDATE}.validation_loop") as mock_loop:
             mock_loop.return_value = "quit"
-            with patch("src.adapters.cli.commands.console") as mock_console:
+            with patch(f"{_VALIDATE}.console") as mock_console:
                 await _validate_file_async("1")
 
         calls = [str(call) for call in mock_console.print.call_args_list]
@@ -593,7 +597,7 @@ class TestImportCommand:
         importer_mock.scan_library.return_value = iter([])
         mock_container.importer_service.return_value = importer_mock
 
-        with patch("src.adapters.cli.commands.console") as mock_console:
+        with patch(f"{_IMPORT}.console") as mock_console:
             await _import_library_async(storage_dir, dry_run=True, from_symlinks=False)
 
         calls = [str(call) for call in mock_console.print.call_args_list]
@@ -615,7 +619,7 @@ class TestImportCommand:
         ])
         mock_container.importer_service.return_value = importer_mock
 
-        with patch("src.adapters.cli.commands.console") as mock_console:
+        with patch(f"{_IMPORT}.console") as mock_console:
             await _import_library_async(storage_dir, dry_run=False, from_symlinks=False)
 
         calls = [str(call) for call in mock_console.print.call_args_list]
@@ -637,7 +641,7 @@ class TestImportCommand:
         ])
         mock_container.importer_service.return_value = importer_mock
 
-        with patch("src.adapters.cli.commands.console") as mock_console:
+        with patch(f"{_IMPORT}.console") as mock_console:
             await _import_library_async(storage_dir, dry_run=False, from_symlinks=False)
 
         calls = [str(call) for call in mock_console.print.call_args_list]
@@ -663,7 +667,7 @@ class TestImportCommand:
         ])
         mock_container.importer_service.return_value = importer_mock
 
-        with patch("src.adapters.cli.commands.console") as mock_console:
+        with patch(f"{_IMPORT}.console") as mock_console:
             await _import_library_async(storage_dir, dry_run=False, from_symlinks=False)
 
         calls = [str(call) for call in mock_console.print.call_args_list]
@@ -677,7 +681,7 @@ class TestImportCommand:
         """import avec repertoire inexistant retourne erreur."""
         storage_dir = Path("/nonexistent/path/that/does/not/exist")
 
-        with patch("src.adapters.cli.commands.console") as mock_console:
+        with patch(f"{_IMPORT}.console") as mock_console:
             from click.exceptions import Exit
             with pytest.raises(Exit) as exc_info:
                 await _import_library_async(storage_dir, dry_run=False, from_symlinks=False)
@@ -702,7 +706,7 @@ class TestImportCommand:
         importer_mock.scan_library.return_value = iter([])
         mock_container.importer_service.return_value = importer_mock
 
-        with patch("src.adapters.cli.commands.console"):
+        with patch(f"{_IMPORT}.console"):
             await _import_library_async(None, dry_run=False, from_symlinks=False)
 
         # Verifier que scan_library a ete appele avec le bon path

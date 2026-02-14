@@ -1020,7 +1020,7 @@ class TestCleanupCLI:
         runner = CliRunner()
 
         # Mock le container et ses dependances
-        with patch("src.adapters.cli.commands.Container") as MockContainer:
+        with patch("src.adapters.cli.commands.maintenance_commands.Container") as MockContainer:
             mock_container = MagicMock()
             MockContainer.return_value = mock_container
 
@@ -1059,7 +1059,7 @@ class TestCleanupCLI:
 
         runner = CliRunner()
 
-        with patch("src.adapters.cli.commands.Container") as MockContainer:
+        with patch("src.adapters.cli.commands.maintenance_commands.Container") as MockContainer:
             mock_container = MagicMock()
             MockContainer.return_value = mock_container
 
@@ -1425,8 +1425,8 @@ class TestCleanupCLICache:
 
         runner = CliRunner()
 
-        with patch("src.adapters.cli.commands.Container") as MockContainer, \
-             patch("src.adapters.cli.commands.save_report_cache") as mock_save:
+        with patch("src.adapters.cli.commands.maintenance_commands.Container") as MockContainer, \
+             patch("src.adapters.cli.commands.maintenance_commands.save_report_cache") as mock_save:
             mock_container = MagicMock()
             MockContainer.return_value = mock_container
 
@@ -1469,9 +1469,9 @@ class TestCleanupCLICache:
             empty_dirs=[Path(tmp_path / "video" / "Films" / "Vide")],
         )
 
-        with patch("src.adapters.cli.commands.Container") as MockContainer, \
-             patch("src.adapters.cli.commands.load_report_cache") as mock_load, \
-             patch("src.adapters.cli.commands.save_report_cache"):
+        with patch("src.adapters.cli.commands.maintenance_commands.Container") as MockContainer, \
+             patch("src.adapters.cli.commands.maintenance_commands.load_report_cache") as mock_load, \
+             patch("src.adapters.cli.commands.maintenance_commands.save_report_cache"):
             mock_load.return_value = cached_report
 
             mock_container = MagicMock()
@@ -1508,9 +1508,9 @@ class TestCleanupCLICache:
 
         runner = CliRunner()
 
-        with patch("src.adapters.cli.commands.Container") as MockContainer, \
-             patch("src.adapters.cli.commands.load_report_cache") as mock_load, \
-             patch("src.adapters.cli.commands.save_report_cache"):
+        with patch("src.adapters.cli.commands.maintenance_commands.Container") as MockContainer, \
+             patch("src.adapters.cli.commands.maintenance_commands.load_report_cache") as mock_load, \
+             patch("src.adapters.cli.commands.maintenance_commands.save_report_cache"):
             mock_load.return_value = None  # Pas de cache
 
             mock_container = MagicMock()
