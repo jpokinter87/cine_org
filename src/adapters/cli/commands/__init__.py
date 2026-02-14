@@ -42,14 +42,22 @@ from src.adapters.cli.commands.imdb_commands import (
     _imdb_sync_async,
     _imdb_stats_async,
 )
-from src.adapters.cli.commands.maintenance_commands import (
+from src.adapters.cli.commands.repair_command import (
     repair_links,
-    consolidate,
-    check,
-    cleanup,
-    regroup,
     _repair_links_async,
+)
+from src.adapters.cli.commands.consolidate_command import (
+    consolidate,
+)
+from src.adapters.cli.commands.check_command import (
+    check,
+)
+from src.adapters.cli.commands.cleanup_command import (
+    cleanup,
     _cleanup_async,
+)
+from src.adapters.cli.commands.regroup_command import (
+    regroup,
     _regroup_async,
 )
 
