@@ -838,6 +838,8 @@ src/
 
 Chaque package volumineux est découpé en modules cohérents avec un `__init__.py` qui réexporte les symboles publics pour préserver la compatibilité des imports.
 
+**Imports** : `RepairService` s'importe depuis `src.services.repair`, et `IntegrityChecker` depuis `src.services.integrity`. Les types partagés (`RepairAction`, `RepairActionType`) restent dans `integrity`.
+
 ## Dépannage
 
 ### Warning "Ignoring unsupported Python request"
