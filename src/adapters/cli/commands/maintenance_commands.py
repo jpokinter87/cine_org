@@ -80,7 +80,7 @@ async def _repair_links_async(
     from loguru import logger as loguru_logger
     from rich.status import Status
 
-    from src.adapters.cli.repair_helpers import (
+    from src.adapters.cli.repair import (
         AutoRepair,
         InteractiveRepair,
         RepairSummary,

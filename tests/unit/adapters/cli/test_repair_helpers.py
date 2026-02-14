@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.adapters.cli.repair_helpers import InteractiveRepair, extract_series_name
+from src.adapters.cli.repair import InteractiveRepair, extract_series_name
 
 
 # ============================================================================
