@@ -21,6 +21,9 @@ from tests.fixtures.tvdb_responses import (
     TVDB_LOGIN_RESPONSE,
     TVDB_SEARCH_EMPTY_RESPONSE,
     TVDB_SEARCH_RESPONSE,
+    TVDB_SEASON_EPISODES_RESPONSE,
+    TVDB_SEASON_EPISODES_PAGE1_RESPONSE,
+    TVDB_SEASON_EPISODES_PAGE2_RESPONSE,
     TVDB_SERIES_DETAILS_RESPONSE,
     TVDB_SERIES_NOT_FOUND_RESPONSE,
 )
@@ -603,5 +606,130 @@ class TestTVDBClientRateLimiting:
         try:
             with pytest.raises(RateLimitError):
                 await client.search("Breaking Bad")
+        finally:
+            await client.close()
+
+
+class TestTVDBClientGetSeasonEpisodeCount:
+    """Tests pour get_season_episode_count."""
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_returns_episode_count_for_season(
+        self, mock_cache: MagicMock, api_key: str
+    ) -> None:
+        """Retourne le nombre d'episodes d'une saison (page unique)."""
+        from src.adapters.api.tvdb_client import TVDBClient
+
+        respx.post("https://api.thetvdb.com/login").mock(
+            return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
+        )
+        respx.get("https://api.thetvdb.com/series/81189/episodes/query").mock(
+            return_value=httpx.Response(200, json=TVDB_SEASON_EPISODES_RESPONSE)
+        )
+
+        client = TVDBClient(api_key=api_key, cache=mock_cache)
+        try:
+            count = await client.get_season_episode_count("81189", 1)
+            assert count == 13
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_returns_none_on_404_season(
+        self, mock_cache: MagicMock, api_key: str
+    ) -> None:
+        """Retourne None quand la saison n'existe pas (404)."""
+        from src.adapters.api.tvdb_client import TVDBClient
+
+        respx.post("https://api.thetvdb.com/login").mock(
+            return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
+        )
+        respx.get("https://api.thetvdb.com/series/81189/episodes/query").mock(
+            return_value=httpx.Response(404, json={"Error": "Resource not found"})
+        )
+
+        client = TVDBClient(api_key=api_key, cache=mock_cache)
+        try:
+            count = await client.get_season_episode_count("81189", 99)
+            assert count is None
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_handles_pagination(
+        self, mock_cache: MagicMock, api_key: str
+    ) -> None:
+        """Gere la pagination TVDB quand il y a plus de 100 episodes."""
+        from src.adapters.api.tvdb_client import TVDBClient
+
+        respx.post("https://api.thetvdb.com/login").mock(
+            return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
+        )
+
+        call_count = 0
+
+        def episodes_response(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            page = request.url.params.get("page", "1")
+            if page == "1" or call_count == 1:
+                return httpx.Response(200, json=TVDB_SEASON_EPISODES_PAGE1_RESPONSE)
+            return httpx.Response(200, json=TVDB_SEASON_EPISODES_PAGE2_RESPONSE)
+
+        respx.get("https://api.thetvdb.com/series/81189/episodes/query").mock(
+            side_effect=episodes_response
+        )
+
+        client = TVDBClient(api_key=api_key, cache=mock_cache)
+        try:
+            count = await client.get_season_episode_count("81189", 5)
+            # 100 (page 1) + 20 (page 2) = 120
+            assert count == 120
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_caches_result_with_details_ttl(
+        self, mock_cache: MagicMock, api_key: str
+    ) -> None:
+        """Le resultat est cache avec set_details (TTL 7 jours)."""
+        from src.adapters.api.tvdb_client import TVDBClient
+
+        respx.post("https://api.thetvdb.com/login").mock(
+            return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
+        )
+        respx.get("https://api.thetvdb.com/series/81189/episodes/query").mock(
+            return_value=httpx.Response(200, json=TVDB_SEASON_EPISODES_RESPONSE)
+        )
+
+        client = TVDBClient(api_key=api_key, cache=mock_cache)
+        try:
+            await client.get_season_episode_count("81189", 1)
+
+            mock_cache.set_details.assert_called_once()
+            call_args = mock_cache.set_details.call_args
+            assert call_args[0][0] == "tvdb:season_count:81189:S01"
+            assert call_args[0][1] == 13
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_returns_cached_count(
+        self, mock_cache: MagicMock, api_key: str
+    ) -> None:
+        """Retourne le count depuis le cache sans appel API."""
+        from src.adapters.api.tvdb_client import TVDBClient
+
+        mock_cache.get = AsyncMock(return_value=13)
+
+        client = TVDBClient(api_key=api_key, cache=mock_cache)
+        try:
+            count = await client.get_season_episode_count("81189", 1)
+            assert count == 13
+            mock_cache.get.assert_called_once_with("tvdb:season_count:81189:S01")
         finally:
             await client.close()

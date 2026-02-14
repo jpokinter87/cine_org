@@ -76,6 +76,48 @@ TVDB_SERIES_DETAILS_RESPONSE = {
     }
 }
 
+# GET /series/81189/episodes/query?airedSeason=1 response (13 episodes, single page)
+TVDB_SEASON_EPISODES_RESPONSE = {
+    "links": {
+        "first": 1,
+        "last": 1,
+        "next": None,
+        "prev": None,
+    },
+    "data": [
+        {"id": i, "airedSeason": 1, "airedEpisodeNumber": i, "episodeName": f"Episode {i}"}
+        for i in range(1, 14)  # 13 episodes
+    ],
+}
+
+# GET /series/81189/episodes/query?airedSeason=5 response (page 1 sur 2, 100 episodes)
+TVDB_SEASON_EPISODES_PAGE1_RESPONSE = {
+    "links": {
+        "first": 1,
+        "last": 2,
+        "next": 2,
+        "prev": None,
+    },
+    "data": [
+        {"id": i, "airedSeason": 5, "airedEpisodeNumber": i, "episodeName": f"Episode {i}"}
+        for i in range(1, 101)  # 100 episodes (page 1)
+    ],
+}
+
+# GET /series/81189/episodes/query?airedSeason=5&page=2 response (page 2 sur 2, 20 episodes)
+TVDB_SEASON_EPISODES_PAGE2_RESPONSE = {
+    "links": {
+        "first": 1,
+        "last": 2,
+        "next": None,
+        "prev": 1,
+    },
+    "data": [
+        {"id": 100 + i, "airedSeason": 5, "airedEpisodeNumber": 100 + i, "episodeName": f"Episode {100 + i}"}
+        for i in range(1, 21)  # 20 episodes (page 2)
+    ],
+}
+
 # GET /series/99999999 response (not found - 404)
 TVDB_SERIES_NOT_FOUND_RESPONSE = {
     "Error": "Resource not found"

@@ -1,8 +1,9 @@
 """
-Tests unitaires pour WorkflowService._auto_validate_series_episodes.
+Tests unitaires pour WorkflowService.
 
-Vérifie que l'auto-validation des épisodes ne valide que les fichiers
-ayant le même candidat TVDB dans leur liste de candidats.
+Vérifie :
+- _auto_validate_series_episodes : auto-validation par candidat TVDB
+- _filter_by_episode_count : filtrage des candidats par nombre d'épisodes
 """
 
 from dataclasses import dataclass, field
@@ -183,3 +184,202 @@ class TestAutoValidateSeriesEpisodes:
         # Aucun autre fichier ne doit être auto-validé
         assert len(processed_ids) == 0
         assert state.manual_validated_count == 0
+
+
+class TestFilterByEpisodeCount:
+    """Tests pour _filter_by_episode_count."""
+
+    @pytest.fixture
+    def workflow(self) -> WorkflowService:
+        """WorkflowService avec tvdb_client mocké."""
+        container = MagicMock()
+        service = WorkflowService(container)
+        service._tvdb_client = MagicMock()
+        service._tvdb_client.get_season_episode_count = AsyncMock()
+        service._console = MagicMock()
+        return service
+
+    @pytest.mark.asyncio
+    async def test_eliminates_candidate_when_episode_exceeds_count(
+        self, workflow: WorkflowService
+    ):
+        """Un candidat avec episode > count est elimine."""
+        # Fichier S03E22 mais la serie n'a que 10 episodes en S03
+        workflow._tvdb_client.get_season_episode_count.return_value = 10
+
+        candidates = [
+            SearchResult(id="111", title="Serie A", score=67.0, source="tvdb"),
+        ]
+
+        result = await workflow._filter_by_episode_count(candidates, season=3, episode=22)
+
+        assert len(result) == 0
+
+    @pytest.mark.asyncio
+    async def test_keeps_candidate_when_episode_within_count(
+        self, workflow: WorkflowService
+    ):
+        """Un candidat avec episode <= count est conserve."""
+        workflow._tvdb_client.get_season_episode_count.return_value = 22
+
+        candidates = [
+            SearchResult(id="111", title="Serie A", score=67.0, source="tvdb"),
+        ]
+
+        result = await workflow._filter_by_episode_count(candidates, season=3, episode=22)
+
+        assert len(result) == 1
+        assert result[0].id == "111"
+
+    @pytest.mark.asyncio
+    async def test_eliminates_candidate_when_season_not_found(
+        self, workflow: WorkflowService
+    ):
+        """Un candidat dont la saison n'existe pas (None) est elimine."""
+        workflow._tvdb_client.get_season_episode_count.return_value = None
+
+        candidates = [
+            SearchResult(id="111", title="Serie A", score=67.0, source="tvdb"),
+        ]
+
+        result = await workflow._filter_by_episode_count(candidates, season=99, episode=1)
+
+        assert len(result) == 0
+
+    @pytest.mark.asyncio
+    async def test_filters_mixed_candidates(self, workflow: WorkflowService):
+        """Parmi plusieurs candidats, seuls ceux compatibles sont conserves."""
+        async def mock_count(series_id, season):
+            if series_id == "111":
+                return 22  # compatible (episode 22 <= 22)
+            elif series_id == "222":
+                return 10  # incompatible (episode 22 > 10)
+            else:
+                return None  # saison inexistante
+
+        workflow._tvdb_client.get_season_episode_count = AsyncMock(side_effect=mock_count)
+
+        candidates = [
+            SearchResult(id="111", title="Serie A", score=90.0, source="tvdb"),
+            SearchResult(id="222", title="Serie B", score=85.0, source="tvdb"),
+            SearchResult(id="333", title="Serie C", score=60.0, source="tvdb"),
+        ]
+
+        result = await workflow._filter_by_episode_count(candidates, season=3, episode=22)
+
+        assert len(result) == 1
+        assert result[0].id == "111"
+
+    @pytest.mark.asyncio
+    async def test_returns_all_when_no_tvdb_client(self, workflow: WorkflowService):
+        """Sans tvdb_client, tous les candidats sont conserves."""
+        workflow._tvdb_client = None
+
+        candidates = [
+            SearchResult(id="111", title="Serie A", score=90.0, source="tvdb"),
+        ]
+
+        result = await workflow._filter_by_episode_count(candidates, season=3, episode=22)
+
+        assert len(result) == 1
+
+    @pytest.mark.asyncio
+    async def test_handles_api_error_gracefully(self, workflow: WorkflowService):
+        """En cas d'erreur API, le candidat est conserve (pas elimine)."""
+        workflow._tvdb_client.get_season_episode_count = AsyncMock(
+            side_effect=Exception("API error")
+        )
+
+        candidates = [
+            SearchResult(id="111", title="Serie A", score=90.0, source="tvdb"),
+        ]
+
+        result = await workflow._filter_by_episode_count(candidates, season=3, episode=22)
+
+        # En cas d'erreur, on conserve le candidat par precaution
+        assert len(result) == 1
+
+    @pytest.mark.asyncio
+    async def test_prefers_exact_season_count_match_with_batch_context(
+        self, workflow: WorkflowService
+    ):
+        """Avec max_episode_in_batch, prefere le candidat dont le count == max_episode.
+
+        Cas Star-Crossed (13 eps) vs Crossed (28 eps) : le batch contient 13 fichiers
+        (S01E01 a S01E13). Star-Crossed a exactement 13 episodes, Crossed en a 28.
+        Star-Crossed doit etre prefere.
+        """
+        async def mock_count(series_id, season):
+            if series_id == "star-crossed":
+                return 13  # == max_episode_in_batch
+            elif series_id == "crossed":
+                return 28  # != max_episode_in_batch
+            return None
+
+        workflow._tvdb_client.get_season_episode_count = AsyncMock(side_effect=mock_count)
+
+        candidates = [
+            SearchResult(id="crossed", title="Crossed", score=75.0, source="tvdb"),
+            SearchResult(id="star-crossed", title="Star-Crossed", score=70.0, source="tvdb"),
+        ]
+
+        # Avec max_episode_in_batch=13, seul Star-Crossed doit rester
+        result = await workflow._filter_by_episode_count(
+            candidates, season=1, episode=5, max_episode_in_batch=13
+        )
+
+        assert len(result) == 1
+        assert result[0].id == "star-crossed"
+
+    @pytest.mark.asyncio
+    async def test_no_batch_refinement_when_no_exact_match(
+        self, workflow: WorkflowService
+    ):
+        """Si aucun candidat n'a count == max_episode, tous les compatibles restent."""
+        async def mock_count(series_id, season):
+            if series_id == "111":
+                return 22
+            elif series_id == "222":
+                return 30
+            return None
+
+        workflow._tvdb_client.get_season_episode_count = AsyncMock(side_effect=mock_count)
+
+        candidates = [
+            SearchResult(id="111", title="Serie A", score=90.0, source="tvdb"),
+            SearchResult(id="222", title="Serie B", score=85.0, source="tvdb"),
+        ]
+
+        # max_episode_in_batch=13, aucun candidat n'a exactement 13 eps
+        result = await workflow._filter_by_episode_count(
+            candidates, season=1, episode=5, max_episode_in_batch=13
+        )
+
+        # Les deux sont compatibles (5 <= 22 et 5 <= 30), pas de discrimination possible
+        assert len(result) == 2
+
+    @pytest.mark.asyncio
+    async def test_batch_refinement_not_applied_without_max_episode(
+        self, workflow: WorkflowService
+    ):
+        """Sans max_episode_in_batch, pas de raffinement batch."""
+        async def mock_count(series_id, season):
+            if series_id == "star-crossed":
+                return 13
+            elif series_id == "crossed":
+                return 28
+            return None
+
+        workflow._tvdb_client.get_season_episode_count = AsyncMock(side_effect=mock_count)
+
+        candidates = [
+            SearchResult(id="crossed", title="Crossed", score=75.0, source="tvdb"),
+            SearchResult(id="star-crossed", title="Star-Crossed", score=70.0, source="tvdb"),
+        ]
+
+        # Sans max_episode_in_batch, les deux restent (5 <= 13 et 5 <= 28)
+        result = await workflow._filter_by_episode_count(
+            candidates, season=1, episode=5
+        )
+
+        assert len(result) == 2

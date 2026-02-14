@@ -402,6 +402,65 @@ class TVDBClient(IMediaAPIClient):
 
         return episodes[0]
 
+    async def get_season_episode_count(
+        self, series_id: str, season: int
+    ) -> Optional[int]:
+        """
+        Retourne le nombre d'episodes d'une saison pour une serie.
+
+        Utilise l'endpoint /series/{id}/episodes/query avec pagination.
+        Le resultat est cache 7 jours via set_details.
+
+        Args:
+            series_id: ID TVDB de la serie
+            season: Numero de saison
+
+        Returns:
+            Nombre d'episodes, ou None si la saison n'existe pas (404)
+        """
+        cache_key = f"tvdb:season_count:{series_id}:S{season:02d}"
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        await self._ensure_token()
+        client = await self._get_client()
+
+        total_count = 0
+        page = 1
+
+        while True:
+            try:
+                params = {"airedSeason": str(season)}
+                if page > 1:
+                    params["page"] = str(page)
+
+                response = await request_with_retry(
+                    client,
+                    "GET",
+                    f"/series/{series_id}/episodes/query",
+                    params=params,
+                    headers=self._get_auth_headers(),
+                )
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    return None
+                raise
+
+            data = response.json()
+            episodes = data.get("data", [])
+            total_count += len(episodes)
+
+            # Verifier s'il y a d'autres pages
+            links = data.get("links", {})
+            last_page = links.get("last", 1)
+            if page >= last_page:
+                break
+            page += 1
+
+        await self._cache.set_details(cache_key, total_count)
+        return total_count
+
     @property
     def source(self) -> str:
         """Retourne l'identifiant de la source API."""

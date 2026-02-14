@@ -25,6 +25,7 @@ from src.core.entities.video import ValidationStatus
 from src.utils.helpers import parse_candidate
 
 if TYPE_CHECKING:
+    from src.adapters.api.tvdb_client import TVDBClient
     from src.core.ports.api_clients import TMDBClient
     from src.core.entities.video import PendingValidation
     from src.services.validation import ValidationService
@@ -224,10 +225,90 @@ async def _filter_by_duration_compatibility(
     return duration_validated, still_remaining
 
 
+async def _filter_by_episode_count_compatibility(
+    remaining: list["PendingValidation"],
+    tvdb_client: "TVDBClient | None",
+) -> tuple[list["PendingValidation"], list["PendingValidation"]]:
+    """
+    Filtre les fichiers series selon la compatibilite du nombre d'episodes.
+
+    Pour chaque fichier, verifie si le numero d'episode existe dans la saison
+    pour chaque candidat TVDB. Si un seul candidat est compatible et a un
+    score >= 60%, le fichier est auto-valide.
+
+    Args:
+        remaining: Liste des fichiers restants apres filtrage par score/duree
+        tvdb_client: Client TVDB pour verifier les episodes
+
+    Returns:
+        Tuple (episode_validated, still_remaining)
+    """
+    if not remaining or not tvdb_client:
+        return [], remaining
+
+    from src.adapters.cli.helpers import _extract_series_info
+
+    episode_validated = []
+    still_remaining = []
+
+    for pending in remaining:
+        filename = pending.video_file.filename if pending.video_file else ""
+        if not filename:
+            still_remaining.append(pending)
+            continue
+
+        # Extraire saison/episode du nom de fichier
+        season, episode = _extract_series_info(filename)
+        # _extract_series_info retourne (1, 1) par defaut, ignorer ce cas
+        if season == 1 and episode == 1 and "s01e01" not in filename.lower():
+            still_remaining.append(pending)
+            continue
+
+        # Verifier chaque candidat TVDB
+        compatible_candidates = []
+        for candidate in pending.candidates:
+            candidate_source = (
+                candidate.get("source", "")
+                if isinstance(candidate, dict)
+                else getattr(candidate, "source", "")
+            )
+            if candidate_source != "tvdb":
+                continue
+
+            candidate_id = (
+                candidate.get("id")
+                if isinstance(candidate, dict)
+                else candidate.id
+            )
+
+            try:
+                count = await tvdb_client.get_season_episode_count(
+                    str(candidate_id), season
+                )
+                if count is not None and episode <= count:
+                    compatible_candidates.append(candidate)
+            except Exception:
+                # En cas d'erreur, ne pas compter comme compatible
+                pass
+
+        # Auto-valider si un seul candidat TVDB compatible avec score >= 60%
+        if len(compatible_candidates) == 1:
+            score = _get_score(compatible_candidates[0])
+            if score >= 60:
+                pending._episode_validated_candidate = compatible_candidates[0]
+                episode_validated.append(pending)
+                continue
+
+        still_remaining.append(pending)
+
+    return episode_validated, still_remaining
+
+
 async def auto_validate_files(
     pending_list: list["PendingValidation"],
     service: "ValidationService",
     tmdb_client: "TMDBClient | None" = None,
+    tvdb_client: "TVDBClient | None" = None,
 ) -> ValidationResult:
     """
     Auto-valide les fichiers selon differents criteres de confiance.
@@ -237,11 +318,13 @@ async def auto_validate_files(
     2. Score >= 95% et autres < 70%
     3. Score >= 90% et ecart >= 12 points
     4. Un seul candidat avec duree compatible (±30%)
+    5. Un seul candidat TVDB avec episode compatible et score >= 60%
 
     Args:
         pending_list: Liste des fichiers en attente de validation
         service: ValidationService pour effectuer les validations
         tmdb_client: Client TMDB optionnel pour verification des durees
+        tvdb_client: Client TVDB optionnel pour verification des episodes
 
     Returns:
         ValidationResult avec les fichiers auto-valides et restants
@@ -287,6 +370,34 @@ async def auto_validate_files(
                 )
 
         auto_validated.extend(duration_validated)
+        remaining = still_remaining
+
+    # Etape 3: Filtrage par compatibilite nombre d'episodes (TVDB)
+    if remaining and tvdb_client:
+        episode_validated, still_remaining = await _filter_by_episode_count_compatibility(
+            remaining, tvdb_client
+        )
+
+        if episode_validated:
+            console.print(
+                f"[bold cyan]Auto-validation (episodes)[/bold cyan]: "
+                f"{len(episode_validated)} fichier(s) "
+                f"(1 seul candidat avec episode compatible)\n"
+            )
+            for pending in episode_validated:
+                candidate = pending._episode_validated_candidate
+                filename = (
+                    pending.video_file.filename if pending.video_file else "?"
+                )
+
+                search_result = parse_candidate(candidate)
+
+                details = await service.validate_candidate(pending, search_result)
+                console.print(
+                    f"[green]{filename}[/green] -> {details.title} (episode compatible)"
+                )
+
+        auto_validated.extend(episode_validated)
         remaining = still_remaining
 
     # Valider automatiquement les cas evidents par score

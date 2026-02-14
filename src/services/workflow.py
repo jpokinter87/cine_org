@@ -413,6 +413,16 @@ class WorkflowService:
         pending_repo = self._container.pending_validation_repository()
         video_file_repo = self._container.video_file_repository()
 
+        # Pre-calculer le max episode par (titre, saison) pour discriminer
+        # les series avec des noms similaires (ex: Star-Crossed vs Crossed)
+        max_ep_map: dict[tuple[str, int], int] = {}
+        for result in state.scan_results:
+            if result.detected_type == MediaType.SERIES:
+                pi = result.parsed_info
+                if pi.title and pi.season and pi.episode:
+                    key = (pi.title.lower(), pi.season)
+                    max_ep_map[key] = max(max_ep_map.get(key, 0), pi.episode)
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -429,8 +439,17 @@ class WorkflowService:
                     match_task, description=f"[green]{result.video_file.filename}"
                 )
 
+                # Determiner le max_episode_in_batch pour cette serie/saison
+                max_ep = None
+                if result.detected_type == MediaType.SERIES:
+                    pi = result.parsed_info
+                    if pi.title and pi.season:
+                        max_ep = max_ep_map.get((pi.title.lower(), pi.season))
+
                 # Créer VideoFile et PendingValidation
-                video_file, pending = await self._create_pending_validation(result)
+                video_file, pending = await self._create_pending_validation(
+                    result, max_ep
+                )
 
                 saved_vf = video_file_repo.save(video_file)
                 if saved_vf.id:
@@ -446,7 +465,7 @@ class WorkflowService:
         )
 
     async def _create_pending_validation(
-        self, scan_result
+        self, scan_result, max_episode_in_batch: Optional[int] = None
     ) -> tuple["VideoFile", PendingValidation]:
         """
         Crée un VideoFile et PendingValidation à partir d'un résultat de scan.
@@ -474,6 +493,21 @@ class WorkflowService:
         else:
             candidates = await self._search_and_score_series(title, year)
 
+            # Filtrer les candidats incompatibles par nombre d'episodes
+            season = scan_result.parsed_info.season
+            episode = scan_result.parsed_info.episode
+            if candidates and season and episode:
+                filtered = await self._filter_by_episode_count(
+                    candidates, season, episode, max_episode_in_batch
+                )
+                if filtered:
+                    candidates = filtered
+                else:
+                    logger.warning(
+                        f"Tous les candidats elimines par episode count pour "
+                        f"{scan_result.video_file.filename}, conservation des originaux"
+                    )
+
         # Convertir en dict pour stockage
         candidates_data = [
             {
@@ -492,6 +526,66 @@ class WorkflowService:
         )
 
         return video_file, pending
+
+    async def _filter_by_episode_count(
+        self,
+        candidates: list,
+        season: int,
+        episode: int,
+        max_episode_in_batch: Optional[int] = None,
+    ) -> list:
+        """
+        Filtre les candidats series incompatibles par nombre d'episodes.
+
+        Phase 1 - Elimination des impossibles :
+        - La saison n'existe pas (get_season_episode_count retourne None)
+        - Le numero d'episode depasse le nombre d'episodes de la saison
+
+        Phase 2 - Raffinement par contexte batch :
+        Si max_episode_in_batch est fourni et que plusieurs candidats restent,
+        prefere ceux dont le nombre d'episodes de la saison correspond exactement
+        au max_episode du batch. Cela discrimine entre des series similaires
+        (ex: Star-Crossed 13 eps vs Crossed 28 eps quand le batch contient 13 fichiers).
+
+        En cas d'erreur API, le candidat est conserve par precaution.
+
+        Args:
+            candidates: Liste de SearchResult candidats
+            season: Numero de saison du fichier
+            episode: Numero d'episode du fichier
+            max_episode_in_batch: Numero d'episode max dans le batch pour cette serie/saison
+
+        Returns:
+            Liste filtree de SearchResult compatibles
+        """
+        if not self._tvdb_client:
+            return candidates
+
+        # Phase 1 : elimination des candidats impossibles
+        compatible = []
+        season_counts: dict[str, int] = {}
+        for candidate in candidates:
+            try:
+                count = await self._tvdb_client.get_season_episode_count(
+                    candidate.id, season
+                )
+                if count is not None and episode <= count:
+                    compatible.append(candidate)
+                    season_counts[candidate.id] = count
+            except Exception:
+                # En cas d'erreur API, conserver le candidat par precaution
+                compatible.append(candidate)
+
+        # Phase 2 : raffinement par contexte batch
+        if max_episode_in_batch and len(compatible) > 1:
+            exact_match = [
+                c for c in compatible
+                if season_counts.get(c.id) == max_episode_in_batch
+            ]
+            if exact_match:
+                return exact_match
+
+        return compatible
 
     async def _search_and_score_movie(
         self, title: str, year: Optional[int], media_info
@@ -709,7 +803,7 @@ class WorkflowService:
         En mode normal: exécute les transferts après confirmation
         """
         from src.adapters.cli.batch_builder import build_transfers_batch
-        from src.adapters.cli.commands import _display_transfer_tree
+        from src.adapters.cli.helpers import _display_transfer_tree
         from src.adapters.cli.validation import display_batch_summary, execute_batch_transfer
         from rich.prompt import Confirm
 
@@ -740,7 +834,7 @@ class WorkflowService:
 
     async def _display_dry_run(self, config: WorkflowConfig, state: WorkflowState) -> None:
         """Affiche le résultat en mode dry-run."""
-        from src.adapters.cli.commands import _display_transfer_tree
+        from src.adapters.cli.helpers import _display_transfer_tree
 
         self._console.print(
             "\n[yellow]Mode dry-run - aucun transfert effectué[/yellow]"
