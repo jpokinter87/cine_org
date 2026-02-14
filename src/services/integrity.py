@@ -370,9 +370,6 @@ class IntegrityChecker:
         return suggestions
 
 
-# Reexportation pour compatibilite des imports existants
-from src.services.repair import RepairService  # noqa: E402, F401
-
 __all__ = [
     "IssueType",
     "RepairActionType",
@@ -380,5 +377,4 @@ __all__ = [
     "IntegrityReport",
     "RepairAction",
     "IntegrityChecker",
-    "RepairService",
 ]

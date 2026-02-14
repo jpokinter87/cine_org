@@ -25,8 +25,8 @@ from src.services.integrity import (
     IssueType,
     RepairAction,
     RepairActionType,
-    RepairService,
 )
+from src.services.repair import RepairService
 
 
 # ============================================================================

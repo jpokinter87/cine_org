@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from src.services.integrity import RepairAction, RepairActionType
 
 if TYPE_CHECKING:
-    from src.services.integrity import RepairService
+    from src.services.repair import RepairService
 
 
 class CandidateDisplay:

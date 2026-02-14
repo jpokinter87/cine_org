@@ -16,15 +16,17 @@ from typer.testing import CliRunner
 
 from src.adapters.cli.commands import (
     MediaFilter,
-    _import_library_async,
-    _pending_async,
-    _process_async,
-    _render_pending_panel,
-    _validate_file_async,
     import_library,
     pending,
     process,
     validate_file,
+)
+from src.adapters.cli.commands.import_commands import _import_library_async
+from src.adapters.cli.commands.validate_commands import _validate_file_async
+from src.adapters.cli.commands.workflow_commands import (
+    _pending_async,
+    _process_async,
+    _render_pending_panel,
 )
 from src.core.entities.video import PendingValidation, ValidationStatus, VideoFile
 from src.core.ports.api_clients import SearchResult

@@ -18,7 +18,7 @@ from rich.progress import (
 from src.services.integrity import RepairAction, RepairActionType
 
 if TYPE_CHECKING:
-    from src.services.integrity import RepairService
+    from src.services.repair import RepairService
 
     from .title_resolver import TitleResolver
 

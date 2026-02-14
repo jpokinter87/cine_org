@@ -26,7 +26,8 @@ from .infrastructure.persistence.hash_service import compute_file_hash
 from .services.enricher import EnricherService
 from .services.importer import ImporterService
 from .services.cleanup import CleanupService
-from .services.integrity import IntegrityChecker, RepairService
+from .services.integrity import IntegrityChecker
+from .services.repair import RepairService
 from .services.matcher import MatcherService
 from .services.scanner import ScannerService
 from .services.renamer import RenamerService

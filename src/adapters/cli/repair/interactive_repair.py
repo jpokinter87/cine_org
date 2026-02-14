@@ -14,7 +14,7 @@ from .custom_search import CandidateDisplay, CustomSearch
 from .helpers import display_broken_link_info, extract_series_name
 
 if TYPE_CHECKING:
-    from src.services.integrity import RepairService
+    from src.services.repair import RepairService
 
     from .title_resolver import TitleResolver
 
