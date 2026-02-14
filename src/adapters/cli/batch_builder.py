@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 from rich.console import Console
 
-from src.adapters.cli.commands import (
+from src.adapters.cli.helpers import (
     _extract_language_from_filename,
     _extract_series_info,
 )

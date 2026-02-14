@@ -28,7 +28,7 @@ def display_cleanup_report(report: "CleanupReport", video_dir: Path) -> None:
         report: Rapport de nettoyage a afficher
         video_dir: Repertoire video pour les chemins relatifs
     """
-    from src.adapters.cli.commands import console
+    from src.adapters.cli.helpers import console
 
     table = Table(title="Rapport de nettoyage", show_header=True)
     table.add_column("Categorie", style="cyan")
@@ -98,7 +98,7 @@ def _rel_parent(path: Path, video_dir: Path) -> str:
 def display_broken_symlinks_tree(report: "CleanupReport", video_dir: Path) -> None:
     """Affiche l'arbre detaille des symlinks casses groupes par repertoire."""
     from collections import defaultdict
-    from src.adapters.cli.commands import console
+    from src.adapters.cli.helpers import console
 
     console.print()
 
@@ -137,7 +137,7 @@ def display_broken_symlinks_tree(report: "CleanupReport", video_dir: Path) -> No
 def display_misplaced_symlinks_tree(report: "CleanupReport", video_dir: Path) -> None:
     """Affiche l'arbre des symlinks mal places avec deplacement prevu."""
     from collections import defaultdict
-    from src.adapters.cli.commands import console
+    from src.adapters.cli.helpers import console
 
     console.print()
 
@@ -167,7 +167,7 @@ def display_misplaced_symlinks_tree(report: "CleanupReport", video_dir: Path) ->
 def display_duplicate_symlinks_tree(report: "CleanupReport", video_dir: Path) -> None:
     """Affiche l'arbre des symlinks dupliques avec conservation/suppression."""
     from collections import defaultdict
-    from src.adapters.cli.commands import console
+    from src.adapters.cli.helpers import console
 
     console.print()
 
@@ -198,7 +198,7 @@ def display_duplicate_symlinks_tree(report: "CleanupReport", video_dir: Path) ->
 
 def display_oversized_dirs_tree(report: "CleanupReport", video_dir: Path) -> None:
     """Affiche l'arbre des repertoires surcharges avec subdivision prevue."""
-    from src.adapters.cli.commands import console
+    from src.adapters.cli.helpers import console
 
     console.print()
 
@@ -225,7 +225,7 @@ def display_oversized_dirs_tree(report: "CleanupReport", video_dir: Path) -> Non
 
 def display_empty_dirs_tree(report: "CleanupReport", video_dir: Path) -> None:
     """Affiche l'arbre des repertoires vides a supprimer."""
-    from src.adapters.cli.commands import console
+    from src.adapters.cli.helpers import console
 
     console.print()
 

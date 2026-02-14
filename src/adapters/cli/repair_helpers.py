@@ -190,7 +190,7 @@ class AutoRepair:
         Returns:
             Tuple (actions, auto_repaired, no_match_count)
         """
-        from src.adapters.cli.commands import console
+        from src.adapters.cli.helpers import console
 
         actions: list[RepairAction] = []
         auto_repaired = 0
@@ -264,7 +264,7 @@ class AutoRepair:
             broken_count: Nombre total de symlinks casses
             no_match_count: Nombre sans candidat
         """
-        from src.adapters.cli.commands import console
+        from src.adapters.cli.helpers import console
 
         console.print(f"\n[bold]Reparations automatiques:[/bold]")
         console.print(f"  [green]{auto_repaired}[/green] repare(s) (score >= 90%)")
@@ -412,7 +412,7 @@ class InteractiveRepair:
         Returns:
             Liste des actions effectuées
         """
-        from src.adapters.cli.commands import console
+        from src.adapters.cli.helpers import console
         from src.services.integrity import RepairActionType
 
         actions: list[RepairAction] = []
@@ -528,7 +528,7 @@ class InteractiveRepair:
         Returns:
             "quit", "repair", "skip", "orphan", ou dict avec l'action
         """
-        from src.adapters.cli.commands import console
+        from src.adapters.cli.helpers import console
         from src.services.integrity import RepairAction, RepairActionType
 
         while True:
@@ -650,7 +650,7 @@ class InteractiveRepair:
 
     async def _handle_orphan(self, repair: "RepairService", link: Path, dry_run: bool) -> RepairAction | None:
         """Gère le déplacement vers orphans."""
-        from src.adapters.cli.commands import console
+        from src.adapters.cli.helpers import console
         from src.services.integrity import RepairAction, RepairActionType
 
         if dry_run:

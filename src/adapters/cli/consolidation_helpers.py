@@ -27,7 +27,7 @@ def display_summary(symlinks: list["ExternalSymlink"], summary: dict) -> None:
         symlinks: Liste des symlinks externes trouves
         summary: Dictionnaire des statistiques par volume
     """
-    from src.adapters.cli.commands import console
+    from src.adapters.cli.helpers import console
 
     console.print(f"\n[bold]Symlinks externes:[/bold] {len(symlinks)}\n")
 
@@ -58,7 +58,7 @@ def display_inaccessible_warning(inaccessible_count: int) -> None:
     Args:
         inaccessible_count: Nombre de fichiers inaccessibles
     """
-    from src.adapters.cli.commands import console
+    from src.adapters.cli.helpers import console
 
     if inaccessible_count > 0:
         console.print(f"\n[yellow]Attention:[/yellow] {inaccessible_count} fichiers inaccessibles")
@@ -72,7 +72,7 @@ def display_examples(symlinks: list["ExternalSymlink"]) -> None:
     Args:
         symlinks: Liste des symlinks externes
     """
-    from src.adapters.cli.commands import console
+    from src.adapters.cli.helpers import console
     from src.services.consolidation import ConsolidationStatus
 
     console.print("\n[dim]Exemples de symlinks externes:[/dim]")
@@ -87,7 +87,7 @@ def display_examples(symlinks: list["ExternalSymlink"]) -> None:
 
 def display_consolidation_prompt() -> None:
     """Affiche le message d'instruction pour la consolidation."""
-    from src.adapters.cli.commands import console
+    from src.adapters.cli.helpers import console
 
     console.print(f"\n[cyan]Pour rapatrier les fichiers accessibles:[/cyan]")
     console.print(f"  cineorg consolidate --consolidate")
@@ -108,7 +108,7 @@ def display_final_summary(
         inaccessible_count: Nombre de fichiers inaccessibles
         dry_run: Mode simulation
     """
-    from src.adapters.cli.commands import console
+    from src.adapters.cli.helpers import console
 
     console.print(f"\n[bold]Resume:[/bold]")
     console.print(f"  [green]{consolidated}[/green] fichier(s) rapatrie(s)")
@@ -135,7 +135,7 @@ class ConsolidationProgress:
             count: Nombre de fichiers a consolider
             dry_run: Mode simulation
         """
-        from src.adapters.cli.commands import console
+        from src.adapters.cli.helpers import console
 
         mode_label = "[dim](dry-run)[/dim] " if dry_run else ""
         console.print(f"\n[bold cyan]{mode_label}Rapatriement de {count} fichiers...[/bold cyan]\n")
@@ -149,6 +149,6 @@ class ConsolidationProgress:
             symlink_name: Nom du symlink
             error_message: Message d'erreur
         """
-        from src.adapters.cli.commands import console
+        from src.adapters.cli.helpers import console
 
         console.print(f"[red]Erreur:[/red] {symlink_name}: {error_message}")
