@@ -75,33 +75,87 @@ python -m src.main --help
 
 ```
 src/
-├── main.py              # CLI entry point
-├── core/                # Business logic
-│   ├── scanner.py       # Download directory scanning
-│   ├── parser.py        # Metadata extraction (guessit + mediainfo)
-│   ├── matcher.py       # Scoring and API matching
-│   ├── renamer.py       # Formatted filename generation
-│   ├── organizer.py     # Directory structure management
-│   ├── transferer.py    # File moves + symlink creation
-│   ├── importer.py      # Import existing library to DB
-│   ├── enricher.py      # API enrichment (separate from import)
-│   ├── repair.py        # Broken symlink repair
-│   └── orchestrator.py  # Workflow coordination
-├── api/                 # External API clients
-│   ├── base.py          # Abstract interface (MediaAPIClient)
-│   ├── tmdb.py          # TMDB client (movies only)
-│   └── tvdb.py          # TVDB client (TV shows only)
-├── db/                  # Data layer
-│   ├── models.py        # SQLModel models
-│   └── repository.py    # Data access
-├── web/                 # Web interface
-│   ├── app.py           # FastAPI app
-│   └── routes/          # Route handlers
-├── cli/                 # CLI interface
-│   └── commands.py      # Typer commands
+├── main.py                  # CLI entry point (Typer)
+├── config.py                # Configuration (variables d'environnement)
+├── container.py             # Injection de dépendances (dependency-injector)
+├── core/                    # Domaine métier
+│   ├── entities/            # Entités (Movie, Series, Episode, VideoFile)
+│   ├── ports/               # Interfaces (repositories, API clients, parser)
+│   └── value_objects/       # Objets valeur (ParsedInfo, MediaInfo)
+├── adapters/                # Adaptateurs
+│   ├── api/                 # Clients API externes
+│   │   ├── tmdb_client.py   #   TMDB (films)
+│   │   ├── tvdb_client.py   #   TVDB (séries)
+│   │   ├── cache.py         #   Cache disque des réponses API
+│   │   └── retry.py         #   Retry avec backoff exponentiel
+│   ├── cli/                 # Interface CLI
+│   │   ├── commands/        #   Commandes Typer (1 fichier par commande)
+│   │   │   ├── workflow_commands.py    # process, pending
+│   │   │   ├── validate_commands.py    # validate auto/manual/batch/file
+│   │   │   ├── import_commands.py      # import, enrich, populate-movies
+│   │   │   ├── enrichment_commands.py  # enrich-ratings, enrich-imdb-ids
+│   │   │   ├── imdb_commands.py        # imdb import/sync/stats
+│   │   │   ├── repair_command.py       # repair-links
+│   │   │   ├── cleanup_command.py      # cleanup
+│   │   │   ├── consolidate_command.py  # consolidate
+│   │   │   ├── check_command.py        # check
+│   │   │   └── regroup_command.py      # regroup
+│   │   ├── validation/      #   Validation interactive
+│   │   │   ├── candidate_display.py    # Affichage des candidats paginés
+│   │   │   ├── interactive_loop.py     # Boucle de validation manuelle
+│   │   │   └── batch_display.py        # Résumé batch et conflits
+│   │   ├── repair/          #   Réparation interactive des symlinks
+│   │   │   ├── auto_repair.py          # Réparation automatique
+│   │   │   ├── interactive_repair.py   # Réparation interactive
+│   │   │   ├── title_resolver.py       # Résolution alternative de titres
+│   │   │   ├── custom_search.py        # Recherche personnalisée
+│   │   │   └── helpers.py              # Utilitaires d'affichage
+│   │   ├── helpers.py       #   Utilitaires CLI partagés
+│   │   ├── cleanup_helpers.py          # Affichage rapport cleanup
+│   │   ├── consolidation_helpers.py    # Affichage consolidation
+│   │   ├── auto_validator.py           # Validation automatique
+│   │   └── batch_builder.py            # Construction des batchs
+│   ├── imdb/                # Import datasets IMDb
+│   ├── parsing/             # Parsing (guessit, mediainfo)
+│   └── file_system.py       # Opérations fichiers
+├── services/                # Services métier
+│   ├── workflow/            #   Pipeline de traitement (scan → match → transfer)
+│   │   ├── workflow_service.py   # Orchestration principale
+│   │   ├── scan_step.py          # Scan des téléchargements
+│   │   ├── matching_step.py      # Matching TMDB/TVDB + scoring
+│   │   ├── transfer_step.py      # Transfert et création symlinks
+│   │   └── dataclasses.py        # WorkflowConfig, WorkflowResult, etc.
+│   ├── repair/              #   Réparation de symlinks
+│   │   ├── repair_service.py     # Orchestration réparation
+│   │   ├── file_indexer.py       # Index des fichiers storage
+│   │   ├── filename_analyzer.py  # Normalisation et extraction de titres
+│   │   └── similarity_matcher.py # Recherche floue de candidats
+│   ├── cleanup/             #   Nettoyage et réorganisation video/
+│   │   ├── cleanup_service.py    # Orchestration cleanup
+│   │   ├── analyzers.py          # 5 analyseurs (_scan_*)
+│   │   ├── executors.py          # 6 correcteurs
+│   │   ├── subdivision_algorithm.py  # Algorithme de subdivision alphabétique
+│   │   ├── dataclasses.py        # CleanupReport, BrokenSymlink, etc.
+│   │   └── report_cache.py       # Cache du rapport d'analyse
+│   ├── integrity.py         # Vérification d'intégrité (IntegrityChecker)
+│   ├── matcher.py           # Scoring et matching API
+│   ├── organizer.py         # Structure des répertoires
+│   ├── renamer.py           # Génération des noms de fichiers
+│   ├── scanner.py           # Scan des répertoires
+│   ├── transferer.py        # Déplacement + création symlinks
+│   ├── importer.py          # Import vidéothèque existante
+│   ├── enricher.py          # Enrichissement API
+│   ├── consolidation.py     # Consolidation volumes externes
+│   └── prefix_grouper.py    # Regroupement par préfixe de titre
+├── infrastructure/          # Persistance
+│   └── persistence/
+│       ├── database.py      # Gestion SQLite
+│       ├── models.py        # Modèles SQLModel
+│       ├── hash_service.py  # Calcul de hash SHA-256
+│       └── repositories/    # Implémentation des ports
 └── utils/
-    ├── constants.py     # Video extensions, genre hierarchy, codecs
-    └── helpers.py       # Utility functions
+    ├── constants.py         # Extensions vidéo, hiérarchie genres, codecs
+    └── helpers.py           # Fonctions utilitaires
 ```
 
 ### Key Design Patterns

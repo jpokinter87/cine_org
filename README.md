@@ -804,12 +804,39 @@ uv run cineorg -q process
 - **Python 3.11+**
 - **Typer + Rich** - Interface CLI interactive avec panneaux colorés
 - **SQLModel** - ORM (SQLite)
+- **dependency-injector** - Injection de dépendances
 - **guessit** - Parsing des noms de fichiers
 - **pymediainfo** - Extraction métadonnées techniques (codecs, résolution, durée)
 - **httpx** - Client HTTP async pour les APIs
 - **diskcache** - Cache persistant des résultats API
 - **tenacity** - Retry avec backoff exponentiel
 - **rapidfuzz** - Scoring de similarité des titres
+
+## Architecture du code
+
+Le projet suit une **architecture hexagonale** avec séparation domaine / adaptateurs / services :
+
+```
+src/
+├── core/                    # Domaine métier (entités, ports, value objects)
+├── adapters/                # Adaptateurs (CLI, API, parsing, persistance)
+│   ├── api/                 #   Clients TMDB et TVDB avec cache et retry
+│   ├── cli/                 #   Interface Typer
+│   │   ├── commands/        #     1 fichier par commande CLI
+│   │   ├── validation/      #     Validation interactive (candidats, boucle, batch)
+│   │   └── repair/          #     Réparation interactive des symlinks
+│   ├── imdb/                #   Import datasets IMDb
+│   └── parsing/             #   guessit + mediainfo
+├── services/                # Logique métier
+│   ├── workflow/            #   Pipeline scan → match → transfer (mixin pattern)
+│   ├── repair/              #   Réparation symlinks (index, analyse, similarité)
+│   ├── cleanup/             #   Nettoyage video/ (analyse, correction, subdivision)
+│   └── ...                  #   matcher, organizer, renamer, transferer, etc.
+├── infrastructure/          # Persistance (SQLite, repositories, hash)
+└── utils/                   # Constantes et helpers
+```
+
+Chaque package volumineux est découpé en modules cohérents avec un `__init__.py` qui réexporte les symboles publics pour préserver la compatibilité des imports.
 
 ## Dépannage
 
