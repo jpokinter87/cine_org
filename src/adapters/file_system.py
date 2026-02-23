@@ -168,7 +168,7 @@ class FileSystemAdapter(IFileSystem, ISymlinkManager):
         """
         try:
             link.parent.mkdir(parents=True, exist_ok=True)
-            link.symlink_to(target)
+            link.symlink_to(target.resolve())
             return True
         except OSError:
             return False

@@ -391,28 +391,6 @@ def _navigate_to_leaf(start_dir: Path, title: str) -> Path:
 
         if matching is None:
             # Aucun sous-répertoire ne correspond, on est à la feuille
-            # ou le répertoire n'existe pas encore
-            break
-
-        # Vérifier si on est entré dans un répertoire de contenu (films/séries)
-        #而不是 un répertoire de subdivision (lettres/plages)
-        # Un répertoire de contenu a généralement un nom long (titre)
-        # et peut contenir des fichiers médias
-        has_media_files = any(
-            f.suffix.lower() in (".mkv", ".mp4", ".avi", ".mov", ".m4v")
-            for f in matching.iterdir() if f.is_file()
-        )
-
-        # Heuristique : si le nom ressemble à un titre de film/série
-        # (long, sans tiret de plage), on s'arrête
-        name_looks_like_content = (
-            len(matching.name) > 10  # Titres généralement plus longs que "A-C" ou "Di-Dz"
-            and "-" not in matching.name[:10]  # Pas de plage au début
-        )
-
-        if name_looks_like_content or has_media_files:
-            # On est dans un répertoire de contenu, pas une subdivision
-            current = matching
             break
 
         current = matching

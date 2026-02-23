@@ -269,11 +269,11 @@ class TestTransferFileMocked:
 # ====================
 
 
-class TestRelativeSymlinks:
-    """Tests pour les symlinks relatifs."""
+class TestAbsoluteSymlinks:
+    """Tests pour les symlinks absolus."""
 
-    def test_create_relative_symlink(self, tmp_path):
-        """Cree symlink avec chemin relatif."""
+    def test_create_absolute_symlink(self, tmp_path):
+        """Cree symlink avec chemin absolu."""
         storage = tmp_path / "storage" / "Films" / "Action" / "M"
         video = tmp_path / "video" / "Films" / "Action" / "M"
         storage.mkdir(parents=True)
@@ -293,9 +293,9 @@ class TestRelativeSymlinks:
 
         assert symlink.is_symlink()
         assert symlink.resolve() == target
-        # Verifier que c'est un chemin relatif
+        # Verifier que c'est un chemin absolu
         link_target = os.readlink(symlink)
-        assert ".." in link_target
+        assert os.path.isabs(link_target)
 
     def test_symlink_mirrors_storage_structure(self, tmp_path):
         """Le symlink reflete la structure de storage dans video."""

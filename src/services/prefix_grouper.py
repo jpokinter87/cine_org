@@ -167,11 +167,11 @@ class PrefixGrouperService:
                 filename = video_file.name
 
                 if video_file.is_symlink():
-                    # Lire la cible du symlink (sans résoudre la chaîne)
-                    original_target = video_file.readlink()
+                    # Résoudre la cible du symlink en chemin absolu
+                    original_target = video_file.resolve()
 
                     # Supprimer l'ancien symlink et créer le nouveau
-                    # pointant vers la même cible de stockage
+                    # pointant vers la même cible de stockage (chemin absolu)
                     video_file.unlink()
                     new_link = video_prefix_dir / filename
                     new_link.symlink_to(original_target)

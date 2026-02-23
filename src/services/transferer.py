@@ -5,10 +5,9 @@ Ce module fournit les fonctions de transfert de fichiers vers leur
 destination finale avec:
 - Detection des conflits via hash (doublons vs collisions de noms)
 - Deplacement atomique (rollback en cas d'erreur)
-- Creation de symlinks relatifs dans video/ vers storage/
+- Creation de symlinks absolus dans video/ vers storage/
 """
 
-import os
 import re
 from dataclasses import dataclass, field
 from enum import Enum
@@ -339,17 +338,12 @@ class TransfererService:
         # Creer les repertoires parents
         symlink_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Calculer le chemin relatif vers la cible
-        # Utilise os.path.relpath pour compatibilite Python 3.11
-        # (Path.relative_to avec walk_up=True necessite Python 3.12)
-        target_relative = os.path.relpath(target_path, symlink_path.parent)
-
         # Supprimer le symlink existant s'il y en a un
         if symlink_path.exists() or symlink_path.is_symlink():
             symlink_path.unlink()
 
-        # Creer le symlink
-        symlink_path.symlink_to(target_relative)
+        # Creer le symlink avec un chemin absolu vers la cible
+        symlink_path.symlink_to(target_path.resolve())
 
         return symlink_path
 
