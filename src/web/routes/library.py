@@ -70,6 +70,7 @@ async def library_index(
     genre: Optional[str] = None,
     year: Optional[str] = None,
     q: Optional[str] = None,
+    person: Optional[str] = None,
     sort: str = "title",
     order: str = "asc",
     page: int = 1,
@@ -96,6 +97,11 @@ async def library_index(
                 movie_stmt = movie_stmt.where(MovieModel.year == year_int)
             if genre:
                 movie_stmt = movie_stmt.where(MovieModel.genres_json.contains(genre))
+            if person:
+                movie_stmt = movie_stmt.where(
+                    MovieModel.director.contains(person)
+                    | MovieModel.cast_json.contains(person)
+                )
 
             movies = session.exec(movie_stmt).all()
             for m in movies:
@@ -120,6 +126,11 @@ async def library_index(
                 series_stmt = series_stmt.where(SeriesModel.year == year_int)
             if genre:
                 series_stmt = series_stmt.where(SeriesModel.genres_json.contains(genre))
+            if person:
+                series_stmt = series_stmt.where(
+                    SeriesModel.director.contains(person)
+                    | SeriesModel.cast_json.contains(person)
+                )
 
             all_series = session.exec(series_stmt).all()
             for s in all_series:
@@ -187,6 +198,7 @@ async def library_index(
         "current_genre": genre,
         "current_year": year_int,
         "current_q": q or "",
+        "current_person": person or "",
         "current_sort": sort,
         "current_order": order,
     }

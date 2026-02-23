@@ -46,33 +46,45 @@
         </select>
     </div>
 
-    {% if current_genre or current_year or current_q or current_type != 'all' %}
+    {% if current_person %}
+    <input type="hidden" name="person" value="{{ current_person }}">
+    {% endif %}
+
+    {% if current_genre or current_year or current_q or current_type != 'all' or current_person %}
     <div class="lib-active-filters">
         {% if current_type != 'all' %}
         <span class="lib-filter-tag">
             {{ 'Film' if current_type == 'movie' else 'Serie' }}
-            <a href="/library/?type=all&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q={{ current_q }}&sort={{ current_sort }}&order={{ current_order }}"
+            <a href="/library/?type=all&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q={{ current_q }}&person={{ current_person }}&sort={{ current_sort }}&order={{ current_order }}"
                class="lib-filter-tag-remove">&times;</a>
         </span>
         {% endif %}
         {% if current_genre %}
         <span class="lib-filter-tag">
             {{ current_genre }}
-            <a href="/library/?type={{ current_type }}&genre=&year={{ current_year or '' }}&q={{ current_q }}&sort={{ current_sort }}&order={{ current_order }}"
+            <a href="/library/?type={{ current_type }}&genre=&year={{ current_year or '' }}&q={{ current_q }}&person={{ current_person }}&sort={{ current_sort }}&order={{ current_order }}"
                class="lib-filter-tag-remove">&times;</a>
         </span>
         {% endif %}
         {% if current_year %}
         <span class="lib-filter-tag">
             {{ current_year }}
-            <a href="/library/?type={{ current_type }}&genre={{ current_genre or '' }}&year=&q={{ current_q }}&sort={{ current_sort }}&order={{ current_order }}"
+            <a href="/library/?type={{ current_type }}&genre={{ current_genre or '' }}&year=&q={{ current_q }}&person={{ current_person }}&sort={{ current_sort }}&order={{ current_order }}"
                class="lib-filter-tag-remove">&times;</a>
         </span>
         {% endif %}
         {% if current_q %}
         <span class="lib-filter-tag">
             &laquo; {{ current_q }} &raquo;
-            <a href="/library/?type={{ current_type }}&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q=&sort={{ current_sort }}&order={{ current_order }}"
+            <a href="/library/?type={{ current_type }}&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q=&person={{ current_person }}&sort={{ current_sort }}&order={{ current_order }}"
+               class="lib-filter-tag-remove">&times;</a>
+        </span>
+        {% endif %}
+        {% if current_person %}
+        <span class="lib-filter-tag lib-filter-tag-person">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            {{ current_person }}
+            <a href="/library/?type={{ current_type }}&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q={{ current_q }}&sort={{ current_sort }}&order={{ current_order }}"
                class="lib-filter-tag-remove">&times;</a>
         </span>
         {% endif %}

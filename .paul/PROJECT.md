@@ -12,7 +12,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 1.0 (CLI + Web) |
+| Version | 1.1 (CLI + Web + Enrichissement) |
 | Status | Production |
 | Last Updated | 2026-02-23 |
 
@@ -38,10 +38,14 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
   - Navigation bibliothèque films/séries avec filtres et détail — Phase 5
   - Page configuration (répertoires, clés API, seuils) — Phase 5
   - Maintenance : diagnostics intégrité et cleanup avec SSE temps réel — Phase 5
+- [x] Enrichissement données (v1.1)
+  - Ratings films enrichis à 100% (progress bar Rich) — Phase 6
+  - Séries enrichies : tmdb_id 99.7%, imdb_id 98.3% — Phase 7
+  - Fiches web enrichies : liens IMDb/TMDB, crédits cliquables, filtre par personne — Phase 8
 
 ### Active (In Progress)
 
-(None — v1.0 milestone complete)
+(None — v1.1 milestone complete)
 
 ### Planned (Next)
 
@@ -121,4 +125,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-23 after Phase 5 (v1.0 milestone complete)*
+*Last updated: 2026-02-24 after Phase 8 (v1.1 milestone complete)*

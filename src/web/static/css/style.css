@@ -3025,6 +3025,68 @@ a.pagination-btn:hover {
     color: var(--text-primary);
 }
 
+.lib-credit-link {
+    color: var(--text-primary);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.lib-credit-link:hover {
+    color: var(--accent-blue);
+    border-bottom-color: var(--accent-blue);
+}
+
+/* ── External Links (IMDb/TMDB) ── */
+
+.lib-external-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.55rem;
+    border-radius: 100px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-decoration: none;
+    letter-spacing: 0.03em;
+    transition: opacity 0.2s;
+    opacity: 0.7;
+}
+
+.lib-external-link:hover {
+    opacity: 1;
+}
+
+.lib-external-imdb {
+    background: rgba(245, 197, 24, 0.15);
+    color: #f5c518;
+}
+
+.lib-external-tmdb {
+    background: rgba(1, 180, 228, 0.12);
+    color: #01b4e4;
+}
+
+/* ── Rating Source Label (Grid) ── */
+
+.lib-card-rating-source {
+    font-size: 0.5rem;
+    font-weight: 600;
+    opacity: 0.8;
+    letter-spacing: 0.02em;
+}
+
+/* ── Person Filter Tag ── */
+
+.lib-filter-tag-person {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.lib-filter-tag-person svg {
+    opacity: 0.7;
+}
+
 .lib-detail-synopsis {
     margin-top: 0.5rem;
 }

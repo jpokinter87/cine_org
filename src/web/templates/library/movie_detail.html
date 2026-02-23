@@ -38,6 +38,12 @@
                     {{ '%.1f'|format(movie.vote_average) }} TMDB
                 </span>
                 {% endif %}
+                {% if movie.imdb_id %}
+                <a href="https://www.imdb.com/title/{{ movie.imdb_id }}/" target="_blank" rel="noopener" class="lib-external-link lib-external-imdb">IMDb</a>
+                {% endif %}
+                {% if movie.tmdb_id %}
+                <a href="https://www.themoviedb.org/movie/{{ movie.tmdb_id }}" target="_blank" rel="noopener" class="lib-external-link lib-external-tmdb">TMDB</a>
+                {% endif %}
             </div>
 
             <h1 class="lib-detail-title">{{ movie.title }}</h1>
@@ -60,13 +66,13 @@
                 {% if movie.director %}
                 <div class="lib-detail-credit-row">
                     <span class="lib-credit-label">Réalisateur</span>
-                    <span class="lib-credit-value">{{ movie.director }}</span>
+                    <span class="lib-credit-value"><a href="/library/?person={{ movie.director | urlencode }}" class="lib-credit-link">{{ movie.director }}</a></span>
                 </div>
                 {% endif %}
                 {% if movie.cast %}
                 <div class="lib-detail-credit-row">
                     <span class="lib-credit-label">Acteurs</span>
-                    <span class="lib-credit-value">{{ movie.cast | join(', ') }}</span>
+                    <span class="lib-credit-value">{% for actor in movie.cast %}<a href="/library/?person={{ actor | urlencode }}" class="lib-credit-link">{{ actor }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
                 </div>
                 {% endif %}
             </div>

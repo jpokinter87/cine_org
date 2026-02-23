@@ -15,8 +15,8 @@ CineOrg dispose d'un CLI complet et d'une interface web fonctionnelle. Le procha
 ## Current Milestone
 
 **v1.1 Enrichissement Données** (v1.1.0)
-Status: In Progress
-Phases: 2 of 3 complete
+Status: Complete
+Phases: 3 of 3 complete
 
 ## Phases
 
@@ -24,7 +24,7 @@ Phases: 2 of 3 complete
 |-------|------|-------|--------|-----------|
 | 6 | Enrichissement Films | 1/1 | Complete | 2026-02-23 |
 | 7 | Enrichissement Séries | 1/1 | Complete | 2026-02-23 |
-| 8 | Fiches Détaillées Enrichies | TBD | Not started | - |
+| 8 | Fiches Détaillées Enrichies | 1/1 | Complete | 2026-02-23 |
 
 ## Phase Details
 

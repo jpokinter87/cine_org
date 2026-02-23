@@ -38,6 +38,12 @@
                     {{ '%.1f'|format(series.vote_average) }} TMDB
                 </span>
                 {% endif %}
+                {% if series.imdb_id %}
+                <a href="https://www.imdb.com/title/{{ series.imdb_id }}/" target="_blank" rel="noopener" class="lib-external-link lib-external-imdb">IMDb</a>
+                {% endif %}
+                {% if series.tmdb_id %}
+                <a href="https://www.themoviedb.org/tv/{{ series.tmdb_id }}" target="_blank" rel="noopener" class="lib-external-link lib-external-tmdb">TMDB</a>
+                {% endif %}
             </div>
 
             <h1 class="lib-detail-title">{{ series.title }}</h1>
@@ -61,13 +67,13 @@
                 {% if series.director %}
                 <div class="lib-detail-credit-row">
                     <span class="lib-credit-label">Créateur{{ 's' if ', ' in (series.director or '') else '' }}</span>
-                    <span class="lib-credit-value">{{ series.director }}</span>
+                    <span class="lib-credit-value"><a href="/library/?person={{ series.director | urlencode }}" class="lib-credit-link">{{ series.director }}</a></span>
                 </div>
                 {% endif %}
                 {% if series.cast %}
                 <div class="lib-detail-credit-row">
                     <span class="lib-credit-label">Acteurs</span>
-                    <span class="lib-credit-value">{{ series.cast | join(', ') }}</span>
+                    <span class="lib-credit-value">{% for actor in series.cast %}<a href="/library/?person={{ actor | urlencode }}" class="lib-credit-link">{{ actor }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
                 </div>
                 {% endif %}
             </div>
@@ -80,7 +86,7 @@
             </div>
             {% endif %}
 
-            {% if series.tvdb_id or series.imdb_id %}
+            {% if series.tvdb_id or series.tmdb_id or series.imdb_id %}
             <details class="lib-detail-file-toggle">
                 <summary class="lib-file-toggle-btn">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -91,8 +97,9 @@
                     <div class="lib-file-row">
                         <span class="lib-file-label">IDs</span>
                         <span class="lib-file-ids">
-                            {% if series.tvdb_id %}TVDB: {{ series.tvdb_id }}{% endif %}
-                            {% if series.imdb_id %}{% if series.tvdb_id %} · {% endif %}IMDb: {{ series.imdb_id }}{% endif %}
+                            {% if series.tmdb_id %}TMDB: {{ series.tmdb_id }}{% endif %}
+                            {% if series.tvdb_id %}{% if series.tmdb_id %} · {% endif %}TVDB: {{ series.tvdb_id }}{% endif %}
+                            {% if series.imdb_id %}{% if series.tmdb_id or series.tvdb_id %} · {% endif %}IMDb: {{ series.imdb_id }}{% endif %}
                         </span>
                     </div>
                 </div>
