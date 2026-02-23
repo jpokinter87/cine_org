@@ -5,26 +5,26 @@
 See: .paul/PROJECT.md (updated 2026-02-23)
 
 **Core value:** Organiser et renommer automatiquement une vidéothèque personnelle à partir des téléchargements
-**Current focus:** v1.0 Interface Web — Phase 4 Transfert & Conflits
+**Current focus:** v1.0 Interface Web — Phase 4 complete, prêt pour Phase 5
 
 ## Current Position
 
 Milestone: v1.0 Interface Web
-Phase: 4 of 5 (Transfert & Conflits) — Not started
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-02-23 — Phase 3 complete, transitioned to Phase 4
+Phase: 4 of 5 (Transfert & Conflits) — Complete
+Plan: 04-01 complete
+Status: Phase complete, transition required
+Last activity: 2026-02-23 — Phase 4 UNIFY complete
 
 Progress:
-- Milestone: [██████░░░░] 60%
-- Phase 4: [░░░░░░░░░░] 0%
+- Milestone: [████████░░] 80%
+- Phase 4: [██████████] 100%
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Phase 3 loop complete — ready for Phase 4 PLAN]
+  ✓        ✓        ✓     [Loop complete — phase transition required]
 ```
 
 ## Accumulated Context
@@ -43,23 +43,27 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - WorkflowProgress class comme état partagé (asyncio.Task ↔ SSE)
 - Cascade auto-validation séries : valider 1 épisode → auto-valide les autres (même candidat TVDB)
 - Services individuels réutilisés dans le web (pas WorkflowService couplé Rich)
+- TransferProgress avec asyncio.Event pour pause/resume conflit
+- Silent Rich console pour neutraliser batch_builder en contexte web
+- Mode dry-run pour simulation sans risque
 
 ### Deferred Issues
 - Code dupliqué matching entre workflow web (routes/workflow.py) et CLI (matching_step.py)
+- Silent Rich console hack — refactoring batch_builder souhaitable
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: (pending phase commit)
+Last commit: 8e79f15
 Branch: master
 
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Phase 3 complete, ready to plan Phase 4
-Next action: /paul:plan for Phase 4 (Transfert & Conflits)
-Resume file: .paul/ROADMAP.md
+Stopped at: Phase 4 UNIFY complete
+Next action: Phase transition → then Phase 5 planning
+Resume file: .paul/phases/04-transfert-conflits/04-01-SUMMARY.md
 
 ---
 *STATE.md — Updated after every significant action*

@@ -1,0 +1,258 @@
+{# Fragment de progression transfert — injecté par POST /transfer/start, mis à jour via SSE #}
+
+<div class="workflow-progress" id="transfer-progress"{% if progress.dry_run %} data-dry-run="1"{% endif %}>
+    <div class="progress-header">
+        <div class="progress-title-row">
+            <h2 class="progress-title">
+                {% if progress.dry_run %}
+                Simulation en cours
+                {% else %}
+                Transfert en cours
+                {% endif %}
+            </h2>
+            <div class="progress-spinner">
+                <div class="spinner"></div>
+            </div>
+            {% if progress.dry_run %}
+            <span class="type-badge badge-series" style="margin-left: 0.5rem">DRY RUN</span>
+            {% endif %}
+        </div>
+        <p class="progress-message" id="transfer-message">Initialisation…</p>
+    </div>
+
+    {# Barre de progression #}
+    <div class="progress-bar-container">
+        <div class="progress-bar" id="transfer-bar" style="width: 0%"></div>
+    </div>
+
+    {# Compteurs live #}
+    <div class="progress-counters" id="transfer-counters">
+        <div class="progress-counter">
+            <span class="progress-counter-value" id="counter-current">0</span>
+            <span class="progress-counter-label" id="counter-label">fichier(s)</span>
+        </div>
+    </div>
+
+    {# Fichier en cours #}
+    <div class="progress-filename" id="transfer-filename"></div>
+</div>
+
+{# Zone conflit (remplie dynamiquement par JS quand SSE envoie 'conflict') #}
+<div id="conflict-zone" style="display:none"></div>
+
+{# Zone résultats (remplie par JS quand SSE envoie 'complete') #}
+<div id="transfer-results" style="display:none"></div>
+
+<script>
+(function() {
+    const es = new EventSource('/transfer/progress');
+    const bar = document.getElementById('transfer-bar');
+    const msg = document.getElementById('transfer-message');
+    const counterVal = document.getElementById('counter-current');
+    const counterLabel = document.getElementById('counter-label');
+    const filenameEl = document.getElementById('transfer-filename');
+    const progressEl = document.getElementById('transfer-progress');
+    const resultsEl = document.getElementById('transfer-results');
+    const conflictZone = document.getElementById('conflict-zone');
+
+    es.addEventListener('progress', function(e) {
+        const d = JSON.parse(e.data);
+        msg.textContent = d.message;
+
+        // Barre
+        let pct = d.total > 0 ? (d.current / d.total) * 100 : 0;
+        bar.style.width = Math.min(pct, 98) + '%';
+
+        // Compteurs
+        if (d.total > 0) {
+            counterVal.textContent = d.current + ' / ' + d.total;
+            counterLabel.textContent = 'fichier(s)';
+        }
+
+        // Fichier en cours
+        if (d.filename) {
+            filenameEl.textContent = d.filename;
+            filenameEl.style.display = 'block';
+        }
+
+        // Masquer le conflit si on reprend
+        conflictZone.style.display = 'none';
+    });
+
+    es.addEventListener('conflict', function(e) {
+        const d = JSON.parse(e.data);
+        msg.textContent = 'Conflit détecté — résolution requise';
+
+        // Construire le dialogue de conflit
+        let html = '<div class="conflict-overlay active">';
+        html += '<div class="conflict-card">';
+        html += '<h3 class="conflict-title">Conflit détecté</h3>';
+        html += '<p class="conflict-subtitle">' + d.filename + '</p>';
+
+        // Type de conflit
+        let typeLabel = d.type === 'name_collision' ? 'Collision de nom' : 'Contenu similaire';
+        html += '<div class="conflict-type-badge">' + typeLabel + '</div>';
+
+        // Tableau comparatif
+        html += '<div class="conflict-compare">';
+        html += '<div class="conflict-compare-col">';
+        html += '<div class="conflict-compare-header conflict-existing">Existant</div>';
+        html += '<div class="conflict-compare-row"><span class="conflict-label">Fichier</span><span class="conflict-value">' + d.existing_name + '</span></div>';
+        html += '<div class="conflict-compare-row"><span class="conflict-label">Taille</span><span class="conflict-value">' + d.existing_size + '</span></div>';
+        html += '<div class="conflict-compare-row"><span class="conflict-label">Résolution</span><span class="conflict-value">' + (d.existing_resolution || '?') + '</span></div>';
+        html += '<div class="conflict-compare-row"><span class="conflict-label">Vidéo</span><span class="conflict-value">' + (d.existing_video_codec || '?') + '</span></div>';
+        html += '<div class="conflict-compare-row"><span class="conflict-label">Audio</span><span class="conflict-value">' + (d.existing_audio_codec || '?') + '</span></div>';
+        html += '</div>';
+
+        html += '<div class="conflict-compare-vs">VS</div>';
+
+        html += '<div class="conflict-compare-col">';
+        html += '<div class="conflict-compare-header conflict-new">Nouveau</div>';
+        html += '<div class="conflict-compare-row"><span class="conflict-label">Fichier</span><span class="conflict-value">' + d.new_name + '</span></div>';
+        html += '<div class="conflict-compare-row"><span class="conflict-label">Taille</span><span class="conflict-value">' + d.new_size + '</span></div>';
+        html += '<div class="conflict-compare-row"><span class="conflict-label">Résolution</span><span class="conflict-value">' + (d.new_resolution || '?') + '</span></div>';
+        html += '<div class="conflict-compare-row"><span class="conflict-label">Vidéo</span><span class="conflict-value">' + (d.new_video_codec || '?') + '</span></div>';
+        html += '<div class="conflict-compare-row"><span class="conflict-label">Audio</span><span class="conflict-value">' + (d.new_audio_codec || '?') + '</span></div>';
+        html += '</div>';
+        html += '</div>';
+
+        // Boutons de résolution
+        html += '<div class="conflict-actions">';
+        html += '<button class="conflict-btn conflict-btn-old" onclick="resolveConflict(\'keep_old\')">Garder l\'ancien</button>';
+        html += '<button class="conflict-btn conflict-btn-new" onclick="resolveConflict(\'keep_new\')">Garder le nouveau</button>';
+        html += '<button class="conflict-btn conflict-btn-both" onclick="resolveConflict(\'keep_both\')">Garder les deux</button>';
+        html += '<button class="conflict-btn conflict-btn-skip" onclick="resolveConflict(\'skip\')">Passer</button>';
+        html += '</div>';
+
+        html += '</div>';
+        html += '</div>';
+
+        conflictZone.innerHTML = html;
+        conflictZone.style.display = 'block';
+    });
+
+    const isDryRun = progressEl.dataset.dryRun === '1';
+
+    es.addEventListener('complete', function(e) {
+        es.close();
+        const d = JSON.parse(e.data);
+        bar.style.width = '100%';
+        bar.classList.add('complete');
+
+        // Masquer le spinner
+        document.querySelector('.progress-spinner').style.display = 'none';
+        filenameEl.style.display = 'none';
+        conflictZone.style.display = 'none';
+        msg.textContent = isDryRun ? 'Simulation terminée' : 'Transfert terminé';
+
+        function tooltipHtml(files) {
+            if (!files || files.length === 0) return '';
+            return '<div class="result-tooltip">' +
+                files.map(function(f) { return '<div class="tooltip-file">' + f + '</div>'; }).join('') +
+                '</div>';
+        }
+
+        let html = '<div class="workflow-results-card">';
+        html += '<h2 class="results-title">' + (isDryRun ? 'Résultats de la simulation' : 'Résultats du transfert') + '</h2>';
+        html += '<div class="results-grid">';
+
+        html += '<div class="result-item result-success result-has-tooltip">' +
+            '<span class="result-value">' + d.transferred + '</span>' +
+            '<span class="result-label">Transféré(s)</span>' +
+            tooltipHtml(d.transferred_files) + '</div>';
+
+        if (d.duplicates_ignored > 0) {
+            html += '<div class="result-item result-muted result-has-tooltip">' +
+                '<span class="result-value">' + d.duplicates_ignored + '</span>' +
+                '<span class="result-label">Doublon(s) ignoré(s)</span>' +
+                tooltipHtml(d.duplicate_files) + '</div>';
+        }
+
+        if (d.conflicts_resolved > 0) {
+            html += '<div class="result-item">' +
+                '<span class="result-value">' + d.conflicts_resolved + '</span>' +
+                '<span class="result-label">Conflit(s) résolu(s)</span></div>';
+        }
+
+        if (d.errors > 0) {
+            html += '<div class="result-item result-pending result-has-tooltip">' +
+                '<span class="result-value">' + d.errors + '</span>' +
+                '<span class="result-label">Erreur(s)</span>' +
+                tooltipHtml(d.error_files) + '</div>';
+        }
+
+        html += '</div>';
+
+        // Détails des transferts (tableau fichier par fichier)
+        if (d.transferred_details && d.transferred_details.length > 0) {
+            html += '<div class="transfer-details-table">';
+            html += '<h3 class="details-table-title">Détail des fichiers</h3>';
+            d.transferred_details.forEach(function(item) {
+                html += '<div class="transfer-detail-row">';
+                html += '<div class="detail-filename">' +
+                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">' +
+                    '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>' +
+                    '<polyline points="14 2 14 8 20 8"/></svg> ' +
+                    item.name + '</div>';
+                html += '<div class="detail-paths">';
+                html += '<div class="detail-path"><span class="detail-path-label">Storage</span>' +
+                    '<span class="detail-path-value">' + item.storage + '</span></div>';
+                if (item.symlink) {
+                    html += '<div class="detail-path"><span class="detail-path-label">Symlink</span>' +
+                        '<span class="detail-path-value">' + item.symlink + '</span></div>';
+                }
+                html += '</div></div>';
+            });
+            html += '</div>';
+        }
+
+        // Actions
+        html += '<div class="results-actions">';
+        if (d.transferred > 0) {
+            let successMsg = isDryRun
+                ? d.transferred + ' fichier(s) transférable(s) avec succès'
+                : d.transferred + ' fichier(s) transféré(s) avec succès';
+            html += '<div class="results-complete">' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+                'width="24" height="24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>' +
+                '<polyline points="22 4 12 14.01 9 11.01"/></svg>' +
+                '<span>' + successMsg + '</span></div>';
+        }
+        html += '<a href="/transfer" class="action-btn action-secondary" style="margin-left:auto">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">' +
+            '<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>' +
+            'Retour au transfert</a>';
+        html += '</div>';
+
+        html += '</div>';
+
+        resultsEl.innerHTML = html;
+        resultsEl.style.display = 'block';
+        progressEl.classList.add('done');
+    });
+
+    es.addEventListener('error', function(e) {
+        es.close();
+        let errMsg = 'Erreur inconnue';
+        try {
+            const d = JSON.parse(e.data);
+            errMsg = d.message;
+        } catch(_) {}
+
+        bar.classList.add('error');
+        msg.textContent = 'Erreur : ' + errMsg;
+        msg.classList.add('error');
+        document.querySelector('.progress-spinner').style.display = 'none';
+    });
+
+    // Fonction globale pour la résolution de conflit
+    window.resolveConflict = function(choice) {
+        fetch('/transfer/resolve-conflict', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'choice=' + encodeURIComponent(choice)
+        });
+        conflictZone.style.display = 'none';
+    };
+})();
+</script>

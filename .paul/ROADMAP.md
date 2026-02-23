@@ -8,7 +8,7 @@ CineOrg dispose d'un CLI complet et fonctionnel. La prochaine étape majeure est
 
 **v1.0 Interface Web** (v1.0.0)
 Status: In progress
-Phases: 3 of 5 complete
+Phases: 4 of 5 complete
 
 ## Phases
 
@@ -17,7 +17,7 @@ Phases: 3 of 5 complete
 | 1 | Foundation Web | 1/1 | Complete | 2026-02-23 |
 | 2 | Validation Visuelle | 2/2 | Complete | 2026-02-23 |
 | 3 | Orchestration Workflow | 1/1 | Complete | 2026-02-23 |
-| 4 | Transfert & Conflits | TBD | Not started | - |
+| 4 | Transfert & Conflits | 1/1 | Complete | 2026-02-23 |
 | 5 | Bibliothèque & Maintenance | TBD | Not started | - |
 
 ## Phase Details
@@ -76,9 +76,12 @@ Phases: 3 of 5 complete
 - Confirmation et exécution du transfert
 - Détection et résolution de conflits (doublon, collision de noms)
 - Affichage comparatif des fichiers en conflit
+- Mode simulation (dry-run)
+
+**Status:** Complete (2026-02-23)
 
 **Plans:**
-- [ ] 04-01: Résumé batch + transfert + résolution conflits
+- [x] 04-01: Résumé batch + transfert + résolution conflits + dry-run
 
 ### Phase 5: Bibliothèque & Maintenance
 
@@ -99,4 +102,4 @@ Phases: 3 of 5 complete
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-23 — Phase 3 complete*
+*Last updated: 2026-02-23 — Phase 4 complete*
