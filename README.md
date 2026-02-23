@@ -15,6 +15,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Zone de staging](#zone-de-staging)
   - [Validation automatique et manuelle](#validation-automatique-et-manuelle)
   - [Détection des doublons](#détection-des-doublons)
+- [Peupler la base de données séries](#peupler-la-base-de-données-séries)
 - [Notes et évaluations](#notes-et-évaluations)
   - [Notes TMDB](#notes-tmdb)
   - [Notes IMDb](#notes-imdb)
@@ -537,6 +538,36 @@ uv run cineorg import /chemin/vers/videotheque
 # Mode simulation
 uv run cineorg import --dry-run
 ```
+
+### Peupler la base de données séries
+
+La commande `populate-series` scanne les symlinks dans `video/Séries/` pour créer les entrées séries et épisodes en base de données. Les cibles des symlinks sont résolues pour stocker le chemin physique (`file_path`) de chaque épisode.
+
+```bash
+# Simulation (affiche ce qui serait créé sans modifier la base)
+uv run cineorg populate-series --dry-run
+
+# Peupler depuis le video_dir configuré
+uv run cineorg populate-series
+
+# Peupler depuis un répertoire spécifique
+uv run cineorg populate-series /chemin/vers/video
+
+# Limiter à 50 séries (utile pour tester)
+uv run cineorg populate-series --limit 50
+```
+
+**Fonctionnement :**
+
+1. **Découverte** : Parcourt récursivement `video/Séries/` (toutes catégories : Séries TV, Animation, Mangas, etc.) et détecte les dossiers contenant un sous-dossier `Saison XX`.
+
+2. **Parsing** : Extrait le titre et l'année depuis le nom du dossier série (ex: `Breaking Bad (2008)` → titre "Breaking Bad", année 2008). Les dossiers sans année sont acceptés.
+
+3. **Épisodes** : Pour chaque fichier vidéo dans les `Saison XX/`, parse le pattern `SxxExx` et le titre d'épisode (format CineOrg : `Titre - S01E01 - Titre Episode - MULTi ...`).
+
+4. **Déduplication** : Vérifie l'existence en base par titre+année (séries) et series_id+saison+épisode (épisodes) avant insertion.
+
+**Note** : Cette commande ne fait aucun appel API. L'enrichissement TVDB pourra être fait séparément, comme `enrich-ratings` pour les films.
 
 ### Enrichir les métadonnées
 
