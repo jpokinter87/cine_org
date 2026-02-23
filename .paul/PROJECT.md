@@ -12,8 +12,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 0.9 (CLI complet) |
-| Status | Production (CLI) |
+| Version | 1.0 (CLI + Web) |
+| Status | Production |
 | Last Updated | 2026-02-23 |
 
 ## Requirements
@@ -30,18 +30,22 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 - [x] Cleanup et consolidation de la vidéothèque
 - [x] Import/enrichissement de vidéothèques existantes
 - [x] CLI complet via Typer
+- [x] Interface web graphique (FastAPI + Jinja2 + HTMX)
+  - Foundation web : FastAPI app, layout Jinja2, HTMX, page d'accueil stats — Phase 1
+  - Validation visuelle : liste pending, détail candidats enrichis, actions HTMX — Phase 2
+  - Orchestration workflow : scan → matching → auto-validation avec SSE temps réel — Phase 3
+  - Transfert et résolution de conflits via le web — Phase 4
+  - Navigation bibliothèque films/séries avec filtres et détail — Phase 5
+  - Page configuration (répertoires, clés API, seuils) — Phase 5
+  - Maintenance : diagnostics intégrité et cleanup avec SSE temps réel — Phase 5
 
 ### Active (In Progress)
 
-- [ ] Interface web graphique (FastAPI + Jinja2 + HTMX)
-  - [x] Foundation web : FastAPI app, layout Jinja2, HTMX, page d'accueil stats — Phase 1
-  - [x] Validation visuelle : liste pending, détail candidats enrichis, actions HTMX — Phase 2
-  - [x] Orchestration workflow : scan → matching → auto-validation avec SSE temps réel — Phase 3
+(None — v1.0 milestone complete)
 
 ### Planned (Next)
 
-- [ ] Transfert et résolution de conflits via le web
-- [ ] Navigation bibliothèque et outils maintenance
+(None defined yet)
 
 ### Out of Scope
 
@@ -92,6 +96,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | Dialogue custom pour actions destructives | Overlay CSS avec explication plutôt que confirm() natif | 2026-02-23 | Active |
 | SSE pour progression workflow | EventSource + StreamingResponse, état partagé via WorkflowProgress | 2026-02-23 | Active |
 | Cascade auto-validation séries | Valider 1 épisode auto-valide les autres de la même série (même candidat TVDB) | 2026-02-23 | Active |
+| SSE maintenance multi-phases | Progression par phase pour analyses longues (intégrité 3, cleanup 6) | 2026-02-23 | Active |
+| Scope Films+Séries maintenance | Limiter les analyses aux sous-dossiers pertinents | 2026-02-23 | Active |
 
 ## Success Metrics
 
@@ -99,7 +105,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 |--------|--------|---------|--------|
 | Couverture tests | 90%+ | ~90% | On track |
 | CLI fonctionnel | Toutes commandes | Complet | Achieved |
-| Interface web | Workflow complet | Workflow + validation | In Progress |
+| Interface web | Workflow complet | Complet (5 phases) | Achieved |
 
 ## Tech Stack
 
@@ -115,4 +121,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-23 after Phase 3*
+*Last updated: 2026-02-23 after Phase 5 (v1.0 milestone complete)*

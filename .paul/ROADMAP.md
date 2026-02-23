@@ -7,8 +7,8 @@ CineOrg dispose d'un CLI complet et fonctionnel. La prochaine étape majeure est
 ## Current Milestone
 
 **v1.0 Interface Web** (v1.0.0)
-Status: In progress
-Phases: 4 of 5 complete
+Status: Complete
+Phases: 5 of 5 complete
 
 ## Phases
 
@@ -18,7 +18,7 @@ Phases: 4 of 5 complete
 | 2 | Validation Visuelle | 2/2 | Complete | 2026-02-23 |
 | 3 | Orchestration Workflow | 1/1 | Complete | 2026-02-23 |
 | 4 | Transfert & Conflits | 1/1 | Complete | 2026-02-23 |
-| 5 | Bibliothèque & Maintenance | 1/3 | In Progress | - |
+| 5 | Bibliothèque & Maintenance | 3/3 | Complete | 2026-02-23 |
 
 ## Phase Details
 
@@ -97,13 +97,17 @@ Phases: 4 of 5 complete
 - Vérification d'intégrité
 - Cleanup / nettoyage
 
-**Status:** In Progress
+**Status:** Complete (2026-02-23)
 
 **Plans:**
 - [x] 05-01: Navigation bibliothèque films/séries + enrichissement séries/crédits
 - [x] 05-02: Page de configuration (répertoires, clés API, seuils, logging)
-- [ ] 05-03: Outils maintenance (repair, check, cleanup)
+- [x] 05-03: Outils maintenance (repair, check, cleanup)
+
+### Milestone Summary
+
+All 5 phases complete. Interface web fully functional alongside the CLI.
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-23 — Phase 4 complete*
+*Last updated: 2026-02-23 — v1.0 milestone complete*
