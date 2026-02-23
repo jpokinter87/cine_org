@@ -16,6 +16,7 @@ from src.adapters.cli.commands.import_commands import (
     import_library,
     enrich,
     populate_movies,
+    populate_series,
 )
 from src.adapters.cli.commands.enrichment_commands import (
     enrich_ratings,
@@ -61,6 +62,7 @@ __all__ = [
     "import_library",
     "enrich",
     "populate_movies",
+    "populate_series",
     # enrichment
     "enrich_ratings",
     "enrich_imdb_ids",

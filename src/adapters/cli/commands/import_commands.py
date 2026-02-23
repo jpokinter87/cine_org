@@ -1,8 +1,9 @@
 """
-Commandes CLI d'import et d'enrichissement de base (import, enrich, populate-movies).
+Commandes CLI d'import et d'enrichissement de base (import, enrich, populate-movies, populate-series).
 """
 
 import asyncio
+import re
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -314,3 +315,285 @@ async def _populate_movies_async(container, limit: int, dry_run: bool) -> None:
 
         if tmdb_client:
             await tmdb_client.close()
+
+
+# --- Regex pour le parsing des dossiers et fichiers series ---
+_SERIES_DIR_RE = re.compile(r"^(.+?)\s*\((\d{4})\)$")
+_SEASON_DIR_RE = re.compile(r"^Saison\s+(\d+)$", re.IGNORECASE)
+_EPISODE_RE = re.compile(r"S(\d{2,})E(\d{2,})", re.IGNORECASE)
+# Format CineOrg : "Titre - SxxExx - Titre Episode - MULTI/MUL/VF/... codec resolution.ext"
+_EPISODE_TITLE_RE = re.compile(
+    r"S\d{2,}E\d{2,}\s*-\s*(.+?)\s*-\s*(?:MUL|VF|VO|FR|EN|MULTI|FRENCH|CUSTOM)",
+    re.IGNORECASE,
+)
+
+
+def populate_series(
+    source_dir: Annotated[
+        Optional[Path],
+        typer.Argument(help="Repertoire video racine (contient Séries/ avec symlinks)"),
+    ] = None,
+    limit: Annotated[
+        int,
+        typer.Option(
+            "--limit", "-l",
+            help="Nombre maximum de series a traiter (0 = illimite)",
+        ),
+    ] = 0,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Simule sans modifier la base"),
+    ] = False,
+) -> None:
+    """Peuple les tables series et episodes depuis les symlinks video."""
+    asyncio.run(_populate_series_async(source_dir, limit, dry_run))
+
+
+@with_container()
+async def _populate_series_async(
+    container, source_dir: Optional[Path], limit: int, dry_run: bool
+) -> None:
+    """Implementation async de la commande populate-series."""
+    from src.core.entities.media import Series
+    from src.utils.constants import VIDEO_EXTENSIONS
+
+    config = container.config()
+    series_repo = container.series_repository()
+    episode_repo = container.episode_repository()
+
+    # Par defaut, scanner video_dir (symlinks au format CineOrg)
+    base_dir = source_dir or Path(config.video_dir)
+    series_root = base_dir / "Séries"
+
+    if not series_root.exists():
+        console.print(f"[red]Erreur:[/red] Repertoire introuvable: {series_root}")
+        raise typer.Exit(code=1)
+
+    if dry_run:
+        console.print("[yellow]Mode dry-run — aucune modification[/yellow]\n")
+
+    console.print(f"[bold cyan]Population des tables series/episodes[/bold cyan]: {series_root}\n")
+
+    with suppress_loguru():
+        # Phase 1 : decouvrir tous les dossiers serie
+        series_dirs = _discover_series_dirs(series_root)
+
+        if limit > 0:
+            series_dirs = series_dirs[:limit]
+
+        console.print(f"[dim]{len(series_dirs)} dossier(s) serie detecte(s)[/dim]\n")
+
+        series_created = 0
+        series_skipped = 0
+        episodes_created = 0
+        episodes_skipped = 0
+        errors = 0
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("[cyan]Traitement...", total=len(series_dirs))
+
+            for series_path, title, year in series_dirs:
+                progress.update(task, description=f"[cyan]{title}")
+
+                try:
+                    # Verifier si la serie existe deja (titre exact + annee)
+                    existing = series_repo.search_by_title(title, year=year)
+                    exact_match = next(
+                        (s for s in existing if s.title == title and s.year == year),
+                        None,
+                    )
+
+                    if exact_match:
+                        series_id = exact_match.id
+                        series_skipped += 1
+                    else:
+                        series_entity = Series(title=title, year=year)
+                        if not dry_run:
+                            saved = series_repo.save(series_entity)
+                            series_id = saved.id
+                        else:
+                            series_id = None
+                        series_created += 1
+
+                    # Phase 2 : scanner les episodes
+                    ep_created, ep_skipped, ep_errors = _process_episodes(
+                        series_path=series_path,
+                        series_id=series_id,
+                        episode_repo=episode_repo,
+                        video_extensions=VIDEO_EXTENSIONS,
+                        dry_run=dry_run,
+                    )
+                    episodes_created += ep_created
+                    episodes_skipped += ep_skipped
+                    errors += ep_errors
+
+                except Exception as e:
+                    console.print(f"\n[red]Erreur[/red] {title}: {e}")
+                    errors += 1
+
+                progress.advance(task)
+
+    # Resume final
+    console.print(f"\n[bold]Resume:[/bold]")
+    console.print(f"  [green]{series_created}[/green] serie(s) creee(s)")
+    console.print(f"  [yellow]{series_skipped}[/yellow] serie(s) deja en base")
+    console.print(f"  [green]{episodes_created}[/green] episode(s) cree(s)")
+    console.print(f"  [yellow]{episodes_skipped}[/yellow] episode(s) deja en base")
+    if errors > 0:
+        console.print(f"  [red]{errors}[/red] erreur(s)")
+
+
+def _discover_series_dirs(series_root: Path) -> list[tuple[Path, str, int | None]]:
+    """
+    Decouvre tous les dossiers serie sous le repertoire racine.
+
+    Parcourt recursivement les sous-categories (Animation, Séries TV, etc.)
+    et detecte les dossiers contenant un sous-dossier 'Saison'.
+
+    Retourne une liste de (chemin, titre, annee).
+    """
+    results: list[tuple[Path, str, int | None]] = []
+
+    for category_dir in sorted(series_root.iterdir()):
+        if not category_dir.is_dir():
+            continue
+        _find_series_in_dir(category_dir, results)
+
+    results.sort(key=lambda x: x[1].lower())
+    return results
+
+
+def _find_series_in_dir(
+    directory: Path, results: list[tuple[Path, str, int | None]]
+) -> None:
+    """
+    Recherche recursivement les dossiers serie dans un repertoire.
+
+    Un dossier est considere comme une serie s'il contient au moins
+    un sous-dossier 'Saison XX'.
+    """
+    try:
+        children = sorted(directory.iterdir())
+    except PermissionError:
+        return
+
+    has_season = any(
+        child.is_dir() and _SEASON_DIR_RE.match(child.name) for child in children
+    )
+
+    if has_season:
+        match = _SERIES_DIR_RE.match(directory.name)
+        if match:
+            title = match.group(1).strip()
+            year = int(match.group(2))
+        else:
+            title = directory.name.strip()
+            year = None
+        results.append((directory, title, year))
+    else:
+        for child in children:
+            if child.is_dir():
+                _find_series_in_dir(child, results)
+
+
+def _resolve_symlink_target(path: Path) -> str | None:
+    """Resout la cible d'un symlink, retourne le chemin absolu ou None."""
+    if path.is_symlink():
+        try:
+            target = path.resolve()
+            if target.exists():
+                return str(target)
+        except (OSError, ValueError):
+            pass
+    return None
+
+
+def _process_episodes(
+    series_path: Path,
+    series_id: str | None,
+    episode_repo,
+    video_extensions: frozenset[str],
+    dry_run: bool,
+) -> tuple[int, int, int]:
+    """
+    Traite les episodes d'un dossier serie.
+
+    Scanne les symlinks et resout leurs cibles pour stocker file_path.
+    Retourne (crees, ignores, erreurs).
+    """
+    created = 0
+    skipped = 0
+    errors = 0
+
+    from src.core.entities.media import Episode
+    from src.infrastructure.persistence.models import EpisodeModel
+
+    for season_dir in sorted(series_path.iterdir()):
+        if not season_dir.is_dir():
+            continue
+        season_match = _SEASON_DIR_RE.match(season_dir.name)
+        if not season_match:
+            continue
+        season_num = int(season_match.group(1))
+
+        for video_file in sorted(season_dir.iterdir()):
+            # Accepter fichiers reels et symlinks
+            if not (video_file.is_file() or video_file.is_symlink()):
+                continue
+            if video_file.suffix.lower() not in video_extensions:
+                continue
+
+            ep_match = _EPISODE_RE.search(video_file.name)
+            if not ep_match:
+                errors += 1
+                continue
+
+            ep_num = int(ep_match.group(2))
+
+            # Titre d'episode (format CineOrg)
+            ep_title = ""
+            title_match = _EPISODE_TITLE_RE.search(video_file.name)
+            if title_match:
+                ep_title = title_match.group(1).strip()
+
+            # Resoudre la cible du symlink pour file_path
+            file_path = _resolve_symlink_target(video_file)
+            if file_path is None and video_file.is_file():
+                file_path = str(video_file.resolve())
+
+            # Deduplication par series_id + season + episode
+            if series_id is not None:
+                existing_eps = episode_repo.get_by_series(
+                    series_id, season=season_num, episode=ep_num
+                )
+                if existing_eps:
+                    skipped += 1
+                    continue
+
+            episode = Episode(
+                series_id=series_id,
+                season_number=season_num,
+                episode_number=ep_num,
+                title=ep_title,
+            )
+
+            if not dry_run and series_id is not None:
+                try:
+                    # Sauvegarder avec file_path via le modele directement
+                    model = episode_repo._to_model(episode)
+                    model.file_path = file_path
+                    episode_repo._session.add(model)
+                    episode_repo._session.commit()
+                    created += 1
+                except Exception:
+                    errors += 1
+            else:
+                created += 1
+
+    return created, skipped, errors

@@ -21,6 +21,7 @@ from .adapters.cli.commands import (
     import_library,
     pending,
     populate_movies,
+    populate_series,
     process,
     regroup,
     repair_links,
@@ -69,6 +70,7 @@ app.command(name="import")(import_library)
 # Commandes de maintenance
 app.command()(enrich)
 app.command(name="populate-movies")(populate_movies)
+app.command(name="populate-series")(populate_series)
 app.command(name="enrich-ratings")(enrich_ratings)
 app.command(name="enrich-imdb-ids")(enrich_imdb_ids)
 app.command(name="repair-links")(repair_links)
