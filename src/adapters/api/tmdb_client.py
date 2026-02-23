@@ -263,6 +263,65 @@ class TMDBClient(IMediaAPIClient):
 
         return details
 
+    async def find_by_imdb_id(self, imdb_id: str) -> Optional[MediaDetails]:
+        """
+        Recherche un film ou une série via son ID IMDb.
+
+        Utilise l'endpoint TMDB /find/{external_id} avec source=imdb_id.
+        Si un film est trouvé, retourne ses détails complets via get_details.
+
+        Args:
+            imdb_id: ID IMDb (format ttXXXXXXX)
+
+        Returns:
+            MediaDetails si trouvé, None sinon
+        """
+        client = self._get_client()
+        try:
+            response = await request_with_retry(
+                client,
+                "GET",
+                f"/find/{imdb_id}",
+                params={"language": "fr-FR", "external_source": "imdb_id"},
+            )
+        except httpx.HTTPStatusError:
+            return None
+
+        data = response.json()
+
+        # Chercher dans les résultats films
+        movie_results = data.get("movie_results", [])
+        if movie_results:
+            tmdb_id = str(movie_results[0]["id"])
+            return await self.get_details(tmdb_id)
+
+        # Chercher dans les résultats séries TV
+        tv_results = data.get("tv_results", [])
+        if tv_results:
+            item = tv_results[0]
+            # Construire un MediaDetails directement
+            release_date = item.get("first_air_date", "")
+            year = int(release_date[:4]) if release_date and len(release_date) >= 4 else None
+            poster_path = item.get("poster_path")
+            poster_url = f"{self.TMDB_IMAGE_BASE_URL}{poster_path}" if poster_path else None
+
+            return MediaDetails(
+                id=str(item["id"]),
+                title=item.get("name", item.get("original_name", "")),
+                original_title=item.get("original_name"),
+                year=year,
+                genres=tuple(
+                    TMDB_GENRE_MAPPING.get(gid, "Inconnu")
+                    for gid in item.get("genre_ids", [])
+                ),
+                overview=item.get("overview"),
+                poster_url=poster_url,
+                vote_average=item.get("vote_average"),
+                vote_count=item.get("vote_count"),
+            )
+
+        return None
+
     async def get_external_ids(self, media_id: str) -> Optional[dict[str, str | None]]:
         """
         Recupere les IDs externes (IMDb, Wikidata, etc.) pour un film.

@@ -313,17 +313,12 @@ class ValidationService:
             return await self._tvdb_client.get_details(id_value)
 
         elif id_type == "imdb":
-            # TMDB supporte la recherche par IMDB ID via l'endpoint /find
-            # Pour simplifier, on utilise get_details avec l'ID IMDB
-            # Note: Dans une version complete, on utiliserait /find/{external_id}
             if self._tmdb_client is None:
                 return None
             api_key = getattr(self._tmdb_client, "_api_key", None)
             if not api_key:
                 return None
-            # TMDB get_details attend un ID TMDB, pas IMDB
-            # Pour IMDB, il faudrait un endpoint specifique - retourne None pour l'instant
-            return None
+            return await self._tmdb_client.find_by_imdb_id(id_value)
 
         return None
 

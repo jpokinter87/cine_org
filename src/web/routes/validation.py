@@ -221,17 +221,67 @@ async def validate_candidate(
             f'<div class="action-msg action-error">Erreur : {exc}</div>',
         )
 
+    # Auto-valider les autres épisodes de la même série (source tvdb)
+    auto_count = 0
+    if selected.source == "tvdb":
+        auto_count = await _auto_validate_series_episodes(
+            service, pending, selected
+        )
+
     title = selected.title or candidate_id
+    if auto_count > 0:
+        msg = (
+            f'Validé : <strong>{title}</strong> '
+            f'+ {auto_count} autre(s) épisode(s) auto-validé(s) — Redirection…'
+        )
+    else:
+        msg = f'Validé : <strong>{title}</strong> — Redirection…'
+
     html = (
         f'<div class="action-msg action-success">'
         f'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
         f'width="18" height="18"><polyline points="20 6 9 17 4 12"/></svg>'
-        f'Validé : <strong>{title}</strong> — Redirection…'
+        f'{msg}'
         f'</div>'
     )
     response = HTMLResponse(html)
     response.headers["HX-Redirect"] = "/validation"
     return response
+
+
+async def _auto_validate_series_episodes(
+    service, pending, candidate
+) -> int:
+    """Auto-valide les autres épisodes de la même série.
+
+    Parcourt les pending restants et valide ceux qui ont le même
+    candidat TVDB (même ID) dans leur liste de candidats.
+
+    Returns:
+        Nombre d'épisodes auto-validés.
+    """
+    from ...core.entities.video import ValidationStatus
+
+    candidate_id = candidate.id
+    auto_count = 0
+
+    remaining = [
+        p for p in service.list_pending()
+        if p.validation_status == ValidationStatus.PENDING
+        and not p.auto_validated
+        and p.id != pending.id
+    ]
+
+    for other in remaining:
+        other_candidates = parse_candidates(other.candidates)
+        matching = [c for c in other_candidates if c.id == candidate_id]
+        if matching:
+            await service.validate_candidate(other, matching[0])
+            auto_count += 1
+            fname = other.video_file.filename if other.video_file else "?"
+            logger.info("Auto-validé (cascade série): %s", fname)
+
+    return auto_count
 
 
 @router.post("/{pending_id}/reject", response_class=HTMLResponse)
@@ -269,7 +319,7 @@ async def search_manual(
     request: Request,
     pending_id: str,
     q: str = Query("", min_length=1),
-    year: Optional[int] = Query(None),
+    year: Optional[str] = Query(None),
 ):
     """Recherche manuelle par titre via HTMX."""
     container = request.app.state.container
@@ -286,8 +336,16 @@ async def search_manual(
     filename = pending.video_file.filename if pending.video_file else ""
     is_series = _is_series(candidates, filename)
 
+    # Convertir year string → int (le formulaire HTML envoie "" si vide)
+    year_int: Optional[int] = None
+    if year and year.strip():
+        try:
+            year_int = int(year.strip())
+        except ValueError:
+            year_int = None
+
     # Recherche via le service
-    results = await service.search_manual(q, is_series=is_series, year=year)
+    results = await service.search_manual(q, is_series=is_series, year=year_int)
 
     # Scorer les résultats
     matcher = container.matcher_service()
@@ -296,7 +354,7 @@ async def search_manual(
         file_duration = pending.video_file.media_info.duration_seconds
 
     scored = matcher.score_results(
-        results, q, query_year=year, query_duration=file_duration, is_series=is_series
+        results, q, query_year=year_int, query_duration=file_duration, is_series=is_series
     )
 
     # Enrichir les top-10
@@ -337,6 +395,10 @@ async def search_by_id(
             '<div class="action-msg action-error">Fichier introuvable.</div>',
             status_code=404,
         )
+
+    # Normaliser l'ID IMDB : ajouter le préfixe 'tt' si absent
+    if id_type == "imdb" and id_value.isdigit():
+        id_value = f"tt{id_value}"
 
     details = await service.search_by_external_id(id_type, id_value)
 

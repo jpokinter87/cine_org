@@ -473,11 +473,16 @@ class TestSearchByExternalId:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_search_by_imdb_id(self, validation_service):
-        """id_type=imdb -> retourne None (non implemente completement)."""
-        # IMDB search via TMDB /find endpoint is not fully implemented
+    async def test_search_by_imdb_id(
+        self, validation_service, mock_tmdb_client, sample_media_details
+    ):
+        """id_type=imdb -> find_by_imdb_id via TMDB client."""
+        mock_tmdb_client.find_by_imdb_id = AsyncMock(return_value=sample_media_details)
+
         result = await validation_service.search_by_external_id("imdb", "tt0499549")
-        assert result is None
+
+        mock_tmdb_client.find_by_imdb_id.assert_called_once_with("tt0499549")
+        assert result == sample_media_details
 
     @pytest.mark.asyncio
     async def test_search_by_external_id_no_client(self, mock_pending_repo, mock_matcher):

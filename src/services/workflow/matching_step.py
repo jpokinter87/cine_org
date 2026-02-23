@@ -180,9 +180,8 @@ class MatchingStepMixin:
         if not self._tvdb_client:
             return candidates
 
-        # Phase 1 : elimination des candidats impossibles
+        # Elimination des candidats dont la saison n'a pas assez d'episodes
         compatible = []
-        season_counts: dict[str, int] = {}
         for candidate in candidates:
             try:
                 count = await self._tvdb_client.get_season_episode_count(
@@ -190,19 +189,12 @@ class MatchingStepMixin:
                 )
                 if count is not None and episode <= count:
                     compatible.append(candidate)
-                    season_counts[candidate.id] = count
+                elif count is None:
+                    # Pas de données pour cette saison → garder par précaution
+                    compatible.append(candidate)
             except Exception:
                 # En cas d'erreur API, conserver le candidat par precaution
                 compatible.append(candidate)
-
-        # Phase 2 : raffinement par contexte batch
-        if max_episode_in_batch and len(compatible) > 1:
-            exact_match = [
-                c for c in compatible
-                if season_counts.get(c.id) == max_episode_in_batch
-            ]
-            if exact_match:
-                return exact_match
 
         return compatible
 

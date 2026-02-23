@@ -265,8 +265,19 @@ class TVDBClient(IMediaAPIClient):
         genres = tuple(series.get("genre", []))
 
         # Construire l'URL du poster
+        # L'API v3 retourne des paths variés :
+        #   "/banners/posters/xxx.jpg" (déjà complet)
+        #   "posters/xxx.jpg" ou "series/xxx/posters/xxx.jpg" (besoin de /banners/)
+        #   "v4/series/xxx/posters/xxx.jpg" (besoin de /banners/)
         poster_path = series.get("poster")
-        poster_url = f"https://artworks.thetvdb.com{poster_path}" if poster_path else None
+        if poster_path:
+            if not poster_path.startswith("/"):
+                poster_path = f"/{poster_path}"
+            if not poster_path.startswith("/banners/"):
+                poster_path = f"/banners{poster_path}"
+            poster_url = f"https://artworks.thetvdb.com{poster_path}"
+        else:
+            poster_url = None
 
         # Construire MediaDetails
         details = MediaDetails(

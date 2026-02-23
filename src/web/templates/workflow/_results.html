@@ -1,0 +1,59 @@
+{# Fragment résultats — affiché si on revient sur /workflow après un run terminé #}
+
+<div class="workflow-results-card">
+    <h2 class="results-title">Dernier traitement</h2>
+    <div class="results-grid">
+        <div class="result-item result-has-tooltip">
+            <span class="result-value">{{ progress.scanned }}</span>
+            <span class="result-label">Fichier(s) scanné(s)</span>
+            {% if progress.scanned_files %}
+            <div class="result-tooltip">
+                {% for f in progress.scanned_files %}<div class="tooltip-file">{{ f }}</div>{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        <div class="result-item result-success result-has-tooltip">
+            <span class="result-value">{{ progress.auto_validated }}</span>
+            <span class="result-label">Auto-validé(s)</span>
+            {% if progress.auto_validated_files %}
+            <div class="result-tooltip">
+                {% for f in progress.auto_validated_files %}<div class="tooltip-file">{{ f }}</div>{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        <div class="result-item {% if progress.pending_remaining > 0 %}result-pending{% endif %} result-has-tooltip">
+            <span class="result-value">{{ progress.pending_remaining }}</span>
+            <span class="result-label">En attente</span>
+            {% if progress.pending_files %}
+            <div class="result-tooltip">
+                {% for f in progress.pending_files %}<div class="tooltip-file">{{ f }}</div>{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% if progress.undersized_ignored > 0 %}
+        <div class="result-item result-muted result-has-tooltip">
+            <span class="result-value">{{ progress.undersized_ignored }}</span>
+            <span class="result-label">Sous-dimensionné(s) ignoré(s)</span>
+            {% if progress.undersized_files %}
+            <div class="result-tooltip">
+                {% for f in progress.undersized_files %}<div class="tooltip-file">{{ f }}</div>{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    {% if progress.pending_remaining > 0 %}
+    <div class="results-actions">
+        <a href="/validation" class="action-btn action-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            Valider les fichiers en attente
+        </a>
+    </div>
+    {% elif progress.scanned > 0 %}
+    <div class="results-complete">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <span>Tous les fichiers ont été auto-validés</span>
+    </div>
+    {% endif %}
+</div>

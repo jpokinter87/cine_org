@@ -1,0 +1,210 @@
+{# Fragment de progression — injecté par POST /workflow/start, mis à jour via SSE #}
+
+<div class="workflow-progress" id="workflow-progress">
+    <div class="progress-header">
+        <div class="progress-title-row">
+            <h2 class="progress-title">Traitement en cours</h2>
+            <div class="progress-spinner">
+                <div class="spinner"></div>
+            </div>
+        </div>
+        <p class="progress-message" id="progress-message">Initialisation…</p>
+    </div>
+
+    {# Barre de progression #}
+    <div class="progress-bar-container">
+        <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+    </div>
+
+    {# Étapes #}
+    <div class="progress-steps" id="progress-steps">
+        <div class="progress-step" data-step="1">
+            <div class="progress-step-dot"></div>
+            <span class="progress-step-label">Réinit.</span>
+        </div>
+        <div class="progress-step" data-step="2">
+            <div class="progress-step-dot"></div>
+            <span class="progress-step-label">Scan</span>
+        </div>
+        <div class="progress-step" data-step="3">
+            <div class="progress-step-dot"></div>
+            <span class="progress-step-label">Matching</span>
+        </div>
+        <div class="progress-step" data-step="4">
+            <div class="progress-step-dot"></div>
+            <span class="progress-step-label">Auto-validation</span>
+        </div>
+    </div>
+
+    {# Compteurs live #}
+    <div class="progress-counters" id="progress-counters">
+        <div class="progress-counter">
+            <span class="progress-counter-value" id="counter-current">0</span>
+            <span class="progress-counter-label" id="counter-label">fichier(s)</span>
+        </div>
+    </div>
+
+    {# Fichier en cours #}
+    <div class="progress-filename" id="progress-filename"></div>
+</div>
+
+{# Zone résultats (remplie par JS quand SSE envoie 'complete') #}
+<div id="workflow-results" style="display:none"></div>
+
+<script>
+(function() {
+    const es = new EventSource('/workflow/progress');
+    const bar = document.getElementById('progress-bar');
+    const msg = document.getElementById('progress-message');
+    const steps = document.getElementById('progress-steps');
+    const counterVal = document.getElementById('counter-current');
+    const counterLabel = document.getElementById('counter-label');
+    const filenameEl = document.getElementById('progress-filename');
+    const progressEl = document.getElementById('workflow-progress');
+    const resultsEl = document.getElementById('workflow-results');
+
+    es.addEventListener('progress', function(e) {
+        const d = JSON.parse(e.data);
+        msg.textContent = d.message;
+
+        // Mettre à jour la barre
+        let pct = 0;
+        if (d.total > 0) {
+            // Progression pondérée par étape
+            const stepWeight = (d.step_number - 1) / d.total_steps;
+            const inStepPct = d.current / d.total;
+            pct = (stepWeight + inStepPct / d.total_steps) * 100;
+        } else {
+            pct = ((d.step_number - 1) / d.total_steps) * 100;
+        }
+        bar.style.width = Math.min(pct, 98) + '%';
+
+        // Marquer les étapes complétées
+        steps.querySelectorAll('.progress-step').forEach(function(s) {
+            const sn = parseInt(s.dataset.step);
+            s.classList.toggle('completed', sn < d.step_number);
+            s.classList.toggle('active', sn === d.step_number);
+        });
+
+        // Compteurs
+        if (d.total > 0) {
+            counterVal.textContent = d.current + ' / ' + d.total;
+            counterLabel.textContent = 'fichier(s)';
+        }
+
+        // Nom du fichier en cours
+        if (d.filename) {
+            filenameEl.textContent = d.filename;
+            filenameEl.style.display = 'block';
+        }
+    });
+
+    es.addEventListener('complete', function(e) {
+        es.close();
+        const d = JSON.parse(e.data);
+        bar.style.width = '100%';
+        bar.classList.add('complete');
+
+        steps.querySelectorAll('.progress-step').forEach(function(s) {
+            s.classList.add('completed');
+            s.classList.remove('active');
+        });
+
+        // Masquer le spinner
+        document.querySelector('.progress-spinner').style.display = 'none';
+
+        // Construire les résultats
+        msg.textContent = 'Traitement terminé';
+        filenameEl.style.display = 'none';
+
+        function tooltipHtml(files) {
+            if (!files || files.length === 0) return '';
+            return '<div class="result-tooltip">' +
+                files.map(function(f) { return '<div class="tooltip-file">' + f + '</div>'; }).join('') +
+                '</div>';
+        }
+
+        let html = '<div class="workflow-results-card">';
+        html += '<h2 class="results-title">Résultats</h2>';
+        html += '<div class="results-grid">';
+
+        html += '<div class="result-item result-has-tooltip">' +
+            '<span class="result-value">' + d.scanned + '</span>' +
+            '<span class="result-label">Fichier(s) scanné(s)</span>' +
+            tooltipHtml(d.scanned_files) + '</div>';
+
+        html += '<div class="result-item result-success result-has-tooltip">' +
+            '<span class="result-value">' + d.auto_validated + '</span>' +
+            '<span class="result-label">Auto-validé(s)</span>' +
+            tooltipHtml(d.auto_validated_files) + '</div>';
+
+        html += '<div class="result-item' + (d.pending_remaining > 0 ? ' result-pending' : '') + ' result-has-tooltip">' +
+            '<span class="result-value">' + d.pending_remaining + '</span>' +
+            '<span class="result-label">En attente</span>' +
+            tooltipHtml(d.pending_files) + '</div>';
+
+        if (d.undersized_ignored > 0) {
+            html += '<div class="result-item result-muted result-has-tooltip">' +
+                '<span class="result-value">' + d.undersized_ignored + '</span>' +
+                '<span class="result-label">Sous-dimensionné(s) ignoré(s)</span>' +
+                tooltipHtml(d.undersized_files) + '</div>';
+        }
+
+        html += '</div>';
+
+        if (d.pending_remaining > 0) {
+            html += '<div class="results-actions">' +
+                '<a href="/validation" class="action-btn action-primary">' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" ' +
+                'stroke-linecap="round" stroke-linejoin="round" width="16" height="16">' +
+                '<polyline points="9 11 12 14 22 4"/>' +
+                '<path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>' +
+                '</svg>Valider les fichiers en attente</a></div>';
+        } else if (d.scanned > 0) {
+            html += '<div class="results-complete">' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+                'width="24" height="24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>' +
+                '<polyline points="22 4 12 14.01 9 11.01"/></svg>' +
+                '<span>Tous les fichiers ont été auto-validés</span></div>';
+        }
+
+        html += '</div>';
+
+        resultsEl.innerHTML = html;
+        resultsEl.style.display = 'block';
+        progressEl.classList.add('done');
+
+        // Rafraîchir la section "État actuel" (stale après le workflow)
+        var statusSection = document.querySelector('.workflow-status');
+        if (statusSection) {
+            // Mettre à jour les compteurs avec les données du workflow
+            var statusValues = statusSection.querySelectorAll('.workflow-status-value');
+            if (statusValues.length >= 1) {
+                statusValues[0].textContent = d.pending_remaining;
+                statusValues[0].classList.toggle('has-pending', d.pending_remaining > 0);
+            }
+            if (statusValues.length >= 2) {
+                statusValues[1].textContent = d.auto_validated;
+            }
+        }
+
+        // Ré-afficher le formulaire de lancement
+        var launchSection = document.querySelector('.workflow-launch');
+        if (launchSection) launchSection.style.display = '';
+    });
+
+    es.addEventListener('error', function(e) {
+        es.close();
+        let errMsg = 'Erreur inconnue';
+        try {
+            const d = JSON.parse(e.data);
+            errMsg = d.message;
+        } catch(_) {}
+
+        bar.classList.add('error');
+        msg.textContent = 'Erreur : ' + errMsg;
+        msg.classList.add('error');
+        document.querySelector('.progress-spinner').style.display = 'none';
+    });
+})();
+</script>
