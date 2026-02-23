@@ -1,0 +1,49 @@
+<section class="search-section" id="search-section">
+    <h2 class="search-heading">Recherche manuelle</h2>
+
+    <div class="search-forms">
+        <form class="search-form"
+              hx-get="/validation/{{ pending.id }}/search"
+              hx-target="#search-results"
+              hx-indicator="#search-spinner"
+              hx-on::after-request="document.getElementById('search-section').scrollIntoView({behavior:'smooth',block:'start'})">
+            <div class="search-inputs">
+                <input type="text" name="q" placeholder="Titre du film ou de la série…"
+                       class="search-input" required>
+                <input type="number" name="year" placeholder="Année" class="search-year"
+                       min="1900" max="2030">
+            </div>
+            <button type="submit" class="search-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                Rechercher
+            </button>
+        </form>
+
+        <form class="search-form search-form-id"
+              hx-get="/validation/{{ pending.id }}/search-id"
+              hx-target="#search-results"
+              hx-indicator="#search-spinner"
+              hx-on::after-request="document.getElementById('search-section').scrollIntoView({behavior:'smooth',block:'start'})">
+            <div class="search-inputs">
+                <select name="id_type" class="search-select">
+                    <option value="tmdb">TMDB</option>
+                    <option value="tvdb">TVDB</option>
+                    <option value="imdb">IMDB</option>
+                </select>
+                <input type="text" name="id_value" placeholder="ID (ex: 19995)"
+                       class="search-input" required>
+            </div>
+            <button type="submit" class="search-btn search-btn-id">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                Chercher par ID
+            </button>
+        </form>
+    </div>
+
+    <div id="search-spinner" class="htmx-indicator">
+        <div class="spinner"></div>
+        <span>Recherche en cours…</span>
+    </div>
+
+    <div id="search-results"></div>
+</section>

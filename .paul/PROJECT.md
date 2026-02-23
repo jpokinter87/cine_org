@@ -35,11 +35,13 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 - [ ] Interface web graphique (FastAPI + Jinja2 + HTMX)
   - [x] Foundation web : FastAPI app, layout Jinja2, HTMX, page d'accueil stats — Phase 1
+  - [x] Validation visuelle : liste pending, détail candidats enrichis, actions HTMX — Phase 2
 
 ### Planned (Next)
 
-- [ ] Affichage des jaquettes pour la discrimination des candidats
-- [ ] Validation interactive avec visuels (posters, synopsis, acteurs)
+- [ ] Lancement workflow depuis le web avec suivi progression
+- [ ] Transfert et résolution de conflits via le web
+- [ ] Navigation bibliothèque et outils maintenance
 
 ### Out of Scope
 
@@ -86,6 +88,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | Lifespan DI pattern | Container initialisé via asynccontextmanager dans FastAPI | 2026-02-23 | Active |
 | deps.py pour partage | Templates Jinja2 dans module séparé pour éviter imports circulaires | 2026-02-23 | Active |
 | CSS custom thème sombre | Instrument Serif + DM Sans, pas de framework CSS lourd | 2026-02-23 | Active |
+| Fragments HTMX + HX-Redirect | Actions POST retournent des fragments HTML, redirect via header | 2026-02-23 | Active |
+| Dialogue custom pour actions destructives | Overlay CSS avec explication plutôt que confirm() natif | 2026-02-23 | Active |
 
 ## Success Metrics
 
@@ -93,7 +97,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 |--------|--------|---------|--------|
 | Couverture tests | 90%+ | ~90% | On track |
 | CLI fonctionnel | Toutes commandes | Complet | Achieved |
-| Interface web | Validation avec visuels | Foundation posée | In Progress |
+| Interface web | Validation avec visuels | Validation complète | In Progress |
 
 ## Tech Stack
 
@@ -109,4 +113,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-23 after Phase 1*
+*Last updated: 2026-02-23 after Phase 2*

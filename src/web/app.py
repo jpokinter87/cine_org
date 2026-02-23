@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ..container import Container
 from .routes.home import router as home_router
+from .routes.validation import router as validation_router
 
 _WEB_DIR = Path(__file__).parent
 
@@ -33,3 +34,4 @@ app.mount("/static", StaticFiles(directory=_WEB_DIR / "static"), name="static")
 
 # Routes
 app.include_router(home_router)
+app.include_router(validation_router)

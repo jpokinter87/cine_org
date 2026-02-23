@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}CineOrg — Validation · Non trouvé{% endblock %}
+{% block nav_validation %}active{% endblock %}
+
+{% block content %}
+<section class="empty-state">
+    <h2 class="empty-title">Validation introuvable</h2>
+    <p class="empty-text">L'entrée #{{ pending_id }} n'existe pas ou a déjà été traitée.</p>
+    <a href="/validation" class="action-btn action-secondary">Retour à la liste</a>
+</section>
+{% endblock %}

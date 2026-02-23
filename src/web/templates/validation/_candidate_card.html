@@ -1,0 +1,85 @@
+<div class="candidate-card" data-candidate-id="{{ item.candidate.id }}" data-source="{{ item.candidate.source }}">
+    <div class="candidate-poster{% if item.details and item.details.poster_url %} poster-zoomable{% endif %}">
+        {% if item.details and item.details.poster_url %}
+        <img src="{{ item.details.poster_url }}" alt="{{ item.candidate.title }}" loading="lazy"
+             onclick="openLightbox(this.src, this.alt)">
+        <div class="poster-zoom-hint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+        </div>
+        {% else %}
+        <div class="poster-placeholder">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+        </div>
+        {% endif %}
+    </div>
+    <div class="candidate-info">
+        <div class="candidate-header">
+            <h3 class="candidate-title">
+                {{ item.candidate.title }}
+                {% if item.candidate.year %}
+                <span class="candidate-year">({{ item.candidate.year }})</span>
+                {% endif %}
+            </h3>
+            <div class="candidate-badges">
+                <span class="score-badge {{ item.score_class }}">{{ "%.0f"|format(item.candidate.score) }}%</span>
+                <span class="source-badge source-{{ item.candidate.source }}">{{ item.candidate.source | upper }}</span>
+            </div>
+        </div>
+
+        {% if item.details %}
+        <div class="candidate-details">
+            {% if item.details.genres %}
+            <div class="candidate-genres">
+                {% for genre in item.details.genres[:3] %}
+                <span class="genre-tag">{{ genre }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if item.details.director %}
+            <p class="candidate-crew">
+                <span class="crew-label">Réalisateur</span> {{ item.details.director }}
+            </p>
+            {% endif %}
+
+            {% if item.details.cast %}
+            <p class="candidate-crew">
+                <span class="crew-label">Casting</span> {{ item.details.cast[:4] | join(', ') }}
+            </p>
+            {% endif %}
+
+            {% if item.details.overview %}
+            <p class="candidate-synopsis">{{ item.details.overview[:200] }}{% if item.details.overview|length > 200 %}…{% endif %}</p>
+            {% endif %}
+
+            <div class="candidate-footer">
+                {% if item.duration_str %}
+                <span class="duration-indicator {{ item.duration_class }}">
+                    {{ item.duration_str }}
+                </span>
+                {% endif %}
+                {% if item.details.vote_average %}
+                <span class="vote-indicator">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    {{ "%.1f"|format(item.details.vote_average) }}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <p class="candidate-no-details">Détails non disponibles (API indisponible)</p>
+        {% endif %}
+
+        <form class="candidate-validate-form"
+              hx-post="/validation/{{ pending.id if pending is defined else pending_id }}/validate"
+              hx-target="closest .candidate-card"
+              hx-swap="outerHTML">
+            <input type="hidden" name="candidate_id" value="{{ item.candidate.id }}">
+            <input type="hidden" name="source" value="{{ item.candidate.source }}">
+            <button type="submit" class="action-btn-validate">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>
+                Valider ce candidat
+            </button>
+        </form>
+    </div>
+</div>

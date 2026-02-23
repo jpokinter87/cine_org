@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}CineOrg — Validation · {{ file_info.filename[:40] }}{% endblock %}
+{% block nav_validation %}active{% endblock %}
+
+{% block content %}
+<div id="action-feedback"></div>
+
+<section class="detail-header">
+    <a href="/validation" class="back-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="15 18 9 12 15 6"/></svg>
+        Retour à la liste
+    </a>
+
+    <div class="detail-title-row">
+        <h1 class="detail-title">{{ file_info.filename }}</h1>
+        <button class="action-btn-reject" onclick="showRejectDialog()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            Ignorer ce fichier
+        </button>
+    </div>
+    <div class="detail-meta">
+        <span class="type-badge {{ 'badge-series' if is_series else 'badge-film' }}">
+            {{ 'Série' if is_series else 'Film' }}
+        </span>
+        {% if file_info.size %}
+        <span class="meta-item">{{ file_info.size }}</span>
+        {% endif %}
+        {% if file_info.duration %}
+        <span class="meta-item">{{ file_info.duration }}</span>
+        {% endif %}
+        <span class="meta-item">{{ total_candidates }} candidat{{ 's' if total_candidates != 1 else '' }}</span>
+    </div>
+</section>
+
+<section class="candidates-grid">
+    {% for item in enriched_candidates %}
+    {% include "validation/_candidate_card.html" %}
+    {% endfor %}
+</section>
+
+{% if total_pages > 1 %}
+<nav class="pagination">
+    {% if page > 1 %}
+    <a href="/validation/{{ pending.id }}?page={{ page - 1 }}" class="pagination-btn pagination-prev">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="15 18 9 12 15 6"/></svg>
+        Précédents
+    </a>
+    {% else %}
+    <span class="pagination-btn pagination-disabled">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="15 18 9 12 15 6"/></svg>
+        Précédents
+    </span>
+    {% endif %}
+
+    <span class="pagination-info">
+        Page {{ page }} / {{ total_pages }}
+        <span class="pagination-range">({{ start_index + 1 }}–{{ start_index + enriched_candidates|length }} sur {{ total_candidates }})</span>
+    </span>
+
+    {% if page < total_pages %}
+    <a href="/validation/{{ pending.id }}?page={{ page + 1 }}" class="pagination-btn pagination-next">
+        Suivants
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="9 18 15 12 9 6"/></svg>
+    </a>
+    {% else %}
+    <span class="pagination-btn pagination-disabled">
+        Suivants
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="9 18 15 12 9 6"/></svg>
+    </span>
+    {% endif %}
+</nav>
+{% endif %}
+
+{% include "validation/_search_form.html" %}
+
+<!-- Dialogue de rejet custom -->
+<div class="reject-overlay" id="reject-overlay" onclick="if(event.target===this)hideRejectDialog()">
+    <div class="reject-dialog">
+        <h3 class="reject-dialog-title">Ignorer ce fichier ?</h3>
+        <p class="reject-dialog-text">
+            Le fichier <strong>{{ file_info.filename[:80] }}</strong> sera marqué comme
+            <em>rejeté</em>. Il ne sera plus proposé pour validation et ne sera pas traité
+            automatiquement.
+        </p>
+        <p class="reject-dialog-note">
+            Le fichier reste intact dans le répertoire de téléchargement. Il pourra être
+            reproposé en relançant un workflow.
+        </p>
+        <div class="reject-dialog-actions">
+            <button class="reject-dialog-cancel" onclick="hideRejectDialog()">Annuler</button>
+            <button class="reject-dialog-confirm"
+                    hx-post="/validation/{{ pending.id }}/reject"
+                    hx-target="#action-feedback"
+                    onclick="hideRejectDialog()">
+                Oui, ignorer
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Lightbox poster -->
+<div class="poster-lightbox" id="poster-lightbox" onclick="closeLightbox()">
+    <img id="poster-lightbox-img" src="" alt="">
+</div>
+
+<script>
+function showRejectDialog() {
+    document.getElementById('reject-overlay').classList.add('active');
+}
+function hideRejectDialog() {
+    document.getElementById('reject-overlay').classList.remove('active');
+}
+function openLightbox(src, alt) {
+    var lb = document.getElementById('poster-lightbox');
+    var img = document.getElementById('poster-lightbox-img');
+    img.src = src;
+    img.alt = alt || '';
+    lb.classList.add('active');
+}
+function closeLightbox() {
+    document.getElementById('poster-lightbox').classList.remove('active');
+}
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        hideRejectDialog();
+        closeLightbox();
+    }
+});
+</script>
+{% endblock %}
