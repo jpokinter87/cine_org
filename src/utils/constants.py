@@ -118,6 +118,28 @@ TMDB_GENRE_MAPPING = {
     37: "Western",
 }
 
+# Mapping des IDs de genre TMDB TV vers noms francais
+# Source: https://api.themoviedb.org/3/genre/tv/list?language=fr-FR
+# Les IDs TV different partiellement des IDs films
+TMDB_TV_GENRE_MAPPING = {
+    10759: "Action & Aventure",
+    16: "Animation",
+    35: "Comedie",
+    80: "Crime",
+    99: "Documentaire",
+    18: "Drame",
+    10751: "Famille",
+    10762: "Enfants",
+    9648: "Mystere",
+    10763: "Actualites",
+    10764: "Tele-realite",
+    10765: "Science-Fiction & Fantastique",
+    10766: "Soap",
+    10767: "Talk-show",
+    10768: "Guerre & Politique",
+    37: "Western",
+}
+
 # Mapping des genres TMDB/internes vers les noms de repertoires existants
 # Permet de matcher les genres retournes par l'API avec la structure de dossiers
 GENRE_FOLDER_MAPPING = {

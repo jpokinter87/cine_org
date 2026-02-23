@@ -20,7 +20,7 @@ import httpx
 from src.adapters.api.cache import APICache
 from src.adapters.api.retry import request_with_retry
 from src.core.ports.api_clients import IMediaAPIClient, MediaDetails, SearchResult
-from src.utils.constants import TMDB_GENRE_MAPPING
+from src.utils.constants import TMDB_GENRE_MAPPING, TMDB_TV_GENRE_MAPPING
 
 
 class TMDBClient(IMediaAPIClient):
@@ -261,6 +261,138 @@ class TMDBClient(IMediaAPIClient):
         # Cache results
         await self._cache.set_details(cache_key, details)
 
+        return details
+
+    async def search_tv(
+        self,
+        query: str,
+        year: Optional[int] = None,
+    ) -> list[SearchResult]:
+        """
+        Recherche des series TV par titre.
+
+        Args:
+            query: Titre de la serie a rechercher
+            year: Annee de premiere diffusion optionnelle
+
+        Returns:
+            Liste de SearchResult (vide si aucun resultat)
+        """
+        cache_key = f"tmdb:search_tv:{query}"
+
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        client = self._get_client()
+        params = {
+            "query": query,
+            "language": "fr-FR",
+            "include_adult": "false",
+        }
+
+        response = await request_with_retry(
+            client, "GET", "/search/tv", params=params
+        )
+        data = response.json()
+
+        results = []
+        for item in data.get("results", []):
+            first_air_date = item.get("first_air_date", "")
+            item_year = int(first_air_date[:4]) if first_air_date and len(first_air_date) >= 4 else None
+
+            localized_title = item.get("name", "")
+            original_title = item.get("original_name", "")
+
+            results.append(
+                SearchResult(
+                    id=str(item["id"]),
+                    title=localized_title or original_title,
+                    original_title=original_title if original_title != localized_title else None,
+                    year=item_year,
+                    source=self.source,
+                )
+            )
+
+        await self._cache.set_search(cache_key, results)
+        return results
+
+    async def get_tv_details(self, tv_id: str) -> Optional[MediaDetails]:
+        """
+        Recupere les details complets d'une serie TV.
+
+        Inclut les credits (createurs et acteurs principaux).
+
+        Args:
+            tv_id: ID TMDB de la serie TV
+
+        Returns:
+            MediaDetails avec toutes les informations, ou None si non trouve
+        """
+        cache_key = f"tmdb:tv_details:{tv_id}"
+
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        client = self._get_client()
+        try:
+            response = await request_with_retry(
+                client,
+                "GET",
+                f"/tv/{tv_id}",
+                params={"language": "fr-FR", "append_to_response": "credits"},
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            raise
+
+        data = response.json()
+
+        # Annee depuis first_air_date
+        first_air_date = data.get("first_air_date", "")
+        year = int(first_air_date[:4]) if first_air_date and len(first_air_date) >= 4 else None
+
+        # Genres (noms FR depuis l'API, fallback sur mapping TV)
+        genres = tuple(
+            genre.get("name", TMDB_TV_GENRE_MAPPING.get(genre["id"], "Inconnu"))
+            for genre in data.get("genres", [])
+        )
+
+        # Poster
+        poster_path = data.get("poster_path")
+        poster_url = f"{self.TMDB_IMAGE_BASE_URL}{poster_path}" if poster_path else None
+
+        # Createur(s) : equivalent du realisateur pour les series
+        creators = data.get("created_by", [])
+        director = ", ".join(c.get("name", "") for c in creators[:2]) if creators else None
+
+        # Acteurs principaux depuis credits
+        cast: tuple[str, ...] = ()
+        credits_data = data.get("credits", {})
+        cast_list = credits_data.get("cast", [])[:5]
+        cast = tuple(actor.get("name", "") for actor in cast_list if actor.get("name"))
+
+        # Notes
+        vote_average = data.get("vote_average")
+        vote_count = data.get("vote_count")
+
+        details = MediaDetails(
+            id=str(data["id"]),
+            title=data.get("name", data.get("original_name", "")),
+            original_title=data.get("original_name"),
+            year=year,
+            genres=genres,
+            overview=data.get("overview"),
+            poster_url=poster_url,
+            director=director,
+            cast=cast,
+            vote_average=vote_average,
+            vote_count=vote_count,
+        )
+
+        await self._cache.set_details(cache_key, details)
         return details
 
     async def find_by_imdb_id(self, imdb_id: str) -> Optional[MediaDetails]:

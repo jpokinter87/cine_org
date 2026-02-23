@@ -15,12 +15,15 @@ from src.adapters.cli.commands.validate_commands import (
 from src.adapters.cli.commands.import_commands import (
     import_library,
     enrich,
+    link_movies,
     populate_movies,
     populate_series,
 )
 from src.adapters.cli.commands.enrichment_commands import (
     enrich_ratings,
     enrich_imdb_ids,
+    enrich_series,
+    enrich_movies_credits,
 )
 from src.adapters.cli.commands.imdb_commands import (
     imdb_app,
@@ -43,6 +46,9 @@ from src.adapters.cli.commands.cleanup_command import (
 from src.adapters.cli.commands.regroup_command import (
     regroup,
 )
+from src.adapters.cli.commands.fix_bad_links_command import (
+    fix_bad_links,
+)
 from src.adapters.cli.commands.fix_symlinks_command import (
     fix_symlinks,
 )
@@ -61,11 +67,14 @@ __all__ = [
     # import
     "import_library",
     "enrich",
+    "link_movies",
     "populate_movies",
     "populate_series",
     # enrichment
     "enrich_ratings",
     "enrich_imdb_ids",
+    "enrich_series",
+    "enrich_movies_credits",
     # imdb
     "imdb_app",
     "imdb_import",
@@ -78,4 +87,5 @@ __all__ = [
     "cleanup",
     "regroup",
     "fix_symlinks",
+    "fix_bad_links",
 ]

@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}{{ movie.title }} — CineOrg{% endblock %}
+{% block nav_library %}active{% endblock %}
+
+{% block content %}
+<div class="library-detail-page">
+    <a href="/library" class="back-link">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        Bibliothèque
+    </a>
+
+    <div class="lib-detail-header">
+        <div class="lib-detail-poster poster-zoomable" {% if poster_url %}onclick="openPosterLightbox('{{ poster_url }}')"{% endif %}>
+            {% if poster_url %}
+            <img src="{{ poster_url.replace('/w300', '/w500') }}" alt="{{ movie.title }}">
+            <div class="poster-zoom-hint">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            </div>
+            {% else %}
+            <div class="lib-card-no-poster lib-detail-no-poster">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/></svg>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="lib-detail-info">
+            <div class="lib-detail-badges">
+                <span class="type-badge badge-film">Film</span>
+                {% if movie.imdb_rating %}
+                <span class="lib-rating-badge lib-rating-imdb">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    {{ movie.imdb_rating }} IMDb
+                </span>
+                {% endif %}
+                {% if movie.vote_average %}
+                <span class="lib-rating-badge {% if movie.vote_average >= 7 %}score-high{% elif movie.vote_average >= 5 %}score-medium{% else %}score-low{% endif %}">
+                    {{ '%.1f'|format(movie.vote_average) }} TMDB
+                </span>
+                {% endif %}
+            </div>
+
+            <h1 class="lib-detail-title">{{ movie.title }}</h1>
+
+            <div class="lib-detail-meta-row">
+                {% if movie.year %}<span class="lib-detail-meta-item">{{ movie.year }}</span>{% endif %}
+                {% if duration %}<span class="lib-detail-meta-item">{{ duration }}</span>{% endif %}
+            </div>
+
+            {% if genres %}
+            <div class="lib-detail-genres">
+                {% for g in genres %}
+                <span class="genre-tag">{{ g }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if movie.director or movie.cast %}
+            <div class="lib-detail-credits">
+                {% if movie.director %}
+                <div class="lib-detail-credit-row">
+                    <span class="lib-credit-label">Réalisateur</span>
+                    <span class="lib-credit-value">{{ movie.director }}</span>
+                </div>
+                {% endif %}
+                {% if movie.cast %}
+                <div class="lib-detail-credit-row">
+                    <span class="lib-credit-label">Acteurs</span>
+                    <span class="lib-credit-value">{{ movie.cast | join(', ') }}</span>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if movie.overview %}
+            <div class="lib-detail-synopsis">
+                <h3 class="lib-detail-section-title">Synopsis</h3>
+                <p>{{ movie.overview }}</p>
+            </div>
+            {% endif %}
+
+            {% if movie.file_path or video_file or file_info or movie.tmdb_id %}
+            <details class="lib-detail-file-toggle">
+                <summary class="lib-file-toggle-btn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    Informations fichier
+                    <svg class="lib-file-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </summary>
+                <div class="lib-file-details">
+                    {# Cas 1 : file_path en DB #}
+                    {% if movie.file_path %}
+                    <div class="lib-file-row">
+                        <span class="lib-file-label">Fichier storage</span>
+                        <code class="lib-file-path">{{ movie.file_path }}</code>
+                    </div>
+                    {% endif %}
+                    {% if video_file and video_file.symlink_path %}
+                    <div class="lib-file-row">
+                        <span class="lib-file-label">Symlink video</span>
+                        <code class="lib-file-path">{{ video_file.symlink_path }}</code>
+                    </div>
+                    {% endif %}
+                    {# Cas 2 : fichier trouve dans video/ par titre #}
+                    {% if file_info %}
+                    <div class="lib-file-row">
+                        <span class="lib-file-label">Symlink video</span>
+                        <code class="lib-file-path">{{ file_info.symlink_path }}</code>
+                    </div>
+                    {% if file_info.storage_path %}
+                    <div class="lib-file-row">
+                        <span class="lib-file-label">Fichier storage</span>
+                        <code class="lib-file-path">{{ file_info.storage_path }}</code>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                    {# Infos techniques #}
+                    {% if video_file %}
+                    <div class="lib-file-row lib-file-tech">
+                        {% if video_file.codec_video %}<span>{{ video_file.codec_video }}</span>{% endif %}
+                        {% if video_file.codec_audio %}<span>{{ video_file.codec_audio }}</span>{% endif %}
+                        {% if video_file.resolution_width %}<span>{{ video_file.resolution_width }}x{{ video_file.resolution_height }}</span>{% endif %}
+                        {% if video_file.size_bytes %}<span>{{ '%.1f'|format(video_file.size_bytes / 1073741824) }} Go</span>{% endif %}
+                    </div>
+                    {% elif movie.codec_video or movie.resolution %}
+                    <div class="lib-file-row lib-file-tech">
+                        {% if movie.codec_video %}<span>{{ movie.codec_video }}</span>{% endif %}
+                        {% if movie.codec_audio %}<span>{{ movie.codec_audio }}</span>{% endif %}
+                        {% if movie.resolution %}<span>{{ movie.resolution }}</span>{% endif %}
+                        {% if movie.file_size_bytes %}<span>{{ '%.1f'|format(movie.file_size_bytes / 1073741824) }} Go</span>{% endif %}
+                    </div>
+                    {% endif %}
+                    {# IDs externes #}
+                    {% if movie.tmdb_id %}
+                    <div class="lib-file-row">
+                        <span class="lib-file-label">IDs</span>
+                        <span class="lib-file-ids">
+                            TMDB: {{ movie.tmdb_id }}
+                            {% if movie.imdb_id %} · IMDb: {{ movie.imdb_id }}{% endif %}
+                        </span>
+                    </div>
+                    {% endif %}
+                </div>
+            </details>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Lightbox zoom jaquette -->
+<div class="poster-lightbox" id="poster-lightbox" onclick="this.classList.remove('active')">
+    <img id="poster-lightbox-img" src="" alt="">
+</div>
+<script>
+function openPosterLightbox(src) {
+    var lb = document.getElementById('poster-lightbox');
+    document.getElementById('poster-lightbox-img').src = src.replace('/w300', '/w500');
+    lb.classList.add('active');
+}
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') document.getElementById('poster-lightbox').classList.remove('active');
+});
+</script>
+{% endblock %}

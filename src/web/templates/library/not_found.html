@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Non trouvé — CineOrg{% endblock %}
+{% block nav_library %}active{% endblock %}
+
+{% block content %}
+<div class="empty-state">
+    <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    </div>
+    <h2 class="empty-title">{{ entity_type|capitalize }} #{{ entity_id }} introuvable</h2>
+    <p class="empty-text">L'élément demandé n'existe pas dans la base de données.</p>
+    <a href="/library" class="action-btn action-secondary">Retour à la bibliothèque</a>
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% if items %}
+<div class="lib-grid">
+    {% for item in items %}
+    <a href="/library/{{ 'movies' if item.type == 'movie' else 'series' }}/{{ item.id }}" class="lib-card">
+        <div class="lib-card-poster">
+            {% if item.poster_url %}
+            <img src="{{ item.poster_url }}" alt="{{ item.title }}" loading="lazy">
+            <div class="lib-card-zoom" onclick="event.preventDefault(); event.stopPropagation(); openPosterLightbox('{{ item.poster_url }}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            </div>
+            {% else %}
+            <div class="lib-card-no-poster">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/></svg>
+            </div>
+            {% endif %}
+            <span class="lib-card-type {{ 'badge-film' if item.type == 'movie' else 'badge-series' }}">
+                {{ 'Film' if item.type == 'movie' else 'Serie' }}
+            </span>
+            {% if item.rating %}
+            <span class="lib-card-rating {% if item.rating >= 7 %}rating-good{% elif item.rating >= 5 %}rating-ok{% else %}rating-low{% endif %}">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                {{ '%.1f'|format(item.rating) }}
+            </span>
+            {% endif %}
+        </div>
+        <div class="lib-card-body">
+            <h3 class="lib-card-title">{{ item.title }}</h3>
+            <div class="lib-card-meta">
+                {% if item.year %}<span>{{ item.year }}</span>{% endif %}
+                {% if item.genres %}<span>{{ item.genres[0] }}</span>{% endif %}
+            </div>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+
+{% if total_pages > 1 %}
+{% include "library/_pagination.html" %}
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+    </div>
+    <h2 class="empty-title">Aucun résultat</h2>
+    <p class="empty-text">Essayez de modifier vos filtres ou votre recherche.</p>
+    <a href="/library/" class="action-btn action-secondary">Réinitialiser les filtres</a>
+</div>
+{% endif %}

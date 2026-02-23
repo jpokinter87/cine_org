@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Bibliothèque — CineOrg{% endblock %}
+{% block nav_library %}active{% endblock %}
+
+{% block content %}
+<div class="library-page">
+    <div class="hero">
+        <h1 class="hero-title">Bibliothèque</h1>
+        <p class="hero-subtitle" id="library-count">{{ total_items }} titre{{ 's' if total_items != 1 else '' }} dans votre collection</p>
+    </div>
+
+    <div id="library-content">
+        {% include "library/_filters.html" %}
+        {% include "library/_grid.html" %}
+    </div>
+</div>
+
+<!-- Lightbox zoom jaquette -->
+<div class="poster-lightbox" id="poster-lightbox" onclick="this.classList.remove('active')">
+    <img id="poster-lightbox-img" src="" alt="">
+</div>
+
+<script>
+function openPosterLightbox(src) {
+    var lb = document.getElementById('poster-lightbox');
+    document.getElementById('poster-lightbox-img').src = src.replace('/w300', '/w500');
+    lb.classList.add('active');
+}
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') document.getElementById('poster-lightbox').classList.remove('active');
+});
+</script>
+{% endblock %}

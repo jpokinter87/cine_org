@@ -43,6 +43,7 @@ class SQLModelMovieRepository(IMovieRepository):
             L'entite Movie correspondante
         """
         genres_list = json.loads(model.genres_json) if model.genres_json else []
+        cast_list = json.loads(model.cast_json) if model.cast_json else []
         return Movie(
             id=str(model.id) if model.id else None,
             tmdb_id=model.tmdb_id,
@@ -58,6 +59,8 @@ class SQLModelMovieRepository(IMovieRepository):
             imdb_id=model.imdb_id,
             imdb_rating=model.imdb_rating,
             imdb_votes=model.imdb_votes,
+            director=model.director,
+            cast=tuple(cast_list),
         )
 
     def _to_model(self, entity: Movie) -> MovieModel:
@@ -84,6 +87,8 @@ class SQLModelMovieRepository(IMovieRepository):
             vote_count=entity.vote_count,
             imdb_rating=entity.imdb_rating,
             imdb_votes=entity.imdb_votes,
+            director=entity.director,
+            cast_json=json.dumps(list(entity.cast)) if entity.cast else None,
         )
         if entity.id:
             model.id = int(entity.id)
@@ -168,6 +173,10 @@ class SQLModelMovieRepository(IMovieRepository):
             existing.imdb_id = movie.imdb_id
             existing.imdb_rating = movie.imdb_rating
             existing.imdb_votes = movie.imdb_votes
+            existing.director = movie.director
+            existing.cast_json = (
+                json.dumps(list(movie.cast)) if movie.cast else None
+            )
             self._session.add(existing)
             self._session.commit()
             self._session.refresh(existing)

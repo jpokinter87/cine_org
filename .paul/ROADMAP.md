@@ -18,7 +18,7 @@ Phases: 4 of 5 complete
 | 2 | Validation Visuelle | 2/2 | Complete | 2026-02-23 |
 | 3 | Orchestration Workflow | 1/1 | Complete | 2026-02-23 |
 | 4 | Transfert & Conflits | 1/1 | Complete | 2026-02-23 |
-| 5 | Bibliothèque & Maintenance | TBD | Not started | - |
+| 5 | Bibliothèque & Maintenance | 1/3 | In Progress | - |
 
 ## Phase Details
 
@@ -92,13 +92,17 @@ Phases: 4 of 5 complete
 **Scope:**
 - Navigation films/séries avec filtres (genre, année, note)
 - Détail d'un film/série (métadonnées, jaquette, fichiers associés)
+- Configuration de l'application (répertoires, clés API, seuils)
 - Réparation des symlinks cassés
 - Vérification d'intégrité
 - Cleanup / nettoyage
 
+**Status:** In Progress
+
 **Plans:**
-- [ ] 05-01: Navigation bibliothèque films/séries
-- [ ] 05-02: Outils maintenance (repair, check, cleanup)
+- [x] 05-01: Navigation bibliothèque films/séries + enrichissement séries/crédits
+- [x] 05-02: Page de configuration (répertoires, clés API, seuils, logging)
+- [ ] 05-03: Outils maintenance (repair, check, cleanup)
 
 ---
 *Roadmap created: 2026-02-23*

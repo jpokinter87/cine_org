@@ -1,0 +1,177 @@
+{% if not has_issues %}
+<div class="maint-summary maint-summary-ok">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <span>Aucun problème détecté — la vidéothèque est propre</span>
+</div>
+{% else %}
+<div class="maint-summary maint-summary-warn">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <span>{{ total_issues }} problème{{ 's' if total_issues != 1 else '' }} détecté{{ 's' if total_issues != 1 else '' }}</span>
+</div>
+
+<div class="maint-categories">
+    <!-- Symlinks cassés -->
+    <div class="maint-category">
+        <div class="maint-cat-header">
+            <span class="maint-cat-badge {% if broken %}badge-error{% else %}badge-ok{% endif %}">{{ broken_total }}</span>
+            <span class="maint-cat-title">Symlinks cassés</span>
+        </div>
+        {% if broken %}
+        <details class="maint-issue-details">
+            <summary class="maint-issue-toggle">
+                {% if broken_total > broken|length %}
+                    Voir les {{ broken|length }} premiers sur {{ broken_total }}
+                {% else %}
+                    Voir les {{ broken_total }} symlink{{ 's' if broken_total != 1 else '' }}
+                {% endif %}
+            </summary>
+            <ul class="maint-issue-list">
+                {% for item in broken %}
+                <li class="maint-issue-item" title="{{ item.full_path }}">
+                    <code class="maint-issue-path">{{ item.path }}</code>
+                    {% if item.score %}
+                    <span class="maint-candidate-score">Candidat : {{ item.candidate }} ({{ item.score }}%)</span>
+                    {% else %}
+                    <span class="maint-no-candidate">Aucun candidat</span>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% if broken_total > broken|length %}
+            <p class="maint-truncated">… et {{ broken_total - broken|length }} autre{{ 's' if (broken_total - broken|length) != 1 else '' }}</p>
+            {% endif %}
+        </details>
+        {% endif %}
+    </div>
+
+    <!-- Symlinks mal placés -->
+    <div class="maint-category">
+        <div class="maint-cat-header">
+            <span class="maint-cat-badge {% if misplaced %}badge-warn{% else %}badge-ok{% endif %}">{{ misplaced_total }}</span>
+            <span class="maint-cat-title">Symlinks mal placés</span>
+        </div>
+        {% if misplaced %}
+        <details class="maint-issue-details">
+            <summary class="maint-issue-toggle">
+                {% if misplaced_total > misplaced|length %}
+                    Voir les {{ misplaced|length }} premiers sur {{ misplaced_total }}
+                {% else %}
+                    Voir les {{ misplaced_total }} symlink{{ 's' if misplaced_total != 1 else '' }}
+                {% endif %}
+            </summary>
+            <ul class="maint-issue-list">
+                {% for item in misplaced %}
+                <li class="maint-issue-item">
+                    <code class="maint-issue-path">{{ item.title }}</code>
+                    <span class="maint-issue-detail">{{ item.current }} → {{ item.expected }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% if misplaced_total > misplaced|length %}
+            <p class="maint-truncated">… et {{ misplaced_total - misplaced|length }} autre{{ 's' if (misplaced_total - misplaced|length) != 1 else '' }}</p>
+            {% endif %}
+        </details>
+        {% endif %}
+    </div>
+
+    <!-- Doublons -->
+    <div class="maint-category">
+        <div class="maint-cat-header">
+            <span class="maint-cat-badge {% if duplicates %}badge-warn{% else %}badge-ok{% endif %}">{{ duplicates_total }}</span>
+            <span class="maint-cat-title">Doublons</span>
+        </div>
+        {% if duplicates %}
+        <details class="maint-issue-details">
+            <summary class="maint-issue-toggle">
+                {% if duplicates_total > duplicates|length %}
+                    Voir les {{ duplicates|length }} premiers sur {{ duplicates_total }}
+                {% else %}
+                    Voir les {{ duplicates_total }} groupe{{ 's' if duplicates_total != 1 else '' }}
+                {% endif %}
+            </summary>
+            <ul class="maint-issue-list">
+                {% for item in duplicates %}
+                <li class="maint-issue-item">
+                    <code class="maint-issue-path">{{ item.target }}</code>
+                    <span class="maint-issue-detail">{{ item.remove_count }} doublon{{ 's' if item.remove_count != 1 else '' }} à supprimer</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% if duplicates_total > duplicates|length %}
+            <p class="maint-truncated">… et {{ duplicates_total - duplicates|length }} autre{{ 's' if (duplicates_total - duplicates|length) != 1 else '' }}</p>
+            {% endif %}
+        </details>
+        {% endif %}
+    </div>
+
+    <!-- Répertoires surdimensionnés -->
+    <div class="maint-category">
+        <div class="maint-cat-header">
+            <span class="maint-cat-badge {% if oversized %}badge-warn{% else %}badge-ok{% endif %}">{{ oversized_total }}</span>
+            <span class="maint-cat-title">Répertoires surdimensionnés</span>
+        </div>
+        {% if oversized %}
+        <details class="maint-issue-details">
+            <summary class="maint-issue-toggle">
+                {% if oversized_total > oversized|length %}
+                    Voir les {{ oversized|length }} premiers sur {{ oversized_total }}
+                {% else %}
+                    Voir les {{ oversized_total }} répertoire{{ 's' if oversized_total != 1 else '' }}
+                {% endif %}
+            </summary>
+            <ul class="maint-issue-list">
+                {% for item in oversized %}
+                <li class="maint-issue-item">
+                    <code class="maint-issue-path">{{ item.path }}</code>
+                    <span class="maint-issue-detail">{{ item.count }} fichiers (max : {{ item.max }})</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% if oversized_total > oversized|length %}
+            <p class="maint-truncated">… et {{ oversized_total - oversized|length }} autre{{ 's' if (oversized_total - oversized|length) != 1 else '' }}</p>
+            {% endif %}
+        </details>
+        {% endif %}
+    </div>
+
+    <!-- Répertoires vides -->
+    <div class="maint-category">
+        <div class="maint-cat-header">
+            <span class="maint-cat-badge {% if empty %}badge-warn{% else %}badge-ok{% endif %}">{{ empty_total }}</span>
+            <span class="maint-cat-title">Répertoires vides</span>
+        </div>
+        {% if empty %}
+        <details class="maint-issue-details">
+            <summary class="maint-issue-toggle">
+                {% if empty_total > empty|length %}
+                    Voir les {{ empty|length }} premiers sur {{ empty_total }}
+                {% else %}
+                    Voir les {{ empty_total }} répertoire{{ 's' if empty_total != 1 else '' }}
+                {% endif %}
+            </summary>
+            <ul class="maint-issue-list">
+                {% for item in empty %}
+                <li class="maint-issue-item">
+                    <code class="maint-issue-path">{{ item.path }}</code>
+                </li>
+                {% endfor %}
+            </ul>
+            {% if empty_total > empty|length %}
+            <p class="maint-truncated">… et {{ empty_total - empty|length }} autre{{ 's' if (empty_total - empty|length) != 1 else '' }}</p>
+            {% endif %}
+        </details>
+        {% endif %}
+    </div>
+</div>
+
+<div class="maint-cli-hint">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+    <div>
+        <strong>Pour appliquer les corrections :</strong>
+        <ul class="maint-cli-commands">
+            <li><code>cineorg cleanup --fix</code> — corrige tous les problèmes détectés</li>
+            <li><code>cineorg repair-links --auto</code> — répare les symlinks cassés automatiquement</li>
+        </ul>
+    </div>
+</div>
+{% endif %}

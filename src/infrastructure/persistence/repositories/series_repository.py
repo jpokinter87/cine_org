@@ -43,6 +43,7 @@ class SQLModelSeriesRepository(ISeriesRepository):
             L'entite Series correspondante
         """
         genres_list = json.loads(model.genres_json) if model.genres_json else []
+        cast_list = json.loads(model.cast_json) if model.cast_json else []
         return Series(
             id=str(model.id) if model.id else None,
             tvdb_id=model.tvdb_id,
@@ -57,6 +58,8 @@ class SQLModelSeriesRepository(ISeriesRepository):
             imdb_id=model.imdb_id,
             imdb_rating=model.imdb_rating,
             imdb_votes=model.imdb_votes,
+            director=model.director,
+            cast=tuple(cast_list),
         )
 
     def _to_model(self, entity: Series) -> SeriesModel:
@@ -82,6 +85,8 @@ class SQLModelSeriesRepository(ISeriesRepository):
             vote_count=entity.vote_count,
             imdb_rating=entity.imdb_rating,
             imdb_votes=entity.imdb_votes,
+            director=entity.director,
+            cast_json=json.dumps(list(entity.cast)) if entity.cast else None,
         )
         if entity.id:
             model.id = int(entity.id)
@@ -136,6 +141,10 @@ class SQLModelSeriesRepository(ISeriesRepository):
             existing.imdb_id = series.imdb_id
             existing.imdb_rating = series.imdb_rating
             existing.imdb_votes = series.imdb_votes
+            existing.director = series.director
+            existing.cast_json = (
+                json.dumps(list(series.cast)) if series.cast else None
+            )
             self._session.add(existing)
             self._session.commit()
             self._session.refresh(existing)

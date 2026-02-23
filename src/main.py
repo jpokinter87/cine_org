@@ -15,10 +15,14 @@ from .adapters.cli.commands import (
     consolidate,
     enrich,
     enrich_imdb_ids,
+    enrich_movies_credits,
     enrich_ratings,
+    enrich_series,
+    fix_bad_links,
     fix_symlinks,
     imdb_app,
     import_library,
+    link_movies,
     pending,
     populate_movies,
     populate_series,
@@ -71,14 +75,18 @@ app.command(name="import")(import_library)
 app.command()(enrich)
 app.command(name="populate-movies")(populate_movies)
 app.command(name="populate-series")(populate_series)
+app.command(name="link-movies")(link_movies)
 app.command(name="enrich-ratings")(enrich_ratings)
 app.command(name="enrich-imdb-ids")(enrich_imdb_ids)
+app.command(name="enrich-series")(enrich_series)
+app.command(name="enrich-movies-credits")(enrich_movies_credits)
 app.command(name="repair-links")(repair_links)
 app.command()(consolidate)
 app.command()(check)
 app.command()(cleanup)
 app.command()(regroup)
 app.command(name="fix-symlinks")(fix_symlinks)
+app.command(name="fix-bad-links")(fix_bad_links)
 
 # Monter validate_app comme sous-commande
 app.add_typer(validate_app, name="validate")

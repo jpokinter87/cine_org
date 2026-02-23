@@ -1,0 +1,52 @@
+{% set base_url = "/library/?type=" ~ current_type ~ "&genre=" ~ (current_genre or '') ~ "&year=" ~ (current_year or '') ~ "&q=" ~ current_q ~ "&sort=" ~ current_sort ~ "&order=" ~ current_order %}
+
+<div class="pagination {{ extra_class|default('') }}">
+    {# Première page #}
+    {% if page > 1 %}
+    <a href="{{ base_url }}&page=1" class="pagination-btn pagination-edge" title="Première page">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 18 5 12 11 6"/><polyline points="19 18 13 12 19 6"/></svg>
+    </a>
+    {% else %}
+    <span class="pagination-btn pagination-edge pagination-disabled">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 18 5 12 11 6"/><polyline points="19 18 13 12 19 6"/></svg>
+    </span>
+    {% endif %}
+
+    {# Page précédente #}
+    {% if page > 1 %}
+    <a href="{{ base_url }}&page={{ page - 1 }}" class="pagination-btn" title="Page précédente">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </a>
+    {% else %}
+    <span class="pagination-btn pagination-disabled">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </span>
+    {% endif %}
+
+    <span class="pagination-info">
+        Page {{ page }} / {{ total_pages }}
+        <span class="pagination-range">{{ total_items }} résultat{{ 's' if total_items != 1 else '' }}</span>
+    </span>
+
+    {# Page suivante #}
+    {% if page < total_pages %}
+    <a href="{{ base_url }}&page={{ page + 1 }}" class="pagination-btn" title="Page suivante">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    </a>
+    {% else %}
+    <span class="pagination-btn pagination-disabled">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    </span>
+    {% endif %}
+
+    {# Dernière page #}
+    {% if page < total_pages %}
+    <a href="{{ base_url }}&page={{ total_pages }}" class="pagination-btn pagination-edge" title="Dernière page">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 18 19 12 13 6"/><polyline points="5 18 11 12 5 6"/></svg>
+    </a>
+    {% else %}
+    <span class="pagination-btn pagination-edge pagination-disabled">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 18 19 12 13 6"/><polyline points="5 18 11 12 5 6"/></svg>
+    </span>
+    {% endif %}
+</div>

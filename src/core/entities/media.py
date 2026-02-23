@@ -32,6 +32,8 @@ class Movie:
         imdb_id : ID IMDb (ex: "tt0499549")
         imdb_rating : Note moyenne IMDb (0-10)
         imdb_votes : Nombre de votes sur IMDb
+        director : Realisateur principal
+        cast : Tuple des acteurs principaux (3-5 premiers)
     """
 
     id: Optional[str] = None
@@ -48,6 +50,8 @@ class Movie:
     imdb_id: Optional[str] = None
     imdb_rating: Optional[float] = None
     imdb_votes: Optional[int] = None
+    director: Optional[str] = None
+    cast: tuple[str, ...] = ()
 
 
 @dataclass
@@ -71,6 +75,8 @@ class Series:
         imdb_id : ID IMDb (ex: "tt0903747")
         imdb_rating : Note moyenne IMDb (0-10)
         imdb_votes : Nombre de votes sur IMDb
+        director : Createur(s) / showrunner principal
+        cast : Tuple des acteurs principaux (3-5 premiers)
     """
 
     id: Optional[str] = None
@@ -86,6 +92,8 @@ class Series:
     imdb_id: Optional[str] = None
     imdb_rating: Optional[float] = None
     imdb_votes: Optional[int] = None
+    director: Optional[str] = None
+    cast: tuple[str, ...] = ()
 
 
 @dataclass

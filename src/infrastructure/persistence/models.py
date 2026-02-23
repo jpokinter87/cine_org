@@ -57,6 +57,8 @@ class MovieModel(SQLModel, table=True):
     vote_count: int | None = None  # Nombre de votes sur TMDB
     imdb_rating: float | None = None  # Note moyenne IMDb (0-10)
     imdb_votes: int | None = None  # Nombre de votes sur IMDb
+    director: str | None = None  # Realisateur principal
+    cast_json: str | None = None  # JSON: ["Acteur 1", "Acteur 2", ...]
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 
@@ -84,6 +86,18 @@ class MovieModel(SQLModel, table=True):
         """Serialise les langues en JSON."""
         self.languages_json = json.dumps(value)
 
+    @property
+    def cast(self) -> list[str]:
+        """Retourne les acteurs deserialises."""
+        if self.cast_json:
+            return json.loads(self.cast_json)
+        return []
+
+    @cast.setter
+    def cast(self, value: list[str]) -> None:
+        """Serialise les acteurs en JSON."""
+        self.cast_json = json.dumps(value)
+
 
 class SeriesModel(SQLModel, table=True):
     """
@@ -107,6 +121,8 @@ class SeriesModel(SQLModel, table=True):
     vote_count: int | None = None  # Nombre de votes
     imdb_rating: float | None = None  # Note moyenne IMDb (0-10)
     imdb_votes: int | None = None  # Nombre de votes sur IMDb
+    director: str | None = None  # Createur(s) / showrunner principal
+    cast_json: str | None = None  # JSON: ["Acteur 1", "Acteur 2", ...]
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 
@@ -121,6 +137,18 @@ class SeriesModel(SQLModel, table=True):
     def genres(self, value: list[str]) -> None:
         """Serialise les genres en JSON."""
         self.genres_json = json.dumps(value)
+
+    @property
+    def cast(self) -> list[str]:
+        """Retourne les acteurs deserialises."""
+        if self.cast_json:
+            return json.loads(self.cast_json)
+        return []
+
+    @cast.setter
+    def cast(self, value: list[str]) -> None:
+        """Serialise les acteurs en JSON."""
+        self.cast_json = json.dumps(value)
 
 
 class EpisodeModel(SQLModel, table=True):

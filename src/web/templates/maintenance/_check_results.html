@@ -1,0 +1,119 @@
+{% if not has_issues %}
+<div class="maint-summary maint-summary-ok">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <span>Aucun problème détecté</span>
+</div>
+{% else %}
+<div class="maint-summary maint-summary-warn">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <span>{{ total_issues }} problème{{ 's' if total_issues != 1 else '' }} détecté{{ 's' if total_issues != 1 else '' }}</span>
+</div>
+
+<div class="maint-categories">
+    <!-- Entrées fantômes -->
+    <div class="maint-category">
+        <div class="maint-cat-header">
+            <span class="maint-cat-badge {% if ghost_entries %}badge-warn{% else %}badge-ok{% endif %}">{{ ghost_total }}</span>
+            <span class="maint-cat-title">Entrées fantômes</span>
+            <span class="maint-cat-hint">Entrées en base sans fichier sur le disque</span>
+        </div>
+        {% if ghost_entries %}
+        <details class="maint-issue-details">
+            <summary class="maint-issue-toggle">
+                {% if ghost_total > ghost_entries|length %}
+                    Voir les {{ ghost_entries|length }} premières sur {{ ghost_total }}
+                {% else %}
+                    Voir les {{ ghost_total }} entrée{{ 's' if ghost_total != 1 else '' }}
+                {% endif %}
+            </summary>
+            <ul class="maint-issue-list">
+                {% for item in ghost_entries %}
+                <li class="maint-issue-item" title="{{ item.full_path }}">
+                    <code class="maint-issue-path">{{ item.path }}</code>
+                    {% if item.details %}<span class="maint-issue-detail">{{ item.details }}</span>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% if ghost_total > ghost_entries|length %}
+            <p class="maint-truncated">… et {{ ghost_total - ghost_entries|length }} autre{{ 's' if (ghost_total - ghost_entries|length) != 1 else '' }}</p>
+            {% endif %}
+        </details>
+        {% endif %}
+    </div>
+
+    <!-- Fichiers orphelins -->
+    <div class="maint-category">
+        <div class="maint-cat-header">
+            <span class="maint-cat-badge {% if orphan_files %}badge-warn{% else %}badge-ok{% endif %}">{{ orphan_total }}</span>
+            <span class="maint-cat-title">Fichiers orphelins</span>
+            <span class="maint-cat-hint">Fichiers sur le disque absents de la base</span>
+        </div>
+        {% if orphan_files %}
+        <details class="maint-issue-details">
+            <summary class="maint-issue-toggle">
+                {% if orphan_total > orphan_files|length %}
+                    Voir les {{ orphan_files|length }} premiers sur {{ orphan_total }}
+                {% else %}
+                    Voir les {{ orphan_total }} fichier{{ 's' if orphan_total != 1 else '' }}
+                {% endif %}
+            </summary>
+            <ul class="maint-issue-list">
+                {% for item in orphan_files %}
+                <li class="maint-issue-item" title="{{ item.full_path }}">
+                    <code class="maint-issue-path">{{ item.path }}</code>
+                </li>
+                {% endfor %}
+            </ul>
+            {% if orphan_total > orphan_files|length %}
+            <p class="maint-truncated">… et {{ orphan_total - orphan_files|length }} autre{{ 's' if (orphan_total - orphan_files|length) != 1 else '' }}</p>
+            {% endif %}
+        </details>
+        {% endif %}
+    </div>
+
+    <!-- Symlinks cassés -->
+    <div class="maint-category">
+        <div class="maint-cat-header">
+            <span class="maint-cat-badge {% if broken_symlinks %}badge-error{% else %}badge-ok{% endif %}">{{ broken_total }}</span>
+            <span class="maint-cat-title">Symlinks cassés</span>
+            <span class="maint-cat-hint">Liens symboliques pointant vers des cibles inexistantes</span>
+        </div>
+        {% if broken_symlinks %}
+        <details class="maint-issue-details">
+            <summary class="maint-issue-toggle">
+                {% if broken_total > broken_symlinks|length %}
+                    Voir les {{ broken_symlinks|length }} premiers sur {{ broken_total }}
+                {% else %}
+                    Voir les {{ broken_total }} symlink{{ 's' if broken_total != 1 else '' }}
+                {% endif %}
+            </summary>
+            <ul class="maint-issue-list">
+                {% for item in broken_symlinks %}
+                <li class="maint-issue-item" title="{{ item.full_path }}">
+                    <code class="maint-issue-path">{{ item.path }}</code>
+                    {% if item.details %}<span class="maint-issue-detail">Cible : {{ item.details }}</span>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% if broken_total > broken_symlinks|length %}
+            <p class="maint-truncated">… et {{ broken_total - broken_symlinks|length }} autre{{ 's' if (broken_total - broken_symlinks|length) != 1 else '' }}</p>
+            {% endif %}
+        </details>
+        {% endif %}
+    </div>
+</div>
+
+{% if suggestions %}
+<div class="maint-cli-hint">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+    <div>
+        <strong>Corrections via le CLI :</strong>
+        <ul class="maint-cli-commands">
+            {% for s in suggestions %}
+            <li>{{ s }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endif %}
+{% endif %}

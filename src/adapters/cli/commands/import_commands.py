@@ -93,7 +93,9 @@ async def _import_library_async(
         )
         scan_generator = importer.scan_from_symlinks(source_dir)
     else:
-        console.print(f"[bold cyan]Import de la videotheque[/bold cyan]: {source_dir}\n")
+        console.print(
+            f"[bold cyan]Import de la videotheque[/bold cyan]: {source_dir}\n"
+        )
         scan_generator = importer.scan_library(source_dir)
 
     with Progress(
@@ -159,7 +161,9 @@ async def _enrich_async(container) -> None:
         console.print("[dim]Tous les fichiers ont deja des candidats.[/dim]")
         return
 
-    console.print(f"[bold cyan]Enrichissement API[/bold cyan]: {len(pending)} fichier(s)\n")
+    console.print(
+        f"[bold cyan]Enrichissement API[/bold cyan]: {len(pending)} fichier(s)\n"
+    )
 
     with suppress_loguru():
         enriched_count = 0
@@ -178,25 +182,36 @@ async def _enrich_async(container) -> None:
             if result.enriched > 0:
                 # Afficher en vert avec le nombre de candidats et le meilleur score
                 if item.candidates:
-                    best_score = item.candidates[0].get("score", 0) if item.candidates else 0
-                    console.print(f"[dim]({i}/{len(pending)})[/dim] [green]{filename}[/green] ✓ {len(item.candidates)} candidat(s), score: {best_score:.0f}%")
+                    best_score = (
+                        item.candidates[0].get("score", 0) if item.candidates else 0
+                    )
+                    console.print(
+                        f"[dim]({i}/{len(pending)})[/dim] [green]{filename}[/green] ✓ {len(item.candidates)} candidat(s), score: {best_score:.0f}%"
+                    )
                 else:
-                    console.print(f"[dim]({i}/{len(pending)})[/dim] [green]{filename}[/green] ✓")
+                    console.print(
+                        f"[dim]({i}/{len(pending)})[/dim] [green]{filename}[/green] ✓"
+                    )
                 enriched_count += 1
             else:
                 # Afficher en rouge
-                console.print(f"[dim]({i}/{len(pending)})[/dim] [red]{filename}[/red] ✗")
+                console.print(
+                    f"[dim]({i}/{len(pending)})[/dim] [red]{filename}[/red] ✗"
+                )
                 failed_count += 1
 
         # Afficher le resume
-        console.print(f"\n[bold]Resume:[/bold] [green]{enriched_count}[/green] enrichi(s), [red]{failed_count}[/red] echec(s)")
+        console.print(
+            f"\n[bold]Resume:[/bold] [green]{enriched_count}[/green] enrichi(s), [red]{failed_count}[/red] echec(s)"
+        )
 
 
 def populate_movies(
     limit: Annotated[
         int,
         typer.Option(
-            "--limit", "-l",
+            "--limit",
+            "-l",
             help="Nombre maximum de films a traiter (0 = illimite)",
         ),
     ] = 0,
@@ -213,7 +228,6 @@ def populate_movies(
 async def _populate_movies_async(container, limit: int, dry_run: bool) -> None:
     """Implementation async de la commande populate-movies."""
     from src.core.entities.media import Movie
-    from src.core.entities.video import ValidationStatus
 
     # Recuperer les repositories
     pending_repo = container.pending_validation_repository()
@@ -233,7 +247,11 @@ async def _populate_movies_async(container, limit: int, dry_run: bool) -> None:
             # Verifier si c'est un film (source=tmdb)
             first_candidate = p.candidates[0] if p.candidates else None
             if first_candidate:
-                source = first_candidate.get("source") if isinstance(first_candidate, dict) else getattr(first_candidate, "source", None)
+                source = (
+                    first_candidate.get("source")
+                    if isinstance(first_candidate, dict)
+                    else getattr(first_candidate, "source", None)
+                )
                 if source == "tmdb":
                     validated_movies.append(p)
             if limit > 0 and len(validated_movies) >= limit:
@@ -241,7 +259,9 @@ async def _populate_movies_async(container, limit: int, dry_run: bool) -> None:
 
         if not validated_movies:
             console.print("[yellow]Aucun film valide a traiter.[/yellow]")
-            console.print("[dim]Utilisez 'process' ou 'pending' pour valider des films.[/dim]")
+            console.print(
+                "[dim]Utilisez 'process' ou 'pending' pour valider des films.[/dim]"
+            )
             return
 
         console.print(
@@ -264,7 +284,9 @@ async def _populate_movies_async(container, limit: int, dry_run: bool) -> None:
                 existing = movie_repo.get_by_tmdb_id(int(tmdb_id))
 
                 if existing:
-                    console.print(f"[dim]({i}/{len(validated_movies)})[/dim] {filename} - deja en base")
+                    console.print(
+                        f"[dim]({i}/{len(validated_movies)})[/dim] {filename} - deja en base"
+                    )
                     updated += 1
                     continue
 
@@ -272,7 +294,9 @@ async def _populate_movies_async(container, limit: int, dry_run: bool) -> None:
                 details = await tmdb_client.get_details(tmdb_id)
 
                 if not details:
-                    console.print(f"[dim]({i}/{len(validated_movies)})[/dim] [red]{filename}[/red] - TMDB introuvable")
+                    console.print(
+                        f"[dim]({i}/{len(validated_movies)})[/dim] [red]{filename}[/red] - TMDB introuvable"
+                    )
                     errors += 1
                     continue
 
@@ -293,28 +317,161 @@ async def _populate_movies_async(container, limit: int, dry_run: bool) -> None:
                 if not dry_run:
                     movie_repo.save(movie)
 
-                console.print(f"[dim]({i}/{len(validated_movies)})[/dim] [green]{filename}[/green] -> {details.title} ({details.year})")
+                console.print(
+                    f"[dim]({i}/{len(validated_movies)})[/dim] [green]{filename}[/green] -> {details.title} ({details.year})"
+                )
                 created += 1
 
                 # Rate limiting
                 await asyncio.sleep(0.25)
 
             except Exception as e:
-                console.print(f"[dim]({i}/{len(validated_movies)})[/dim] [red]{filename}[/red] - Erreur: {e}")
+                console.print(
+                    f"[dim]({i}/{len(validated_movies)})[/dim] [red]{filename}[/red] - Erreur: {e}"
+                )
                 errors += 1
 
         # Resume
-        console.print(f"\n[bold]Resume:[/bold]")
+        console.print("\n[bold]Resume:[/bold]")
         console.print(f"  [green]{created}[/green] film(s) cree(s)")
         console.print(f"  [yellow]{updated}[/yellow] deja en base")
         if errors > 0:
             console.print(f"  [red]{errors}[/red] erreur(s)")
 
         if not dry_run and created > 0:
-            console.print("\n[dim]Utilisez 'enrich-ratings' pour enrichir les notes TMDB.[/dim]")
+            console.print(
+                "\n[dim]Utilisez 'enrich-ratings' pour enrichir les notes TMDB.[/dim]"
+            )
 
         if tmdb_client:
             await tmdb_client.close()
+
+
+# --- Commande link-movies ---
+_FILM_NAME_RE = re.compile(r"^(.+?)\s*\((\d{4})\)")
+
+
+def link_movies(
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Simule sans modifier la base"),
+    ] = False,
+) -> None:
+    """Associe les films en base a leurs fichiers physiques via les symlinks video/."""
+    asyncio.run(_link_movies_async(dry_run))
+
+
+@with_container()
+async def _link_movies_async(container, dry_run: bool) -> None:
+    """Implementation async de link-movies."""
+    from sqlmodel import or_, select
+
+    from src.infrastructure.persistence.models import MovieModel
+    from src.utils.constants import VIDEO_EXTENSIONS
+
+    config = container.config()
+    movie_repo = container.movie_repository()
+    session = movie_repo._session
+
+    video_films_dir = Path(config.video_dir) / "Films"
+    if not video_films_dir.exists():
+        console.print(f"[red]Erreur:[/red] Repertoire introuvable: {video_films_dir}")
+        raise typer.Exit(code=1)
+
+    with suppress_loguru():
+        # Lister tous les symlinks video dans Films/
+        symlinks = [
+            f
+            for f in video_films_dir.rglob("*")
+            if f.is_symlink() and f.suffix.lower() in VIDEO_EXTENSIONS
+        ]
+
+        console.print(
+            f"[bold cyan]Association films ↔ fichiers[/bold cyan]: "
+            f"{len(symlinks)} symlinks dans {video_films_dir}\n"
+        )
+
+        if dry_run:
+            console.print("[yellow]Mode dry-run — aucune modification[/yellow]\n")
+
+        linked = 0
+        already = 0
+        not_found = 0
+        no_target = 0
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("[cyan]Association...", total=len(symlinks))
+
+            for symlink in symlinks:
+                m = _FILM_NAME_RE.match(symlink.name)
+                if not m:
+                    progress.advance(task)
+                    continue
+
+                title = m.group(1).strip()
+                year = int(m.group(2))
+
+                # Resoudre la cible du symlink
+                try:
+                    target = symlink.resolve()
+                    if not target.exists():
+                        no_target += 1
+                        progress.advance(task)
+                        continue
+                except (OSError, ValueError):
+                    no_target += 1
+                    progress.advance(task)
+                    continue
+
+                file_path = str(target)
+
+                # Chercher le film en base (titre ou titre original + annee)
+                results = session.exec(
+                    select(MovieModel).where(
+                        or_(
+                            MovieModel.title == title,
+                            MovieModel.original_title == title,
+                        ),
+                        MovieModel.year == year,
+                    )
+                ).all()
+
+                if not results:
+                    not_found += 1
+                    progress.advance(task)
+                    continue
+
+                movie = results[0]
+
+                if movie.file_path:
+                    already += 1
+                    progress.advance(task)
+                    continue
+
+                progress.update(task, description=f"[cyan]{title}")
+
+                if not dry_run:
+                    movie.file_path = file_path
+                    session.add(movie)
+                    session.commit()
+
+                linked += 1
+                progress.advance(task)
+
+    # Resume
+    console.print("\n[bold]Resume:[/bold]")
+    console.print(f"  [green]{linked}[/green] film(s) associe(s)")
+    console.print(f"  [yellow]{already}[/yellow] deja associe(s)")
+    if not_found > 0:
+        console.print(f"  [dim]{not_found}[/dim] non trouve(s) en base")
+    if no_target > 0:
+        console.print(f"  [red]{no_target}[/red] symlink(s) sans cible valide")
 
 
 # --- Regex pour le parsing des dossiers et fichiers series ---
@@ -336,7 +493,8 @@ def populate_series(
     limit: Annotated[
         int,
         typer.Option(
-            "--limit", "-l",
+            "--limit",
+            "-l",
             help="Nombre maximum de series a traiter (0 = illimite)",
         ),
     ] = 0,
@@ -372,7 +530,9 @@ async def _populate_series_async(
     if dry_run:
         console.print("[yellow]Mode dry-run — aucune modification[/yellow]\n")
 
-    console.print(f"[bold cyan]Population des tables series/episodes[/bold cyan]: {series_root}\n")
+    console.print(
+        f"[bold cyan]Population des tables series/episodes[/bold cyan]: {series_root}\n"
+    )
 
     with suppress_loguru():
         # Phase 1 : decouvrir tous les dossiers serie
@@ -440,7 +600,7 @@ async def _populate_series_async(
                 progress.advance(task)
 
     # Resume final
-    console.print(f"\n[bold]Resume:[/bold]")
+    console.print("\n[bold]Resume:[/bold]")
     console.print(f"  [green]{series_created}[/green] serie(s) creee(s)")
     console.print(f"  [yellow]{series_skipped}[/yellow] serie(s) deja en base")
     console.print(f"  [green]{episodes_created}[/green] episode(s) cree(s)")
@@ -532,7 +692,6 @@ def _process_episodes(
     errors = 0
 
     from src.core.entities.media import Episode
-    from src.infrastructure.persistence.models import EpisodeModel
 
     for season_dir in sorted(series_path.iterdir()):
         if not season_dir.is_dir():

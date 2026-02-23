@@ -1,0 +1,87 @@
+<form class="lib-filters"
+      hx-get="/library/"
+      hx-target="#library-content"
+      hx-push-url="true"
+      hx-trigger="change from:select, keyup changed delay:300ms from:find input[name=q]">
+
+    <div class="lib-filters-row">
+        <div class="lib-search-wrap">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text"
+                   name="q"
+                   class="lib-search-input"
+                   placeholder="Rechercher un titre..."
+                   value="{{ current_q }}">
+        </div>
+
+        <select name="type" class="lib-filter-select">
+            <option value="all" {{ 'selected' if current_type == 'all' }}>Tous</option>
+            <option value="movie" {{ 'selected' if current_type == 'movie' }}>Films</option>
+            <option value="series" {{ 'selected' if current_type == 'series' }}>Series</option>
+        </select>
+
+        <select name="genre" class="lib-filter-select">
+            <option value="">Genre</option>
+            {% for g in genres %}
+            <option value="{{ g }}" {{ 'selected' if current_genre == g }}>{{ g }}</option>
+            {% endfor %}
+        </select>
+
+        <select name="year" class="lib-filter-select">
+            <option value="">Année</option>
+            {% for y in years %}
+            <option value="{{ y }}" {{ 'selected' if current_year == y }}>{{ y }}</option>
+            {% endfor %}
+        </select>
+
+        <select name="sort" class="lib-filter-select">
+            <option value="title" {{ 'selected' if current_sort == 'title' }}>Tri: Titre</option>
+            <option value="year" {{ 'selected' if current_sort == 'year' }}>Tri: Année</option>
+            <option value="rating" {{ 'selected' if current_sort == 'rating' }}>Tri: Note</option>
+        </select>
+
+        <select name="order" class="lib-filter-select lib-filter-order">
+            <option value="asc" {{ 'selected' if current_order == 'asc' }}>Croissant</option>
+            <option value="desc" {{ 'selected' if current_order == 'desc' }}>Décroissant</option>
+        </select>
+    </div>
+
+    {% if current_genre or current_year or current_q or current_type != 'all' %}
+    <div class="lib-active-filters">
+        {% if current_type != 'all' %}
+        <span class="lib-filter-tag">
+            {{ 'Film' if current_type == 'movie' else 'Serie' }}
+            <a href="/library/?type=all&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q={{ current_q }}&sort={{ current_sort }}&order={{ current_order }}"
+               class="lib-filter-tag-remove">&times;</a>
+        </span>
+        {% endif %}
+        {% if current_genre %}
+        <span class="lib-filter-tag">
+            {{ current_genre }}
+            <a href="/library/?type={{ current_type }}&genre=&year={{ current_year or '' }}&q={{ current_q }}&sort={{ current_sort }}&order={{ current_order }}"
+               class="lib-filter-tag-remove">&times;</a>
+        </span>
+        {% endif %}
+        {% if current_year %}
+        <span class="lib-filter-tag">
+            {{ current_year }}
+            <a href="/library/?type={{ current_type }}&genre={{ current_genre or '' }}&year=&q={{ current_q }}&sort={{ current_sort }}&order={{ current_order }}"
+               class="lib-filter-tag-remove">&times;</a>
+        </span>
+        {% endif %}
+        {% if current_q %}
+        <span class="lib-filter-tag">
+            &laquo; {{ current_q }} &raquo;
+            <a href="/library/?type={{ current_type }}&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q=&sort={{ current_sort }}&order={{ current_order }}"
+               class="lib-filter-tag-remove">&times;</a>
+        </span>
+        {% endif %}
+    </div>
+    {% endif %}
+</form>
+
+{% if total_pages > 1 %}
+{% with extra_class="pagination-top" %}
+{% include "library/_pagination.html" %}
+{% endwith %}
+{% endif %}

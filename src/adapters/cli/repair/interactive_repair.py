@@ -129,10 +129,22 @@ class InteractiveRepair:
         if not nas_dir:
             return None
 
-        # Chercher le meilleur candidat dans le repertoire confirme
+        # Extraire le SxxExx du symlink casse pour matcher le bon episode
+        import re
+
+        ep_match = re.search(r"S(\d+)E(\d+)", link.name, re.IGNORECASE)
+        if not ep_match:
+            return None
+
+        episode_id = ep_match.group(0).upper()
         nas_dir_str = str(nas_dir)
+
+        # Chercher le candidat ayant le meme SxxExx dans le repertoire confirme
         for candidate, score in targets_with_scores:
-            if str(candidate).startswith(nas_dir_str):
+            if (
+                str(candidate).startswith(nas_dir_str)
+                and episode_id in candidate.name.upper()
+            ):
                 return candidate
 
         # Fallback: recherche directe par numero d'episode dans le NAS
@@ -185,7 +197,9 @@ class InteractiveRepair:
                 )
 
             # Auto-reparation si serie deja confirmee
-            auto_target = self._check_series_auto_repair(series_name, link, targets_with_scores)
+            auto_target = self._check_series_auto_repair(
+                series_name, link, targets_with_scores
+            )
             if auto_target:
                 if not dry_run:
                     success = repair.repair_symlink(link, auto_target)
@@ -216,7 +230,9 @@ class InteractiveRepair:
                 # Auto-reparation si score = 100%
                 if targets_with_scores[0][1] >= 100:
                     best_target, best_score = targets_with_scores[0]
-                    console.print(f"\n[green]Match parfait (100%)[/green]: {best_target.name}")
+                    console.print(
+                        f"\n[green]Match parfait (100%)[/green]: {best_target.name}"
+                    )
                     if not dry_run:
                         success = repair.repair_symlink(link, best_target)
                     else:
@@ -233,17 +249,27 @@ class InteractiveRepair:
                         # Enregistrer la serie comme confirmee
                         if series_name:
                             self._register_confirmed_series(link, best_target)
-                        console.print(f"[green]✓ Auto-repare -> {best_target.name}[/green]\n")
+                        console.print(
+                            f"[green]✓ Auto-repare -> {best_target.name}[/green]\n"
+                        )
                     else:
                         console.print("[red]Echec de la reparation automatique[/red]\n")
                     continue  # Passer au symlink suivant
 
-                console.print(f"\n[green]{len(targets_with_scores)}[/green] cible(s) possible(s):")
+                console.print(
+                    f"\n[green]{len(targets_with_scores)}[/green] cible(s) possible(s):"
+                )
                 CandidateDisplay.display(console, targets_with_scores, page_start)
 
             # Boucle pour gerer la pagination et recherche par titre
             result = await self._process_link(
-                repair, link, targets_with_scores, page_start, min_score, dry_run, series_name
+                repair,
+                link,
+                targets_with_scores,
+                page_start,
+                min_score,
+                dry_run,
+                series_name,
             )
 
             if result == "quit":
@@ -297,7 +323,9 @@ class InteractiveRepair:
 
             # Valider le choix
             if choice not in valid_choices:
-                console.print(f"[red]Choix invalide. Utilisez: {', '.join(sorted(valid_choices))}[/red]")
+                console.print(
+                    f"[red]Choix invalide. Utilisez: {', '.join(sorted(valid_choices))}[/red]"
+                )
                 continue
 
             # Recherche par titre personnalise
@@ -307,16 +335,31 @@ class InteractiveRepair:
                     console.print(f"[cyan]Recherche de '{custom_title}'...[/cyan]")
 
                     # Utiliser CustomSearch pour la recherche
-                    custom_results = CustomSearch.search(repair, custom_title, link, min_score)
+                    custom_results = CustomSearch.search(
+                        repair, custom_title, link, min_score
+                    )
 
                     if custom_results:
                         targets_with_scores = custom_results
                         page_start = 0
-                        media_label = "films" if "/films/" in str(link).lower() else "séries" if "/séries/" in str(link).lower() or "/series/" in str(link).lower() else "tous"
-                        console.print(f"\n[green]{len(targets_with_scores)}[/green] resultat(s) pour '{custom_title}' ({media_label}):")
-                        CandidateDisplay.display(console, targets_with_scores, page_start)
+                        media_label = (
+                            "films"
+                            if "/films/" in str(link).lower()
+                            else "séries"
+                            if "/séries/" in str(link).lower()
+                            or "/series/" in str(link).lower()
+                            else "tous"
+                        )
+                        console.print(
+                            f"\n[green]{len(targets_with_scores)}[/green] resultat(s) pour '{custom_title}' ({media_label}):"
+                        )
+                        CandidateDisplay.display(
+                            console, targets_with_scores, page_start
+                        )
                     else:
-                        console.print(f"[red]Aucun resultat pour '{custom_title}'[/red]")
+                        console.print(
+                            f"[red]Aucun resultat pour '{custom_title}'[/red]"
+                        )
                 continue
 
             # Gerer la pagination
@@ -347,30 +390,61 @@ class InteractiveRepair:
             elif choice == "r":
                 if not targets_with_scores:
                     console.print("[red]Aucune cible trouvee[/red]\n")
-                    return {"action": RepairAction(link=link, action=RepairActionType.SKIPPED)}
+                    return {
+                        "action": RepairAction(
+                            link=link, action=RepairActionType.SKIPPED
+                        )
+                    }
 
                 # Selection de la cible
                 max_choice = min(len(targets_with_scores), 15)
-                target_choice = input(f"Cible (1-{max_choice}, a=annuler) [1]: ").strip().lower() or "1"
+                target_choice = (
+                    input(f"Cible (1-{max_choice}, a=annuler) [1]: ").strip().lower()
+                    or "1"
+                )
 
                 if target_choice == "a" or target_choice == "annuler":
-                    return {"action": RepairAction(link=link, action=RepairActionType.SKIPPED)}
+                    return {
+                        "action": RepairAction(
+                            link=link, action=RepairActionType.SKIPPED
+                        )
+                    }
                 else:
                     try:
                         target_idx = int(target_choice) - 1
                         if target_idx < 0 or target_idx >= len(targets_with_scores):
-                            console.print(f"[red]Choix invalide (1-{max_choice})[/red]\n")
-                            return {"action": RepairAction(link=link, action=RepairActionType.SKIPPED)}
+                            console.print(
+                                f"[red]Choix invalide (1-{max_choice})[/red]\n"
+                            )
+                            return {
+                                "action": RepairAction(
+                                    link=link, action=RepairActionType.SKIPPED
+                                )
+                            }
                     except ValueError:
-                        console.print(f"[red]Choix invalide (1-{max_choice} ou 'a')[/red]\n")
-                        return {"action": RepairAction(link=link, action=RepairActionType.SKIPPED)}
+                        console.print(
+                            f"[red]Choix invalide (1-{max_choice} ou 'a')[/red]\n"
+                        )
+                        return {
+                            "action": RepairAction(
+                                link=link, action=RepairActionType.SKIPPED
+                            )
+                        }
                     new_target, score = targets_with_scores[target_idx]
 
                     if dry_run:
                         if series_name:
                             self._register_confirmed_series(link, new_target)
-                        console.print(f"[cyan](dry-run)[/cyan] Reparation: {new_target.name}\n")
-                        return {"action": RepairAction(link=link, action=RepairActionType.REPAIRED, new_target=new_target)}
+                        console.print(
+                            f"[cyan](dry-run)[/cyan] Reparation: {new_target.name}\n"
+                        )
+                        return {
+                            "action": RepairAction(
+                                link=link,
+                                action=RepairActionType.REPAIRED,
+                                new_target=new_target,
+                            )
+                        }
                     else:
                         success = repair.repair_symlink(link, new_target)
 
@@ -378,32 +452,49 @@ class InteractiveRepair:
                             # Enregistrer la serie comme confirmee
                             if series_name:
                                 self._register_confirmed_series(link, new_target)
-                            console.print(f"[green]Repare -> {new_target.name}[/green]\n")
-                            return {"action": RepairAction(link=link, action=RepairActionType.REPAIRED, new_target=new_target)}
+                            console.print(
+                                f"[green]Repare -> {new_target.name}[/green]\n"
+                            )
+                            return {
+                                "action": RepairAction(
+                                    link=link,
+                                    action=RepairActionType.REPAIRED,
+                                    new_target=new_target,
+                                )
+                            }
                         else:
                             console.print("[red]Echec de la reparation[/red]\n")
-                            return {"action": RepairAction(link=link, action=RepairActionType.SKIPPED)}
+                            return {
+                                "action": RepairAction(
+                                    link=link, action=RepairActionType.SKIPPED
+                                )
+                            }
 
     def _propose_skip_series(self, console, link: Path) -> None:
         """Propose d'ignorer les episodes restants du meme repertoire."""
-        skip_all = input(
-            "Ignorer les episodes restants de cette serie ? (o/n) [o]: "
-        ).strip().lower() or "o"
+        skip_all = (
+            input("Ignorer les episodes restants de cette serie ? (o/n) [o]: ")
+            .strip()
+            .lower()
+            or "o"
+        )
         if skip_all in ("o", "oui"):
             self.skipped_series.add(str(link.parent))
             console.print(f"[dim]Serie ignoree ({link.parent.name})[/dim]")
 
-    async def _handle_orphan(self, repair: "RepairService", link: Path, dry_run: bool) -> RepairAction | None:
+    async def _handle_orphan(
+        self, repair: "RepairService", link: Path, dry_run: bool
+    ) -> RepairAction | None:
         """Gère le déplacement vers orphans."""
         from src.adapters.cli.helpers import console
 
         if dry_run:
-            console.print(f"[cyan](dry-run)[/cyan] Deplacement vers orphans\n")
+            console.print("[cyan](dry-run)[/cyan] Deplacement vers orphans\n")
             return RepairAction(link=link, action=RepairActionType.ORPHANED)
         else:
             dest = repair.move_to_orphans(link)
             if dest:
-                console.print(f"[yellow]Deplace vers orphans[/yellow]\n")
+                console.print("[yellow]Deplace vers orphans[/yellow]\n")
                 return RepairAction(link=link, action=RepairActionType.ORPHANED)
             else:
                 console.print("[red]Echec du deplacement[/red]\n")
