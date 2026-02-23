@@ -42,6 +42,9 @@ from src.adapters.cli.commands.cleanup_command import (
 from src.adapters.cli.commands.regroup_command import (
     regroup,
 )
+from src.adapters.cli.commands.fix_symlinks_command import (
+    fix_symlinks,
+)
 
 __all__ = [
     # workflow
@@ -72,4 +75,5 @@ __all__ = [
     "check",
     "cleanup",
     "regroup",
+    "fix_symlinks",
 ]
