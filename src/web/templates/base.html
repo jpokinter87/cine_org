@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}CineOrg{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+    <nav class="main-nav">
+        <a href="/" class="nav-brand">Ciné<span class="brand-accent">Org</span></a>
+        <ul class="nav-links">
+            <li><a href="/" class="nav-link {% block nav_home %}{% endblock %}">Accueil</a></li>
+            <li><a href="/validation" class="nav-link {% block nav_validation %}{% endblock %}">Validation</a></li>
+            <li><a href="/library" class="nav-link {% block nav_library %}{% endblock %}">Bibliothèque</a></li>
+        </ul>
+        <button class="nav-toggle" aria-label="Menu" onclick="this.closest('.main-nav').classList.toggle('open')">
+            <span></span><span></span><span></span>
+        </button>
+    </nav>
+    <main class="content">
+        {% block content %}{% endblock %}
+    </main>
+    <footer class="main-footer">
+        <span class="footer-text">CineOrg v0.1.0</span>
+    </footer>
+</body>
+</html>

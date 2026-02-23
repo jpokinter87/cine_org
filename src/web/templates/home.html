@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}CineOrg — Accueil{% endblock %}
+{% block nav_home %}active{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <h1 class="hero-title">Vidéothèque</h1>
+    <p class="hero-subtitle">Gestion et organisation de votre collection</p>
+</section>
+
+<section class="stats-grid">
+    <div class="stat-card stat-films">
+        <div class="stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/></svg>
+        </div>
+        <span class="stat-value">{{ movie_count }}</span>
+        <span class="stat-label">Films</span>
+    </div>
+    <div class="stat-card stat-series">
+        <div class="stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg>
+        </div>
+        <span class="stat-value">{{ series_count }}</span>
+        <span class="stat-label">Séries</span>
+    </div>
+    <div class="stat-card stat-episodes">
+        <div class="stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        </div>
+        <span class="stat-value">{{ episode_count }}</span>
+        <span class="stat-label">Épisodes</span>
+    </div>
+    <div class="stat-card stat-pending">
+        <div class="stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <span class="stat-value">{{ pending_count }}</span>
+        <span class="stat-label">En attente</span>
+    </div>
+</section>
+
+<section class="quick-actions">
+    <h2 class="section-title">Actions rapides</h2>
+    <div class="actions-row">
+        <a href="/validation" class="action-btn action-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            Valider les fichiers
+        </a>
+        <a href="/library" class="action-btn action-secondary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            Parcourir la bibliothèque
+        </a>
+    </div>
+</section>
+{% endblock %}

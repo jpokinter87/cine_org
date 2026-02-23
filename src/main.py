@@ -16,6 +16,7 @@ from .adapters.cli.commands import (
     enrich,
     enrich_imdb_ids,
     enrich_ratings,
+    fix_symlinks,
     imdb_app,
     import_library,
     pending,
@@ -75,6 +76,7 @@ app.command()(consolidate)
 app.command()(check)
 app.command()(cleanup)
 app.command()(regroup)
+app.command(name="fix-symlinks")(fix_symlinks)
 
 # Monter validate_app comme sous-commande
 app.add_typer(validate_app, name="validate")
@@ -139,6 +141,19 @@ def scan() -> None:
         count += 1
 
     typer.echo(f"Total: {count} files found")
+
+
+@app.command()
+def serve(
+    host: Annotated[str, typer.Option(help="Adresse d'écoute")] = "0.0.0.0",
+    port: Annotated[int, typer.Option(help="Port d'écoute")] = 8000,
+    reload: Annotated[bool, typer.Option(help="Rechargement automatique")] = False,
+) -> None:
+    """Lance le serveur web CineOrg."""
+    import uvicorn
+
+    typer.echo(f"Démarrage du serveur sur {host}:{port}")
+    uvicorn.run("src.web.app:app", host=host, port=port, reload=reload)
 
 
 def main() -> None:
