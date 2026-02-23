@@ -176,3 +176,16 @@ def _run_migrations() -> None:
                 text("ALTER TABLE series ADD COLUMN imdb_votes INTEGER")
             )
             conn.commit()
+
+        # Migration 6: Ajouter tmdb_id a series si manquante
+        result = conn.execute(text("PRAGMA table_info(series)"))
+        series_columns = [row[1] for row in result.fetchall()]
+
+        if "tmdb_id" not in series_columns:
+            conn.execute(
+                text("ALTER TABLE series ADD COLUMN tmdb_id INTEGER")
+            )
+            conn.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_series_tmdb_id ON series(tmdb_id)")
+            )
+            conn.commit()

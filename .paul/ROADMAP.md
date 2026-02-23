@@ -2,112 +2,72 @@
 
 ## Overview
 
-CineOrg dispose d'un CLI complet et fonctionnel. La prochaine étape majeure est la création d'une interface web permettant une validation visuelle des candidats (jaquettes, synopsis, acteurs) pour les titres équivoques, en complément du CLI existant.
+CineOrg dispose d'un CLI complet et d'une interface web fonctionnelle. Le prochain objectif est l'enrichissement des données (crédits, ratings, IMDB IDs) et l'amélioration des fiches détaillées dans l'interface web.
+
+## Milestones
+
+### v1.0 Interface Web — Complete (2026-02-23)
+
+5 phases : Foundation Web, Validation Visuelle, Orchestration Workflow, Transfert & Conflits, Bibliothèque & Maintenance.
+
+---
 
 ## Current Milestone
 
-**v1.0 Interface Web** (v1.0.0)
-Status: Complete
-Phases: 5 of 5 complete
+**v1.1 Enrichissement Données** (v1.1.0)
+Status: In Progress
+Phases: 2 of 3 complete
 
 ## Phases
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
-| 1 | Foundation Web | 1/1 | Complete | 2026-02-23 |
-| 2 | Validation Visuelle | 2/2 | Complete | 2026-02-23 |
-| 3 | Orchestration Workflow | 1/1 | Complete | 2026-02-23 |
-| 4 | Transfert & Conflits | 1/1 | Complete | 2026-02-23 |
-| 5 | Bibliothèque & Maintenance | 3/3 | Complete | 2026-02-23 |
+| 6 | Enrichissement Films | 1/1 | Complete | 2026-02-23 |
+| 7 | Enrichissement Séries | 1/1 | Complete | 2026-02-23 |
+| 8 | Fiches Détaillées Enrichies | TBD | Not started | - |
 
 ## Phase Details
 
-### Phase 1: Foundation Web
+### Phase 6: Enrichissement Films
 
-**Goal:** Mettre en place l'application FastAPI, le wiring DI, le layout Jinja2 de base, les assets statiques et un point d'entrée serveur web
-**Depends on:** Nothing (first phase)
-**Status:** Complete (2026-02-23)
-
-**Plans:**
-- [x] 01-01: Setup FastAPI app + Container DI + layout de base + page d'accueil
-
-### Phase 2: Validation Visuelle
-
-**Goal:** Reproduire et améliorer le flux de validation CLI avec affichage visuel des candidats (jaquettes, synopsis, cast, année, score)
-**Depends on:** Phase 1 (app FastAPI fonctionnelle)
-**Research:** Unlikely (services ValidationService/MatcherService déjà prêts pour web)
+**Goal:** Enrichir les données films en base : crédits (réalisateur, acteurs), ratings (IMDB/TMDB), IMDB IDs
+**Depends on:** v1.0 (bibliothèque films peuplée)
+**Research:** Unlikely (commandes enrich-* CLI existantes, TMDB API câblée)
 
 **Scope:**
-- Liste des fichiers en attente de validation (pending)
-- Affichage enrichi des candidats avec jaquettes TMDB/TVDB
-- Actions : valider, rejeter, skip, recherche manuelle, recherche par ID
-- Pagination des candidats
-- Affichage du score avec code couleur
+- Exécution et fiabilisation des commandes `enrich-movies-credits`, `enrich-ratings`, `enrich-imdb-ids`
+- Correction des éventuels bugs ou limitations (rate limiting, données manquantes)
+- Vérification de la couverture : % de films avec crédits, ratings, IMDB IDs
 
-**Plans:**
-- [x] 02-01: Routes API + templates validation pending
-- [x] 02-02: Interactions HTMX validation/rejet/recherche
+**Plans:** TBD (defined during /paul:plan)
 
-### Phase 3: Orchestration Workflow
+### Phase 7: Enrichissement Séries
 
-**Goal:** Permettre de lancer le workflow complet (scan → matching → auto-validation) depuis l'interface web avec suivi de progression
-**Depends on:** Phase 2 (validation visuelle pour la partie manuelle)
-**Research:** Unlikely (WorkflowService async existant)
+**Goal:** Enrichir les données séries en base : crédits (créateurs, acteurs), ratings, épisodes enrichis
+**Depends on:** Phase 6 (patterns d'enrichissement validés)
+**Research:** Unlikely (commande enrich-series existante, TMDB TV API câblée)
 
 **Scope:**
-- Déclenchement du workflow depuis le web
-- Suivi de progression en temps réel (SSE ou polling HTMX)
-- Affichage des résultats d'auto-validation
-- Gestion des erreurs et annulation
+- Exécution et fiabilisation de `enrich-series` pour crédits et ratings
+- Enrichissement des épisodes individuels (titres, descriptions si disponibles)
+- Vérification de la couverture : % de séries avec crédits, ratings
 
-**Status:** Complete (2026-02-23)
+**Plans:** TBD (defined during /paul:plan)
 
-**Plans:**
-- [x] 03-01: Lancement workflow + suivi progression SSE + cascade auto-validation séries
+### Phase 8: Fiches Détaillées Enrichies
 
-### Phase 4: Transfert & Conflits
-
-**Goal:** Interface web pour le résumé batch, la confirmation de transfert et la résolution de conflits
-**Depends on:** Phase 3 (workflow fournit les fichiers validés à transférer)
-**Research:** Unlikely (TransfererService existant)
-
-**Scope:**
-- Résumé batch visuel (arborescence des transferts prévus)
-- Confirmation et exécution du transfert
-- Détection et résolution de conflits (doublon, collision de noms)
-- Affichage comparatif des fichiers en conflit
-- Mode simulation (dry-run)
-
-**Status:** Complete (2026-02-23)
-
-**Plans:**
-- [x] 04-01: Résumé batch + transfert + résolution conflits + dry-run
-
-### Phase 5: Bibliothèque & Maintenance
-
-**Goal:** Navigation dans la vidéothèque et outils de maintenance accessibles via le web
-**Depends on:** Phase 1 (app de base suffisante)
+**Goal:** Améliorer les fiches détaillées web pour exploiter les données enrichies
+**Depends on:** Phases 6 et 7 (données enrichies disponibles)
 **Research:** Unlikely
 
 **Scope:**
-- Navigation films/séries avec filtres (genre, année, note)
-- Détail d'un film/série (métadonnées, jaquette, fichiers associés)
-- Configuration de l'application (répertoires, clés API, seuils)
-- Réparation des symlinks cassés
-- Vérification d'intégrité
-- Cleanup / nettoyage
+- Acteurs et réalisateurs cliquables dans les fiches (filtre par personne)
+- Affichage des ratings (IMDB + TMDB) avec badges visuels
+- Liens vers les pages IMDB/TMDB externes
+- Amélioration de la grille bibliothèque (badges rating, indicateurs enrichissement)
 
-**Status:** Complete (2026-02-23)
-
-**Plans:**
-- [x] 05-01: Navigation bibliothèque films/séries + enrichissement séries/crédits
-- [x] 05-02: Page de configuration (répertoires, clés API, seuils, logging)
-- [x] 05-03: Outils maintenance (repair, check, cleanup)
-
-### Milestone Summary
-
-All 5 phases complete. Interface web fully functional alongside the CLI.
+**Plans:** TBD (defined during /paul:plan)
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-23 — v1.0 milestone complete*
+*Last updated: 2026-02-23 — v1.1 milestone created*

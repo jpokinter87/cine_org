@@ -6,7 +6,7 @@ complets (poster, notes, genres, createurs, acteurs).
 """
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Optional
 
@@ -128,6 +128,9 @@ class SeriesEnricherService:
             if not details:
                 return EnrichmentResult.NOT_FOUND
 
+            # Sauvegarder le tmdb_id
+            series.tmdb_id = int(best.id)
+
             # Mettre a jour la serie avec les donnees TMDB
             if details.poster_url:
                 series.poster_path = details.poster_url
@@ -145,6 +148,12 @@ class SeriesEnricherService:
                 series.director = details.director
             if details.cast:
                 series.cast = details.cast
+
+            # Recuperer l'imdb_id via les IDs externes TMDB
+            if not series.imdb_id:
+                ext_ids = await self._tmdb_client.get_tv_external_ids(best.id)
+                if ext_ids and ext_ids.get("imdb_id"):
+                    series.imdb_id = ext_ids["imdb_id"]
 
             self._series_repo.save(series)
             return EnrichmentResult.SUCCESS

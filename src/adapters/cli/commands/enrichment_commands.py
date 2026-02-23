@@ -28,7 +28,7 @@ def enrich_ratings(
             "--limit", "-l",
             help="Nombre maximum de films a enrichir",
         ),
-    ] = 100,
+    ] = 2000,
 ) -> None:
     """Enrichit les notes TMDB (vote_average, vote_count) pour les films sans notes."""
     asyncio.run(_enrich_ratings_async(limit))
@@ -37,7 +37,11 @@ def enrich_ratings(
 @with_container()
 async def _enrich_ratings_async(container, limit: int) -> None:
     """Implementation async de la commande enrich-ratings."""
-    from src.services.ratings_enricher import RatingsEnricherService
+    from src.services.ratings_enricher import (
+        EnrichmentResult,
+        ProgressInfo,
+        RatingsEnricherService,
+    )
 
     # Creer le service d'enrichissement des notes
     movie_repo = container.movie_repository()
@@ -56,15 +60,44 @@ async def _enrich_ratings_async(container, limit: int) -> None:
         console.print("[dim]Tous les films ont deja leurs notes TMDB.[/dim]")
         return
 
+    total = len(movies_to_enrich)
     console.print(
-        f"[bold cyan]Enrichissement des notes TMDB[/bold cyan]: {len(movies_to_enrich)} film(s)\n"
+        f"[bold cyan]Enrichissement des notes TMDB[/bold cyan]: {total} film(s)\n"
     )
 
     with suppress_loguru():
-        stats = await service.enrich_ratings(limit=limit, rate_limit_seconds=0.25)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeRemainingColumn(),
+            console=console,
+            transient=False,
+        ) as progress:
+            task = progress.add_task("[cyan]Enrichissement...", total=total)
+
+            def on_progress(info: ProgressInfo) -> None:
+                """Callback de progression."""
+                progress.update(task, completed=info.current)
+                year_str = f" ({info.movie_year})" if info.movie_year else ""
+                title = f"{info.movie_title}{year_str}"
+
+                if info.result == EnrichmentResult.SUCCESS:
+                    progress.console.print(f"  [green]✓[/green] {title}")
+                elif info.result == EnrichmentResult.FAILED:
+                    progress.console.print(f"  [red]✗[/red] {title} - echec API")
+                elif info.result == EnrichmentResult.SKIPPED:
+                    progress.console.print(f"  [dim]-[/dim] {title} - ignore (sans tmdb_id)")
+
+            stats = await service.enrich_ratings(
+                limit=limit,
+                rate_limit_seconds=0.25,
+                on_progress=on_progress,
+            )
 
         # Afficher le resume
-        console.print(f"\n[bold]Resume:[/bold]")
+        console.print("\n[bold]Resume:[/bold]")
         console.print(f"  [green]{stats.enriched}[/green] enrichi(s)")
         if stats.failed > 0:
             console.print(f"  [red]{stats.failed}[/red] echec(s)")
@@ -149,7 +182,7 @@ async def _enrich_imdb_ids_async(container, limit: int) -> None:
             )
 
         # Afficher le resume
-        console.print(f"\n[bold]Resume:[/bold]")
+        console.print("\n[bold]Resume:[/bold]")
         console.print(f"  [green]{stats.enriched}[/green] enrichi(s)")
         if stats.failed > 0:
             console.print(f"  [red]{stats.failed}[/red] echec(s) API")
@@ -263,7 +296,7 @@ async def _enrich_series_async(container, limit: int, force: bool) -> None:
                 on_progress=on_progress,
             )
 
-        console.print(f"\n[bold]Resume:[/bold]")
+        console.print("\n[bold]Resume:[/bold]")
         console.print(f"  [green]{stats.enriched}[/green] enrichie(s)")
         if stats.not_found > 0:
             console.print(f"  [yellow]{stats.not_found}[/yellow] non trouvee(s) sur TMDB")
@@ -361,7 +394,7 @@ async def _enrich_movies_credits_async(container, limit: int) -> None:
                 on_progress=on_progress,
             )
 
-        console.print(f"\n[bold]Resume:[/bold]")
+        console.print("\n[bold]Resume:[/bold]")
         console.print(f"  [green]{stats.enriched}[/green] enrichi(s)")
         if stats.failed > 0:
             console.print(f"  [red]{stats.failed}[/red] echec(s) API")

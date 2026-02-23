@@ -110,6 +110,7 @@ class SeriesModel(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     tvdb_id: int | None = Field(default=None, index=True)
+    tmdb_id: int | None = Field(default=None, index=True)
     imdb_id: str | None = Field(default=None, index=True)
     title: str = Field(index=True)
     original_title: str | None = None

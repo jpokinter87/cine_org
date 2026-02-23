@@ -7,10 +7,30 @@ pour les films qui n'ont pas encore ces informations en base.
 
 import asyncio
 from dataclasses import dataclass
+from enum import Enum
+from typing import Callable, Optional
 
-from src.core.entities.media import Movie
 from src.core.ports.api_clients import IMediaAPIClient
 from src.core.ports.repositories import IMovieRepository
+
+
+class EnrichmentResult(str, Enum):
+    """Resultat d'enrichissement pour un film."""
+
+    SUCCESS = "success"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+@dataclass
+class ProgressInfo:
+    """Information de progression pour le callback."""
+
+    current: int
+    total: int
+    movie_title: str
+    movie_year: Optional[int]
+    result: EnrichmentResult
 
 
 @dataclass
@@ -50,6 +70,7 @@ class RatingsEnricherService:
         self,
         limit: int = 100,
         rate_limit_seconds: float = 0.25,
+        on_progress: Optional[Callable[[ProgressInfo], None]] = None,
     ) -> EnrichmentStats:
         """
         Enrichit les notes TMDB pour les films sans notes.
@@ -57,6 +78,7 @@ class RatingsEnricherService:
         Args:
             limit: Nombre maximum de films a enrichir
             rate_limit_seconds: Delai entre les appels API (rate limiting)
+            on_progress: Callback de progression optionnel
 
         Returns:
             Statistiques d'enrichissement
@@ -75,20 +97,28 @@ class RatingsEnricherService:
             # Recuperer les details depuis TMDB
             if movie.tmdb_id is None:
                 stats.skipped += 1
-                continue
+                result = EnrichmentResult.SKIPPED
+            else:
+                details = await self._tmdb_client.get_details(str(movie.tmdb_id))
 
-            details = await self._tmdb_client.get_details(str(movie.tmdb_id))
+                if details is None:
+                    stats.failed += 1
+                    result = EnrichmentResult.FAILED
+                else:
+                    # Mettre a jour le film avec les notes
+                    movie.vote_average = details.vote_average
+                    movie.vote_count = details.vote_count
+                    self._movie_repo.save(movie)
+                    stats.enriched += 1
+                    result = EnrichmentResult.SUCCESS
 
-            if details is None:
-                stats.failed += 1
-                continue
-
-            # Mettre a jour le film avec les notes
-            movie.vote_average = details.vote_average
-            movie.vote_count = details.vote_count
-
-            # Sauvegarder
-            self._movie_repo.save(movie)
-            stats.enriched += 1
+            if on_progress:
+                on_progress(ProgressInfo(
+                    current=i + 1,
+                    total=stats.total,
+                    movie_title=movie.title,
+                    movie_year=movie.year,
+                    result=result,
+                ))
 
         return stats

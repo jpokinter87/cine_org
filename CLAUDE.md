@@ -14,14 +14,15 @@ Les noms de variables, fonctions et classes restent en anglais (convention Pytho
 
 ## Environnement Python
 
-**IMPORTANT** : Ce projet utilise un environnement virtuel `.venv`. Pour toutes les commandes Python (pytest, python -m src.main, etc.), toujours activer le venv :
+**IMPORTANT** : Ce projet utilise `uv` comme gestionnaire de dépendances. Toujours utiliser `uv run` pour exécuter les commandes Python :
 
 ```bash
-source .venv/bin/activate && pytest ...
-source .venv/bin/activate && python -m src.main ...
+uv run pytest ...
+uv run python -m src.main ...
+uv run ruff check ...
 ```
 
-Ne jamais essayer d'utiliser `python3` ou `pyenv` directement - pytest et les dépendances sont uniquement dans `.venv`.
+Ne jamais essayer d'utiliser `python3` ou `pyenv` directement - les dépendances sont gérées par `uv`.
 
 ## Project Overview
 
@@ -48,25 +49,25 @@ CineOrg is a personal video library management application that:
 
 ```bash
 # Install dependencies
-pip install -r requirements.txt
+uv sync
 
 # Run tests
-pytest
+uv run pytest
 
 # Run tests with coverage
-pytest --cov=src --cov-report=html --cov-report=term-missing
+uv run pytest --cov=src --cov-report=html --cov-report=term-missing
 
 # Run a single test file
-pytest tests/unit/test_parser.py -v
+uv run pytest tests/unit/test_parser.py -v
 
 # Check minimum coverage (fails if < 90%)
-pytest --cov=src --cov-fail-under=90
+uv run pytest --cov=src --cov-fail-under=90
 
 # Start dev server
-uvicorn src.web.app:app --reload
+uv run uvicorn src.web.app:app --reload
 
 # Run CLI
-python -m src.main --help
+uv run python -m src.main --help
 ```
 
 ## Code Architecture

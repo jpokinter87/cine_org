@@ -81,6 +81,7 @@ class Series:
 
     id: Optional[str] = None
     tvdb_id: Optional[int] = None
+    tmdb_id: Optional[int] = None
     title: str = ""
     original_title: Optional[str] = None
     year: Optional[int] = None

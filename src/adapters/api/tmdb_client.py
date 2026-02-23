@@ -486,6 +486,35 @@ class TMDBClient(IMediaAPIClient):
             "twitter_id": data.get("twitter_id"),
         }
 
+    async def get_tv_external_ids(self, tv_id: str) -> Optional[dict[str, str | None]]:
+        """
+        Recupere les IDs externes (IMDb, etc.) pour une serie TV.
+
+        Args:
+            tv_id: ID TMDB de la serie TV
+
+        Returns:
+            Dictionnaire avec les IDs externes, ou None si non trouve
+        """
+        client = self._get_client()
+        try:
+            response = await request_with_retry(
+                client,
+                "GET",
+                f"/tv/{tv_id}/external_ids",
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            raise
+
+        data = response.json()
+
+        return {
+            "imdb_id": data.get("imdb_id"),
+            "tvdb_id": data.get("tvdb_id"),
+        }
+
     async def close(self) -> None:
         """
         Ferme le client HTTP.

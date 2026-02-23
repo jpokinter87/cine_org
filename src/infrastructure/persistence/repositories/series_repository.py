@@ -47,6 +47,7 @@ class SQLModelSeriesRepository(ISeriesRepository):
         return Series(
             id=str(model.id) if model.id else None,
             tvdb_id=model.tvdb_id,
+            tmdb_id=model.tmdb_id,
             title=model.title,
             original_title=model.original_title,
             year=model.year,
@@ -74,6 +75,7 @@ class SQLModelSeriesRepository(ISeriesRepository):
         """
         model = SeriesModel(
             tvdb_id=entity.tvdb_id,
+            tmdb_id=entity.tmdb_id,
             imdb_id=entity.imdb_id,
             title=entity.title,
             original_title=entity.original_title,
@@ -128,6 +130,7 @@ class SQLModelSeriesRepository(ISeriesRepository):
 
         if existing:
             # Mise a jour
+            existing.tmdb_id = series.tmdb_id
             existing.title = series.title
             existing.original_title = series.original_title
             existing.year = series.year
