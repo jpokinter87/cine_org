@@ -4490,6 +4490,47 @@ details[open] > .maint-issue-toggle::before {
     border-color: rgba(232, 168, 56, 0.5);
 }
 
+/* ── Video Player (mpv) ── */
+.play-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    text-decoration: none;
+}
+.play-btn:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+.lib-episode-play-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.35rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s;
+    text-decoration: none;
+}
+.lib-episode-play-btn:hover {
+    color: var(--accent-warm);
+}
+.play-launched {
+    font-size: 0.75rem;
+    color: var(--accent-warm);
+    font-family: 'DM Sans', sans-serif;
+}
+
 @media (max-width: 600px) {
     .reassociate-dialog {
         max-width: 100%;
