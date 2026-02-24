@@ -27,7 +27,7 @@ Phases: 1 of 3 complete
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 9 | Correction Manuelle Associations | 1/1 | Complete | 2026-02-24 |
-| 10 | Détection Automatique Erreurs | TBD | Not started | - |
+| 10 | Détection Automatique Erreurs | 1/1 | Planning | - |
 | 11 | Tableau de Bord Qualité | TBD | Not started | - |
 
 ## Phase Details
@@ -60,7 +60,8 @@ Phases: 1 of 3 complete
 - Liste des films/séries à vérifier avec score de confiance
 - Intégration avec le mécanisme de correction de la Phase 9
 
-**Plans:** TBD (defined during /paul:plan)
+**Plans:**
+- Plan 01: Service AssociationChecker (heuristiques durée/titre/année) + page web /quality/suspicious (2 tasks + 1 checkpoint)
 
 ### Phase 11: Tableau de Bord Qualité
 

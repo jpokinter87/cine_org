@@ -31,6 +31,18 @@ def _truncate_path(path: Path | str, segments: int = 3) -> str:
     return ".../" + "/".join(parts[-segments:])
 
 
+def _relative_from_root(path: Path | str) -> str:
+    """Retourne le chemin relatif depuis Films/ ou Séries/ (inclus)."""
+    parts = Path(path).parts
+    for i, part in enumerate(parts):
+        if part in _SCOPED_SUBDIRS:
+            return "/".join(parts[i:])
+    # Fallback : derniers 4 segments
+    if len(parts) > 4:
+        return ".../" + "/".join(parts[-4:])
+    return str(path)
+
+
 def _escape_json(s: str) -> str:
     """Échappe une chaîne pour inclusion dans du JSON SSE."""
     return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
@@ -207,19 +219,19 @@ async def run_check_sse(request: Request):
         max_display = 50
         ghost_entries = [
             {
-                "path": _truncate_path(i.path),
+                "path": _relative_from_root(i.path),
                 "full_path": str(i.path),
                 "details": i.details,
             }
             for i in ghost[:max_display]
         ]
         orphan_files = [
-            {"path": _truncate_path(i.path), "full_path": str(i.path)}
+            {"path": _relative_from_root(i.path), "full_path": str(i.path)}
             for i in orphans[:max_display]
         ]
         broken_symlinks = [
             {
-                "path": _truncate_path(i.path),
+                "path": _relative_from_root(i.path),
                 "full_path": str(i.path),
                 "details": i.details,
             }
@@ -334,10 +346,10 @@ async def run_cleanup_sse(request: Request):
         max_display = 50
         broken = [
             {
-                "path": _truncate_path(b.symlink_path),
+                "path": _relative_from_root(b.symlink_path),
                 "full_path": str(b.symlink_path),
                 "score": f"{b.candidate_score:.0f}" if b.best_candidate else None,
-                "candidate": _truncate_path(b.best_candidate)
+                "candidate": _relative_from_root(b.best_candidate)
                 if b.best_candidate
                 else None,
             }
@@ -345,30 +357,31 @@ async def run_cleanup_sse(request: Request):
         ]
         misplaced = [
             {
-                "path": _truncate_path(m.symlink_path),
+                "path": _relative_from_root(m.symlink_path),
                 "title": m.media_title or _truncate_path(m.symlink_path, 1),
-                "current": _truncate_path(m.current_dir, 2),
-                "expected": _truncate_path(m.expected_dir, 2),
+                "current": _relative_from_root(m.current_dir),
+                "expected": _relative_from_root(m.expected_dir),
             }
             for m in misplaced_raw[:max_display]
         ]
         duplicates = [
             {
-                "target": _truncate_path(d.target_path, 2),
-                "keep": _truncate_path(d.keep, 2),
+                "target": _relative_from_root(d.target_path),
+                "keep": _relative_from_root(d.keep),
+                "remove": [_relative_from_root(r) for r in d.remove],
                 "remove_count": len(d.remove),
             }
             for d in duplicates_raw[:max_display]
         ]
         oversized = [
             {
-                "path": _truncate_path(o.parent_dir, 2),
+                "path": _relative_from_root(o.parent_dir),
                 "count": o.current_count,
                 "max": o.max_allowed,
             }
             for o in oversized_raw[:max_display]
         ]
-        empty = [{"path": _truncate_path(e, 3)} for e in empty_raw[:max_display]]
+        empty = [{"path": _relative_from_root(e)} for e in empty_raw[:max_display]]
 
         html = templates.env.get_template("maintenance/_cleanup_results.html").render(
             has_issues=has_issues,

@@ -185,7 +185,7 @@ def display_duplicate_symlinks_tree(report: "CleanupReport", video_dir: Path) ->
     )
 
     for dir_path in sorted(groups.keys()):
-        dir_branch = tree.add(f"[cyan]{dir_dir}/[/cyan]")
+        dir_branch = tree.add(f"[cyan]{dir_path}/[/cyan]")
         for d in sorted(groups[dir_path], key=lambda x: x.symlink_path.name):
             keep_name = d.keep.name
             remove_names = ", ".join(s.name for s in d.remove)

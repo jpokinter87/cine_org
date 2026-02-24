@@ -16,7 +16,7 @@ from loguru import logger
 from src.services.integrity import RepairAction, RepairActionType
 
 from .file_indexer import FileIndexer
-from .filename_analyzer import extract_clean_title, normalize_filename
+from .filename_analyzer import extract_clean_title, extract_series_info, normalize_filename
 from .similarity_matcher import calculate_similarity_fast, calculate_title_similarity
 
 
@@ -220,6 +220,10 @@ class RepairService:
         clean_link = extract_clean_title(link_name)
         clean_target = extract_clean_title(target_name) if target_name != link_name else ""
 
+        # Detecter si le symlink est un episode de serie (SxxExx)
+        _, link_season, link_episode, _ = extract_series_info(link_name)
+        is_series_episode = link_season is not None and link_episode is not None
+
         # Preparer les titres alternatifs (ex: titre original TMDB)
         clean_alternatives: list[str] = []
         if alternative_names:
@@ -251,21 +255,39 @@ class RepairService:
                             candidates.append((f, 100.0))
                             continue
 
-                        # Calculer avec titres complets
-                        score_link = calculate_title_similarity(link_name, f.name)
-                        # Calculer avec titres nettoyés (guessit)
                         clean_candidate = extract_clean_title(f.name)
-                        score_clean = calculate_similarity_fast(clean_link, clean_candidate)
 
-                        scores = [score_link, score_clean]
-
-                        # Comparer aussi avec le nom de la cible originale
-                        if clean_target:
-                            score_target = calculate_title_similarity(target_name, f.name)
-                            score_target_clean = calculate_similarity_fast(
-                                clean_target, clean_candidate
+                        if is_series_episode:
+                            # Pour les episodes : utiliser uniquement le score
+                            # episode-aware (calculate_similarity_fast) qui penalise
+                            # les mauvais numeros d'episode. calculate_title_similarity
+                            # ignore les SxxExx et donnerait un faux 100%.
+                            score_clean = calculate_similarity_fast(
+                                clean_link, clean_candidate
                             )
-                            scores.extend([score_target, score_target_clean])
+                            scores = [score_clean]
+
+                            if clean_target:
+                                score_target_clean = calculate_similarity_fast(
+                                    clean_target, clean_candidate
+                                )
+                                scores.append(score_target_clean)
+                        else:
+                            # Pour les films : combiner les deux methodes
+                            score_link = calculate_title_similarity(link_name, f.name)
+                            score_clean = calculate_similarity_fast(
+                                clean_link, clean_candidate
+                            )
+                            scores = [score_link, score_clean]
+
+                            if clean_target:
+                                score_target = calculate_title_similarity(
+                                    target_name, f.name
+                                )
+                                score_target_clean = calculate_similarity_fast(
+                                    clean_target, clean_candidate
+                                )
+                                scores.extend([score_target, score_target_clean])
 
                         # Comparer avec les titres alternatifs (ex: titre original TMDB)
                         for clean_alt in clean_alternatives:

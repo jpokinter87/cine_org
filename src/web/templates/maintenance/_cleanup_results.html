@@ -91,9 +91,21 @@
             </summary>
             <ul class="maint-issue-list">
                 {% for item in duplicates %}
-                <li class="maint-issue-item">
-                    <code class="maint-issue-path">{{ item.target }}</code>
-                    <span class="maint-issue-detail">{{ item.remove_count }} doublon{{ 's' if item.remove_count != 1 else '' }} à supprimer</span>
+                <li class="maint-issue-item maint-duplicate-group">
+                    <div class="maint-dup-target">
+                        <span class="maint-dup-label">Fichier cible :</span>
+                        <code class="maint-issue-path">{{ item.target }}</code>
+                    </div>
+                    <div class="maint-dup-keep">
+                        <span class="maint-dup-label maint-dup-keep-label">Symlink conservé :</span>
+                        <code class="maint-issue-path">{{ item.keep }}</code>
+                    </div>
+                    {% for dup in item.remove %}
+                    <div class="maint-dup-remove">
+                        <span class="maint-dup-label maint-dup-remove-label">Symlink à supprimer :</span>
+                        <code class="maint-issue-path">{{ dup }}</code>
+                    </div>
+                    {% endfor %}
                 </li>
                 {% endfor %}
             </ul>
