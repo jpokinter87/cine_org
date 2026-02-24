@@ -25,6 +25,18 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Réparation des symlinks cassés](#réparation-des-symlinks-cassés)
   - [Consolidation des fichiers externes](#consolidation-des-fichiers-externes)
 - [Format de nommage](#format-de-nommage)
+- [Interface web](#interface-web)
+  - [Lancement du serveur](#lancement-du-serveur)
+  - [Tableau de bord](#tableau-de-bord)
+  - [Bibliothèque](#bibliothèque)
+  - [Filtres et recherche](#filtres-et-recherche)
+  - [Fiches détaillées](#fiches-détaillées)
+  - [Correction des associations TMDB](#correction-des-associations-tmdb)
+  - [Lecteur vidéo intégré](#lecteur-vidéo-intégré)
+  - [Traitement et validation](#traitement-et-validation)
+  - [Transfert](#transfert)
+  - [Maintenance](#maintenance)
+  - [Configuration](#configuration-web)
 - [Stack technique](#stack-technique)
 
 ## Installation
@@ -829,6 +841,183 @@ uv run cineorg -vv process  # Encore plus verbeux
 # Mode silencieux (erreurs uniquement)
 uv run cineorg -q process
 ```
+
+## Interface web
+
+CineOrg dispose d'une interface web complète (FastAPI + Jinja2 + HTMX) permettant de parcourir la vidéothèque, filtrer et rechercher des contenus, consulter les fiches détaillées, lancer le traitement des nouveaux fichiers et effectuer la maintenance.
+
+La barre de navigation donne accès à toutes les sections : **Accueil**, **Traitement**, **Validation**, **Transfert**, **Bibliothèque**, **Maintenance** et **Configuration**.
+
+### Lancement du serveur
+
+```bash
+# Lancement standard (accessible depuis le réseau local sur le port 8000)
+uv run cineorg serve
+
+# Options disponibles
+uv run cineorg serve --port 9000       # Port personnalisé
+uv run cineorg serve --reload          # Rechargement automatique (développement)
+uv run cineorg serve --host 127.0.0.1  # Restreindre à la machine locale
+```
+
+L'interface est accessible à `http://localhost:8000` (ou `http://<IP-du-serveur>:8000` depuis un autre poste du réseau local).
+
+### Tableau de bord
+
+> ![Tableau de bord](docs/screenshots/dashboard.png)
+
+La page d'accueil (`/`) affiche un tableau de bord avec les statistiques de la vidéothèque :
+
+- Nombre de **films** en base
+- Nombre de **séries** et d'**épisodes**
+- Nombre de fichiers **en attente de validation**
+
+### Bibliothèque
+
+> ![Bibliothèque — grille de jaquettes](docs/screenshots/library-grid.png)
+
+La page `/library` affiche l'ensemble des films et séries sous forme de grille de jaquettes avec pagination (48 éléments par page). Chaque carte affiche :
+
+- La **jaquette** TMDB (ou un placeholder si absente)
+- Le **titre** et l'**année**
+- Un badge **Film** ou **Série**
+- La **note IMDb** si disponible
+
+Un clic sur une carte ouvre la fiche détaillée du contenu.
+
+### Filtres et recherche
+
+> ![Filtres actifs avec cartouches](docs/screenshots/library-filters.png)
+
+La barre de filtres en haut de la bibliothèque permet de combiner librement plusieurs critères. Tous les filtres sont interactifs via HTMX : la grille se met à jour sans rechargement de page.
+
+| Filtre | Description |
+|--------|-------------|
+| **Recherche** | Par titre (défaut) ou titre + synopsis (mode « Titre + Synopsis ») |
+| **Type** | Tous, Films, Séries |
+| **Genre** | Filtrer par genre (Action, Drame, Science-Fiction…) |
+| **Année** | Filtrer par année de sortie |
+| **Résolution** | 4K, 1080p, 720p, SD |
+| **Codec vidéo** | x264, x265, XviD… |
+| **Codec audio** | AAC, AC3, DTS, DTS-HD… |
+| **Tri** | Par titre, année, note, résolution, codec vidéo ou audio |
+| **Ordre** | Croissant ou décroissant |
+
+**Cartouches déselectionnables** — Chaque filtre actif s'affiche sous forme de cartouche avec un bouton × pour le retirer. Cela permet de visualiser et gérer facilement les critères en cours.
+
+> ![Cartouches filtre personne](docs/screenshots/library-filter-tags.png)
+
+**Filtrage par clic** — Depuis les fiches détaillées, un clic sur un badge technique (résolution, codec), un genre, un réalisateur ou un acteur filtre automatiquement la bibliothèque sur ce critère. Les réalisateurs et acteurs sont distingués par des icônes différentes (mégaphone pour le réalisateur, buste pour l'acteur).
+
+**Recherche étendue** — Le mode « Titre + Synopsis » permet de chercher des mots-clés dans le synopsis des films (ex : chercher « espace » trouve les films de science-fiction même si le mot n'est pas dans le titre).
+
+### Fiches détaillées
+
+> ![Fiche détaillée film](docs/screenshots/movie-detail.png)
+
+Chaque film dispose d'une fiche complète affichant :
+
+- **Jaquette** zoomable — clic pour agrandir en plein écran (lightbox)
+- **Notes** — badges colorés IMDb (jaune) et TMDB (vert/orange/rouge selon le score)
+- **Liens externes** — accès direct vers les fiches IMDb et TMDB
+- **Genres** — sous forme de tags cliquables
+- **Badges techniques** — résolution (bleu), codec vidéo et audio (violet), langues (vert). Chaque badge est cliquable pour filtrer toute la bibliothèque sur ce critère
+- **Crédits** — réalisateur et acteurs sous forme de liens. Un clic affiche tous les films de cette personne dans la bibliothèque
+- **Synopsis** complet
+- **Bouton Visionner** — lance la lecture via mpv
+- **Bouton Corriger** — ré-association TMDB (voir section dédiée)
+- **Informations fichier** — panneau dépliable avec chemin storage, chemin symlink, codec, résolution, taille du fichier et IDs externes (TMDB, IMDb)
+
+> ![Fiche détaillée série](docs/screenshots/series-detail.png)
+
+Pour les **séries**, la fiche affiche en plus :
+
+- Le nombre de **saisons** et d'**épisodes**
+- Les **badges techniques agrégés** à partir de l'ensemble des épisodes (valeurs distinctes)
+- La **liste des saisons** sous forme de panneaux dépliables, chaque épisode ayant :
+  - Son numéro (E01, E02…) et son titre
+  - Un bouton **lecture** (triangle play) pour lancer l'épisode dans mpv
+  - Un bouton **fichier** pour afficher le chemin du fichier
+
+### Correction des associations TMDB
+
+> ![Overlay de ré-association](docs/screenshots/reassociate.png)
+
+Lorsqu'un film ou une série est mal identifié par TMDB, le bouton **Corriger** ouvre un overlay de ré-association :
+
+1. **Recherche** — Saisir le titre correct dans le champ de recherche
+2. **Résultats** — Les candidats TMDB s'affichent avec :
+   - Jaquette miniature
+   - Titre et année
+   - Score de correspondance (badge vert/orange/rouge)
+   - Popularité TMDB
+   - Synopsis abrégé
+3. **Sélection** — Cliquer sur « Associer » pour remplacer l'association TMDB
+4. Les métadonnées (titre, synopsis, genres, notes, jaquette) sont automatiquement mises à jour
+
+### Lecteur vidéo intégré
+
+Le bouton **Visionner** (films) ou le bouton **play** (épisodes) lance la lecture du fichier via `mpv` directement sur la machine serveur. Un indicateur de statut s'affiche pendant la lecture.
+
+> **Note** : cette fonctionnalité est disponible uniquement en accès local. Depuis un poste distant du réseau, le lecteur s'ouvrirait sur la machine serveur (pas sur le client). Le streaming vers les clients distants est prévu dans une future version.
+
+### Traitement et validation
+
+> ![Page de traitement](docs/screenshots/workflow.png)
+
+La page **Traitement** (`/workflow`) permet de lancer le pipeline de traitement des nouveaux fichiers directement depuis le navigateur :
+
+1. **Scan** des répertoires de téléchargement
+2. **Identification** via TMDB/TVDB avec scoring de correspondance
+3. **Validation automatique** pour les résultats à haute confiance (score >= 85%)
+
+La progression s'affiche en temps réel via SSE (Server-Sent Events).
+
+> ![Page de validation](docs/screenshots/validation.png)
+
+La page **Validation** (`/validation`) liste les fichiers en attente de validation manuelle. Pour chaque fichier :
+
+- Affichage du nom original et des candidats TMDB/TVDB proposés
+- Possibilité de **valider** un candidat, de le **rejeter** ou de **rechercher** manuellement un titre alternatif
+- Recherche par titre ou par ID TMDB/TVDB direct
+
+### Transfert
+
+> ![Page de transfert](docs/screenshots/transfer.png)
+
+La page **Transfert** (`/transfer`) gère le déplacement des fichiers validés vers le stockage organisé :
+
+- Renommage selon le format standardisé
+- Création de la structure de répertoires (genre/lettre/subdivision pour les films, lettre/titre/saison pour les séries)
+- Création des symlinks dans `video/`
+- Gestion des **conflits** (doublons détectés) avec choix de résolution interactif
+
+### Maintenance
+
+> ![Page de maintenance](docs/screenshots/maintenance.png)
+
+La page **Maintenance** (`/maintenance`) fournit deux diagnostics en lecture seule :
+
+- **Vérification d'intégrité** — Détecte les symlinks cassés, les fichiers storage orphelins, les entrées DB sans fichier correspondant
+- **Analyse de nettoyage** — Détecte les symlinks cassés dans `video/`, les répertoires vides, les symlinks mal placés (mauvais genre, mauvaise subdivision), les problèmes de case
+
+Chaque diagnostic s'exécute avec une barre de progression en temps réel (SSE) et affiche un rapport détaillé avec compteurs. Les actions correctives restent disponibles via le CLI (`uv run cineorg cleanup --fix`).
+
+### Configuration web
+
+> ![Page de configuration](docs/screenshots/config.png)
+
+La page **Configuration** (`/config`) permet de visualiser et modifier les paramètres de l'application :
+
+| Section | Paramètres |
+|---------|-----------|
+| **Répertoires** | Téléchargements, Stockage, Vidéo |
+| **Base de données** | URL SQLite (lecture seule) |
+| **Clés API** | TMDB, TVDB (masquées) |
+| **Traitement** | Taille minimale fichier, seuil de score, max fichiers par sous-dossier |
+| **Logging** | Niveau de log, fichier de log, rotation |
+
+Les modifications sont enregistrées dans le fichier `.env` et prises en compte au redémarrage du serveur.
 
 ## Stack technique
 
