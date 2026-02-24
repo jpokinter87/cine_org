@@ -51,6 +51,30 @@ def _format_duration(seconds: int | None) -> str:
     return f"{minutes}min"
 
 
+def _resolution_label(resolution: str | None) -> str:
+    """Convertit '1920x1080' en '1080p' via Resolution.label."""
+    if not resolution or "x" not in resolution:
+        return resolution or ""
+    try:
+        w, h = resolution.split("x")
+        from ...core.value_objects.media_info import Resolution
+
+        return Resolution(width=int(w), height=int(h)).label
+    except (ValueError, TypeError):
+        return resolution
+
+
+def _resolution_pixels(resolution: str | None) -> int:
+    """Convertit '1920x1080' en nombre total de pixels pour le tri."""
+    if not resolution or "x" not in resolution:
+        return 0
+    try:
+        w, h = resolution.split("x")
+        return int(w) * int(h)
+    except (ValueError, TypeError):
+        return 0
+
+
 def _poster_url(poster_path: str | None) -> str | None:
     """Construit l'URL poster TMDB."""
     if poster_path:
@@ -75,6 +99,11 @@ async def library_index(
     year: Optional[str] = None,
     q: Optional[str] = None,
     person: Optional[str] = None,
+    person_role: Optional[str] = None,
+    resolution: Optional[str] = None,
+    codec_video: Optional[str] = None,
+    codec_audio: Optional[str] = None,
+    search_mode: str = "title",
     sort: str = "title",
     order: str = "asc",
     page: int = 1,
@@ -96,18 +125,39 @@ async def library_index(
         if type in ("all", "movie"):
             movie_stmt = select(MovieModel)
             if q:
-                movie_stmt = movie_stmt.where(MovieModel.title.contains(q))
+                if search_mode == "extended":
+                    movie_stmt = movie_stmt.where(
+                        MovieModel.title.contains(q) | MovieModel.overview.contains(q)
+                    )
+                else:
+                    movie_stmt = movie_stmt.where(MovieModel.title.contains(q))
             if year_int:
                 movie_stmt = movie_stmt.where(MovieModel.year == year_int)
             if genre:
                 movie_stmt = movie_stmt.where(MovieModel.genres_json.contains(genre))
             if person:
-                movie_stmt = movie_stmt.where(
-                    MovieModel.director.contains(person)
-                    | MovieModel.cast_json.contains(person)
-                )
+                if person_role == "director":
+                    movie_stmt = movie_stmt.where(MovieModel.director.contains(person))
+                elif person_role == "actor":
+                    movie_stmt = movie_stmt.where(MovieModel.cast_json.contains(person))
+                else:
+                    movie_stmt = movie_stmt.where(
+                        MovieModel.director.contains(person)
+                        | MovieModel.cast_json.contains(person)
+                    )
+            if codec_video:
+                movie_stmt = movie_stmt.where(MovieModel.codec_video == codec_video)
+            if codec_audio:
+                movie_stmt = movie_stmt.where(MovieModel.codec_audio == codec_audio)
 
             movies = session.exec(movie_stmt).all()
+
+            # Filtre resolution cote Python (label converti)
+            if resolution:
+                movies = [
+                    m for m in movies if _resolution_label(m.resolution) == resolution
+                ]
+
             for m in movies:
                 rating = _best_rating(m.vote_average, m.imdb_rating)
                 items.append(
@@ -122,23 +172,47 @@ async def library_index(
                         "rating_source": "IMDb"
                         if m.imdb_rating is not None
                         else "TMDB",
+                        "resolution": m.resolution,
+                        "resolution_label": _resolution_label(m.resolution),
+                        "codec_video": m.codec_video,
+                        "codec_audio": m.codec_audio,
                     }
                 )
 
         # --- Series ---
-        if type in ("all", "series"):
+        # Les filtres techniques (resolution, codec) ne s'appliquent pas aux series
+        if (
+            type in ("all", "series")
+            and not resolution
+            and not codec_video
+            and not codec_audio
+        ):
             series_stmt = select(SeriesModel)
             if q:
-                series_stmt = series_stmt.where(SeriesModel.title.contains(q))
+                if search_mode == "extended":
+                    series_stmt = series_stmt.where(
+                        SeriesModel.title.contains(q) | SeriesModel.overview.contains(q)
+                    )
+                else:
+                    series_stmt = series_stmt.where(SeriesModel.title.contains(q))
             if year_int:
                 series_stmt = series_stmt.where(SeriesModel.year == year_int)
             if genre:
                 series_stmt = series_stmt.where(SeriesModel.genres_json.contains(genre))
             if person:
-                series_stmt = series_stmt.where(
-                    SeriesModel.director.contains(person)
-                    | SeriesModel.cast_json.contains(person)
-                )
+                if person_role == "director":
+                    series_stmt = series_stmt.where(
+                        SeriesModel.director.contains(person)
+                    )
+                elif person_role == "actor":
+                    series_stmt = series_stmt.where(
+                        SeriesModel.cast_json.contains(person)
+                    )
+                else:
+                    series_stmt = series_stmt.where(
+                        SeriesModel.director.contains(person)
+                        | SeriesModel.cast_json.contains(person)
+                    )
 
             all_series = session.exec(series_stmt).all()
             for s in all_series:
@@ -155,6 +229,10 @@ async def library_index(
                         "rating_source": "IMDb"
                         if s.imdb_rating is not None
                         else "TMDB",
+                        "resolution": None,
+                        "resolution_label": "",
+                        "codec_video": None,
+                        "codec_audio": None,
                     }
                 )
 
@@ -167,6 +245,30 @@ async def library_index(
         elif sort == "rating":
             items.sort(
                 key=lambda x: (x["rating"] or 0, x["title"].lower()), reverse=descending
+            )
+        elif sort == "resolution":
+            items.sort(
+                key=lambda x: (
+                    _resolution_pixels(x.get("resolution")),
+                    x["title"].lower(),
+                ),
+                reverse=descending,
+            )
+        elif sort == "codec_video":
+            items.sort(
+                key=lambda x: (
+                    x.get("codec_video") or "",
+                    x["title"].lower(),
+                ),
+                reverse=descending,
+            )
+        elif sort == "codec_audio":
+            items.sort(
+                key=lambda x: (
+                    x.get("codec_audio") or "",
+                    x["title"].lower(),
+                ),
+                reverse=descending,
             )
         else:  # title
             items.sort(key=lambda x: x["title"].lower(), reverse=descending)
@@ -200,6 +302,43 @@ async def library_index(
         ).all()
         all_years = sorted(set(movie_years + series_years), reverse=True)
 
+        # --- Valeurs distinctes techniques (films uniquement) ---
+        raw_resolutions = session.exec(
+            select(MovieModel.resolution)
+            .where(MovieModel.resolution.is_not(None))
+            .distinct()
+        ).all()
+        # Convertir en labels et deduper
+        res_labels: set[str] = set()
+        for r in raw_resolutions:
+            label = _resolution_label(r)
+            if label:
+                res_labels.add(label)
+        all_resolutions = sorted(
+            res_labels,
+            key=lambda x: {"4K": 0, "1080p": 1, "720p": 2, "SD": 3}.get(x, 4),
+        )
+
+        all_codecs_video = sorted(
+            r
+            for r in session.exec(
+                select(MovieModel.codec_video)
+                .where(MovieModel.codec_video.is_not(None))
+                .distinct()
+            ).all()
+            if r
+        )
+
+        all_codecs_audio = sorted(
+            r
+            for r in session.exec(
+                select(MovieModel.codec_audio)
+                .where(MovieModel.codec_audio.is_not(None))
+                .distinct()
+            ).all()
+            if r
+        )
+
     finally:
         session.close()
 
@@ -210,20 +349,32 @@ async def library_index(
         "total_pages": total_pages,
         "genres": sorted(all_genres),
         "years": all_years,
+        "resolutions": all_resolutions,
+        "codecs_video": all_codecs_video,
+        "codecs_audio": all_codecs_audio,
         "current_type": type,
         "current_genre": genre,
         "current_year": year_int,
         "current_q": q or "",
         "current_person": person or "",
+        "current_person_role": person_role or "",
+        "current_resolution": resolution or "",
+        "current_codec_video": codec_video or "",
+        "current_codec_audio": codec_audio or "",
+        "current_search_mode": search_mode,
         "current_sort": sort,
         "current_order": order,
     }
 
     # Si requete HTMX, retourner filtres + grille (le bloc #library-content)
     if request.headers.get("HX-Request"):
-        return templates.TemplateResponse(request, "library/_content.html", context)
+        response = templates.TemplateResponse(request, "library/_content.html", context)
+        response.headers["Vary"] = "HX-Request"
+        return response
 
-    return templates.TemplateResponse(request, "library/index.html", context)
+    response = templates.TemplateResponse(request, "library/index.html", context)
+    response.headers["Vary"] = "HX-Request"
+    return response
 
 
 def _find_movie_file(title: str, year: int | None) -> dict | None:
@@ -314,6 +465,10 @@ async def movie_detail(request: Request, movie_id: int):
     if not movie.file_path and not video_file:
         file_info = _find_movie_file(movie.title, movie.year)
 
+    # Metadonnees techniques pour les cartouches
+    resolution_label = _resolution_label(movie.resolution)
+    languages = movie.languages if hasattr(movie, "languages") else []
+
     return templates.TemplateResponse(
         request,
         "library/movie_detail.html",
@@ -324,6 +479,8 @@ async def movie_detail(request: Request, movie_id: int):
             "duration": duration,
             "video_file": video_file,
             "file_info": file_info,
+            "resolution_label": resolution_label,
+            "languages": languages,
         },
     )
 
@@ -361,6 +518,21 @@ async def series_detail(request: Request, series_id: int):
 
         total_episodes = len(episodes)
 
+        # Agreger les metadonnees techniques des episodes
+        ep_resolutions: set[str] = set()
+        ep_codecs_video: set[str] = set()
+        ep_codecs_audio: set[str] = set()
+        ep_languages: set[str] = set()
+        for ep in episodes:
+            if ep.resolution:
+                ep_resolutions.add(_resolution_label(ep.resolution))
+            if ep.codec_video:
+                ep_codecs_video.add(ep.codec_video)
+            if ep.codec_audio:
+                ep_codecs_audio.add(ep.codec_audio)
+            for lang in ep.languages:
+                ep_languages.add(lang)
+
     finally:
         session.close()
 
@@ -373,6 +545,10 @@ async def series_detail(request: Request, series_id: int):
             "poster_url": poster_url,
             "seasons": dict(sorted(seasons.items())),
             "total_episodes": total_episodes,
+            "ep_resolutions": sorted(ep_resolutions),
+            "ep_codecs_video": sorted(ep_codecs_video),
+            "ep_codecs_audio": sorted(ep_codecs_audio),
+            "ep_languages": sorted(ep_languages),
         },
     )
 
@@ -590,7 +766,9 @@ def _series_indicator(
         return {"show": False}
 
     ep_diff = abs(local_episodes - tmdb_episodes)
-    season_match = local_seasons == tmdb_seasons if local_seasons and tmdb_seasons else True
+    season_match = (
+        local_seasons == tmdb_seasons if local_seasons and tmdb_seasons else True
+    )
 
     if ep_diff == 0 and season_match:
         return {"show": True, "css": "duration-match", "label": "Correspondance exacte"}
@@ -881,9 +1059,7 @@ async def series_reassociate_search(request: Request, series_id: int, q: str = "
 
     # Trier par proximite du nombre d'episodes
     if local_episodes:
-        candidates.sort(
-            key=lambda c: abs((c["nb_episodes"] or 9999) - local_episodes)
-        )
+        candidates.sort(key=lambda c: abs((c["nb_episodes"] or 9999) - local_episodes))
 
     return templates.TemplateResponse(
         request,

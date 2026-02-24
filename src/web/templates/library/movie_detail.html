@@ -72,18 +72,35 @@
             </div>
             {% endif %}
 
+            {% if resolution_label or movie.codec_video or movie.codec_audio or languages %}
+            <div class="lib-detail-tech-badges">
+                {% if resolution_label %}
+                <a href="/library/?resolution={{ resolution_label }}" class="tech-badge tech-badge-resolution">{{ resolution_label }}</a>
+                {% endif %}
+                {% if movie.codec_video %}
+                <a href="/library/?codec_video={{ movie.codec_video }}" class="tech-badge tech-badge-codec">{{ movie.codec_video }}</a>
+                {% endif %}
+                {% if movie.codec_audio %}
+                <a href="/library/?codec_audio={{ movie.codec_audio }}" class="tech-badge tech-badge-codec">{{ movie.codec_audio }}</a>
+                {% endif %}
+                {% for lang in languages %}
+                <span class="tech-badge tech-badge-lang">{{ lang }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+
             {% if movie.director or movie.cast %}
             <div class="lib-detail-credits">
                 {% if movie.director %}
                 <div class="lib-detail-credit-row">
                     <span class="lib-credit-label">Réalisateur</span>
-                    <span class="lib-credit-value"><a href="/library/?person={{ movie.director | urlencode }}" class="lib-credit-link">{{ movie.director }}</a></span>
+                    <span class="lib-credit-value"><a href="/library/?person={{ movie.director | urlencode }}&person_role=director" class="lib-credit-link">{{ movie.director }}</a></span>
                 </div>
                 {% endif %}
                 {% if movie.cast %}
                 <div class="lib-detail-credit-row">
                     <span class="lib-credit-label">Acteurs</span>
-                    <span class="lib-credit-value">{% for actor in movie.cast %}<a href="/library/?person={{ actor | urlencode }}" class="lib-credit-link">{{ actor }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
+                    <span class="lib-credit-value">{% for actor in movie.cast %}<a href="/library/?person={{ actor | urlencode }}&person_role=actor" class="lib-credit-link">{{ actor }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
                 </div>
                 {% endif %}
             </div>

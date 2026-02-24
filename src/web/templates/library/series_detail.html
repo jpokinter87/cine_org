@@ -66,18 +66,35 @@
             </div>
             {% endif %}
 
+            {% if ep_resolutions or ep_codecs_video or ep_codecs_audio or ep_languages %}
+            <div class="lib-detail-tech-badges">
+                {% for r in ep_resolutions %}
+                <span class="tech-badge tech-badge-resolution">{{ r }}</span>
+                {% endfor %}
+                {% for c in ep_codecs_video %}
+                <span class="tech-badge tech-badge-codec">{{ c }}</span>
+                {% endfor %}
+                {% for c in ep_codecs_audio %}
+                <span class="tech-badge tech-badge-codec">{{ c }}</span>
+                {% endfor %}
+                {% for lang in ep_languages %}
+                <span class="tech-badge tech-badge-lang">{{ lang }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+
             {% if series.director or series.cast %}
             <div class="lib-detail-credits">
                 {% if series.director %}
                 <div class="lib-detail-credit-row">
                     <span class="lib-credit-label">Créateur{{ 's' if ', ' in (series.director or '') else '' }}</span>
-                    <span class="lib-credit-value"><a href="/library/?person={{ series.director | urlencode }}" class="lib-credit-link">{{ series.director }}</a></span>
+                    <span class="lib-credit-value"><a href="/library/?person={{ series.director | urlencode }}&person_role=director" class="lib-credit-link">{{ series.director }}</a></span>
                 </div>
                 {% endif %}
                 {% if series.cast %}
                 <div class="lib-detail-credit-row">
                     <span class="lib-credit-label">Acteurs</span>
-                    <span class="lib-credit-value">{% for actor in series.cast %}<a href="/library/?person={{ actor | urlencode }}" class="lib-credit-link">{{ actor }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
+                    <span class="lib-credit-value">{% for actor in series.cast %}<a href="/library/?person={{ actor | urlencode }}&person_role=actor" class="lib-credit-link">{{ actor }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
                 </div>
                 {% endif %}
             </div>

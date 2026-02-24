@@ -1,4 +1,4 @@
-{% set base_url = "/library/?type=" ~ current_type ~ "&genre=" ~ (current_genre or '') ~ "&year=" ~ (current_year or '') ~ "&q=" ~ current_q ~ "&sort=" ~ current_sort ~ "&order=" ~ current_order %}
+{% set base_url = "/library/?type=" ~ current_type ~ "&genre=" ~ (current_genre or '') ~ "&year=" ~ (current_year or '') ~ "&q=" ~ current_q ~ "&person=" ~ (current_person or '') ~ "&person_role=" ~ (current_person_role or '') ~ "&resolution=" ~ current_resolution ~ "&codec_video=" ~ current_codec_video ~ "&codec_audio=" ~ current_codec_audio ~ "&search_mode=" ~ current_search_mode ~ "&sort=" ~ current_sort ~ "&order=" ~ current_order %}
 
 <div class="pagination {{ extra_class|default('') }}">
     {# Première page #}

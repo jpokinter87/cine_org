@@ -2996,6 +2996,74 @@ a.pagination-btn:hover {
     flex-wrap: wrap;
 }
 
+/* ── Cartouches techniques (fiches detail) ── */
+
+.lib-detail-tech-badges {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+}
+
+.tech-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.55rem;
+    border-radius: 100px;
+    font-size: 0.7rem;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s;
+}
+
+.tech-badge-resolution {
+    background: rgba(56, 189, 248, 0.12);
+    color: #38bdf8;
+}
+
+a.tech-badge-resolution:hover {
+    background: rgba(56, 189, 248, 0.22);
+    color: #7dd3fc;
+}
+
+.tech-badge-codec {
+    background: rgba(168, 85, 247, 0.12);
+    color: #a855f7;
+}
+
+a.tech-badge-codec:hover {
+    background: rgba(168, 85, 247, 0.22);
+    color: #c084fc;
+}
+
+.tech-badge-lang {
+    background: rgba(52, 211, 153, 0.12);
+    color: #34d399;
+}
+
+/* ── Filter tag tech ── */
+
+.lib-filter-tag-tech {
+    background: rgba(168, 85, 247, 0.15);
+    color: #c084fc;
+}
+
+.lib-filter-tag-tech .lib-filter-tag-remove {
+    color: #c084fc;
+}
+
+.lib-filter-tag-tech .lib-filter-tag-remove:hover {
+    background: rgba(168, 85, 247, 0.25);
+}
+
+/* ── Search mode select ── */
+
+.lib-filter-search-mode {
+    max-width: 140px;
+}
+
 .lib-detail-credits {
     margin-top: 0.75rem;
     display: flex;
@@ -3085,6 +3153,19 @@ a.pagination-btn:hover {
 
 .lib-filter-tag-person svg {
     opacity: 0.7;
+}
+
+.lib-filter-tag-director {
+    background: rgba(251, 146, 60, 0.15);
+    color: #fb923c;
+}
+
+.lib-filter-tag-director .lib-filter-tag-remove {
+    color: #fb923c;
+}
+
+.lib-filter-tag-director .lib-filter-tag-remove:hover {
+    background: rgba(251, 146, 60, 0.25);
 }
 
 .lib-detail-synopsis {
@@ -4074,6 +4155,46 @@ details[open] > .maint-issue-toggle::before {
     font-size: 0.72rem;
     color: var(--accent-rose);
     opacity: 0.7;
+}
+
+/* Duplicate group details */
+.maint-duplicate-group {
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.maint-duplicate-group:last-child {
+    border-bottom: none;
+}
+.maint-dup-target,
+.maint-dup-keep,
+.maint-dup-remove {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+}
+.maint-dup-target .maint-issue-path {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.maint-dup-keep .maint-issue-path {
+    color: var(--accent-emerald);
+}
+.maint-dup-remove .maint-issue-path {
+    color: var(--accent-rose);
+}
+.maint-dup-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    min-width: 10rem;
+    flex-shrink: 0;
+}
+.maint-dup-keep-label {
+    color: var(--accent-emerald);
+}
+.maint-dup-remove-label {
+    color: var(--accent-rose);
 }
 
 /* Truncated list indicator */
