@@ -5,10 +5,16 @@
 
 {% block content %}
 <div class="library-detail-page">
-    <a href="/library?type=series" class="back-link">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-        Bibliothèque
-    </a>
+    <div class="back-links">
+        <a href="javascript:history.back()" class="back-link">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+            Retour
+        </a>
+        <a href="/library" class="back-link back-link-home">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Bibliothèque
+        </a>
+    </div>
 
     <div class="lib-detail-header">
         <div class="lib-detail-poster poster-zoomable" {% if poster_url %}onclick="openPosterLightbox('{{ poster_url }}')"{% endif %}>
