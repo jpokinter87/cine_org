@@ -44,6 +44,10 @@
                 {% if series.tmdb_id %}
                 <a href="https://www.themoviedb.org/tv/{{ series.tmdb_id }}" target="_blank" rel="noopener" class="lib-external-link lib-external-tmdb">TMDB</a>
                 {% endif %}
+                <button class="reassociate-btn" hx-get="/library/series/{{ series.id }}/reassociate" hx-target="#reassociate-container" hx-swap="innerHTML" title="Corriger l'association TMDB">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    Corriger
+                </button>
             </div>
 
             <h1 class="lib-detail-title">{{ series.title }}</h1>
@@ -137,6 +141,9 @@
         {% endfor %}
     </div>
 </div>
+
+<!-- Container pour l'overlay de re-association -->
+<div id="reassociate-container"></div>
 
 <!-- Lightbox zoom jaquette -->
 <div class="poster-lightbox" id="poster-lightbox" onclick="this.classList.remove('active')">

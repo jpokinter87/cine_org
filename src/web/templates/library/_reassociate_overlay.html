@@ -1,0 +1,68 @@
+<div class="reassociate-overlay" id="reassociate-overlay">
+    <div class="reassociate-dialog">
+        <div class="reassociate-header">
+            <h2 class="reassociate-title">Corriger l'association TMDB</h2>
+            <button class="reassociate-close" onclick="document.getElementById('reassociate-overlay').remove()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+
+        <div class="reassociate-search">
+            <div class="reassociate-search-row">
+                <input
+                    type="text"
+                    class="reassociate-search-input"
+                    name="q"
+                    value="{{ title }}"
+                    placeholder="Rechercher un titre..."
+                    hx-get="/library/{{ entity_type ~ 's' if entity_type == 'movie' else entity_type }}/{{ entity_id }}/reassociate/search"
+                    hx-trigger="input changed delay:500ms, keyup[key=='Enter']"
+                    hx-target="#reassociate-results"
+                    hx-indicator="#reassociate-spinner"
+                    autofocus
+                >
+                <div class="reassociate-spinner" id="reassociate-spinner">
+                    <div class="spinner-dot"></div>
+                </div>
+            </div>
+            {% if local_duration_seconds %}
+            <div class="reassociate-local-info">
+                Durée réelle du fichier : <strong>{{ (local_duration_seconds // 3600) }}h {{ '%02d' | format((local_duration_seconds % 3600) // 60) }}min</strong>
+            </div>
+            {% endif %}
+            {% if local_episodes %}
+            <div class="reassociate-local-info">
+                Contenu local : <strong>{{ local_seasons }} saison{{ 's' if local_seasons != 1 else '' }}, {{ local_episodes }} épisode{{ 's' if local_episodes != 1 else '' }}</strong>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="reassociate-results" id="reassociate-results">
+            <p class="reassociate-hint">Modifiez la recherche ou appuyez sur Entrée</p>
+        </div>
+    </div>
+</div>
+<script>
+// Fermer avec Escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        var overlay = document.getElementById('reassociate-overlay');
+        if (overlay) overlay.remove();
+    }
+});
+// Fermer en cliquant hors du dialog
+document.getElementById('reassociate-overlay').addEventListener('click', function(e) {
+    if (e.target === this) this.remove();
+});
+// Focus sur l'input et lancer la recherche initiale
+(function() {
+    var input = document.querySelector('.reassociate-search-input');
+    if (input) {
+        input.focus();
+        input.select();
+        // Lancer la recherche initiale via htmx.ajax
+        var url = input.getAttribute('hx-get') + '?q=' + encodeURIComponent(input.value);
+        htmx.ajax('GET', url, {target: '#reassociate-results'});
+    }
+})();
+</script>

@@ -12,7 +12,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 1.1 (CLI + Web + Enrichissement) |
+| Version | 1.2 (CLI + Web + Enrichissement + Associations) |
 | Status | Production |
 | Last Updated | 2026-02-23 |
 
@@ -45,11 +45,16 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-(None — v1.1 milestone complete)
+- [ ] Détection automatique d'associations erronées — Phase 10
+- [ ] Tableau de bord qualité des données — Phase 11
 
 ### Planned (Next)
 
 (None defined yet)
+
+### Recently Validated (v1.2)
+
+- [x] Correction manuelle d'associations TMDB depuis la fiche web — Phase 9
 
 ### Out of Scope
 
@@ -98,6 +103,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | CSS custom thème sombre | Instrument Serif + DM Sans, pas de framework CSS lourd | 2026-02-23 | Active |
 | Fragments HTMX + HX-Redirect | Actions POST retournent des fragments HTML, redirect via header | 2026-02-23 | Active |
 | Dialogue custom pour actions destructives | Overlay CSS avec explication plutôt que confirm() natif | 2026-02-23 | Active |
+| Durée fichier via mediainfo + résolution symlink | La durée DB peut correspondre à une mauvaise association TMDB | 2026-02-24 | Active |
+| Indicateurs confiance associations | Durée (films) et saisons/épisodes (séries) pour guider la correction | 2026-02-24 | Active |
 | SSE pour progression workflow | EventSource + StreamingResponse, état partagé via WorkflowProgress | 2026-02-23 | Active |
 | Cascade auto-validation séries | Valider 1 épisode auto-valide les autres de la même série (même candidat TVDB) | 2026-02-23 | Active |
 | SSE maintenance multi-phases | Progression par phase pour analyses longues (intégrité 3, cleanup 6) | 2026-02-23 | Active |
@@ -125,4 +132,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-24 after Phase 8 (v1.1 milestone complete)*
+*Last updated: 2026-02-24 after Phase 9*

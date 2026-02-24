@@ -6,10 +6,12 @@ Affiche la collection avec filtres, recherche, pagination et pages de detail.
 
 import json
 import math
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Form, Request
+from fastapi.responses import HTMLResponse, Response
 from sqlmodel import select
 
 from ...infrastructure.persistence.database import get_session
@@ -106,16 +108,20 @@ async def library_index(
             movies = session.exec(movie_stmt).all()
             for m in movies:
                 rating = _best_rating(m.vote_average, m.imdb_rating)
-                items.append({
-                    "id": m.id,
-                    "type": "movie",
-                    "title": m.title,
-                    "year": m.year,
-                    "genres": _parse_genres(m.genres_json),
-                    "poster_url": _poster_url(m.poster_path),
-                    "rating": rating,
-                    "rating_source": "IMDb" if m.imdb_rating is not None else "TMDB",
-                })
+                items.append(
+                    {
+                        "id": m.id,
+                        "type": "movie",
+                        "title": m.title,
+                        "year": m.year,
+                        "genres": _parse_genres(m.genres_json),
+                        "poster_url": _poster_url(m.poster_path),
+                        "rating": rating,
+                        "rating_source": "IMDb"
+                        if m.imdb_rating is not None
+                        else "TMDB",
+                    }
+                )
 
         # --- Series ---
         if type in ("all", "series"):
@@ -135,23 +141,31 @@ async def library_index(
             all_series = session.exec(series_stmt).all()
             for s in all_series:
                 rating = _best_rating(s.vote_average, s.imdb_rating)
-                items.append({
-                    "id": s.id,
-                    "type": "series",
-                    "title": s.title,
-                    "year": s.year,
-                    "genres": _parse_genres(s.genres_json),
-                    "poster_url": _poster_url(s.poster_path),
-                    "rating": rating,
-                    "rating_source": "IMDb" if s.imdb_rating is not None else "TMDB",
-                })
+                items.append(
+                    {
+                        "id": s.id,
+                        "type": "series",
+                        "title": s.title,
+                        "year": s.year,
+                        "genres": _parse_genres(s.genres_json),
+                        "poster_url": _poster_url(s.poster_path),
+                        "rating": rating,
+                        "rating_source": "IMDb"
+                        if s.imdb_rating is not None
+                        else "TMDB",
+                    }
+                )
 
         # --- Tri ---
         descending = order == "desc"
         if sort == "year":
-            items.sort(key=lambda x: (x["year"] or 0, x["title"].lower()), reverse=descending)
+            items.sort(
+                key=lambda x: (x["year"] or 0, x["title"].lower()), reverse=descending
+            )
         elif sort == "rating":
-            items.sort(key=lambda x: (x["rating"] or 0, x["title"].lower()), reverse=descending)
+            items.sort(
+                key=lambda x: (x["rating"] or 0, x["title"].lower()), reverse=descending
+            )
         else:  # title
             items.sort(key=lambda x: x["title"].lower(), reverse=descending)
 
@@ -205,9 +219,7 @@ async def library_index(
 
     # Si requete HTMX, retourner filtres + grille (le bloc #library-content)
     if request.headers.get("HX-Request"):
-        return templates.TemplateResponse(
-            request, "library/_content.html", context
-        )
+        return templates.TemplateResponse(request, "library/_content.html", context)
 
     return templates.TemplateResponse(request, "library/index.html", context)
 
@@ -361,3 +373,445 @@ async def series_detail(request: Request, series_id: int):
             "total_episodes": total_episodes,
         },
     )
+
+
+# ────────────────────────────────────────────────────────────────────
+# Routes de re-association TMDB (correction manuelle)
+# ────────────────────────────────────────────────────────────────────
+
+
+def _get_file_duration(movie: "MovieModel") -> int | None:
+    """
+    Extrait la duree reelle d'un fichier video via mediainfo.
+
+    Strategie : file_path en DB, sinon resolution du symlink via _find_movie_file.
+    """
+    from ...adapters.parsing.mediainfo_extractor import MediaInfoExtractor
+
+    # 1. file_path direct en DB
+    physical_path = movie.file_path
+
+    # 2. Sinon, trouver le symlink dans video/ et resoudre vers le storage
+    if not physical_path:
+        file_info = _find_movie_file(movie.title, movie.year)
+        if file_info:
+            physical_path = file_info.get("storage_path") or file_info.get(
+                "symlink_path"
+            )
+
+    if not physical_path:
+        return None
+
+    path = Path(physical_path)
+    # Si c'est un symlink, resoudre vers le fichier physique
+    if path.is_symlink():
+        path = path.resolve()
+    if not path.exists():
+        return None
+
+    try:
+        info = MediaInfoExtractor().extract(path)
+        return info.duration_seconds if info else None
+    except Exception:
+        return None
+
+
+def _duration_indicator(local_seconds: int | None, tmdb_seconds: int | None) -> dict:
+    """
+    Compare les durees locale et TMDB, retourne un indicateur visuel.
+
+    Memes seuils que le CLI (candidate_display._get_duration_color) :
+    - < 5 min : vert (coherent)
+    - 5-15 min : jaune (ecart modere)
+    - >= 15 min : rouge (tres different)
+    """
+    if not local_seconds or not tmdb_seconds:
+        return {"show": False}
+
+    diff = abs(local_seconds - tmdb_seconds)
+    if diff < 5 * 60:
+        return {"show": True, "css": "duration-match", "label": "Durée cohérente"}
+    elif diff < 15 * 60:
+        return {"show": True, "css": "duration-warn", "label": "Écart modéré"}
+    else:
+        return {
+            "show": True,
+            "css": "duration-danger",
+            "label": "Durée très différente",
+        }
+
+
+def _series_indicator(
+    local_seasons: int | None,
+    local_episodes: int | None,
+    tmdb_seasons: int | None,
+    tmdb_episodes: int | None,
+) -> dict:
+    """Compare saisons/episodes locaux et TMDB pour indicateur de confiance."""
+    if not local_episodes or not tmdb_episodes:
+        return {"show": False}
+
+    ep_diff = abs(local_episodes - tmdb_episodes)
+    season_match = local_seasons == tmdb_seasons if local_seasons and tmdb_seasons else True
+
+    if ep_diff == 0 and season_match:
+        return {"show": True, "css": "duration-match", "label": "Correspondance exacte"}
+    elif ep_diff <= 3 and season_match:
+        return {"show": True, "css": "duration-match", "label": "Très proche"}
+    elif ep_diff <= 10:
+        return {"show": True, "css": "duration-warn", "label": "Écart modéré"}
+    else:
+        return {"show": True, "css": "duration-danger", "label": "Très différent"}
+
+
+def _get_local_series_counts(series_id: int) -> tuple[int, int]:
+    """Compte les saisons et episodes locaux depuis la DB."""
+    session = next(get_session())
+    try:
+        episodes = session.exec(
+            select(EpisodeModel).where(EpisodeModel.series_id == series_id)
+        ).all()
+        if not episodes:
+            return 0, 0
+        seasons = set()
+        for ep in episodes:
+            seasons.add(ep.season_number)
+        return len(seasons), len(episodes)
+    finally:
+        session.close()
+
+
+@router.get("/movies/{movie_id}/reassociate")
+async def movie_reassociate_overlay(request: Request, movie_id: int):
+    """Retourne le fragment HTML de l'overlay de recherche pour un film."""
+    session = next(get_session())
+    try:
+        movie = session.get(MovieModel, movie_id)
+        if not movie:
+            return HTMLResponse("<p>Film non trouvé</p>", status_code=404)
+    finally:
+        session.close()
+
+    # Duree reelle du fichier via mediainfo (pas la duree TMDB en DB)
+    file_duration = _get_file_duration(movie)
+
+    return templates.TemplateResponse(
+        request,
+        "library/_reassociate_overlay.html",
+        {
+            "entity_id": movie_id,
+            "entity_type": "movie",
+            "title": movie.title,
+            "year": movie.year,
+            "current_tmdb_id": movie.tmdb_id,
+            "local_duration_seconds": file_duration,
+        },
+    )
+
+
+@router.get("/movies/{movie_id}/reassociate/search")
+async def movie_reassociate_search(request: Request, movie_id: int, q: str = ""):
+    """Recherche TMDB films et retourne les resultats enrichis."""
+    if not q.strip():
+        return HTMLResponse("<p class='reassociate-empty'>Saisissez un titre</p>")
+
+    container = request.app.state.container
+    tmdb_client = container.tmdb_client()
+
+    # Recuperer le film en DB
+    session = next(get_session())
+    try:
+        movie = session.get(MovieModel, movie_id)
+        current_tmdb_id = movie.tmdb_id if movie else None
+    finally:
+        session.close()
+
+    # Duree reelle du fichier via mediainfo (seule source fiable)
+    local_duration = _get_file_duration(movie) if movie else None
+
+    # Recherche TMDB
+    results = await tmdb_client.search(q)
+
+    # Enrichir chaque resultat (max 8) avec les details
+    candidates = []
+    for sr in results[:8]:
+        details = await tmdb_client.get_details(sr.id)
+        indicator = _duration_indicator(
+            local_duration, details.duration_seconds if details else None
+        )
+        candidates.append(
+            {
+                "tmdb_id": sr.id,
+                "title": details.title if details else sr.title,
+                "original_title": details.original_title
+                if details
+                else sr.original_title,
+                "year": details.year if details else sr.year,
+                "overview": details.overview if details else None,
+                "poster_url": _poster_url(details.poster_url)
+                if details and details.poster_url
+                else None,
+                "director": details.director if details else None,
+                "tmdb_duration": _format_duration(details.duration_seconds)
+                if details and details.duration_seconds
+                else None,
+                "tmdb_duration_seconds": details.duration_seconds if details else None,
+                "duration_indicator": indicator,
+                "is_current": str(current_tmdb_id) == sr.id
+                if current_tmdb_id
+                else False,
+            }
+        )
+
+    # Trier par pertinence : ecart de duree le plus faible en premier
+    if local_duration:
+        candidates.sort(
+            key=lambda c: abs((c["tmdb_duration_seconds"] or 999999) - local_duration)
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "library/_reassociate_results.html",
+        {
+            "candidates": candidates,
+            "entity_id": movie_id,
+            "entity_type": "movie",
+            "local_duration": _format_duration(local_duration),
+            "local_duration_seconds": local_duration,
+        },
+    )
+
+
+@router.post("/movies/{movie_id}/reassociate")
+async def movie_reassociate_apply(
+    request: Request,
+    movie_id: int,
+    tmdb_id: str = Form(...),
+):
+    """Applique la re-association d'un film avec un nouveau resultat TMDB."""
+    container = request.app.state.container
+    tmdb_client = container.tmdb_client()
+
+    # Recuperer les details complets
+    details = await tmdb_client.get_details(tmdb_id)
+    if not details:
+        return HTMLResponse("<p>Résultat TMDB non trouvé</p>", status_code=404)
+
+    # Recuperer l'imdb_id
+    ext_ids = await tmdb_client.get_external_ids(tmdb_id)
+    imdb_id = ext_ids.get("imdb_id") if ext_ids else None
+
+    # Mettre a jour le MovieModel
+    session = next(get_session())
+    try:
+        movie = session.get(MovieModel, movie_id)
+        if not movie:
+            return HTMLResponse("<p>Film non trouvé</p>", status_code=404)
+
+        movie.tmdb_id = int(tmdb_id)
+        movie.imdb_id = imdb_id
+        movie.title = details.title
+        movie.original_title = details.original_title
+        movie.year = details.year
+        movie.genres_json = json.dumps(list(details.genres)) if details.genres else None
+        movie.duration_seconds = details.duration_seconds
+        movie.overview = details.overview
+        movie.poster_path = details.poster_url
+        movie.director = details.director
+        movie.cast_json = json.dumps(list(details.cast)) if details.cast else None
+        movie.vote_average = details.vote_average
+        movie.vote_count = details.vote_count
+        movie.updated_at = datetime.utcnow()
+
+        # Tenter de relier le fichier physique via le symlink video/
+        if not movie.file_path:
+            file_info = _find_movie_file(details.title, details.year)
+            if file_info:
+                movie.file_path = file_info.get("storage_path") or file_info.get(
+                    "symlink_path"
+                )
+
+        session.add(movie)
+        session.commit()
+    finally:
+        session.close()
+
+    response = Response(status_code=200)
+    response.headers["HX-Redirect"] = f"/library/movies/{movie_id}"
+    return response
+
+
+@router.get("/series/{series_id}/reassociate")
+async def series_reassociate_overlay(request: Request, series_id: int):
+    """Retourne le fragment HTML de l'overlay de recherche pour une serie."""
+    session = next(get_session())
+    try:
+        series = session.get(SeriesModel, series_id)
+        if not series:
+            return HTMLResponse("<p>Série non trouvée</p>", status_code=404)
+    finally:
+        session.close()
+
+    local_seasons, local_episodes = _get_local_series_counts(series_id)
+
+    return templates.TemplateResponse(
+        request,
+        "library/_reassociate_overlay.html",
+        {
+            "entity_id": series_id,
+            "entity_type": "series",
+            "title": series.title,
+            "year": series.year,
+            "current_tmdb_id": series.tmdb_id,
+            "local_duration_seconds": None,
+            "local_seasons": local_seasons,
+            "local_episodes": local_episodes,
+        },
+    )
+
+
+@router.get("/series/{series_id}/reassociate/search")
+async def series_reassociate_search(request: Request, series_id: int, q: str = ""):
+    """Recherche TMDB series et retourne les resultats enrichis."""
+    if not q.strip():
+        return HTMLResponse("<p class='reassociate-empty'>Saisissez un titre</p>")
+
+    container = request.app.state.container
+    tmdb_client = container.tmdb_client()
+
+    # Recuperer le tmdb_id actuel pour marquage
+    session = next(get_session())
+    try:
+        series = session.get(SeriesModel, series_id)
+        current_tmdb_id = series.tmdb_id if series else None
+    finally:
+        session.close()
+
+    # Compter saisons/episodes locaux
+    local_seasons, local_episodes = _get_local_series_counts(series_id)
+
+    # Recherche TMDB TV
+    results = await tmdb_client.search_tv(q)
+
+    # Enrichir chaque resultat avec les details
+    candidates = []
+    for sr in results[:8]:
+        details = await tmdb_client.get_tv_details(sr.id)
+
+        # Recuperer number_of_seasons / number_of_episodes via appel brut
+        # (non expose par MediaDetails, on accede au cache TMDB)
+        nb_seasons = None
+        nb_episodes = None
+        try:
+            client = tmdb_client._get_client()
+            from ...adapters.api.retry import request_with_retry
+
+            resp = await request_with_retry(
+                client, "GET", f"/tv/{sr.id}", params={"language": "fr-FR"}
+            )
+            tv_data = resp.json()
+            nb_seasons = tv_data.get("number_of_seasons")
+            nb_episodes = tv_data.get("number_of_episodes")
+        except Exception:
+            pass
+
+        indicator = _series_indicator(
+            local_seasons, local_episodes, nb_seasons, nb_episodes
+        )
+
+        candidates.append(
+            {
+                "tmdb_id": sr.id,
+                "title": details.title if details else sr.title,
+                "original_title": details.original_title
+                if details
+                else sr.original_title,
+                "year": details.year if details else sr.year,
+                "overview": details.overview if details else None,
+                "poster_url": _poster_url(details.poster_url)
+                if details and details.poster_url
+                else None,
+                "director": details.director if details else None,
+                "nb_seasons": nb_seasons,
+                "nb_episodes": nb_episodes,
+                "series_indicator": indicator,
+                "is_current": str(current_tmdb_id) == sr.id
+                if current_tmdb_id
+                else False,
+            }
+        )
+
+    # Trier par proximite du nombre d'episodes
+    if local_episodes:
+        candidates.sort(
+            key=lambda c: abs((c["nb_episodes"] or 9999) - local_episodes)
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "library/_reassociate_results.html",
+        {
+            "candidates": candidates,
+            "entity_id": series_id,
+            "entity_type": "series",
+            "local_duration": None,
+            "local_duration_seconds": None,
+            "local_seasons": local_seasons,
+            "local_episodes": local_episodes,
+        },
+    )
+
+
+@router.post("/series/{series_id}/reassociate")
+async def series_reassociate_apply(
+    request: Request,
+    series_id: int,
+    tmdb_id: str = Form(...),
+):
+    """Applique la re-association d'une serie avec un nouveau resultat TMDB."""
+    container = request.app.state.container
+    tmdb_client = container.tmdb_client()
+
+    # Recuperer les details complets
+    details = await tmdb_client.get_tv_details(tmdb_id)
+    if not details:
+        return HTMLResponse("<p>Résultat TMDB non trouvé</p>", status_code=404)
+
+    # Recuperer l'imdb_id
+    ext_ids = await tmdb_client.get_tv_external_ids(tmdb_id)
+    imdb_id = ext_ids.get("imdb_id") if ext_ids else None
+
+    # Mettre a jour le SeriesModel
+    session = next(get_session())
+    try:
+        series = session.get(SeriesModel, series_id)
+        if not series:
+            return HTMLResponse("<p>Série non trouvée</p>", status_code=404)
+
+        series.tmdb_id = int(tmdb_id)
+        series.imdb_id = imdb_id
+        series.tvdb_id = (
+            None  # L'association change, l'ancien tvdb_id n'est plus valide
+        )
+        series.title = details.title
+        series.original_title = details.original_title
+        series.year = details.year
+        series.genres_json = (
+            json.dumps(list(details.genres)) if details.genres else None
+        )
+        series.overview = details.overview
+        series.poster_path = details.poster_url
+        series.director = details.director
+        series.cast_json = json.dumps(list(details.cast)) if details.cast else None
+        series.vote_average = details.vote_average
+        series.vote_count = details.vote_count
+        series.updated_at = datetime.utcnow()
+
+        session.add(series)
+        session.commit()
+    finally:
+        session.close()
+
+    response = Response(status_code=200)
+    response.headers["HX-Redirect"] = f"/library/series/{series_id}"
+    return response

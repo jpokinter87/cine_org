@@ -1,0 +1,100 @@
+{% if not candidates %}
+<p class="reassociate-empty">Aucun résultat trouvé</p>
+{% else %}
+{% for c in candidates %}
+<div class="reassociate-card {% if c.is_current %}reassociate-current{% endif %}">
+    <div class="reassociate-card-poster">
+        {% if c.poster_url %}
+        <img src="{{ c.poster_url }}" alt="{{ c.title }}" loading="lazy">
+        {% else %}
+        <div class="reassociate-no-poster">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+        </div>
+        {% endif %}
+    </div>
+    <div class="reassociate-card-info">
+        <div class="reassociate-card-title">
+            {{ c.title }}
+            {% if c.year %}<span class="reassociate-card-year">({{ c.year }})</span>{% endif %}
+            {% if c.is_current %}<span class="reassociate-card-current-badge">Association actuelle</span>{% endif %}
+        </div>
+        {% if c.original_title and c.original_title != c.title %}
+        <div class="reassociate-card-original">{{ c.original_title }}</div>
+        {% endif %}
+        {% if c.director %}
+        <div class="reassociate-card-director">{{ c.director }}</div>
+        {% endif %}
+
+        {# Indicateurs de confiance — Films : duree comparee #}
+        {% if entity_type == "movie" and c.tmdb_duration %}
+        <div class="reassociate-card-duration">
+            <span class="reassociate-duration-tmdb">{{ c.tmdb_duration }}</span>
+            {% if c.duration_indicator.show %}
+            <span class="reassociate-duration-badge reassociate-{{ c.duration_indicator.css }}">{{ c.duration_indicator.label }}</span>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {# Indicateurs de confiance — Series : saisons et episodes #}
+        {% if entity_type == "series" %}
+            {% if c.nb_seasons is not none %}
+            <div class="reassociate-card-seasons">
+                {{ c.nb_seasons }} saison{{ 's' if c.nb_seasons != 1 else '' }}{% if c.nb_episodes is not none %}, {{ c.nb_episodes }} épisode{{ 's' if c.nb_episodes != 1 else '' }}{% endif %}
+                {% if c.series_indicator and c.series_indicator.show %}
+                <span class="reassociate-duration-badge reassociate-{{ c.series_indicator.css }}">{{ c.series_indicator.label }}</span>
+                {% endif %}
+            </div>
+            {% endif %}
+        {% endif %}
+
+        {% if c.overview %}
+        <div class="reassociate-card-overview">{{ c.overview[:150] }}{% if c.overview|length > 150 %}…{% endif %}</div>
+        {% endif %}
+
+        {% if not c.is_current %}
+        <form class="reassociate-card-action">
+            <button
+                type="button"
+                class="reassociate-select-btn"
+                onclick="showReassociateConfirm('{{ c.title | e }}', '{{ c.year or '' }}', '{{ c.tmdb_id }}')"
+            >
+                Sélectionner
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+
+<!-- Dialog de confirmation -->
+<div class="reassociate-confirm-overlay" id="reassociate-confirm-overlay" onclick="if(event.target===this)hideReassociateConfirm()">
+    <div class="reassociate-confirm-dialog">
+        <h3 class="reassociate-confirm-title">Ré-associer ce titre ?</h3>
+        <p class="reassociate-confirm-text">
+            Associer avec <strong id="reassociate-confirm-name"></strong>
+        </p>
+        <div class="reassociate-confirm-actions">
+            <button type="button" class="reassociate-confirm-cancel" onclick="hideReassociateConfirm()">Annuler</button>
+            <button type="button" class="reassociate-confirm-ok"
+                id="reassociate-confirm-ok-btn"
+                hx-post="/library/{{ entity_type ~ 's' if entity_type == 'movie' else entity_type }}/{{ entity_id }}/reassociate"
+            >
+                Confirmer
+            </button>
+        </div>
+    </div>
+</div>
+<script>
+function showReassociateConfirm(title, year, tmdbId) {
+    var label = title + (year ? ' (' + year + ')' : '');
+    document.getElementById('reassociate-confirm-name').textContent = '« ' + label + ' »';
+    var btn = document.getElementById('reassociate-confirm-ok-btn');
+    btn.setAttribute('hx-vals', JSON.stringify({tmdb_id: tmdbId}));
+    htmx.process(btn);
+    document.getElementById('reassociate-confirm-overlay').classList.add('active');
+}
+function hideReassociateConfirm() {
+    document.getElementById('reassociate-confirm-overlay').classList.remove('active');
+}
+</script>
+{% endif %}

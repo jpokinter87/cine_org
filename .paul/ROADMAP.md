@@ -2,7 +2,7 @@
 
 ## Overview
 
-CineOrg dispose d'un CLI complet et d'une interface web fonctionnelle. Le prochain objectif est l'enrichissement des données (crédits, ratings, IMDB IDs) et l'amélioration des fiches détaillées dans l'interface web.
+CineOrg dispose d'un CLI complet et d'une interface web fonctionnelle avec données enrichies. Le prochain objectif est la gestion des associations TMDB : correction manuelle, détection automatique des erreurs, et tableau de bord qualité.
 
 ## Milestones
 
@@ -10,64 +10,72 @@ CineOrg dispose d'un CLI complet et d'une interface web fonctionnelle. Le procha
 
 5 phases : Foundation Web, Validation Visuelle, Orchestration Workflow, Transfert & Conflits, Bibliothèque & Maintenance.
 
+### v1.1 Enrichissement Données — Complete (2026-02-24)
+
+3 phases : Enrichissement Films, Enrichissement Séries, Fiches Détaillées Enrichies.
+
 ---
 
 ## Current Milestone
 
-**v1.1 Enrichissement Données** (v1.1.0)
-Status: Complete
-Phases: 3 of 3 complete
+**v1.2 Gestion Associations** (v1.2.0)
+Status: In Progress
+Phases: 1 of 3 complete
 
 ## Phases
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
-| 6 | Enrichissement Films | 1/1 | Complete | 2026-02-23 |
-| 7 | Enrichissement Séries | 1/1 | Complete | 2026-02-23 |
-| 8 | Fiches Détaillées Enrichies | 1/1 | Complete | 2026-02-23 |
+| 9 | Correction Manuelle Associations | 1/1 | Complete | 2026-02-24 |
+| 10 | Détection Automatique Erreurs | TBD | Not started | - |
+| 11 | Tableau de Bord Qualité | TBD | Not started | - |
 
 ## Phase Details
 
-### Phase 6: Enrichissement Films
+### Phase 9: Correction Manuelle Associations
 
-**Goal:** Enrichir les données films en base : crédits (réalisateur, acteurs), ratings (IMDB/TMDB), IMDB IDs
-**Depends on:** v1.0 (bibliothèque films peuplée)
-**Research:** Unlikely (commandes enrich-* CLI existantes, TMDB API câblée)
+**Goal:** Permettre la correction manuelle d'une association film ou série erronée depuis la fiche web
+**Depends on:** v1.1 (fiches détaillées avec tmdb_id, liens TMDB)
+**Research:** Unlikely (TMDB search API déjà câblée, pattern HTMX maîtrisé)
 
 **Scope:**
-- Exécution et fiabilisation des commandes `enrich-movies-credits`, `enrich-ratings`, `enrich-imdb-ids`
-- Correction des éventuels bugs ou limitations (rate limiting, données manquantes)
-- Vérification de la couverture : % de films avec crédits, ratings, IMDB IDs
+- Bouton "Corriger l'association" sur les fiches détaillées (films et séries)
+- Recherche TMDB avec champ de recherche modifiable (titre pré-rempli)
+- Affichage des candidats avec poster, année, synopsis pour sélection
+- Ré-enrichissement complet du film/série avec le bon résultat TMDB
+- Mise à jour de toutes les données (tmdb_id, imdb_id, poster, crédits, ratings, etc.)
+
+**Plans:**
+- Plan 01: Bouton correction, overlay recherche TMDB, indicateurs durée/saisons, ré-association complète (3 tasks dont 1 checkpoint)
+
+### Phase 10: Détection Automatique Erreurs
+
+**Goal:** Identifier automatiquement les associations potentiellement erronées
+**Depends on:** Phase 9 (mécanisme de correction en place)
+**Research:** Likely (heuristiques de détection à définir)
+
+**Scope:**
+- Heuristiques de détection : écart d'année significatif, titre très différent, scores de matching bas
+- Scan batch de la bibliothèque pour repérer les associations suspectes
+- Liste des films/séries à vérifier avec score de confiance
+- Intégration avec le mécanisme de correction de la Phase 9
 
 **Plans:** TBD (defined during /paul:plan)
 
-### Phase 7: Enrichissement Séries
+### Phase 11: Tableau de Bord Qualité
 
-**Goal:** Enrichir les données séries en base : crédits (créateurs, acteurs), ratings, épisodes enrichis
-**Depends on:** Phase 6 (patterns d'enrichissement validés)
-**Research:** Unlikely (commande enrich-series existante, TMDB TV API câblée)
-
-**Scope:**
-- Exécution et fiabilisation de `enrich-series` pour crédits et ratings
-- Enrichissement des épisodes individuels (titres, descriptions si disponibles)
-- Vérification de la couverture : % de séries avec crédits, ratings
-
-**Plans:** TBD (defined during /paul:plan)
-
-### Phase 8: Fiches Détaillées Enrichies
-
-**Goal:** Améliorer les fiches détaillées web pour exploiter les données enrichies
-**Depends on:** Phases 6 et 7 (données enrichies disponibles)
+**Goal:** Dashboard web visualisant la qualité des données et les associations à corriger
+**Depends on:** Phase 10 (détection d'erreurs fonctionnelle)
 **Research:** Unlikely
 
 **Scope:**
-- Acteurs et réalisateurs cliquables dans les fiches (filtre par personne)
-- Affichage des ratings (IMDB + TMDB) avec badges visuels
-- Liens vers les pages IMDB/TMDB externes
-- Amélioration de la grille bibliothèque (badges rating, indicateurs enrichissement)
+- Page web dédiée "Qualité" avec métriques globales (couverture enrichissement, associations suspectes)
+- Liste filtrable des associations suspectes avec actions rapides (corriger, confirmer)
+- Statistiques de couverture par type (films/séries) et par champ (poster, crédits, ratings, IMDB ID)
+- Historique des corrections manuelles
 
 **Plans:** TBD (defined during /paul:plan)
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-23 — v1.1 milestone created*
+*Last updated: 2026-02-24 — Phase 9 complete*
