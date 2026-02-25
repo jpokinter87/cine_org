@@ -8,7 +8,7 @@
 ```yaml
 project:
   name: CineOrg
-  version: 0.9.0
+  version: 1.2.0
 ```
 
 ## Integrations

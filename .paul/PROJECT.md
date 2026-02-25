@@ -42,21 +42,19 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
   - Ratings films enrichis à 100% (progress bar Rich) — Phase 6
   - Séries enrichies : tmdb_id 99.7%, imdb_id 98.3% — Phase 7
   - Fiches web enrichies : liens IMDb/TMDB, crédits cliquables, filtre par personne — Phase 8
+- [x] Gestion des associations TMDB (v1.2)
+  - Correction manuelle d'associations depuis la fiche web (overlay recherche TMDB) — Phase 9
+  - Métadonnées techniques, filtres avancés, navigation inter-fiches, pipeline enrichi — Phase 9b
+  - Détection automatique d'associations suspectes (heuristiques + SSE + cache 24h) — Phase 10
+  - Tableau de bord qualité (couverture enrichissement, résumé suspects, historique corrections) — Phase 11
 
 ### Active (In Progress)
 
-(None — v1.2 complete)
+(None — awaiting next milestone)
 
 ### Planned (Next)
 
 (None defined yet)
-
-### Recently Validated (v1.2)
-
-- [x] Correction manuelle d'associations TMDB depuis la fiche web — Phase 9
-- [x] Métadonnées techniques, filtres avancés, pipeline enrichi — Phase 9b
-- [x] Détection automatique d'associations erronées (AssociationChecker + page suspectes SSE) — Phase 10
-- [x] Tableau de bord qualité (couverture enrichissement, résumé suspects, historique corrections) — Phase 11
 
 ### Out of Scope
 
@@ -111,6 +109,10 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | Cascade auto-validation séries | Valider 1 épisode auto-valide les autres de la même série (même candidat TVDB) | 2026-02-23 | Active |
 | SSE maintenance multi-phases | Progression par phase pour analyses longues (intégrité 3, cleanup 6) | 2026-02-23 | Active |
 | Scope Films+Séries maintenance | Limiter les analyses aux sous-dossiers pertinents | 2026-02-23 | Active |
+| Durée fichier via mediainfo | La durée DB vient de TMDB et peut être erronée | 2026-02-24 | Active |
+| SSE + cache fichier 24h | Scan qualité ~5000 fichiers trop lent en synchrone | 2026-02-25 | Active |
+| Comparaison original_title TMDB | Réduit les faux positifs pour les films étrangers | 2026-02-25 | Active |
+| data-* attributes au lieu de onclick | Apostrophes dans les titres cassaient le JS inline | 2026-02-25 | Active |
 
 ## Success Metrics
 

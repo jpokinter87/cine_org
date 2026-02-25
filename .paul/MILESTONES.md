@@ -1,0 +1,96 @@
+# Milestones
+
+Completed milestone log for this project.
+
+| Milestone | Completed | Duration | Stats |
+|-----------|-----------|----------|-------|
+| v1.0 Interface Web | 2026-02-23 | ~3 days | 5 phases, 8 plans |
+| v1.1 Enrichissement Données | 2026-02-24 | ~1 day | 3 phases, 3 plans |
+| v1.2 Gestion Associations | 2026-02-25 | ~2 days | 4 phases, 4 plans |
+
+---
+
+## v1.0 Interface Web
+
+**Completed:** 2026-02-23
+**Duration:** ~3 days
+
+### Stats
+
+| Metric | Value |
+|--------|-------|
+| Phases | 5 |
+| Plans | 8 |
+
+### Key Accomplishments
+
+- Foundation web : FastAPI app, layout Jinja2 thème sombre, HTMX, page d'accueil stats
+- Validation visuelle : liste pending, détail candidats enrichis, actions HTMX
+- Orchestration workflow : scan, matching, auto-validation avec SSE temps réel
+- Transfert et résolution de conflits via le web
+- Navigation bibliothèque films/séries avec filtres, fiches détaillées
+- Page configuration (répertoires, clés API, seuils)
+- Maintenance : diagnostics intégrité et cleanup avec SSE temps réel
+
+---
+
+## v1.1 Enrichissement Données
+
+**Completed:** 2026-02-24
+**Duration:** ~1 day
+
+### Stats
+
+| Metric | Value |
+|--------|-------|
+| Phases | 3 |
+| Plans | 3 |
+
+### Key Accomplishments
+
+- Ratings films enrichis à 100% (IMDb via TMDB, progress bar Rich)
+- Séries enrichies : tmdb_id 99.7%, imdb_id 98.3%
+- Fiches web enrichies : liens IMDb/TMDB, crédits cliquables, filtre par personne
+
+---
+
+## v1.2 Gestion Associations
+
+**Completed:** 2026-02-25
+**Duration:** ~2 days (2026-02-24 → 2026-02-25)
+
+### Stats
+
+| Metric | Value |
+|--------|-------|
+| Phases | 4 (9, 9b, 10, 11) |
+| Plans | 4 |
+| Files created | ~10 |
+| Files modified | ~25 |
+
+### Key Accomplishments
+
+- Correction manuelle d'associations TMDB : overlay de recherche avec indicateurs de confiance durée/saisons, dialog de confirmation custom
+- Filtres avancés bibliothèque : résolution (4K/1080p/720p/SD), codec vidéo/audio, recherche étendue synopsis
+- Cartouches techniques cliquables sur fiches détaillées + badges Multi langues
+- Navigation prev/next entre fiches avec prefetch et flèches clavier
+- Propagation complète des métadonnées techniques dans le pipeline workflow
+- Détection automatique d'associations suspectes : AssociationChecker avec heuristiques titre/année/durée, scan SSE temps réel, cache 24h
+- Confirmation manuelle des associations avec persistance en DB
+- Dashboard qualité : métriques de couverture enrichissement, résumé suspects, historique corrections
+- Enrichissement 923 séries avec tvdb_id via TMDB API + purge 29 séries documentaires
+
+### Key Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Durée fichier via mediainfo (pas la DB) | La durée DB peut correspondre à une mauvaise association TMDB |
+| SSE + cache fichier 24h pour scan qualité | 5000+ fichiers trop lent pour requête bloquante, cache survit aux --reload |
+| Comparaison original_title | Réduit les faux positifs pour les films étrangers |
+| data-* attributes au lieu de onclick | Les apostrophes dans les titres cassaient le JS |
+| Durée en pourcentage (30%/15%) | Évite les faux positifs selon la durée du film |
+| Séries documentaires exclues | Identification trop difficile, hors périmètre |
+
+---
+
+*Last updated: 2026-02-25*
