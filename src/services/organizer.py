@@ -19,6 +19,7 @@ from typing import Optional
 from src.core.entities.media import Movie, Series
 from src.utils.constants import GENRE_HIERARCHY, GENRE_FOLDER_MAPPING
 from src.utils.helpers import strip_article as _strip_article  # noqa: F401
+from src.utils.helpers import strip_invisible_chars as _strip_invisible_chars_helper
 
 
 @dataclass(frozen=True)
@@ -43,34 +44,7 @@ class SubdivisionRange:
         return f"{self.start}-{self.end}"
 
 
-def _strip_invisible_chars(text: str) -> str:
-    """
-    Retire les caractères Unicode invisibles d'une chaîne.
-
-    Supprime les caractères de contrôle, les marques directionnelles,
-    et autres caractères invisibles qui peuvent provenir des APIs.
-
-    Args:
-        text: Texte potentiellement contaminé par des caractères invisibles.
-
-    Returns:
-        Texte nettoyé.
-    """
-    import unicodedata
-
-    result = []
-    for char in text:
-        category = unicodedata.category(char)
-        # Filtrer les catégories de caractères invisibles :
-        # Cf = Format (LRM, RLM, BOM, etc.)
-        # Cc = Control
-        # Mn = Nonspacing Mark (certains accents combinants indésirables seuls)
-        # Zs = Space Separator (mais on garde l'espace normal U+0020)
-        if category in ("Cf", "Cc"):
-            continue
-        # Soft hyphen (U+00AD) est en catégorie Cf, déjà filtré
-        result.append(char)
-    return "".join(result)
+_strip_invisible_chars = _strip_invisible_chars_helper
 
 
 def get_sort_letter(title: str) -> str:

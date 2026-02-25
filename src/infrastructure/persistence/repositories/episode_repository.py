@@ -128,6 +128,12 @@ class SQLModelEpisodeRepository(IEpisodeRepository):
 
     def save(self, episode: Episode) -> Episode:
         """Sauvegarde un episode (insertion ou mise a jour)."""
+        # Nettoyage preventif des titres (caractères invisibles)
+        from src.utils.helpers import clean_title
+
+        if episode.title:
+            episode.title = clean_title(episode.title)
+
         # Verifier si l'episode existe deja par ID
         existing = None
         if episode.id:

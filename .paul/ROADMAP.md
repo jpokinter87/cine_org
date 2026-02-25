@@ -2,15 +2,65 @@
 
 ## Overview
 
-CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec données enrichies, et d'un système de gestion des associations TMDB (correction manuelle, détection automatique, tableau de bord qualité).
+CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec données enrichies, et d'un système de gestion des associations TMDB (correction manuelle, détection automatique, tableau de bord qualité). Le prochain objectif est de consolider la qualité du code et des données, et de fluidifier le parcours utilisateur.
 
 ## Current Milestone
 
-No active milestone. Run `/paul:discuss-milestone` or `/paul:milestone` to define the next one.
+**v1.3 Qualité & Fluidité** (v1.3.0)
+Status: In Progress
+Phases: 1 of 3 complete
 
-## Next Milestone
+## Phases
 
-Run /paul:discuss-milestone or /paul:milestone to define.
+| Phase | Name | Plans | Status | Completed |
+|-------|------|-------|--------|-----------|
+| 12 | Dette Technique Données | 2/2 | Complete | 2026-02-25 |
+| 13 | Refactoring Code | TBD | Not started | - |
+| 14 | Workflow Fluide | TBD | Not started | - |
+
+## Phase Details
+
+### Phase 12: Dette Technique Données
+
+**Goal:** Combler les lacunes de données accumulées : films sans file_path, métadonnées techniques manquantes, tri accents, titres épisodes
+**Depends on:** v1.2 (pipeline métadonnées techniques en place)
+**Research:** Unlikely (commandes existantes, algorithmes connus)
+
+**Scope:**
+- Enrichissement batch file_path pour les 1307 films manquants
+- Extraction métadonnées techniques (résolution, codecs) pour les 443 films concernés
+- Normalisation du tri alphabétique : accents, caractères spéciaux, articles
+- Nettoyage caractère invisible (ex: "Zoé, mon amie morte")
+- Enrichissement titres épisodes manquants (83.3%)
+
+**Plans:** TBD (defined during /paul:plan)
+
+### Phase 13: Refactoring Code
+
+**Goal:** Améliorer la maintenabilité du code sans changer le comportement visible
+**Depends on:** Phase 12 (données stabilisées avant refactoring)
+**Research:** Unlikely (refactoring pur)
+
+**Scope:**
+- Extraction library.py (~650 lignes) en modules dédiés
+- Dédoublonnage du code matching entre workflow web et CLI
+- Fix du test cassé test_auto_repair_multi_season
+
+**Plans:** TBD (defined during /paul:plan)
+
+### Phase 14: Workflow Fluide
+
+**Goal:** Fluidifier l'enchaînement des étapes du workflow web (scan → validation → transfert)
+**Depends on:** Phase 13 (code refactoré et stable)
+**Research:** Unlikely (amélioration UX sur patterns HTMX existants)
+
+**Scope:**
+- Si tout auto-validé → redirection directe vers l'onglet transfert
+- Si validation manuelle nécessaire → redirection vers validation
+- Après validation complète → proposition/redirection vers transfert
+- Compatibilité avec navigation manuelle (pas de régression)
+
+**Plans:** TBD (defined during /paul:plan)
 
 ## Completed Milestones
 
@@ -44,4 +94,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-25 — v1.2 complete, awaiting next milestone*
+*Last updated: 2026-02-25 — Phase 12 complete*

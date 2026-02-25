@@ -50,7 +50,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-(None — awaiting next milestone)
+- [ ] Tri et recherche bibliothèque normalisés (accents, ligatures, articles) — Phase 12
+- [ ] Enrichissement batch données (file_path, métadonnées techniques, titres épisodes) — Phase 12
 
 ### Planned (Next)
 
@@ -136,4 +137,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-25 after Phase 11 (v1.2 complete)*
+*Last updated: 2026-02-25 after Phase 12 (dette technique données)*

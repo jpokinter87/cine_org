@@ -120,6 +120,14 @@ class SQLModelSeriesRepository(ISeriesRepository):
 
     def save(self, series: Series) -> Series:
         """Sauvegarde une serie (insertion ou mise a jour)."""
+        # Nettoyage preventif des titres (caractères invisibles)
+        from src.utils.helpers import clean_title
+
+        if series.title:
+            series.title = clean_title(series.title)
+        if series.original_title:
+            series.original_title = clean_title(series.original_title)
+
         # Verifier si la serie existe deja (par ID ou tvdb_id)
         existing = None
         if series.id:

@@ -13,6 +13,9 @@ from src.adapters.cli.commands.validate_commands import (
     validate_file,
 )
 from src.adapters.cli.commands.import_commands import (
+    clean_titles,
+    enrich_episode_titles,
+    enrich_tech,
     import_library,
     enrich,
     link_movies,
@@ -88,4 +91,7 @@ __all__ = [
     "regroup",
     "fix_symlinks",
     "fix_bad_links",
+    "clean_titles",
+    "enrich_tech",
+    "enrich_episode_titles",
 ]

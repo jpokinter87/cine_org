@@ -162,6 +162,14 @@ class SQLModelMovieRepository(IMovieRepository):
 
     def save(self, movie: Movie) -> Movie:
         """Sauvegarde un film (insertion ou mise a jour)."""
+        # Nettoyage preventif des titres (caractères invisibles)
+        from src.utils.helpers import clean_title
+
+        if movie.title:
+            movie.title = clean_title(movie.title)
+        if movie.original_title:
+            movie.original_title = clean_title(movie.original_title)
+
         # Verifier si le film existe deja (par ID ou tmdb_id)
         existing = None
         if movie.id:

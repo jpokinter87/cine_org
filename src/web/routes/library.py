@@ -25,10 +25,23 @@ from ...infrastructure.persistence.models import (
     VideoFileModel,
 )
 from ...utils.constants import GENRE_FOLDER_MAPPING
+from ...utils.helpers import search_variants, title_sort_key
 from ..deps import templates
 from .quality import _remove_from_cache as _remove_from_quality_cache
 
 router = APIRouter(prefix="/library")
+
+
+def _title_search_filter(model_class, q: str, extended: bool = False):
+    """Construit un filtre SQL de recherche par titre avec gestion des ligatures."""
+    from sqlalchemy import or_
+
+    variants = search_variants(q)
+    title_conditions = [model_class.title.contains(v) for v in variants]
+    if extended and hasattr(model_class, "overview"):
+        overview_conditions = [model_class.overview.contains(v) for v in variants]
+        return or_(*title_conditions, *overview_conditions)
+    return or_(*title_conditions)
 
 ITEMS_PER_PAGE = 24
 
@@ -175,12 +188,9 @@ async def library_index(
         if type in ("all", "movie"):
             movie_stmt = select(MovieModel)
             if q:
-                if search_mode == "extended":
-                    movie_stmt = movie_stmt.where(
-                        MovieModel.title.contains(q) | MovieModel.overview.contains(q)
-                    )
-                else:
-                    movie_stmt = movie_stmt.where(MovieModel.title.contains(q))
+                movie_stmt = movie_stmt.where(
+                    _title_search_filter(MovieModel, q, extended=(search_mode == "extended"))
+                )
             if year_int:
                 movie_stmt = movie_stmt.where(MovieModel.year == year_int)
             if genre:
@@ -239,12 +249,9 @@ async def library_index(
         ):
             series_stmt = select(SeriesModel)
             if q:
-                if search_mode == "extended":
-                    series_stmt = series_stmt.where(
-                        SeriesModel.title.contains(q) | SeriesModel.overview.contains(q)
-                    )
-                else:
-                    series_stmt = series_stmt.where(SeriesModel.title.contains(q))
+                series_stmt = series_stmt.where(
+                    _title_search_filter(SeriesModel, q, extended=(search_mode == "extended"))
+                )
             if year_int:
                 series_stmt = series_stmt.where(SeriesModel.year == year_int)
             if genre:
@@ -290,17 +297,17 @@ async def library_index(
         descending = order == "desc"
         if sort == "year":
             items.sort(
-                key=lambda x: (x["year"] or 0, x["title"].lower()), reverse=descending
+                key=lambda x: (x["year"] or 0, title_sort_key(x["title"])), reverse=descending
             )
         elif sort == "rating":
             items.sort(
-                key=lambda x: (x["rating"] or 0, x["title"].lower()), reverse=descending
+                key=lambda x: (x["rating"] or 0, title_sort_key(x["title"])), reverse=descending
             )
         elif sort == "resolution":
             items.sort(
                 key=lambda x: (
                     _resolution_pixels(x.get("resolution")),
-                    x["title"].lower(),
+                    title_sort_key(x["title"]),
                 ),
                 reverse=descending,
             )
@@ -308,7 +315,7 @@ async def library_index(
             items.sort(
                 key=lambda x: (
                     x.get("codec_video") or "",
-                    x["title"].lower(),
+                    title_sort_key(x["title"]),
                 ),
                 reverse=descending,
             )
@@ -316,12 +323,12 @@ async def library_index(
             items.sort(
                 key=lambda x: (
                     x.get("codec_audio") or "",
-                    x["title"].lower(),
+                    title_sort_key(x["title"]),
                 ),
                 reverse=descending,
             )
         else:  # title
-            items.sort(key=lambda x: x["title"].lower(), reverse=descending)
+            items.sort(key=lambda x: title_sort_key(x["title"]), reverse=descending)
 
         # --- Pagination ---
         total_items = len(items)

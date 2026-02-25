@@ -464,12 +464,74 @@ async def _link_movies_async(container, dry_run: bool) -> None:
                 linked += 1
                 progress.advance(task)
 
+    # --- Passe 2 : recherche dans storage/ pour les films sans file_path ---
+    storage_linked = 0
+    storage_films_dir = Path(config.storage_dir) / "Films"
+    if storage_films_dir.exists():
+        # Films en base sans file_path
+        movies_no_fp = session.exec(
+            select(MovieModel).where(MovieModel.file_path.is_(None))
+        ).all()
+
+        if movies_no_fp:
+            console.print(
+                f"\n[bold cyan]Passe 2 — recherche dans storage/[/bold cyan]: "
+                f"{len(movies_no_fp)} films sans fichier\n"
+            )
+
+            # Index des fichiers storage par (titre, année)
+            storage_files: dict[tuple[str, int], Path] = {}
+            for f in storage_films_dir.rglob("*"):
+                if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
+                    m = _FILM_NAME_RE.match(f.name)
+                    if m:
+                        storage_files[(m.group(1).strip(), int(m.group(2)))] = f
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                console=console,
+            ) as progress:
+                task = progress.add_task(
+                    "[cyan]Recherche storage...", total=len(movies_no_fp)
+                )
+
+                for movie in movies_no_fp:
+                    # Chercher par titre ou titre original + année
+                    found = None
+                    if movie.title and movie.year:
+                        found = storage_files.get((movie.title, movie.year))
+                    if not found and movie.original_title and movie.year:
+                        found = storage_files.get((movie.original_title, movie.year))
+
+                    if found:
+                        progress.update(
+                            task, description=f"[cyan]{movie.title}"
+                        )
+                        if not dry_run:
+                            movie.file_path = str(found)
+                            session.add(movie)
+                            session.commit()
+                        storage_linked += 1
+
+                    progress.advance(task)
+    else:
+        console.print(
+            f"\n[dim]Storage non trouvé: {storage_films_dir} — passe 2 ignorée[/dim]"
+        )
+
     # Resume
-    console.print("\n[bold]Resume:[/bold]")
-    console.print(f"  [green]{linked}[/green] film(s) associe(s)")
-    console.print(f"  [yellow]{already}[/yellow] deja associe(s)")
+    console.print("\n[bold]Résumé:[/bold]")
+    console.print(f"  [green]{linked}[/green] film(s) associé(s) via symlinks")
+    if storage_linked > 0:
+        console.print(
+            f"  [green]{storage_linked}[/green] film(s) associé(s) via storage"
+        )
+    console.print(f"  [yellow]{already}[/yellow] déjà associé(s)")
     if not_found > 0:
-        console.print(f"  [dim]{not_found}[/dim] non trouve(s) en base")
+        console.print(f"  [dim]{not_found}[/dim] non trouvé(s) en base")
     if no_target > 0:
         console.print(f"  [red]{no_target}[/red] symlink(s) sans cible valide")
 
@@ -756,3 +818,294 @@ def _process_episodes(
                 created += 1
 
     return created, skipped, errors
+
+
+def clean_titles() -> None:
+    """Nettoie les caractères Unicode invisibles dans les titres en base."""
+    from sqlmodel import select
+
+    from src.infrastructure.persistence.database import get_session
+    from src.infrastructure.persistence.models import (
+        EpisodeModel,
+        MovieModel,
+        SeriesModel,
+    )
+    from src.utils.helpers import strip_invisible_chars
+
+    session = next(get_session())
+    total_cleaned = 0
+
+    with suppress_loguru():
+        for model_class, label in [
+            (MovieModel, "films"),
+            (SeriesModel, "séries"),
+            (EpisodeModel, "épisodes"),
+        ]:
+            cleaned = 0
+            all_items = session.exec(select(model_class)).all()
+            for item in all_items:
+                changed = False
+                if item.title:
+                    new_title = strip_invisible_chars(item.title).strip()
+                    if new_title != item.title:
+                        item.title = new_title
+                        changed = True
+                if hasattr(item, "original_title") and item.original_title:
+                    new_ot = strip_invisible_chars(item.original_title).strip()
+                    if new_ot != item.original_title:
+                        item.original_title = new_ot
+                        changed = True
+                if changed:
+                    session.add(item)
+                    cleaned += 1
+
+            if cleaned:
+                session.commit()
+            total_cleaned += cleaned
+            console.print(f"  {label}: {cleaned} titres nettoyés sur {len(all_items)}")
+
+    if total_cleaned:
+        console.print(
+            f"\n[green]✓[/green] {total_cleaned} titres nettoyés au total"
+        )
+    else:
+        console.print("\n[green]✓[/green] Aucun titre à nettoyer")
+    session.close()
+
+
+def enrich_tech(
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Simule sans modifier la base"),
+    ] = False,
+    limit: Annotated[
+        int,
+        typer.Option("--limit", help="Nombre max de films à traiter (0 = tous)"),
+    ] = 0,
+) -> None:
+    """Extrait les métadonnées techniques (résolution, codecs) pour les films avec fichier."""
+    import json
+
+    from sqlmodel import select
+
+    from src.adapters.parsing.mediainfo_extractor import MediaInfoExtractor
+    from src.infrastructure.persistence.database import get_session
+    from src.infrastructure.persistence.models import MovieModel
+
+    session = next(get_session())
+    extractor = MediaInfoExtractor()
+
+    stmt = (
+        select(MovieModel)
+        .where(MovieModel.file_path.isnot(None))
+        .where(MovieModel.resolution.is_(None))
+    )
+    if limit > 0:
+        stmt = stmt.limit(limit)
+    movies = session.exec(stmt).all()
+
+    console.print(
+        f"[bold cyan]Enrichissement métadonnées techniques[/bold cyan]: "
+        f"{len(movies)} films à traiter\n"
+    )
+
+    if dry_run:
+        console.print("[yellow]Mode dry-run — aucune modification[/yellow]\n")
+
+    enriched = 0
+    skipped = 0
+    errors = 0
+
+    with suppress_loguru():
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("[cyan]Extraction...", total=len(movies))
+
+            for movie in movies:
+                file_path = Path(movie.file_path)
+
+                # Résoudre si symlink
+                try:
+                    real_path = file_path.resolve() if file_path.is_symlink() else file_path
+                except OSError:
+                    real_path = file_path
+
+                if not real_path.exists():
+                    skipped += 1
+                    progress.advance(task)
+                    continue
+
+                progress.update(task, description=f"[cyan]{movie.title}")
+
+                try:
+                    media_info = extractor.extract(real_path)
+                except Exception:
+                    errors += 1
+                    progress.advance(task)
+                    continue
+
+                if not media_info:
+                    skipped += 1
+                    progress.advance(task)
+                    continue
+
+                if not dry_run:
+                    if media_info.resolution:
+                        movie.resolution = (
+                            f"{media_info.resolution.width}x{media_info.resolution.height}"
+                        )
+                    if media_info.video_codec:
+                        movie.codec_video = media_info.video_codec.name
+                    if media_info.audio_codecs:
+                        movie.codec_audio = media_info.audio_codecs[0].name
+                    if media_info.audio_languages:
+                        movie.languages_json = json.dumps(
+                            [lang.code for lang in media_info.audio_languages]
+                        )
+                    # Taille du fichier
+                    try:
+                        movie.file_size_bytes = real_path.stat().st_size
+                    except OSError:
+                        pass
+                    session.add(movie)
+
+                    # Commit par batch de 50
+                    if (enriched + 1) % 50 == 0:
+                        session.commit()
+
+                enriched += 1
+                progress.advance(task)
+
+        # Commit final
+        if not dry_run and enriched > 0:
+            session.commit()
+
+    console.print("\n[bold]Résumé:[/bold]")
+    console.print(f"  [green]{enriched}[/green] film(s) enrichi(s)")
+    if skipped > 0:
+        console.print(f"  [yellow]{skipped}[/yellow] ignoré(s) (fichier introuvable ou sans info)")
+    if errors > 0:
+        console.print(f"  [red]{errors}[/red] erreur(s)")
+    session.close()
+
+
+def enrich_episode_titles(
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Simule sans modifier la base"),
+    ] = False,
+    limit: Annotated[
+        int,
+        typer.Option("--limit", help="Nombre max de séries à traiter (0 = toutes)"),
+    ] = 0,
+) -> None:
+    """Enrichit les titres d'épisodes manquants via l'API TVDB."""
+    asyncio.run(_enrich_episode_titles_async(dry_run, limit))
+
+
+@with_container()
+async def _enrich_episode_titles_async(
+    container, dry_run: bool, limit: int
+) -> None:
+    """Implémentation async de enrich-episode-titles."""
+    from sqlalchemy import or_
+    from sqlmodel import select
+
+    from src.infrastructure.persistence.models import EpisodeModel, SeriesModel
+
+    episode_repo = container.episode_repository()
+    session = episode_repo._session
+    tvdb_client = container.tvdb_client()
+
+    # Épisodes sans titre avec tvdb_id disponible, groupés par série
+    eps = session.exec(
+        select(EpisodeModel, SeriesModel.tvdb_id)
+        .join(SeriesModel, EpisodeModel.series_id == SeriesModel.id)
+        .where(or_(EpisodeModel.title.is_(None), EpisodeModel.title == ""))
+        .where(SeriesModel.tvdb_id.isnot(None))
+        .order_by(EpisodeModel.series_id, EpisodeModel.season_number, EpisodeModel.episode_number)
+    ).all()
+
+    # Grouper par série
+    series_groups: dict[int, list[tuple]] = {}
+    for ep, tvdb_id in eps:
+        series_groups.setdefault(ep.series_id, []).append((ep, tvdb_id))
+
+    series_list = list(series_groups.items())
+    if limit > 0:
+        series_list = series_list[:limit]
+
+    total_eps = sum(len(eps_list) for _, eps_list in series_list)
+    console.print(
+        f"[bold cyan]Enrichissement titres épisodes[/bold cyan]: "
+        f"{total_eps} épisodes dans {len(series_list)} séries\n"
+    )
+
+    if dry_run:
+        console.print("[yellow]Mode dry-run — aucune modification[/yellow]\n")
+
+    enriched = 0
+    not_found = 0
+    errors = 0
+
+    with suppress_loguru():
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("[cyan]Enrichissement...", total=total_eps)
+
+            for series_id, eps_list in series_list:
+                tvdb_id = eps_list[0][1]
+                # Afficher le nom de la série
+                series_title = session.exec(
+                    select(SeriesModel.title).where(SeriesModel.id == series_id)
+                ).first()
+                progress.update(
+                    task,
+                    description=f"[cyan]{series_title or f'Série {series_id}'}",
+                )
+
+                for ep, _ in eps_list:
+                    try:
+                        details = await tvdb_client.get_episode_details(
+                            str(tvdb_id), ep.season_number, ep.episode_number
+                        )
+                    except Exception:
+                        errors += 1
+                        progress.advance(task)
+                        continue
+
+                    if details and details.title:
+                        if not dry_run:
+                            ep.title = details.title
+                            if details.overview:
+                                ep.overview = details.overview
+                            session.add(ep)
+                        enriched += 1
+                    else:
+                        not_found += 1
+
+                    progress.advance(task)
+
+                # Commit par série
+                if not dry_run:
+                    session.commit()
+
+    console.print("\n[bold]Résumé:[/bold]")
+    console.print(f"  [green]{enriched}[/green] titre(s) enrichi(s)")
+    if not_found > 0:
+        console.print(f"  [yellow]{not_found}[/yellow] non trouvé(s) sur TVDB")
+    if errors > 0:
+        console.print(f"  [red]{errors}[/red] erreur(s)")
+
+    if tvdb_client:
+        await tvdb_client.close()
