@@ -57,6 +57,9 @@
             </div>
 
             <h1 class="lib-detail-title">{{ series.title }}</h1>
+            {% if series.original_title and series.original_title != series.title %}
+            <p class="lib-detail-original-title">{{ series.original_title }}</p>
+            {% endif %}
 
             <div class="lib-detail-meta-row">
                 {% if series.year %}<span class="lib-detail-meta-item">{{ series.year }}</span>{% endif %}
@@ -67,7 +70,7 @@
             {% if genres %}
             <div class="lib-detail-genres">
                 {% for g in genres %}
-                <span class="genre-tag">{{ g }}</span>
+                <a href="/library/?genre={{ g | urlencode }}" class="genre-tag">{{ g }}</a>
                 {% endfor %}
             </div>
             {% endif %}
@@ -83,8 +86,11 @@
                 {% for c in ep_codecs_audio %}
                 <span class="tech-badge tech-badge-codec">{{ c }}</span>
                 {% endfor %}
+                {% if ep_languages|length > 1 %}
+                <span class="tech-badge tech-badge-lang tech-badge-multi">Multi</span>
+                {% endif %}
                 {% for lang in ep_languages %}
-                <span class="tech-badge tech-badge-lang">{{ lang }}</span>
+                <span class="tech-badge tech-badge-lang {% if ep_languages|length > 1 %}tech-badge-lang-mini{% endif %}">{{ lang }}</span>
                 {% endfor %}
             </div>
             {% endif %}
@@ -184,8 +190,28 @@ function openPosterLightbox(src) {
     document.getElementById('poster-lightbox-img').src = src.replace('/w300', '/w500');
     lb.classList.add('active');
 }
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') document.getElementById('poster-lightbox').classList.remove('active');
-});
+/* Navigation prev/next */
+(function() {
+    var list = JSON.parse(sessionStorage.getItem('lib_nav_list') || '[]');
+    var current = window.location.pathname;
+    var idx = list.indexOf(current);
+    if (idx < 0 || list.length < 2) return;
+    var prev = idx > 0 ? list[idx - 1] : null;
+    var next = idx < list.length - 1 ? list[idx + 1] : null;
+    var nav = document.createElement('div');
+    nav.className = 'lib-detail-nav';
+    nav.innerHTML =
+        (prev ? '<a href="' + prev + '" class="lib-detail-nav-btn lib-detail-nav-prev" title="Précédent (←)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></a>' : '<span></span>') +
+        '<span class="lib-detail-nav-pos">' + (idx + 1) + ' / ' + list.length + '</span>' +
+        (next ? '<a href="' + next + '" class="lib-detail-nav-btn lib-detail-nav-next" title="Suivant (→)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/></svg></a>' : '<span></span>');
+    var header = document.querySelector('.lib-detail-header');
+    if (header) header.parentNode.insertBefore(nav, header);
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') { document.getElementById('poster-lightbox').classList.remove('active'); return; }
+        if (document.querySelector('.reassociate-overlay')) return;
+        if (e.key === 'ArrowLeft' && prev) window.location.href = prev;
+        if (e.key === 'ArrowRight' && next) window.location.href = next;
+    });
+})();
 </script>
 {% endblock %}

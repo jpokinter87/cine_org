@@ -18,12 +18,15 @@ from sqlmodel import select
 
 from ...infrastructure.persistence.database import get_session
 from ...infrastructure.persistence.models import (
+    ConfirmedAssociationModel,
     EpisodeModel,
     MovieModel,
     SeriesModel,
     VideoFileModel,
 )
+from ...utils.constants import GENRE_FOLDER_MAPPING
 from ..deps import templates
+from .quality import _remove_from_cache as _remove_from_quality_cache
 
 router = APIRouter(prefix="/library")
 
@@ -38,6 +41,53 @@ def _parse_genres(genres_json: str | None) -> list[str]:
         except (json.JSONDecodeError, TypeError):
             pass
     return []
+
+
+def _get_storage_genre_info(
+    genres: list[str],
+) -> tuple[str | None, str | None]:
+    """Détermine le genre de rangement et le dossier correspondant.
+
+    Retourne (genre_prioritaire, dossier_rangement).
+    Le genre prioritaire est celui qui a la plus haute priorité dans GENRE_HIERARCHY.
+    La comparaison est insensible aux accents via GENRE_FOLDER_MAPPING.
+    """
+    if not genres:
+        return None, None
+
+    # Trouver le genre prioritaire via le folder mapping (gère les accents)
+    from ...utils.constants import GENRE_HIERARCHY
+
+    best_genre = None
+    best_priority = len(GENRE_HIERARCHY)
+    for g in genres:
+        folder = GENRE_FOLDER_MAPPING.get(g.lower())
+        if folder is None:
+            continue
+        # Trouver la priorité de ce genre dans la hiérarchie
+        for i, h in enumerate(GENRE_HIERARCHY):
+            if h.lower() == g.lower() or GENRE_FOLDER_MAPPING.get(h.lower()) == folder:
+                if i < best_priority:
+                    best_priority = i
+                    best_genre = g
+                break
+
+    if best_genre is None:
+        best_genre = genres[0]
+
+    storage_folder = GENRE_FOLDER_MAPPING.get(best_genre.lower())
+    return best_genre, storage_folder
+
+
+def _genre_json_escaped(genre: str) -> str:
+    """Retourne la version JSON-escaped d'un genre pour LIKE SQL.
+
+    Les genres_json en DB utilisent json.dumps(ensure_ascii=True) par défaut,
+    donc "Comédie" est stocké comme "Com\\u00e9die". Ce helper génère
+    la version escaped pour que le LIKE SQL fonctionne.
+    """
+    # json.dumps produit '"Com\\u00e9die"', on retire les guillemets
+    return json.dumps(genre)[1:-1]
 
 
 def _format_duration(seconds: int | None) -> str:
@@ -134,7 +184,7 @@ async def library_index(
             if year_int:
                 movie_stmt = movie_stmt.where(MovieModel.year == year_int)
             if genre:
-                movie_stmt = movie_stmt.where(MovieModel.genres_json.contains(genre))
+                movie_stmt = movie_stmt.where(MovieModel.genres_json.contains(_genre_json_escaped(genre)))
             if person:
                 if person_role == "director":
                     movie_stmt = movie_stmt.where(MovieModel.director.contains(person))
@@ -198,7 +248,7 @@ async def library_index(
             if year_int:
                 series_stmt = series_stmt.where(SeriesModel.year == year_int)
             if genre:
-                series_stmt = series_stmt.where(SeriesModel.genres_json.contains(genre))
+                series_stmt = series_stmt.where(SeriesModel.genres_json.contains(_genre_json_escaped(genre)))
             if person:
                 if person_role == "director":
                     series_stmt = series_stmt.where(
@@ -469,6 +519,9 @@ async def movie_detail(request: Request, movie_id: int):
     resolution_label = _resolution_label(movie.resolution)
     languages = movie.languages if hasattr(movie, "languages") else []
 
+    # Genre de rangement (prioritaire selon hiérarchie + dossier réel)
+    storage_genre, storage_folder = _get_storage_genre_info(genres)
+
     return templates.TemplateResponse(
         request,
         "library/movie_detail.html",
@@ -481,6 +534,8 @@ async def movie_detail(request: Request, movie_id: int):
             "file_info": file_info,
             "resolution_label": resolution_label,
             "languages": languages,
+            "storage_genre": storage_genre,
+            "storage_folder": storage_folder,
         },
     )
 
@@ -947,10 +1002,24 @@ async def movie_reassociate_apply(
                     "symlink_path"
                 )
 
+        # Marquer comme confirmé (exclure des futurs scans qualité)
+        existing = session.exec(
+            select(ConfirmedAssociationModel).where(
+                ConfirmedAssociationModel.entity_type == "movie",
+                ConfirmedAssociationModel.entity_id == movie_id,
+            )
+        ).first()
+        if not existing:
+            session.add(ConfirmedAssociationModel(
+                entity_type="movie", entity_id=movie_id,
+            ))
+
         session.add(movie)
         session.commit()
     finally:
         session.close()
+
+    _remove_from_quality_cache("movie", movie_id)
 
     response = Response(status_code=200)
     response.headers["HX-Redirect"] = f"/library/movies/{movie_id}"
@@ -1121,10 +1190,24 @@ async def series_reassociate_apply(
         series.vote_count = details.vote_count
         series.updated_at = datetime.utcnow()
 
+        # Marquer comme confirmé (exclure des futurs scans qualité)
+        existing = session.exec(
+            select(ConfirmedAssociationModel).where(
+                ConfirmedAssociationModel.entity_type == "series",
+                ConfirmedAssociationModel.entity_id == series_id,
+            )
+        ).first()
+        if not existing:
+            session.add(ConfirmedAssociationModel(
+                entity_type="series", entity_id=series_id,
+            ))
+
         session.add(series)
         session.commit()
     finally:
         session.close()
+
+    _remove_from_quality_cache("series", series_id)
 
     response = Response(status_code=200)
     response.headers["HX-Redirect"] = f"/library/series/{series_id}"

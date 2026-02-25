@@ -39,6 +39,18 @@
 {% include "library/_pagination.html" %}
 {% endif %}
 
+<script>
+(function() {
+    var cards = document.querySelectorAll('.lib-grid .lib-card');
+    var ids = [];
+    cards.forEach(function(a) {
+        var href = a.getAttribute('href');
+        if (href) ids.push(href);
+    });
+    if (ids.length > 0) sessionStorage.setItem('lib_nav_list', JSON.stringify(ids));
+})();
+</script>
+
 {% else %}
 <div class="empty-state">
     <div class="empty-icon">
