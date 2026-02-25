@@ -16,6 +16,7 @@ from .routes.config import router as config_router
 from .routes.home import router as home_router
 from .routes.maintenance import router as maintenance_router
 from .routes.library import router as library_router
+from .routes.quality import router as quality_router
 from .routes.transfer import router as transfer_router
 from .routes.validation import router as validation_router
 from .routes.workflow import router as workflow_router
@@ -43,5 +44,6 @@ app.include_router(validation_router)
 app.include_router(workflow_router)
 app.include_router(library_router)
 app.include_router(transfer_router)
+app.include_router(quality_router)
 app.include_router(config_router)
 app.include_router(maintenance_router)

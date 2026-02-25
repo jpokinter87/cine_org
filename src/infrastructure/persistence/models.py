@@ -308,3 +308,19 @@ class TrashModel(SQLModel, table=True):
     def entity_metadata(self, value: dict[str, Any]) -> None:
         """Serialise les metadonnees en JSON."""
         self.metadata_json = json.dumps(value)
+
+
+class ConfirmedAssociationModel(SQLModel, table=True):
+    """
+    Associations TMDB confirmées manuellement par l'utilisateur.
+
+    Permet d'exclure des résultats du scan de détection d'erreurs
+    les entités dont l'association est correcte malgré les heuristiques.
+    """
+
+    __tablename__ = "confirmed_associations"
+
+    id: int | None = Field(default=None, primary_key=True)
+    entity_type: str  # "movie" | "series"
+    entity_id: int = Field(index=True)
+    confirmed_at: datetime = Field(default_factory=datetime.utcnow)

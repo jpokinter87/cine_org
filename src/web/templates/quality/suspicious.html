@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}Qualité — Associations suspectes — CineOrg{% endblock %}
+{% block nav_quality %}active{% endblock %}
+
+{% block content %}
+<div class="quality-page">
+    <div class="quality-header">
+        <h1 class="quality-title">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            Associations suspectes
+        </h1>
+        <p class="quality-subtitle">Films et séries dont l'association TMDB semble incorrecte</p>
+    </div>
+
+    <div class="quality-filters">
+        <button class="quality-filter-btn active" onclick="startScan('all', this)">Tous</button>
+        <button class="quality-filter-btn" onclick="startScan('movie', this)">Films</button>
+        <button class="quality-filter-btn" onclick="startScan('series', this)">Séries</button>
+    </div>
+
+    <!-- Zone de progression -->
+    <div id="quality-progress" class="quality-progress" style="display:none;">
+        <div class="quality-progress-bar-container">
+            <div class="quality-progress-bar" id="quality-bar" style="width:0%"></div>
+        </div>
+        <div class="quality-progress-info">
+            <span id="quality-progress-label">Démarrage de l'analyse...</span>
+            <span id="quality-progress-pct">0%</span>
+        </div>
+    </div>
+
+    <!-- Résultats -->
+    <div id="suspicious-results"></div>
+</div>
+
+<script>
+var currentSource = null;
+
+function getCurrentFilter() {
+    var active = document.querySelector('.quality-filter-btn.active');
+    if (!active) return 'all';
+    var text = active.textContent.trim().toLowerCase();
+    if (text === 'films') return 'movie';
+    if (text.startsWith('sér')) return 'series';
+    return 'all';
+}
+
+function startScan(filter, btn, force) {
+    // Mettre à jour le bouton actif
+    document.querySelectorAll('.quality-filter-btn').forEach(function(b) {
+        b.classList.remove('active');
+    });
+    btn.classList.add('active');
+
+    // Afficher la barre de progression
+    var progress = document.getElementById('quality-progress');
+    var bar = document.getElementById('quality-bar');
+    var label = document.getElementById('quality-progress-label');
+    var pct = document.getElementById('quality-progress-pct');
+    var results = document.getElementById('suspicious-results');
+
+    progress.style.display = 'block';
+    bar.style.width = '0%';
+    label.textContent = 'Démarrage de l\'analyse...';
+    pct.textContent = '0%';
+    results.innerHTML = '';
+
+    // Fermer la source précédente si elle existe
+    if (currentSource) {
+        currentSource.close();
+    }
+
+    // Ouvrir le flux SSE
+    var url = '/quality/suspicious/scan?filter=' + filter;
+    if (force) url += '&force=true';
+    currentSource = new EventSource(url);
+
+    currentSource.addEventListener('progress', function(e) {
+        var data = JSON.parse(e.data);
+        bar.style.width = data.pct + '%';
+        label.textContent = data.label;
+        pct.textContent = data.pct + '%';
+    });
+
+    currentSource.addEventListener('complete', function(e) {
+        var data = JSON.parse(e.data);
+        progress.style.display = 'none';
+        results.innerHTML = data.html;
+        htmx.process(results);
+        currentSource.close();
+        currentSource = null;
+    });
+
+    currentSource.onerror = function() {
+        progress.style.display = 'none';
+        results.innerHTML = '<div class="quality-empty"><h3>Erreur lors de l\'analyse</h3><p>Veuillez réessayer.</p></div>';
+        currentSource.close();
+        currentSource = null;
+    };
+}
+
+// --- Modale de confirmation ---
+function showConfirmModal(btn, entityType, entityId) {
+    var overlay = document.getElementById('confirm-overlay');
+    overlay.style.display = 'flex';
+    overlay.dataset.entityType = entityType;
+    overlay.dataset.entityId = entityId;
+    overlay.dataset.sourceBtn = '';
+    overlay._sourceBtn = btn;
+}
+
+function closeConfirmModal() {
+    document.getElementById('confirm-overlay').style.display = 'none';
+}
+
+function doConfirm() {
+    var overlay = document.getElementById('confirm-overlay');
+    var entityType = overlay.dataset.entityType;
+    var entityId = overlay.dataset.entityId;
+    var btn = overlay._sourceBtn;
+    closeConfirmModal();
+
+    var actionsDiv = btn.closest('.quality-card-actions');
+    var form = new FormData();
+    form.append('entity_type', entityType);
+    form.append('entity_id', entityId);
+
+    fetch('/quality/suspicious/confirm', { method: 'POST', body: form })
+        .then(function(r) { return r.text(); })
+        .then(function(html) {
+            actionsDiv.innerHTML = html;
+        });
+}
+
+// Fermer avec Échap
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeConfirmModal();
+});
+
+// --- Rafraîchir les statuts au retour sur l'onglet ---
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState !== 'visible') return;
+    var cards = document.querySelectorAll('.quality-card[data-entity-type]');
+    if (cards.length === 0) return;
+
+    var ids = [];
+    cards.forEach(function(card) {
+        var actions = card.querySelector('.quality-card-actions');
+        if (!actions || !actions.querySelector('.quality-card-confirm')) return;
+        ids.push(card.dataset.entityType + ':' + card.dataset.entityId);
+    });
+    if (ids.length === 0) return;
+
+    fetch('/quality/suspicious/check-confirmed?ids=' + encodeURIComponent(ids.join(',')))
+        .then(function(r) { return r.json(); })
+        .then(function(confirmed) {
+            confirmed.forEach(function(item) {
+                var card = document.querySelector(
+                    '.quality-card[data-entity-type="' + item.entity_type
+                    + '"][data-entity-id="' + item.entity_id + '"]'
+                );
+                if (!card) return;
+
+                // Mettre à jour le titre
+                var titleEl = card.querySelector('.quality-card-title');
+                if (titleEl && item.title) titleEl.textContent = item.title;
+
+                // Mettre à jour l'année
+                var yearEl = card.querySelector('.quality-card-year');
+                if (yearEl && item.year) yearEl.textContent = item.year;
+
+                // Mettre à jour le poster
+                if (item.poster_path) {
+                    var posterDiv = card.querySelector('.quality-card-poster');
+                    if (posterDiv) {
+                        posterDiv.innerHTML = '<img src="https://image.tmdb.org/t/p/w154'
+                            + item.poster_path + '" alt="' + (item.title || '') + '" loading="lazy">';
+                    }
+                }
+
+                // Retirer les raisons et le bloc "Fichier :"
+                var reasons = card.querySelector('.quality-reasons');
+                if (reasons) reasons.remove();
+                var parsed = card.querySelector('.quality-card-parsed');
+                if (parsed) parsed.remove();
+
+                // Remplacer le score par un badge vert "Corrigé"
+                var scoreEl = card.querySelector('.quality-score');
+                if (scoreEl) {
+                    scoreEl.className = 'quality-confirmed-badge';
+                    scoreEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
+                        + 'stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Corrigé';
+                }
+
+                // Remplacer les actions par le badge
+                var actions = card.querySelector('.quality-card-actions');
+                if (actions) {
+                    actions.innerHTML = '<a href="/library/'
+                        + (item.entity_type === 'movie' ? 'movies' : 'series')
+                        + '/' + item.entity_id + '" target="_blank" rel="noopener" '
+                        + 'class="quality-card-action">Voir la fiche '
+                        + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+                        + '<polyline points="9 18 15 12 9 6"/></svg></a>';
+                }
+            });
+        });
+});
+
+// Lancement automatique au chargement
+document.addEventListener('DOMContentLoaded', function() {
+    startScan('all', document.querySelector('.quality-filter-btn'));
+});
+</script>
+
+<!-- Modale de confirmation -->
+<div id="confirm-overlay" class="confirm-overlay" style="display:none;" onclick="if(event.target===this)closeConfirmModal()">
+    <div class="confirm-dialog">
+        <p>Confirmer que cette association est correcte ?</p>
+        <p class="confirm-hint">Cette entrée ne sera plus signalée lors des prochains scans.</p>
+        <div class="confirm-buttons">
+            <button class="confirm-btn-cancel" onclick="closeConfirmModal()">Annuler</button>
+            <button class="confirm-btn-ok" onclick="doConfirm()">Confirmer</button>
+        </div>
+    </div>
+</div>
+{% endblock %}

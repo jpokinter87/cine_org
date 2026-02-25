@@ -1,0 +1,94 @@
+<div class="quality-summary">
+    <span class="quality-count">{{ total }} association{{ 's' if total != 1 else '' }} suspecte{{ 's' if total != 1 else '' }}</span>
+    <span class="quality-breakdown">
+        {{ movie_count }} film{{ 's' if movie_count != 1 else '' }} · {{ series_count }} série{{ 's' if series_count != 1 else '' }}
+    </span>
+    {% if from_cache %}
+    <button class="quality-rescan-btn" onclick="startScan(getCurrentFilter(), document.querySelector('.quality-filter-btn.active'), true)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"/>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+        Rescanner
+    </button>
+    {% endif %}
+</div>
+
+{% if results %}
+<div class="quality-grid">
+    {% for item in results %}
+    <div class="quality-card" data-entity-type="{{ item.entity_type }}" data-entity-id="{{ item.entity_id }}">
+        <div class="quality-card-poster">
+            {% if item.poster_path %}
+            <img src="https://image.tmdb.org/t/p/w154{{ item.poster_path }}" alt="{{ item.title_tmdb }}" loading="lazy">
+            {% else %}
+            <div class="quality-card-no-poster">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
+                    <line x1="7" y1="2" x2="7" y2="22"/>
+                    <line x1="17" y1="2" x2="17" y2="22"/>
+                    <line x1="2" y1="12" x2="22" y2="12"/>
+                </svg>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="quality-card-body">
+            <div class="quality-card-header">
+                <span class="type-badge {{ 'badge-film' if item.entity_type == 'movie' else 'badge-series' }}">
+                    {{ 'Film' if item.entity_type == 'movie' else 'Série' }}
+                </span>
+                <span class="quality-score {% if item.confidence_score >= 50 %}score-medium{% elif item.confidence_score >= 30 %}score-low{% else %}score-critical{% endif %}">
+                    {{ item.confidence_score }}%
+                </span>
+            </div>
+
+            <h3 class="quality-card-title">{{ item.title_tmdb }}</h3>
+            {% if item.year_tmdb %}
+            <span class="quality-card-year">{{ item.year_tmdb }}</span>
+            {% endif %}
+
+            {% if item.title_parsed and item.title_parsed != item.title_tmdb %}
+            <div class="quality-card-parsed">
+                <span class="quality-parsed-label">Fichier :</span>
+                <span class="quality-parsed-value">{{ item.title_parsed }}{% if item.year_parsed %} ({{ item.year_parsed }}){% endif %}</span>
+            </div>
+            {% endif %}
+
+            <ul class="quality-reasons">
+                {% for reason in item.reasons %}
+                <li>{{ reason }}</li>
+                {% endfor %}
+            </ul>
+
+            <div class="quality-card-actions">
+                <a href="/library/{{ 'movies' if item.entity_type == 'movie' else 'series' }}/{{ item.entity_id }}"
+                   target="_blank" rel="noopener"
+                   class="quality-card-action">
+                    Voir la fiche
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                </a>
+                <button class="quality-card-confirm"
+                        onclick="showConfirmModal(this, '{{ item.entity_type }}', '{{ item.entity_id }}')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    Confirmer
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="quality-empty">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+        <polyline points="22 4 12 14.01 9 11.01"/>
+    </svg>
+    <h3>Aucune association suspecte</h3>
+    <p>Toutes les associations TMDB semblent correctes.</p>
+</div>
+{% endif %}
