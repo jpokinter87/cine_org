@@ -27,6 +27,7 @@ Phases: 2 of 3 complete
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 9 | Correction Manuelle Associations | 1/1 | Complete | 2026-02-24 |
+| 9b | Métadonnées Techniques & Filtres Avancés | 1/1 | Complete | 2026-02-25 |
 | 10 | Détection Automatique Erreurs | 1/1 | Complete | 2026-02-25 |
 | 11 | Tableau de Bord Qualité | TBD | Not started | - |
 
@@ -47,6 +48,22 @@ Phases: 2 of 3 complete
 
 **Plans:**
 - Plan 01: Bouton correction, overlay recherche TMDB, indicateurs durée/saisons, ré-association complète (3 tasks dont 1 checkpoint)
+
+### Phase 9b: Métadonnées Techniques & Filtres Avancés
+
+**Goal:** Afficher les métadonnées techniques, ajouter des filtres avancés et propager les données dans le pipeline
+**Depends on:** Phase 8 (fiches détaillées), Phase 9 (ré-association)
+**Research:** No
+
+**Scope:**
+- Filtres avancés bibliothèque : résolution, codec vidéo/audio, recherche étendue synopsis
+- Cartouches techniques cliquables sur fiches détaillées (films et séries)
+- Badges Multi langues + navigation prev/next avec prefetch
+- Propagation métadonnées techniques dans le pipeline workflow (Movie/Episode)
+- Liens TVDB séries, enrichissement tvdb_id, purge documentaires
+
+**Plans:**
+- Plan 01: Filtres, cartouches, navigation, pipeline (6 tasks dont corrections UAT)
 
 ### Phase 10: Détection Automatique Erreurs
 
@@ -79,4 +96,4 @@ Phases: 2 of 3 complete
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-25 — Phase 10 complete*
+*Last updated: 2026-02-25 — Phase 9b + 10 complete*
