@@ -101,10 +101,16 @@ async def validation_list(request: Request):
     # Trier par date décroissante
     items.sort(key=lambda x: x["created_at"] or "", reverse=True)
 
+    # Vérifier s'il y a des fichiers validés prêts au transfert
+    has_validated = False
+    if not items:
+        validated_list = service.list_validated()
+        has_validated = len(validated_list) > 0
+
     return templates.TemplateResponse(
         request,
         "validation/list.html",
-        {"items": items, "total": len(items)},
+        {"items": items, "total": len(items), "has_validated": has_validated},
     )
 
 

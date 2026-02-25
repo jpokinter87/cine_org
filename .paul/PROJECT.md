@@ -12,8 +12,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 1.2 (CLI + Web + Enrichissement + Associations) |
-| Status | Production — v1.2 complete |
+| Version | 1.3 (CLI + Web + Qualité & Fluidité) |
+| Status | Production — v1.3 complete |
 | Last Updated | 2026-02-25 |
 
 ## Requirements
@@ -53,14 +53,17 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 - [x] Refactoring code (v1.3)
   - Code matching partagé CLI/web via pending_factory.py — Phase 13
   - Package library/ découpé en 6 modules (1250→6 fichiers) — Phase 13
+- [x] Workflow fluide (v1.3)
+  - Boutons d'accès rapide guidant workflow → validation → transfert — Phase 14
+  - Cohérence visuelle boutons page d'accueil — Phase 14
 
 ### Active (In Progress)
 
-(None — refactoring complete, next: Phase 14)
+(None — v1.3 complete)
 
 ### Planned (Next)
 
-- [ ] Workflow fluide : redirection auto après validation — Phase 14
+(None — next milestone to define)
 
 ### Out of Scope
 
@@ -121,6 +124,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | data-* attributes au lieu de onclick | Apostrophes dans les titres cassaient le JS inline | 2026-02-25 | Active |
 | Factory standalone pour code partagé CLI/web | Plus simple qu'une classe abstraite, deps passées explicitement | 2026-02-25 | Active |
 | Package library/ avec sous-routers | Découpage fichier 1250 lignes en modules cohérents | 2026-02-25 | Active |
+| Boutons accès rapide plutôt que redirections auto | Respect du rythme utilisateur, pas de timer ni countdown | 2026-02-25 | Active |
 
 ## Success Metrics
 
@@ -144,4 +148,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-25 after Phase 13 (refactoring code)*
+*Last updated: 2026-02-25 after Phase 14 (workflow fluide)*
