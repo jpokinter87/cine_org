@@ -50,6 +50,9 @@
                 {% if series.tmdb_id %}
                 <a href="https://www.themoviedb.org/tv/{{ series.tmdb_id }}" target="_blank" rel="noopener" class="lib-external-link lib-external-tmdb">TMDB</a>
                 {% endif %}
+                {% if series.tvdb_id %}
+                <a href="https://thetvdb.com/dereferrer/series/{{ series.tvdb_id }}" target="_blank" rel="noopener" class="lib-external-link lib-external-tvdb">TVDB</a>
+                {% endif %}
                 <button class="reassociate-btn" hx-get="/library/series/{{ series.id }}/reassociate" hx-target="#reassociate-container" hx-swap="innerHTML" title="Corriger l'association TMDB">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     Corriger
@@ -119,7 +122,7 @@
             </div>
             {% endif %}
 
-            {% if series.tvdb_id or series.tmdb_id or series.imdb_id %}
+            {% if series.tvdb_id or series.tmdb_id or series.imdb_id or first_episode %}
             <details class="lib-detail-file-toggle">
                 <summary class="lib-file-toggle-btn">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -127,6 +130,12 @@
                     <svg class="lib-file-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
                 </summary>
                 <div class="lib-file-details">
+                    {% if first_episode and first_episode.file_path %}
+                    <div class="lib-file-row">
+                        <span class="lib-file-label">Premier épisode</span>
+                        <code class="lib-file-path">{{ first_episode.file_path }}</code>
+                    </div>
+                    {% endif %}
                     <div class="lib-file-row">
                         <span class="lib-file-label">IDs</span>
                         <span class="lib-file-ids">

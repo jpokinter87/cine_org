@@ -632,6 +632,7 @@ async def series_detail(request: Request, series_id: int):
             "ep_codecs_video": sorted(ep_codecs_video),
             "ep_codecs_audio": sorted(ep_codecs_audio),
             "ep_languages": sorted(ep_languages),
+            "first_episode": episodes[0] if episodes else None,
         },
     )
 

@@ -3235,6 +3235,11 @@ a.tech-badge-codec:hover {
     color: #01b4e4;
 }
 
+.lib-external-tvdb {
+    background: rgba(108, 194, 74, 0.12);
+    color: #6cc24a;
+}
+
 /* ── Rating Source Label (Grid) ── */
 
 .lib-card-rating-source {
