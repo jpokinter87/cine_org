@@ -47,15 +47,20 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
   - Métadonnées techniques, filtres avancés, navigation inter-fiches, pipeline enrichi — Phase 9b
   - Détection automatique d'associations suspectes (heuristiques + SSE + cache 24h) — Phase 10
   - Tableau de bord qualité (couverture enrichissement, résumé suspects, historique corrections) — Phase 11
+- [x] Dette technique données (v1.3)
+  - Tri et recherche bibliothèque normalisés (accents, ligatures, articles) — Phase 12
+  - Enrichissement batch données (file_path, métadonnées techniques, titres épisodes) — Phase 12
+- [x] Refactoring code (v1.3)
+  - Code matching partagé CLI/web via pending_factory.py — Phase 13
+  - Package library/ découpé en 6 modules (1250→6 fichiers) — Phase 13
 
 ### Active (In Progress)
 
-- [ ] Tri et recherche bibliothèque normalisés (accents, ligatures, articles) — Phase 12
-- [ ] Enrichissement batch données (file_path, métadonnées techniques, titres épisodes) — Phase 12
+(None — refactoring complete, next: Phase 14)
 
 ### Planned (Next)
 
-(None defined yet)
+- [ ] Workflow fluide : redirection auto après validation — Phase 14
 
 ### Out of Scope
 
@@ -114,6 +119,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | SSE + cache fichier 24h | Scan qualité ~5000 fichiers trop lent en synchrone | 2026-02-25 | Active |
 | Comparaison original_title TMDB | Réduit les faux positifs pour les films étrangers | 2026-02-25 | Active |
 | data-* attributes au lieu de onclick | Apostrophes dans les titres cassaient le JS inline | 2026-02-25 | Active |
+| Factory standalone pour code partagé CLI/web | Plus simple qu'une classe abstraite, deps passées explicitement | 2026-02-25 | Active |
+| Package library/ avec sous-routers | Découpage fichier 1250 lignes en modules cohérents | 2026-02-25 | Active |
 
 ## Success Metrics
 
@@ -137,4 +144,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-25 after Phase 12 (dette technique données)*
+*Last updated: 2026-02-25 after Phase 13 (refactoring code)*

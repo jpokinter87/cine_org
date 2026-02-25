@@ -238,11 +238,11 @@ class TestSeriesAutoRepair:
         """Auto-repare meme si l'episode est dans une saison differente."""
         link = Path(
             "/media/Serveur/test/Séries/Animation/T/"
-            "The Amazing World of Gumball (2011)/Saison 5/ep.mkv"
+            "The Amazing World of Gumball (2011)/Saison 5/"
+            "The Amazing World of Gumball - S04E01.mkv"
         )
-        # Note: les episodes de saisons differentes partagent le meme parent
-        # si le symlink est dans Saison 5 - mais ici on teste qu'un candidat
-        # dans Saison 4 sur le NAS est aussi accepte
+        # Le symlink est dans Saison 5 mais le fichier est S04E01
+        # On teste qu'un candidat dans Saison 4 sur le NAS est aussi accepte
         self.ir.confirmed_series[str(link.parent)] = Path(
             "/media/NAS64/Séries/Animation/M/Le monde incroyable de Gumball"
         )
@@ -263,16 +263,20 @@ class TestSeriesAutoRepair:
         """Si plusieurs candidats, prend le meilleur score dans le repertoire confirme."""
         link = Path(
             "/media/Serveur/test/Séries/Animation/T/"
-            "The Amazing World of Gumball (2011)/Saison 5/ep.mkv"
+            "The Amazing World of Gumball (2011)/Saison 5/"
+            "The Amazing World of Gumball - S05E03.mkv"
         )
         self.ir.confirmed_series[str(link.parent)] = Path(
             "/media/NAS64/Séries/Animation/M/Le monde incroyable de Gumball"
         )
 
-        candidate_wrong = Path("/media/NAS64/Séries/Autre/ep.mkv")
+        candidate_wrong = Path(
+            "/media/NAS64/Séries/Autre/Autre Serie - S05E03.mkv"
+        )
         candidate_good = Path(
             "/media/NAS64/Séries/Animation/M/"
-            "Le monde incroyable de Gumball/Saison 5/ep_good.mkv"
+            "Le monde incroyable de Gumball/Saison 5/"
+            "Le Monde Incroyable de Gumball - S05E03.mkv"
         )
         # Le meilleur score est hors du repertoire confirme
         targets = [(candidate_wrong, 90.0), (candidate_good, 75.0)]

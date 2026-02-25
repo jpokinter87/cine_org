@@ -16,7 +16,7 @@ from starlette.responses import StreamingResponse
 
 from ...core.entities.video import ValidationStatus
 from ...core.value_objects.parsed_info import MediaType
-from ...services.workflow.dataclasses import WorkflowConfig
+from ...services.workflow.pending_factory import create_pending_validation
 from ..deps import templates
 
 logger = logging.getLogger(__name__)
@@ -145,7 +145,7 @@ async def _run_web_workflow(
             progress.message = f"Matching : {result.video_file.filename}"
 
             # Rechercher les candidats via API
-            video_file, pending = await _create_pending(
+            video_file, pending = await create_pending_validation(
                 result, matcher, tmdb_client, tvdb_client
             )
 
@@ -217,117 +217,6 @@ def _should_filter(scan_result, filter_type: str) -> bool:
     if filter_type == "series":
         return scan_result.detected_type != MediaType.SERIES
     return False
-
-
-async def _create_pending(result, matcher, tmdb_client, tvdb_client):
-    """Crée un VideoFile et PendingValidation à partir d'un résultat de scan."""
-    from src.core.entities.video import PendingValidation, VideoFile
-    from src.services.matcher import calculate_movie_score
-
-    video_file = VideoFile(
-        path=result.video_file.path,
-        filename=result.video_file.filename,
-        media_info=result.media_info,
-    )
-
-    title = result.parsed_info.title
-    year = result.parsed_info.year
-    candidates = []
-
-    if result.detected_type == MediaType.MOVIE:
-        # Recherche TMDB
-        if tmdb_client and getattr(tmdb_client, "_api_key", None):
-            try:
-                api_results = await tmdb_client.search(title, year=year)
-                duration = None
-                if result.media_info and result.media_info.duration_seconds:
-                    duration = result.media_info.duration_seconds
-
-                candidates = matcher.score_results(api_results, title, year, duration)
-
-                # Enrichir top 3 avec durée
-                if candidates and duration:
-                    from dataclasses import replace
-
-                    enriched = []
-                    for cand in candidates[:3]:
-                        try:
-                            details = await tmdb_client.get_details(cand.id)
-                            if details and details.duration_seconds:
-                                new_score = calculate_movie_score(
-                                    query_title=title,
-                                    query_year=year,
-                                    query_duration=duration,
-                                    candidate_title=cand.title,
-                                    candidate_year=cand.year,
-                                    candidate_duration=details.duration_seconds,
-                                    candidate_original_title=(
-                                        cand.original_title or details.original_title
-                                    ),
-                                )
-                                cand = replace(cand, score=new_score)
-                        except Exception:
-                            pass
-                        enriched.append(cand)
-                    candidates = enriched + candidates[3:]
-                    candidates.sort(key=lambda c: c.score, reverse=True)
-            except Exception as e:
-                logger.warning("Erreur TMDB pour %s: %s", title, e)
-    else:
-        # Recherche TVDB
-        if tvdb_client and getattr(tvdb_client, "_api_key", None):
-            try:
-                api_results = await tvdb_client.search(title, year=year)
-                candidates = matcher.score_results(
-                    api_results, title, year, None, is_series=True
-                )
-
-                # Filtrer par episode count
-                season = result.parsed_info.season
-                episode = result.parsed_info.episode
-                if candidates and season and episode:
-                    filtered = await _filter_by_episode_count(
-                        tvdb_client, candidates, season, episode
-                    )
-                    if filtered:
-                        candidates = filtered
-            except Exception as e:
-                logger.warning("Erreur TVDB pour %s: %s", title, e)
-
-    candidates_data = [
-        {
-            "id": c.id,
-            "title": c.title,
-            "year": c.year,
-            "score": c.score,
-            "source": c.source,
-        }
-        for c in candidates
-    ]
-
-    pending = PendingValidation(
-        video_file=video_file,
-        candidates=candidates_data,
-    )
-
-    return video_file, pending
-
-
-async def _filter_by_episode_count(tvdb_client, candidates, season, episode):
-    """Filtre les candidats séries dont la saison n'a pas assez d'épisodes."""
-    compatible = []
-    for candidate in candidates:
-        try:
-            count = await tvdb_client.get_season_episode_count(candidate.id, season)
-            if count is not None and episode <= count:
-                compatible.append(candidate)
-            elif count is None:
-                # Pas de données pour cette saison → garder par précaution
-                compatible.append(candidate)
-        except Exception:
-            compatible.append(candidate)
-
-    return compatible
 
 
 # ═══════════════════════════════════════

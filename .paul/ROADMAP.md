@@ -8,14 +8,14 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 **v1.3 Qualité & Fluidité** (v1.3.0)
 Status: In Progress
-Phases: 1 of 3 complete
+Phases: 2 of 3 complete
 
 ## Phases
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 12 | Dette Technique Données | 2/2 | Complete | 2026-02-25 |
-| 13 | Refactoring Code | TBD | Not started | - |
+| 13 | Refactoring Code | 2/2 | Complete | 2026-02-25 |
 | 14 | Workflow Fluide | TBD | Not started | - |
 
 ## Phase Details
@@ -94,4 +94,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-25 — Phase 12 complete*
+*Last updated: 2026-02-25 — Phase 13 complete*

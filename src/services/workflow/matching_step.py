@@ -4,7 +4,6 @@ Etape de matching du workflow : recherche API, scoring et filtrage des candidats
 
 from typing import Optional
 
-from loguru import logger
 from rich.progress import (
     BarColumn,
     Progress,
@@ -13,10 +12,11 @@ from rich.progress import (
     TextColumn,
 )
 
-from src.core.entities.video import PendingValidation, ValidationStatus
+from src.core.entities.video import ValidationStatus
 from src.core.value_objects.parsed_info import MediaType
 
 from .dataclasses import WorkflowState
+from .pending_factory import create_pending_validation
 
 
 class MatchingStepMixin:
@@ -90,188 +90,15 @@ class MatchingStepMixin:
         """
         Crée un VideoFile et PendingValidation à partir d'un résultat de scan.
 
-        Effectue la recherche API et le scoring.
+        Délègue au module partagé pending_factory.
         """
-        from src.core.entities.video import VideoFile
-
-        # Créer VideoFile
-        video_file = VideoFile(
-            path=scan_result.video_file.path,
-            filename=scan_result.video_file.filename,
-            media_info=scan_result.media_info,
+        return await create_pending_validation(
+            scan_result,
+            self._matcher,
+            self._tmdb_client,
+            self._tvdb_client,
+            max_episode_in_batch,
         )
-
-        # Rechercher les candidats via API
-        title = scan_result.parsed_info.title
-        year = scan_result.parsed_info.year
-        candidates = []
-
-        if scan_result.detected_type == MediaType.MOVIE:
-            candidates = await self._search_and_score_movie(
-                title, year, scan_result.media_info
-            )
-        else:
-            candidates = await self._search_and_score_series(title, year)
-
-            # Filtrer les candidats incompatibles par nombre d'episodes
-            season = scan_result.parsed_info.season
-            episode = scan_result.parsed_info.episode
-            if candidates and season and episode:
-                filtered = await self._filter_by_episode_count(
-                    candidates, season, episode, max_episode_in_batch
-                )
-                if filtered:
-                    candidates = filtered
-                else:
-                    logger.warning(
-                        f"Tous les candidats elimines par episode count pour "
-                        f"{scan_result.video_file.filename}, conservation des originaux"
-                    )
-
-        # Convertir en dict pour stockage
-        candidates_data = [
-            {
-                "id": c.id,
-                "title": c.title,
-                "year": c.year,
-                "score": c.score,
-                "source": c.source,
-            }
-            for c in candidates
-        ]
-
-        pending = PendingValidation(
-            video_file=video_file,
-            candidates=candidates_data,
-        )
-
-        return video_file, pending
-
-    async def _filter_by_episode_count(
-        self,
-        candidates: list,
-        season: int,
-        episode: int,
-        max_episode_in_batch: Optional[int] = None,
-    ) -> list:
-        """
-        Filtre les candidats series incompatibles par nombre d'episodes.
-
-        Phase 1 - Elimination des impossibles :
-        - La saison n'existe pas (get_season_episode_count retourne None)
-        - Le numero d'episode depasse le nombre d'episodes de la saison
-
-        Phase 2 - Raffinement par contexte batch :
-        Si max_episode_in_batch est fourni et que plusieurs candidats restent,
-        prefere ceux dont le nombre d'episodes de la saison correspond exactement
-        au max_episode du batch.
-
-        En cas d'erreur API, le candidat est conserve par precaution.
-
-        Args:
-            candidates: Liste de SearchResult candidats
-            season: Numero de saison du fichier
-            episode: Numero d'episode du fichier
-            max_episode_in_batch: Numero d'episode max dans le batch pour cette serie/saison
-
-        Returns:
-            Liste filtree de SearchResult compatibles
-        """
-        if not self._tvdb_client:
-            return candidates
-
-        # Elimination des candidats dont la saison n'a pas assez d'episodes
-        compatible = []
-        for candidate in candidates:
-            try:
-                count = await self._tvdb_client.get_season_episode_count(
-                    candidate.id, season
-                )
-                if count is not None and episode <= count:
-                    compatible.append(candidate)
-                elif count is None:
-                    # Pas de données pour cette saison → garder par précaution
-                    compatible.append(candidate)
-            except Exception:
-                # En cas d'erreur API, conserver le candidat par precaution
-                compatible.append(candidate)
-
-        return compatible
-
-    async def _search_and_score_movie(
-        self, title: str, year: Optional[int], media_info
-    ) -> list:
-        """Recherche et score les films via TMDB."""
-        candidates = []
-
-        if not self._tmdb_client or not getattr(self._tmdb_client, "_api_key", None):
-            return candidates
-
-        try:
-            api_results = await self._tmdb_client.search(title, year=year)
-            duration = None
-            if media_info and media_info.duration_seconds:
-                duration = media_info.duration_seconds
-
-            # Premier scoring sans durée API
-            candidates = self._matcher.score_results(
-                api_results, title, year, duration
-            )
-
-            # Enrichir les top 3 avec durée et re-scorer
-            if candidates and duration:
-                top_candidates = candidates[:3]
-                enriched_candidates = []
-
-                for cand in top_candidates:
-                    try:
-                        details = await self._tmdb_client.get_details(cand.id)
-                        if details and details.duration_seconds:
-                            from src.services.matcher import calculate_movie_score
-                            from dataclasses import replace
-
-                            new_score = calculate_movie_score(
-                                query_title=title,
-                                query_year=year,
-                                query_duration=duration,
-                                candidate_title=cand.title,
-                                candidate_year=cand.year,
-                                candidate_duration=details.duration_seconds,
-                                candidate_original_title=(
-                                    cand.original_title or details.original_title
-                                ),
-                            )
-                            cand = replace(cand, score=new_score)
-                    except Exception:
-                        pass
-                    enriched_candidates.append(cand)
-
-                candidates = enriched_candidates + candidates[3:]
-                candidates.sort(key=lambda c: c.score, reverse=True)
-
-        except Exception as e:
-            self._console.print(f"[yellow]Erreur TMDB pour {title}: {e}[/yellow]")
-
-        return candidates
-
-    async def _search_and_score_series(
-        self, title: str, year: Optional[int]
-    ) -> list:
-        """Recherche et score les séries via TVDB."""
-        candidates = []
-
-        if not self._tvdb_client or not getattr(self._tvdb_client, "_api_key", None):
-            return candidates
-
-        try:
-            api_results = await self._tvdb_client.search(title, year=year)
-            candidates = self._matcher.score_results(
-                api_results, title, year, None, is_series=True
-            )
-        except Exception as e:
-            self._console.print(f"[yellow]Erreur TVDB pour {title}: {e}[/yellow]")
-
-        return candidates
 
     async def _auto_validate(self, state: WorkflowState) -> None:
         """
