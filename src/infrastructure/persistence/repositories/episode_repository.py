@@ -5,6 +5,7 @@ Implemente l'interface IEpisodeRepository pour la persistance des episodes
 dans la base de donnees SQLite via SQLModel.
 """
 
+import json
 from typing import Optional
 
 from sqlmodel import Session, select
@@ -41,6 +42,9 @@ class SQLModelEpisodeRepository(IEpisodeRepository):
         Retourne :
             L'entite Episode correspondante
         """
+        languages_list = (
+            json.loads(model.languages_json) if model.languages_json else []
+        )
         return Episode(
             id=str(model.id) if model.id else None,
             series_id=str(model.series_id) if model.series_id else None,
@@ -50,6 +54,12 @@ class SQLModelEpisodeRepository(IEpisodeRepository):
             air_date=model.air_date,
             duration_seconds=model.duration_seconds,
             overview=model.overview,
+            file_path=model.file_path,
+            codec_video=model.codec_video,
+            codec_audio=model.codec_audio,
+            resolution=model.resolution,
+            languages=tuple(languages_list),
+            file_size_bytes=model.file_size_bytes,
         )
 
     def _to_model(self, entity: Episode) -> EpisodeModel:
@@ -70,6 +80,12 @@ class SQLModelEpisodeRepository(IEpisodeRepository):
             air_date=entity.air_date,
             duration_seconds=entity.duration_seconds,
             overview=entity.overview,
+            file_path=entity.file_path,
+            codec_video=entity.codec_video,
+            codec_audio=entity.codec_audio,
+            resolution=entity.resolution,
+            languages_json=json.dumps(list(entity.languages)) if entity.languages else None,
+            file_size_bytes=entity.file_size_bytes,
         )
         if entity.id:
             model.id = int(entity.id)
@@ -126,6 +142,18 @@ class SQLModelEpisodeRepository(IEpisodeRepository):
             existing.air_date = episode.air_date
             existing.duration_seconds = episode.duration_seconds
             existing.overview = episode.overview
+            if episode.file_path is not None:
+                existing.file_path = episode.file_path
+            if episode.codec_video is not None:
+                existing.codec_video = episode.codec_video
+            if episode.codec_audio is not None:
+                existing.codec_audio = episode.codec_audio
+            if episode.resolution is not None:
+                existing.resolution = episode.resolution
+            if episode.languages:
+                existing.languages_json = json.dumps(list(episode.languages))
+            if episode.file_size_bytes is not None:
+                existing.file_size_bytes = episode.file_size_bytes
             self._session.add(existing)
             self._session.commit()
             self._session.refresh(existing)

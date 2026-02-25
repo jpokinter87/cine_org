@@ -52,6 +52,12 @@ class Movie:
     imdb_votes: Optional[int] = None
     director: Optional[str] = None
     cast: tuple[str, ...] = ()
+    file_path: Optional[str] = None
+    codec_video: Optional[str] = None
+    codec_audio: Optional[str] = None
+    resolution: Optional[str] = None
+    languages: tuple[str, ...] = ()
+    file_size_bytes: Optional[int] = None
 
 
 @dataclass
@@ -121,3 +127,9 @@ class Episode:
     air_date: Optional[date] = None
     duration_seconds: Optional[int] = None
     overview: Optional[str] = None
+    file_path: Optional[str] = None
+    codec_video: Optional[str] = None
+    codec_audio: Optional[str] = None
+    resolution: Optional[str] = None
+    languages: tuple[str, ...] = ()
+    file_size_bytes: Optional[int] = None

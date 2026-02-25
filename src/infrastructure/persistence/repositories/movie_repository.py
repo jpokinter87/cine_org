@@ -44,6 +44,7 @@ class SQLModelMovieRepository(IMovieRepository):
         """
         genres_list = json.loads(model.genres_json) if model.genres_json else []
         cast_list = json.loads(model.cast_json) if model.cast_json else []
+        languages_list = json.loads(model.languages_json) if model.languages_json else []
         return Movie(
             id=str(model.id) if model.id else None,
             tmdb_id=model.tmdb_id,
@@ -61,6 +62,12 @@ class SQLModelMovieRepository(IMovieRepository):
             imdb_votes=model.imdb_votes,
             director=model.director,
             cast=tuple(cast_list),
+            file_path=model.file_path,
+            codec_video=model.codec_video,
+            codec_audio=model.codec_audio,
+            resolution=model.resolution,
+            languages=tuple(languages_list),
+            file_size_bytes=model.file_size_bytes,
         )
 
     def _to_model(self, entity: Movie) -> MovieModel:
@@ -89,6 +96,12 @@ class SQLModelMovieRepository(IMovieRepository):
             imdb_votes=entity.imdb_votes,
             director=entity.director,
             cast_json=json.dumps(list(entity.cast)) if entity.cast else None,
+            file_path=entity.file_path,
+            codec_video=entity.codec_video,
+            codec_audio=entity.codec_audio,
+            resolution=entity.resolution,
+            languages_json=json.dumps(list(entity.languages)) if entity.languages else None,
+            file_size_bytes=entity.file_size_bytes,
         )
         if entity.id:
             model.id = int(entity.id)
@@ -177,6 +190,18 @@ class SQLModelMovieRepository(IMovieRepository):
             existing.cast_json = (
                 json.dumps(list(movie.cast)) if movie.cast else None
             )
+            if movie.file_path is not None:
+                existing.file_path = movie.file_path
+            if movie.codec_video is not None:
+                existing.codec_video = movie.codec_video
+            if movie.codec_audio is not None:
+                existing.codec_audio = movie.codec_audio
+            if movie.resolution is not None:
+                existing.resolution = movie.resolution
+            if movie.languages:
+                existing.languages_json = json.dumps(list(movie.languages))
+            if movie.file_size_bytes is not None:
+                existing.file_size_bytes = movie.file_size_bytes
             self._session.add(existing)
             self._session.commit()
             self._session.refresh(existing)

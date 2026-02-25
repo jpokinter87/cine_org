@@ -77,9 +77,48 @@ class TransferStepMixin:
         results = await execute_batch_transfer(state.transfers, self._transferer)
         success_count = sum(1 for r in results if r.get("success", False))
 
+        # Mettre a jour file_path sur les entites apres transfert reussi
+        self._update_file_paths(state.transfers, results)
+
         self._console.print(
             f"\n[bold green]{success_count}[/bold green] fichier(s) transféré(s)"
         )
+
+    def _update_file_paths(self, transfers: list[dict], results: list[dict]) -> None:
+        """Met a jour file_path sur Movie/Episode apres transfert reussi."""
+        from src.infrastructure.persistence.models import MovieModel, EpisodeModel
+
+        session = self._container.session()
+        updated = 0
+
+        for transfer, result in zip(transfers, results):
+            if not result.get("success"):
+                continue
+
+            symlink_path = transfer.get("symlink_destination")
+            if not symlink_path:
+                continue
+
+            file_path_str = str(symlink_path)
+
+            movie_id = transfer.get("movie_id")
+            if movie_id:
+                movie = session.get(MovieModel, int(movie_id))
+                if movie:
+                    movie.file_path = file_path_str
+                    session.add(movie)
+                    updated += 1
+
+            episode_id = transfer.get("episode_id")
+            if episode_id:
+                ep = session.get(EpisodeModel, int(episode_id))
+                if ep:
+                    ep.file_path = file_path_str
+                    session.add(ep)
+                    updated += 1
+
+        if updated:
+            session.commit()
 
     def _print_summary(self, state: WorkflowState) -> None:
         """Affiche le résumé final du workflow."""

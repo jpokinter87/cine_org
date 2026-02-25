@@ -30,6 +30,38 @@ if TYPE_CHECKING:
 console = Console()
 
 
+def _extract_tech_from_media_info(
+    media_info,
+    video_file=None,
+) -> tuple[str | None, str | None, str | None, tuple[str, ...], int | None]:
+    """
+    Extrait les metadonnees techniques depuis MediaInfo.
+
+    Returns:
+        Tuple (codec_video, codec_audio, resolution, languages, file_size_bytes)
+    """
+    if not media_info:
+        return None, None, None, (), video_file.size_bytes if video_file else None
+
+    codec_video = media_info.video_codec.name if media_info.video_codec else None
+    codec_audio = (
+        media_info.audio_codecs[0].name if media_info.audio_codecs else None
+    )
+    resolution = (
+        f"{media_info.resolution.width}x{media_info.resolution.height}"
+        if media_info.resolution
+        else None
+    )
+    languages = (
+        tuple(lang.code for lang in media_info.audio_languages)
+        if media_info.audio_languages
+        else ()
+    )
+    file_size_bytes = video_file.size_bytes if video_file else None
+
+    return codec_video, codec_audio, resolution, languages, file_size_bytes
+
+
 class TransferData:
     """
     Donnees de transfert pour un fichier.
@@ -360,10 +392,16 @@ async def build_transfers_batch(
                 except Exception:
                     pass
 
+            # Extraire les metadonnees techniques du fichier
+            codec_video, codec_audio, resolution_str, languages, file_size_bytes = (
+                _extract_tech_from_media_info(media_info, pending.video_file)
+            )
+
             # Construire les entites Series et Episode
             from src.core.entities.media import Series, Episode
 
             series = Series(
+                tvdb_id=int(candidate_id) if candidate_id else None,
                 title=candidate_title,
                 year=candidate_year,
                 genres=series_genres,
@@ -372,6 +410,11 @@ async def build_transfers_batch(
                 season_number=season_num,
                 episode_number=episode_num,
                 title=episode_title,
+                codec_video=codec_video,
+                codec_audio=codec_audio,
+                resolution=resolution_str,
+                languages=languages,
+                file_size_bytes=file_size_bytes,
             )
 
             new_filename = renamer.generate_series_filename(
@@ -393,6 +436,27 @@ async def build_transfers_batch(
                 video_dir=video_dir,
             )
 
+            # Sauvegarder la serie en base (ou recuperer si existante)
+            series_repo = container.series_repository()
+            saved_series = series_repo.save(series)
+
+            # Sauvegarder l'episode en base
+            episode.series_id = saved_series.id
+            episode_repo = container.episode_repository()
+            # Verifier si l'episode existe deja
+            existing_eps = episode_repo.get_by_series(
+                saved_series.id, season=season_num, episode=episode_num
+            )
+            if existing_eps:
+                episode.id = existing_eps[0].id
+            saved_episode = episode_repo.save(episode)
+
+            year_str = f" ({series.year})" if series.year else ""
+            console.print(
+                f"  [green]✓[/green] [bold]{series.title}[/bold]{year_str} "
+                f"S{season_num:02d}E{episode_num:02d} sauvegardé"
+            )
+
             transfer_data = {
                 "pending": pending,
                 "source": source_path,
@@ -403,6 +467,8 @@ async def build_transfers_batch(
                 "is_series": True,
                 "title": candidate_title,
                 "year": candidate_year,
+                "series_id": saved_series.id,
+                "episode_id": saved_episode.id,
             }
             transfers.append(transfer_data)
 
@@ -416,6 +482,11 @@ async def build_transfers_batch(
                 imdb_rating,
                 imdb_votes,
             ) = await _enrich_movie_metadata(str(candidate_id), tmdb_client, container)
+
+            # Extraire les metadonnees techniques du fichier
+            codec_video, codec_audio, resolution, languages, file_size_bytes = (
+                _extract_tech_from_media_info(media_info, pending.video_file)
+            )
 
             # Creer l'entite Movie complete
             from src.core.entities.media import Movie
@@ -434,6 +505,13 @@ async def build_transfers_batch(
                 vote_count=movie_details.vote_count if movie_details else None,
                 imdb_rating=imdb_rating,
                 imdb_votes=imdb_votes,
+                director=movie_details.director if movie_details else None,
+                cast=movie_details.cast if movie_details else (),
+                codec_video=codec_video,
+                codec_audio=codec_audio,
+                resolution=resolution,
+                languages=languages,
+                file_size_bytes=file_size_bytes,
             )
 
             # Sauvegarder le film dans la base de donnees
@@ -475,6 +553,7 @@ async def build_transfers_batch(
                 "is_series": False,
                 "title": candidate_title,
                 "year": candidate_year,
+                "movie_id": saved_movie.id,
             }
             transfers.append(transfer_data)
 
