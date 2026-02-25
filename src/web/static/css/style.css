@@ -5226,3 +5226,469 @@ details[open] > .maint-issue-toggle::before {
         padding: 0.8rem;
     }
 }
+
+/* ── Quality Dashboard ── */
+
+.quality-dashboard {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Hero */
+.qdash-hero {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 2rem;
+    margin-bottom: 2.5rem;
+    padding-bottom: 1.75rem;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.qdash-title {
+    font-family: var(--font-display);
+    font-size: 2.5rem;
+    font-weight: 400;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    color: var(--text-primary);
+}
+
+.qdash-subtitle {
+    margin-top: 0.4rem;
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    font-weight: 300;
+}
+
+.qdash-global-stats {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex-shrink: 0;
+}
+
+.qdash-gstat {
+    text-align: center;
+}
+
+.qdash-gstat-value {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+
+.qdash-gstat-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.qdash-gstat-sep {
+    width: 1px;
+    height: 28px;
+    background: var(--border);
+}
+
+/* Body layout : main + aside */
+.qdash-body {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 1.75rem;
+    align-items: start;
+}
+
+.qdash-main {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* ── Coverage sections ── */
+
+.qdash-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem 1.75rem;
+    box-shadow: var(--shadow-card);
+    transition: box-shadow 0.25s ease;
+}
+
+.qdash-section:hover {
+    box-shadow: var(--shadow-card-hover);
+}
+
+.qdash-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 1.25rem;
+}
+
+.qdash-section-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.qdash-icon-films {
+    background: var(--accent-amber-dim);
+    color: var(--accent-amber);
+}
+
+.qdash-icon-series {
+    background: var(--accent-blue-dim);
+    color: var(--accent-blue);
+}
+
+.qdash-icon-episodes {
+    background: var(--accent-emerald-dim);
+    color: var(--accent-emerald);
+}
+
+.qdash-section-title {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    font-weight: 400;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+}
+
+.qdash-section-count {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Coverage rows */
+.qdash-coverage-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.qdash-cov-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    gap: 0.3rem 1rem;
+    align-items: center;
+}
+
+.qdash-cov-header {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.qdash-cov-name {
+    font-size: 0.84rem;
+    color: var(--text-primary);
+    font-weight: 400;
+}
+
+.qdash-cov-ratio {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.qdash-cov-ratio-sep {
+    margin: 0 0.12em;
+    opacity: 0.5;
+}
+
+/* Progress bar track */
+.qdash-cov-track {
+    grid-column: 1;
+    height: 8px;
+    background: var(--bg-deep);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Fill bar — starts at 0, animated to --fill-width via JS */
+.qdash-cov-fill {
+    height: 100%;
+    width: 0;
+    border-radius: 4px;
+    transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+    position: relative;
+}
+
+/* Glow shimmer on the bar */
+.qdash-cov-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15));
+    border-radius: 0 4px 4px 0;
+}
+
+/* Color per section + level */
+.qdash-cov-fill-films.cov-excellent { background: linear-gradient(90deg, var(--accent-amber), #f0c060); }
+.qdash-cov-fill-films.cov-good { background: linear-gradient(90deg, #d4943a, var(--accent-amber)); }
+.qdash-cov-fill-films.cov-medium { background: linear-gradient(90deg, #c67a20, #d4943a); }
+.qdash-cov-fill-films.cov-poor { background: linear-gradient(90deg, #a85a18, #c67a20); }
+
+.qdash-cov-fill-series.cov-excellent { background: linear-gradient(90deg, var(--accent-blue), #7da8f5); }
+.qdash-cov-fill-series.cov-good { background: linear-gradient(90deg, #4a74c8, var(--accent-blue)); }
+.qdash-cov-fill-series.cov-medium { background: linear-gradient(90deg, #3d5fa3, #4a74c8); }
+.qdash-cov-fill-series.cov-poor { background: linear-gradient(90deg, #33497a, #3d5fa3); }
+
+.qdash-cov-fill-episodes.cov-excellent { background: linear-gradient(90deg, var(--accent-emerald), #6fdda7); }
+.qdash-cov-fill-episodes.cov-good { background: linear-gradient(90deg, #3baa72, var(--accent-emerald)); }
+.qdash-cov-fill-episodes.cov-medium { background: linear-gradient(90deg, #2e8a5c, #3baa72); }
+.qdash-cov-fill-episodes.cov-poor { background: linear-gradient(90deg, #246b48, #2e8a5c); }
+
+/* Percentage badge */
+.qdash-cov-pct {
+    grid-column: 2;
+    grid-row: 2;
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    min-width: 3rem;
+}
+
+.cov-pct-excellent { color: var(--accent-emerald); }
+.cov-pct-good { color: var(--accent-amber); }
+.cov-pct-medium { color: #d4943a; }
+.cov-pct-poor { color: var(--accent-rose); }
+
+/* ── Sidebar cards ── */
+
+.qdash-aside {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    position: sticky;
+    top: 84px;
+}
+
+.qdash-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    box-shadow: var(--shadow-card);
+}
+
+.qdash-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.qdash-card-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.qdash-card-icon-warn {
+    background: var(--accent-rose-dim);
+    color: var(--accent-rose);
+}
+
+.qdash-card-icon-ok {
+    background: var(--accent-emerald-dim);
+    color: var(--accent-emerald);
+}
+
+.qdash-card-title {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 400;
+    color: var(--text-primary);
+}
+
+.qdash-card-badge {
+    margin-left: auto;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.15rem 0.55rem;
+    border-radius: 10px;
+    background: var(--accent-emerald-dim);
+    color: var(--accent-emerald);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Suspect grid */
+.qdash-suspect-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.qdash-suspect-cell {
+    text-align: center;
+    padding: 0.6rem 0.25rem;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+}
+
+.qdash-suspect-total {
+    border-color: rgba(232, 93, 117, 0.2);
+    background: rgba(232, 93, 117, 0.04);
+}
+
+.qdash-suspect-num {
+    display: block;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+}
+
+.qdash-suspect-total .qdash-suspect-num {
+    color: var(--accent-rose);
+}
+
+.qdash-suspect-lbl {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Card link */
+.qdash-card-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--accent-amber);
+    text-decoration: none;
+    font-size: 0.84rem;
+    font-weight: 500;
+    transition: opacity 0.2s, gap 0.2s;
+}
+
+.qdash-card-link:hover {
+    opacity: 0.85;
+    gap: 0.55rem;
+}
+
+.qdash-card-empty {
+    color: var(--text-muted);
+    font-size: 0.84rem;
+    margin-bottom: 0.75rem;
+}
+
+/* Correction list */
+.qdash-correction-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    max-height: 360px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+
+.qdash-correction-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 0.82rem;
+}
+
+.qdash-correction-row:last-of-type {
+    border-bottom: none;
+}
+
+.qdash-corr-type {
+    font-size: 0.65rem;
+    padding: 0.12rem 0.45rem;
+    border-radius: 3px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+}
+
+.qdash-corr-type-movie {
+    background: var(--accent-amber-dim);
+    color: var(--accent-amber);
+}
+
+.qdash-corr-type-series {
+    background: var(--accent-blue-dim);
+    color: var(--accent-blue);
+}
+
+.qdash-corr-title {
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.qdash-corr-date {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.qdash-corr-more {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    padding-top: 0.5rem;
+    font-style: italic;
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 960px) {
+    .qdash-body {
+        grid-template-columns: 1fr;
+    }
+    .qdash-aside {
+        position: static;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .qdash-hero {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    .qdash-aside {
+        grid-template-columns: 1fr;
+    }
+    .qdash-section {
+        padding: 1.25rem 1rem;
+    }
+}

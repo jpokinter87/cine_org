@@ -1,9 +1,8 @@
 """
-Routes de la page Qualité — détection d'associations TMDB suspectes.
+Routes de la page Qualité — tableau de bord et détection d'associations TMDB suspectes.
 
-Affiche les films et séries dont l'association TMDB est potentiellement erronée,
-avec score de confiance et raisons. Progression SSE en temps réel.
-Les résultats sont mis en cache pour éviter de rescanner à chaque affichage.
+Dashboard qualité avec métriques de couverture enrichissement, résumé des
+associations suspectes (SSE avec cache), et historique des corrections.
 """
 
 import asyncio
@@ -15,11 +14,13 @@ from pathlib import Path
 from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
-from sqlmodel import select
+from sqlmodel import func, select
 
 from ...infrastructure.persistence.database import get_session
+
 from ...infrastructure.persistence.models import (
     ConfirmedAssociationModel,
+    EpisodeModel,
     MovieModel,
     SeriesModel,
 )
@@ -116,9 +117,108 @@ def _render_results(
     )
 
 
+def _count_coverage(session, model, fields: list[tuple[str, str]]) -> dict:
+    """Calcule les métriques de couverture pour un modèle donné."""
+    total = session.exec(select(func.count(model.id))).one()
+    metrics = []
+    for label, field_name in fields:
+        col = getattr(model, field_name)
+        if field_name in ("vote_average", "imdb_rating"):
+            count = session.exec(
+                select(func.count(model.id)).where(col.is_not(None), col > 0)
+            ).one()
+        else:
+            count = session.exec(
+                select(func.count(model.id)).where(col.is_not(None), col != "")
+            ).one()
+        pct = round(count / total * 100, 1) if total > 0 else 0
+        metrics.append({"label": label, "count": count, "total": total, "pct": pct})
+    return {"total": total, "metrics": metrics}
+
+
+@router.get("", response_class=HTMLResponse)
+@router.get("/", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """Tableau de bord qualité avec métriques de couverture et historique."""
+    session = next(get_session())
+    try:
+        # Couverture films
+        movie_coverage = _count_coverage(session, MovieModel, [
+            ("Poster", "poster_path"),
+            ("IMDb ID", "imdb_id"),
+            ("Réalisateur", "director"),
+            ("Casting", "cast_json"),
+            ("Fichier", "file_path"),
+            ("Résolution", "resolution"),
+            ("Synopsis", "overview"),
+            ("Note TMDB", "vote_average"),
+        ])
+
+        # Couverture séries
+        series_coverage = _count_coverage(session, SeriesModel, [
+            ("Poster", "poster_path"),
+            ("TMDB ID", "tmdb_id"),
+            ("TVDB ID", "tvdb_id"),
+            ("Synopsis", "overview"),
+            ("Créateur", "director"),
+            ("Casting", "cast_json"),
+        ])
+
+        # Couverture épisodes
+        episode_coverage = _count_coverage(session, EpisodeModel, [
+            ("Fichier", "file_path"),
+            ("Résolution", "resolution"),
+        ])
+
+        # Résumé associations suspectes (depuis le cache)
+        cached = _get_cache()
+        suspect_summary = None
+        if cached is not None:
+            suspect_summary = {
+                "total": len(cached),
+                "movies": sum(1 for r in cached if r.entity_type == "movie"),
+                "series": sum(1 for r in cached if r.entity_type == "series"),
+            }
+
+        # Historique des corrections (50 dernières)
+        confirmations = session.exec(
+            select(ConfirmedAssociationModel)
+            .order_by(ConfirmedAssociationModel.id.desc())
+            .limit(50)
+        ).all()
+
+        correction_history = []
+        for conf in confirmations:
+            entry = {
+                "entity_type": conf.entity_type,
+                "entity_id": conf.entity_id,
+                "confirmed_at": conf.confirmed_at,
+                "title": None,
+            }
+            if conf.entity_type == "movie":
+                movie = session.get(MovieModel, conf.entity_id)
+                if movie:
+                    entry["title"] = movie.title
+            elif conf.entity_type == "series":
+                series = session.get(SeriesModel, conf.entity_id)
+                if series:
+                    entry["title"] = series.title
+            correction_history.append(entry)
+
+        return templates.TemplateResponse(request, "quality/dashboard.html", {
+            "movie_coverage": movie_coverage,
+            "series_coverage": series_coverage,
+            "episode_coverage": episode_coverage,
+            "suspect_summary": suspect_summary,
+            "correction_history": correction_history,
+        })
+    finally:
+        session.close()
+
+
 @router.get("/suspicious", response_class=HTMLResponse)
 async def suspicious_page(request: Request):
-    """Page principale listant les associations suspectes."""
+    """Page listant les associations suspectes."""
     return templates.TemplateResponse(request, "quality/suspicious.html", {})
 
 

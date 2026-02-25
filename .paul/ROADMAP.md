@@ -19,8 +19,8 @@ CineOrg dispose d'un CLI complet et d'une interface web fonctionnelle avec donn�
 ## Current Milestone
 
 **v1.2 Gestion Associations** (v1.2.0)
-Status: In Progress
-Phases: 2 of 3 complete
+Status: Complete
+Phases: 4 of 4 complete
 
 ## Phases
 
@@ -29,7 +29,7 @@ Phases: 2 of 3 complete
 | 9 | Correction Manuelle Associations | 1/1 | Complete | 2026-02-24 |
 | 9b | Métadonnées Techniques & Filtres Avancés | 1/1 | Complete | 2026-02-25 |
 | 10 | Détection Automatique Erreurs | 1/1 | Complete | 2026-02-25 |
-| 11 | Tableau de Bord Qualité | TBD | Not started | - |
+| 11 | Tableau de Bord Qualité | 1/1 | Complete | 2026-02-25 |
 
 ## Phase Details
 
@@ -92,8 +92,9 @@ Phases: 2 of 3 complete
 - Statistiques de couverture par type (films/séries) et par champ (poster, crédits, ratings, IMDB ID)
 - Historique des corrections manuelles
 
-**Plans:** TBD (defined during /paul:plan)
+**Plans:**
+- Plan 01: Dashboard qualité — métriques couverture, résumé suspects, historique corrections (2 tasks + 1 checkpoint)
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-25 — Phase 9b + 10 complete*
+*Last updated: 2026-02-25 — v1.2 complete (all 4 phases)*

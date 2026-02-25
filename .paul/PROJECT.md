@@ -13,8 +13,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | Attribute | Value |
 |-----------|-------|
 | Version | 1.2 (CLI + Web + Enrichissement + Associations) |
-| Status | Production |
-| Last Updated | 2026-02-23 |
+| Status | Production — v1.2 complete |
+| Last Updated | 2026-02-25 |
 
 ## Requirements
 
@@ -45,8 +45,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-- [ ] Détection automatique d'associations erronées — Phase 10
-- [ ] Tableau de bord qualité des données — Phase 11
+(None — v1.2 complete)
 
 ### Planned (Next)
 
@@ -55,6 +54,9 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 ### Recently Validated (v1.2)
 
 - [x] Correction manuelle d'associations TMDB depuis la fiche web — Phase 9
+- [x] Métadonnées techniques, filtres avancés, pipeline enrichi — Phase 9b
+- [x] Détection automatique d'associations erronées (AssociationChecker + page suspectes SSE) — Phase 10
+- [x] Tableau de bord qualité (couverture enrichissement, résumé suspects, historique corrections) — Phase 11
 
 ### Out of Scope
 
@@ -132,4 +134,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-24 after Phase 9*
+*Last updated: 2026-02-25 after Phase 11 (v1.2 complete)*
