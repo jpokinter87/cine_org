@@ -224,6 +224,15 @@ function openPosterLightbox(src) {
         (next ? '<a href="' + next + '" class="lib-detail-nav-btn lib-detail-nav-next" title="Suivant (→)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/></svg></a>' : '<span></span>');
     var header = document.querySelector('.lib-detail-header');
     if (header) header.parentNode.insertBefore(nav, header);
+    /* Prefetch pages adjacentes */
+    [prev, next].forEach(function(url) {
+        if (url) {
+            var link = document.createElement('link');
+            link.rel = 'prefetch';
+            link.href = url;
+            document.head.appendChild(link);
+        }
+    });
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') { document.getElementById('poster-lightbox').classList.remove('active'); return; }
         if (document.querySelector('.reassociate-overlay')) return;

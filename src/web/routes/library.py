@@ -155,7 +155,7 @@ async def library_index(
     codec_audio: Optional[str] = None,
     search_mode: str = "title",
     sort: str = "title",
-    order: str = "asc",
+    order: str = "desc",
     page: int = 1,
 ):
     """Page principale de la bibliotheque avec filtres et pagination."""
@@ -427,12 +427,13 @@ async def library_index(
     return response
 
 
-def _find_movie_file(title: str, year: int | None) -> dict | None:
+def _find_movie_file(title: str, year: int | None, original_title: str | None = None) -> dict | None:
     """
-    Recherche le fichier d'un film dans video/Films/ par titre et annee.
+    Recherche le fichier d'un film dans video/Films/ par titre et annee,
+    puis en fallback dans les VideoFiles en DB par titre approche.
 
-    Utilise un glob sur l'annee pour limiter le scan, puis compare les titres
-    de maniere tolerante (caracteres speciaux ignores).
+    Strategie : file_path en DB, sinon resolution du symlink via glob,
+    sinon recherche dans VideoFileModel par titre approche (LIKE SQL).
 
     Returns:
         Dict avec symlink_path et storage_path, ou None si non trouve
@@ -443,41 +444,65 @@ def _find_movie_file(title: str, year: int | None) -> dict | None:
         settings = Settings()
         video_dir = Path(settings.video_dir) / "Films"
     except Exception:
-        return None
+        video_dir = None
 
-    if not video_dir.exists():
-        return None
-
-    if not year:
-        return None
-
-    # Normaliser le titre pour comparaison souple
     def _normalize(s: str) -> str:
         """Retire les caracteres speciaux pour comparaison."""
         return "".join(c.lower() for c in s if c.isalnum() or c == " ").strip()
 
-    norm_title = _normalize(title)
-    year_str = f"({year})"
+    # 1) Glob dans video/Films/ par titre + annee (exact)
+    if video_dir and video_dir.exists() and year:
+        norm_title = _normalize(title)
+        year_str = f"({year})"
+        for f in video_dir.rglob(f"*{year_str}*"):
+            if not f.is_file():
+                continue
+            fname = f.name
+            idx = fname.find(year_str)
+            if idx <= 0:
+                continue
+            file_title = fname[:idx].strip()
+            if _normalize(file_title) == norm_title:
+                try:
+                    storage_path = str(f.resolve()) if f.is_symlink() else None
+                except OSError:
+                    storage_path = None
+                return {"symlink_path": str(f), "storage_path": storage_path}
 
-    # Glob sur l'annee pour limiter le scan
-    for f in video_dir.rglob(f"*{year_str}*"):
-        if not f.is_file():
-            continue
-        # Extraire le titre du nom de fichier (avant "(annee)")
-        fname = f.name
-        idx = fname.find(year_str)
-        if idx <= 0:
-            continue
-        file_title = fname[:idx].strip()
-        if _normalize(file_title) == norm_title:
-            try:
-                storage_path = str(f.resolve()) if f.is_symlink() else None
-            except OSError:
-                storage_path = None
-            return {
-                "symlink_path": str(f),
-                "storage_path": storage_path,
-            }
+    # 2) Recherche dans VideoFileModel par titre approche
+    session = next(get_session())
+    try:
+        # Chercher avec le titre principal puis le titre original
+        search_titles = [title]
+        if original_title and original_title != title:
+            search_titles.append(original_title)
+
+        for search_title in search_titles:
+            # Extraire les mots significatifs (>= 3 chars) pour la recherche
+            words = [w for w in search_title.split() if len(w) >= 3]
+            if not words:
+                continue
+            # Utiliser le mot le plus long comme terme principal
+            main_word = max(words, key=len)
+            candidates = session.exec(
+                select(VideoFileModel)
+                .where(VideoFileModel.path.contains(main_word))
+                .where(VideoFileModel.path.contains("/Films/"))
+            ).all()
+
+            for vf in candidates:
+                fp = Path(vf.path)
+                fname_norm = _normalize(fp.stem)
+                title_norm = _normalize(search_title)
+                # Match si le titre normalise est contenu dans le nom de fichier
+                if title_norm in fname_norm or fname_norm.startswith(title_norm[:15]):
+                    return {
+                        "symlink_path": vf.symlink_path,
+                        "storage_path": str(vf.path),
+                        "video_file": vf,
+                    }
+    finally:
+        session.close()
 
     return None
 
@@ -513,7 +538,10 @@ async def movie_detail(request: Request, movie_id: int):
     # Si pas de file_path en DB, chercher dans video/Films/ par titre
     file_info = None
     if not movie.file_path and not video_file:
-        file_info = _find_movie_file(movie.title, movie.year)
+        file_info = _find_movie_file(movie.title, movie.year, movie.original_title)
+        # Si un VideoFile a ete trouve, l'utiliser pour les infos techniques
+        if file_info and file_info.get("video_file"):
+            video_file = file_info.pop("video_file")
 
     # Metadonnees techniques pour les cartouches
     resolution_label = _resolution_label(movie.resolution)
