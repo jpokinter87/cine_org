@@ -7,6 +7,7 @@ Completed milestone log for this project.
 | v1.0 Interface Web | 2026-02-23 | ~3 days | 5 phases, 8 plans |
 | v1.1 Enrichissement Données | 2026-02-24 | ~1 day | 3 phases, 3 plans |
 | v1.2 Gestion Associations | 2026-02-25 | ~2 days | 4 phases, 4 plans |
+| v1.3 Qualité & Fluidité | 2026-02-25 | ~1 day | 3 phases, 5 plans |
 
 ---
 
@@ -90,6 +91,42 @@ Completed milestone log for this project.
 | data-* attributes au lieu de onclick | Les apostrophes dans les titres cassaient le JS |
 | Durée en pourcentage (30%/15%) | Évite les faux positifs selon la durée du film |
 | Séries documentaires exclues | Identification trop difficile, hors périmètre |
+
+---
+
+## v1.3 Qualité & Fluidité
+
+**Completed:** 2026-02-25
+**Duration:** ~1 day
+
+### Stats
+
+| Metric | Value |
+|--------|-------|
+| Phases | 3 (12, 13, 14) |
+| Plans | 5 |
+| Files created | ~7 |
+| Files modified | ~20 |
+
+### Key Accomplishments
+
+- Tri bibliothèque normalisé : accents, ligatures (œ/æ), articles, caractères invisibles
+- Recherche unicode-aware avec variantes de ligatures
+- Enrichissement batch : link-movies (file_path), enrich-tech (métadonnées techniques), enrich-episode-titles (titres épisodes TVDB)
+- Code matching partagé CLI/web via pending_factory.py (factory functions standalone)
+- Package library/ découpé en 6 modules spécialisés (1250 lignes → 6 fichiers)
+- Boutons d'accès rapide guidant workflow → validation → transfert
+- Cohérence visuelle boutons page d'accueil
+
+### Key Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Ligatures par expansion explicite (œ→oe) | Plus simple et fiable que table Unicode |
+| Recherche SQL via OR sur variantes | Contourne limitation SQLite LIKE unicode |
+| Factory standalone pour code partagé | Plus simple qu'une classe abstraite, deps explicites |
+| Package library/ avec sous-routers | Découpage fichier monolithique en modules cohérents |
+| Boutons accès rapide plutôt que redirections auto | Respect du rythme utilisateur |
 
 ---
 
