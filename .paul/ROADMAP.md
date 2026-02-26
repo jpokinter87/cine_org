@@ -7,15 +7,15 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 ## Current Milestone
 
 **v1.4 Expérience Utilisateur** (v1.4.0)
-Status: In Progress
-Phases: 1 of 2 complete
+Status: Complete
+Phases: 2 of 2 complete
 
 ## Phases
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 15 | Que Regarder Ce Soir | 2/2 | Complete | 2026-02-26 |
-| 16 | Lecteur Distant | TBD | Not started | - |
+| 16 | Lecteur Distant | 2/2 | Complete | 2026-02-26 |
 
 ## Phase Details
 
@@ -94,4 +94,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-26 — Phase 15 complete*
+*Last updated: 2026-02-26 — v1.4 complete (Phase 16)*

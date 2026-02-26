@@ -23,7 +23,7 @@
         Les modifications seront prises en compte au prochain redémarrage du serveur
     </div>
 
-    <form method="post" action="/config" class="config-form">
+    <form method="post" action="/config" class="config-form" id="config-form">
         {% for section in sections %}
         <fieldset class="config-section" id="section-{{ section.id }}">
             <legend class="config-section-legend">
@@ -127,13 +127,23 @@
         </fieldset>
         {% endfor %}
 
-        <div class="config-actions">
-            <button type="submit" class="config-save-btn">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                Enregistrer
-            </button>
-        </div>
     </form>
+
+    {# Section Lecteur — profils gérés via HTMX (hors du formulaire .env) #}
+    <fieldset class="config-section" id="section-player">
+        <legend class="config-section-legend">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Lecteur
+        </legend>
+        {% include "config/player_profiles.html" %}
+    </fieldset>
+
+    <div class="config-actions">
+        <button type="submit" form="config-form" class="config-save-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Enregistrer
+        </button>
+    </div>
 </div>
 
 <script>
@@ -160,6 +170,25 @@ if (toast) {
         toast.style.transform = 'translateY(-10px)';
         setTimeout(function() { toast.remove(); }, 300);
     }, 4000);
+}
+
+// Profils lecteur — toggle édition
+function toggleProfileEdit(btn) {
+    var card = btn.closest('.profile-card');
+    var form = card.querySelector('.profile-edit-form');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleProfileAdd() {
+    var form = document.getElementById('profile-add-form');
+    var btn = document.getElementById('profile-add-toggle-btn');
+    if (form.style.display === 'none') {
+        form.style.display = 'block';
+        btn.style.display = 'none';
+    } else {
+        form.style.display = 'none';
+        btn.style.display = '';
+    }
 }
 </script>
 {% endblock %}

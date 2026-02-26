@@ -1,0 +1,152 @@
+<div class="config-profiles" id="player-profiles">
+    {# Liste des profils #}
+    <div class="profiles-list">
+        {% for profile in profiles %}
+        <div class="profile-card {% if profile.name == active_profile %}profile-active{% endif %}"
+             id="profile-{{ loop.index }}">
+            <div class="profile-header">
+                <button class="profile-select-btn {% if profile.name == active_profile %}selected{% endif %}"
+                        hx-post="/config/player-profiles/active"
+                        hx-vals='{"name": "{{ profile.name }}"}'
+                        hx-target="#player-profiles"
+                        hx-swap="outerHTML"
+                        title="Activer ce profil">
+                    <span class="profile-radio">
+                        {% if profile.name == active_profile %}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+                        {% else %}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>
+                        {% endif %}
+                    </span>
+                    <span class="profile-name">{{ profile.name }}</span>
+                    {% if profile.target == 'remote' %}
+                    <span class="profile-badge profile-badge-remote">distant</span>
+                    {% else %}
+                    <span class="profile-badge profile-badge-local">local</span>
+                    {% endif %}
+                </button>
+                <div class="profile-actions">
+                    <button type="button" class="profile-edit-toggle"
+                            onclick="toggleProfileEdit(this)"
+                            title="Modifier">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                    {% if profile.name != 'Local' %}
+                    <button class="profile-delete-btn"
+                            hx-post="/config/player-profiles/{{ profile.name }}/delete"
+                            hx-target="#player-profiles"
+                            hx-swap="outerHTML"
+                            hx-confirm="Supprimer le profil « {{ profile.name }} » ?"
+                            title="Supprimer">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="profile-detail">
+                <span class="profile-info">{{ profile.command }}</span>
+                {% if profile.target == 'remote' and profile.ssh_host %}
+                <span class="profile-info">→ {{ profile.ssh_user }}@{{ profile.ssh_host }}</span>
+                {% endif %}
+            </div>
+
+            {# Formulaire d'édition (caché par défaut) #}
+            <div class="profile-edit-form" style="display:none">
+                <form hx-post="/config/player-profiles/{{ profile.name }}/edit"
+                      hx-target="#player-profiles"
+                      hx-swap="outerHTML">
+                    <div class="profile-form-grid">
+                        <div class="profile-form-field">
+                            <label>Nom</label>
+                            <input type="text" name="name" value="{{ profile.name }}" class="config-input"
+                                   {% if profile.name == 'Local' %}readonly{% endif %}>
+                        </div>
+                        <div class="profile-form-field">
+                            <label>Programme</label>
+                            <input type="text" name="command" value="{{ profile.command }}" class="config-input" placeholder="mpv">
+                        </div>
+                        <div class="profile-form-field">
+                            <label>Cible</label>
+                            <select name="target" class="config-input config-select">
+                                <option value="local" {% if profile.target == 'local' %}selected{% endif %}>local</option>
+                                <option value="remote" {% if profile.target == 'remote' %}selected{% endif %}>remote</option>
+                            </select>
+                        </div>
+                        <div class="profile-form-field">
+                            <label>Hôte SSH</label>
+                            <input type="text" name="ssh_host" value="{{ profile.ssh_host or '' }}" class="config-input" placeholder="192.168.1.20">
+                        </div>
+                        <div class="profile-form-field">
+                            <label>Utilisateur SSH</label>
+                            <input type="text" name="ssh_user" value="{{ profile.ssh_user or '' }}" class="config-input" placeholder="user">
+                        </div>
+                        <div class="profile-form-field">
+                            <label>Préfixe chemin local</label>
+                            <input type="text" name="local_path_prefix" value="{{ profile.local_path_prefix or '' }}" class="config-input" placeholder="/home/jp/Videos">
+                        </div>
+                        <div class="profile-form-field">
+                            <label>Préfixe chemin distant</label>
+                            <input type="text" name="remote_path_prefix" value="{{ profile.remote_path_prefix or '' }}" class="config-input" placeholder="/mnt/nas">
+                        </div>
+                    </div>
+                    <div class="profile-form-actions">
+                        <button type="submit" class="profile-save-btn">Enregistrer</button>
+                        <button type="button" class="profile-cancel-btn" onclick="toggleProfileEdit(this)">Annuler</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {# Bouton Ajouter #}
+    <button type="button" class="profile-add-toggle" onclick="toggleProfileAdd()" id="profile-add-toggle-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Ajouter un profil
+    </button>
+
+    {# Formulaire d'ajout (caché par défaut) #}
+    <div class="profile-edit-form profile-add-form" id="profile-add-form" style="display:none">
+        <form hx-post="/config/player-profiles/add"
+              hx-target="#player-profiles"
+              hx-swap="outerHTML">
+            <div class="profile-form-grid">
+                <div class="profile-form-field">
+                    <label>Nom</label>
+                    <input type="text" name="name" class="config-input" placeholder="Xubuntu salon" required>
+                </div>
+                <div class="profile-form-field">
+                    <label>Programme</label>
+                    <input type="text" name="command" class="config-input" value="mpv" placeholder="mpv">
+                </div>
+                <div class="profile-form-field">
+                    <label>Cible</label>
+                    <select name="target" class="config-input config-select">
+                        <option value="local">local</option>
+                        <option value="remote">remote</option>
+                    </select>
+                </div>
+                <div class="profile-form-field">
+                    <label>Hôte SSH</label>
+                    <input type="text" name="ssh_host" class="config-input" placeholder="192.168.1.20">
+                </div>
+                <div class="profile-form-field">
+                    <label>Utilisateur SSH</label>
+                    <input type="text" name="ssh_user" class="config-input" placeholder="user">
+                </div>
+                <div class="profile-form-field">
+                    <label>Préfixe chemin local</label>
+                    <input type="text" name="local_path_prefix" class="config-input" placeholder="/home/jp/Videos">
+                </div>
+                <div class="profile-form-field">
+                    <label>Préfixe chemin distant</label>
+                    <input type="text" name="remote_path_prefix" class="config-input" placeholder="/mnt/nas">
+                </div>
+            </div>
+            <div class="profile-form-actions">
+                <button type="submit" class="profile-save-btn">Ajouter</button>
+                <button type="button" class="profile-cancel-btn" onclick="toggleProfileAdd()">Annuler</button>
+            </div>
+        </form>
+    </div>
+</div>

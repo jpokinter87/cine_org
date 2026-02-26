@@ -4030,6 +4030,234 @@ a.tech-badge-codec:hover {
 }
 
 /* ═══════════════════════════════════════════
+   Config — Profils lecteur
+   ═══════════════════════════════════════════ */
+
+.config-profiles {
+    padding: 0.5rem 0;
+}
+
+.profiles-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.profile-card {
+    background: var(--bg-darker, #1a1a2e);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md, 8px);
+    padding: 0.75rem 1rem;
+    transition: border-color 0.2s;
+}
+
+.profile-card.profile-active {
+    border-color: var(--accent, #d4a853);
+}
+
+.profile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.profile-select-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: none;
+    border: none;
+    color: var(--text);
+    cursor: pointer;
+    padding: 0.25rem 0;
+    font-size: 0.95rem;
+}
+
+.profile-select-btn:hover {
+    color: var(--accent, #d4a853);
+}
+
+.profile-select-btn.selected {
+    color: var(--accent, #d4a853);
+}
+
+.profile-radio {
+    display: flex;
+    align-items: center;
+    opacity: 0.5;
+}
+
+.profile-select-btn.selected .profile-radio {
+    opacity: 1;
+    color: var(--accent, #d4a853);
+}
+
+.profile-name {
+    font-family: var(--font-display, 'Instrument Serif', serif);
+    font-size: 1.05rem;
+}
+
+.profile-badge {
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-family: var(--font-body, 'DM Sans', sans-serif);
+}
+
+.profile-badge-local {
+    background: rgba(100, 200, 100, 0.15);
+    color: #7bc67b;
+}
+
+.profile-badge-remote {
+    background: rgba(100, 150, 255, 0.15);
+    color: #8ab4ff;
+}
+
+.profile-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.profile-edit-toggle,
+.profile-delete-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.3rem;
+    border-radius: 4px;
+    opacity: 0.5;
+    transition: opacity 0.2s, color 0.2s;
+}
+
+.profile-edit-toggle:hover,
+.profile-delete-btn:hover {
+    opacity: 1;
+}
+
+.profile-delete-btn:hover {
+    color: #e74c3c;
+}
+
+.profile-detail {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.25rem 0 0 1.75rem;
+}
+
+.profile-info {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono, monospace);
+}
+
+/* Formulaire édition/ajout profil */
+.profile-edit-form {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+}
+
+.profile-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem 1rem;
+}
+
+.profile-form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.profile-form-field label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.profile-form-field .config-input {
+    font-size: 0.85rem;
+    padding: 0.35rem 0.5rem;
+}
+
+.profile-form-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    justify-content: flex-end;
+}
+
+.profile-save-btn {
+    background: var(--accent, #d4a853);
+    color: var(--bg-darker, #0f0f1a);
+    border: none;
+    padding: 0.4rem 1rem;
+    border-radius: var(--radius-sm, 4px);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.profile-save-btn:hover {
+    filter: brightness(1.1);
+}
+
+.profile-cancel-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 0.4rem 1rem;
+    border-radius: var(--radius-sm, 4px);
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.profile-cancel-btn:hover {
+    border-color: var(--text-muted);
+}
+
+.profile-add-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.75rem;
+    background: none;
+    border: 1px dashed var(--border);
+    color: var(--text-muted);
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-md, 8px);
+    cursor: pointer;
+    font-size: 0.85rem;
+    width: 100%;
+    justify-content: center;
+    transition: border-color 0.2s, color 0.2s;
+}
+
+.profile-add-toggle:hover {
+    border-color: var(--accent, #d4a853);
+    color: var(--accent, #d4a853);
+}
+
+.profile-add-form {
+    margin-top: 0.75rem;
+    background: var(--bg-darker, #1a1a2e);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md, 8px);
+    padding: 1rem;
+}
+
+@media (max-width: 768px) {
+    .profile-form-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ═══════════════════════════════════════════
    Maintenance — Diagnostics vidéothèque
    ═══════════════════════════════════════════ */
 

@@ -13,7 +13,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | Attribute | Value |
 |-----------|-------|
 | Version | 1.4 (CLI + Web + Expérience Utilisateur) |
-| Status | Production — Phase 15 complete, Phase 16 planned |
+| Status | Production — v1.4 complete |
 | Last Updated | 2026-02-26 |
 
 ## Requirements
@@ -60,14 +60,15 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
   - Tag "déjà vu" et note étoiles sur fiches films et séries — Phase 15
   - Page "Surprends-moi" avec suggestion aléatoire et filtres (genre, durée, note, type) — Phase 15
   - Bouton accueil avec animation glow ambrée — Phase 15
+- [x] Lecteur distant (v1.4)
+  - Lecteur vidéo configurable : programme (mpv/vlc), cible (local/remote), SSH — Phase 16
+  - Profils lecteur nommés avec CRUD et sélection rapide — Phase 16
+  - Mapping de chemins cross-platform (Linux→Linux, Linux→Windows) — Phase 16
+  - Migration transparente des anciens paramètres .env vers profils JSON — Phase 16
 
 ### Active (In Progress)
 
-(None — ready to plan Phase 16)
-
-### Planned (Next)
-
-- [ ] Lecteur distant configurable : mpv/vlc, machine cible LAN, SSH — Phase 16
+(None — v1.4 complete)
 
 ### Out of Scope
 
@@ -129,6 +130,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | Factory standalone pour code partagé CLI/web | Plus simple qu'une classe abstraite, deps passées explicitement | 2026-02-25 | Active |
 | Package library/ avec sous-routers | Découpage fichier 1250 lignes en modules cohérents | 2026-02-25 | Active |
 | Boutons accès rapide plutôt que redirections auto | Respect du rythme utilisateur, pas de timer ni countdown | 2026-02-25 | Active |
+| Profils lecteur JSON plutôt que .env | Basculement rapide entre machines sans redémarrer | 2026-02-26 | Active |
+| SSH BatchMode=yes + ConnectTimeout=5 | Évite les blocages interactifs, erreurs rapides | 2026-02-26 | Active |
 
 ## Success Metrics
 
@@ -152,4 +155,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-25 after Phase 14 (workflow fluide)*
+*Last updated: 2026-02-26 after Phase 16 (lecteur distant)*

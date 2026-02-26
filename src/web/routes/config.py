@@ -11,6 +11,13 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from ...config import Settings, _ENV_FILE
+from ...player_profiles import (
+    add_profile,
+    delete_profile,
+    load_profiles,
+    set_active_profile,
+    update_profile,
+)
 from ..deps import templates
 
 router = APIRouter()
@@ -181,6 +188,7 @@ async def config_page(request: Request, saved: int = 0):
     """Affiche la page de configuration."""
     settings = Settings()
     sections = _build_field_data(settings)
+    profiles_data = load_profiles()
 
     return templates.TemplateResponse(
         request,
@@ -188,6 +196,8 @@ async def config_page(request: Request, saved: int = 0):
         {
             "sections": sections,
             "saved": saved == 1,
+            "profiles": profiles_data.get("profiles", []),
+            "active_profile": profiles_data.get("active", "Local"),
         },
     )
 
@@ -238,3 +248,70 @@ async def config_save(request: Request):
         _write_env(updates)
 
     return RedirectResponse(url="/config?saved=1", status_code=303)
+
+
+# ── Routes HTMX pour les profils lecteur ────────────────────────────
+
+def _profiles_fragment(request: Request) -> str:
+    """Génère le fragment HTML de la section profils lecteur."""
+    profiles_data = load_profiles()
+    return templates.TemplateResponse(
+        request,
+        "config/player_profiles.html",
+        {
+            "profiles": profiles_data.get("profiles", []),
+            "active_profile": profiles_data.get("active", "Local"),
+        },
+    )
+
+
+@router.post("/config/player-profiles/active")
+async def profile_set_active(request: Request):
+    """Change le profil actif."""
+    form = await request.form()
+    name = form.get("name", "")
+    if name:
+        set_active_profile(name)
+    return _profiles_fragment(request)
+
+
+@router.post("/config/player-profiles/add")
+async def profile_add(request: Request):
+    """Ajoute un nouveau profil."""
+    form = await request.form()
+    profile = {
+        "name": form.get("name", "").strip(),
+        "command": form.get("command", "mpv").strip() or "mpv",
+        "target": form.get("target", "local"),
+        "ssh_host": form.get("ssh_host", "").strip() or None,
+        "ssh_user": form.get("ssh_user", "").strip() or None,
+        "local_path_prefix": form.get("local_path_prefix", "").strip() or None,
+        "remote_path_prefix": form.get("remote_path_prefix", "").strip() or None,
+    }
+    if profile["name"]:
+        add_profile(profile)
+    return _profiles_fragment(request)
+
+
+@router.post("/config/player-profiles/{name}/edit")
+async def profile_edit(request: Request, name: str):
+    """Modifie un profil existant."""
+    form = await request.form()
+    profile = {
+        "name": form.get("name", name).strip(),
+        "command": form.get("command", "mpv").strip() or "mpv",
+        "target": form.get("target", "local"),
+        "ssh_host": form.get("ssh_host", "").strip() or None,
+        "ssh_user": form.get("ssh_user", "").strip() or None,
+        "local_path_prefix": form.get("local_path_prefix", "").strip() or None,
+        "remote_path_prefix": form.get("remote_path_prefix", "").strip() or None,
+    }
+    update_profile(name, profile)
+    return _profiles_fragment(request)
+
+
+@router.post("/config/player-profiles/{name}/delete")
+async def profile_delete(request: Request, name: str):
+    """Supprime un profil (sauf 'Local')."""
+    delete_profile(name)
+    return _profiles_fragment(request)
