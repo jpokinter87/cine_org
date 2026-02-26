@@ -2,54 +2,75 @@
 
 ## Overview
 
-CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec données enrichies, un système de gestion des associations TMDB, des données nettoyées, un code refactoré et un workflow fluide. Le prochain objectif est d'améliorer l'expérience utilisateur au quotidien : suggestion de films et lecture à distance.
+CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec données enrichies, un système de gestion des associations TMDB, des données nettoyées, un code refactoré, un workflow fluide, une suggestion de films et un lecteur distant. Le prochain objectif est de corriger les irritants UX identifiés pendant l'utilisation quotidienne.
 
 ## Current Milestone
 
-**v1.4 Expérience Utilisateur** (v1.4.0)
-Status: Complete
-Phases: 2 of 2 complete
+**v1.5 Polish & Corrections UX** (v1.5.0)
+Status: In Progress
+Phases: 1 of 3 complete
 
 ## Phases
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
-| 15 | Que Regarder Ce Soir | 2/2 | Complete | 2026-02-26 |
-| 16 | Lecteur Distant | 2/2 | Complete | 2026-02-26 |
+| 17 | Visionner Surprends-moi | 1 | Complete | 2026-02-26 |
+| 18 | Ré-association Transfert | TBD | Not started | - |
+| 19 | Config Accordéon | TBD | Not started | - |
 
 ## Phase Details
 
-### Phase 15: Que Regarder Ce Soir
+### Phase 17: Visionner Surprends-moi
 
-**Goal:** Ajouter une fonctionnalité "Surprends-moi" pour suggérer un film à regarder, avec tags "déjà vu" et notes étoiles
-**Depends on:** v1.3 (bibliothèque avec métadonnées riches)
-**Research:** Possible (algorithme de suggestion, UX du wizard)
+**Goal:** Ajouter le bouton Visionner sur les fiches de suggestion de la page Surprends-moi
+**Depends on:** Phase 16 (système de profils lecteur)
 
 **Scope:**
-- Tag "déjà vu" en DB (toggle depuis la fiche film)
-- Note personnelle en étoiles (1-5) depuis la fiche film
-- Page/bouton "Surprends-moi" avec filtres optionnels (genre, durée dispo, humeur)
-- Algorithme de suggestion basé sur la bibliothèque (exclut "déjà vu" sauf bonne note)
-- Bouton d'accès rapide sur la page d'accueil (4ème bouton)
+- Bouton play identique à celui des fiches détail (utilise _play_button_html existant)
+- Lancement de la lecture directement depuis la page suggestion sans la quitter
+- Polling du statut de lecture (identique aux fiches détail)
 
 **Plans:** TBD (defined during /paul:plan)
 
-### Phase 16: Lecteur Distant
+### Phase 18: Ré-association Transfert
 
-**Goal:** Rendre le lecteur vidéo configurable (programme et machine cible) pour lancer la lecture à distance via SSH
-**Depends on:** Phase 15 (le lecteur peut être lancé depuis la suggestion)
-**Research:** Likely (mécanisme SSH, compatibilité Windows/Linux/Mac)
+**Goal:** Permettre de renvoyer un fichier en validation depuis la page transfert si l'auto-validation était erronée
+**Depends on:** Aucun
 
 **Scope:**
-- Configuration du lecteur : choix du programme (mpv, vlc, autre exécutable)
-- Configuration de la machine cible : locale (défaut) ou distante (IP/hostname LAN)
-- Lancement distant via SSH avec authentification par clé
-- Page de configuration enrichie avec paramètres lecteur
-- Documentation prérequis SSH (activation OpenSSH Server sur Windows)
+- Cases à cocher sur les fichiers en attente de transfert
+- Bouton pour renvoyer les fichiers sélectionnés en phase de validation
+- Suppression de la validation automatique erronée
+- Retour au workflow normal de validation manuelle
+
+**Plans:** TBD (defined during /paul:plan)
+
+### Phase 19: Config Accordéon
+
+**Goal:** Restructurer la page /config avec des sous-sections pliables pour réduire le scroll
+**Depends on:** Aucun
+
+**Scope:**
+- Chaque section (Répertoires, Base de données, Clés API, Traitement, Journalisation, Lecteur) est pliable/dépliable
+- CSS pur (details/summary) ou JS minimal
+- Section active ouverte par défaut, les autres fermées
+- Cohérence avec le thème sombre existant
 
 **Plans:** TBD (defined during /paul:plan)
 
 ## Completed Milestones
+
+<details>
+<summary>v1.4 Expérience Utilisateur — 2026-02-26 (2 phases)</summary>
+
+| Phase | Name | Plans | Completed |
+|-------|------|-------|-----------|
+| 15 | Que Regarder Ce Soir | 2/2 | 2026-02-26 |
+| 16 | Lecteur Distant | 2/2 | 2026-02-26 |
+
+Archive: `.paul/milestones/v1.4-ROADMAP.md`
+
+</details>
 
 <details>
 <summary>v1.3 Qualité & Fluidité — 2026-02-25 (3 phases)</summary>
@@ -94,4 +115,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-26 — v1.4 complete (Phase 16)*
+*Last updated: 2026-02-26 — Phase 17 complete*

@@ -5,26 +5,26 @@
 See: .paul/PROJECT.md (updated 2026-02-26)
 
 **Core value:** Organiser et renommer automatiquement une vidéothèque personnelle à partir des téléchargements
-**Current focus:** v1.4 Expérience Utilisateur — Complete
+**Current focus:** v1.5 Polish & Corrections UX — Phase 18
 
 ## Current Position
 
-Milestone: v1.4 Expérience Utilisateur — Complete
-Phase: 16 of 16 — Lecteur Distant — Complete
-Plan: 16-02 complete (profils lecteur)
-Status: Milestone v1.4 complete
-Last activity: 2026-02-26 — Phase 16 complete, v1.4 milestone closed
+Milestone: v1.5 Polish & Corrections UX
+Phase: 18 of 19 — Ré-association Transfert — Not started
+Plan: None yet
+Status: Ready for /paul:plan
+Last activity: 2026-02-26 — Phase 17 complete, transition done
 
 Progress:
-- v1.4: [██████████] 100% (2/2 phases)
-- Phase 16: [██████████] 100% (2/2 plans)
+- v1.5: [███░░░░░░░] 33% (1/3 phases)
+- Phase 18: [░░░░░░░░░░] 0%
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop complete — milestone v1.4 closed]
+  ○        ○        ○     [Ready for new plan]
 ```
 
 ## Accumulated Context
@@ -33,39 +33,33 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Web = complément du CLI, jamais un remplacement
 - Stack : FastAPI + Jinja2 + HTMX (pas de SPA)
 - CSS custom thème sombre (Instrument Serif + DM Sans)
-- Ligatures traitées par expansion explicite (œ→oe, æ→ae)
-- Recherche SQL via OR sur variantes (contourne limitation SQLite LIKE unicode)
-- Code partagé CLI/web via factory functions standalone dans src/services/workflow/
-- Package library/ avec sous-routers FastAPI pour découpage routes web
-- Boutons accès rapide plutôt que redirections auto (respect du rythme utilisateur)
-- Extension watched/rating aux séries (cohérence UX films + séries)
-- Suggestion : random parmi éligibles, pas de ML — simple et efficace
-- Lecteur distant : SSH + mapping de chemins (pas de streaming)
 - Profils lecteur JSON plutôt que .env (basculement rapide entre machines)
 - SSH BatchMode=yes + ConnectTimeout=5 (erreurs rapides et claires)
-- extra=ignore dans Settings pour tolérer les anciens champs player_* du .env
+- Route series/play cherche le premier épisode (S01E01) avec fichier
 
 ### Deferred Issues
 - 1260 films sans file_path (noms trop différents pour match exact)
 - 367 épisodes sans titre (262 non trouvés TVDB + 105 sans tvdb_id)
 - Symlinks épisodes ne reflètent pas les nouveaux titres
-- Ré-association in extremis depuis la page transfert (cases à cocher pour renvoyer en validation)
-- Bouton Visionner sur les fiches du mode Surprends-moi
-- Page /config trop longue : restructurer avec sous-sections pliables (accordéon)
 - Test lecteur distant sur machine Windows (stand-by)
+- Atiye / The Gift : deux tvdb_id distincts (372912/433737) pour la même série — à traiter Phase 18
 
 ### Blockers/Concerns
 None.
 
+### Bug Fixes (cette session)
+- QueuePool exhaustion dans batch_builder.py : repositories instanciés hors boucle (fix appliqué, à commiter)
+
 ### Git State
-Last commit: 187006e feat(16-lecteur-distant): lecteur configurable + profils nommés — phase complete
+Last commit: 87d8d02 feat(16-lecteur-distant): lecteur configurable + profils nommés — phase complete
 Branch: master
+Uncommitted: Phase 17 + fix batch_builder.py
 
 ## Session Continuity
 
 Last session: 2026-02-26
-Stopped at: v1.4 milestone complete
-Next action: /paul:complete-milestone or plan next milestone
+Stopped at: Phase 17 complete, transition done
+Next action: Run /paul:plan for Phase 18 or commit Phase 17 changes
 Resume file: .paul/ROADMAP.md
 
 ---

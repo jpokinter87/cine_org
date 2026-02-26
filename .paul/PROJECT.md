@@ -12,8 +12,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 1.4 (CLI + Web + Expérience Utilisateur) |
-| Status | Production — v1.4 complete |
+| Version | 1.5 (CLI + Web + Polish UX) |
+| Status | Production — v1.5 in progress |
 | Last Updated | 2026-02-26 |
 
 ## Requirements
@@ -65,10 +65,14 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
   - Profils lecteur nommés avec CRUD et sélection rapide — Phase 16
   - Mapping de chemins cross-platform (Linux→Linux, Linux→Windows) — Phase 16
   - Migration transparente des anciens paramètres .env vers profils JSON — Phase 16
+- [x] Visionner Surprends-moi (v1.5)
+  - Bouton Visionner sur page Surprends-moi (films et séries) — Phase 17
+  - Route series/play → premier épisode (S01E01) avec fichier — Phase 17
 
 ### Active (In Progress)
 
-(None — v1.4 complete)
+- [ ] Ré-association in extremis en phase transfert — Phase 18
+- [ ] Page config avec sous-sections pliables — Phase 19
 
 ### Out of Scope
 
@@ -155,4 +159,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-26 after Phase 16 (lecteur distant)*
+*Last updated: 2026-02-26 after Phase 17 (visionner surprends-moi)*

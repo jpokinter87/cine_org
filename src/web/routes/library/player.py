@@ -10,7 +10,9 @@ from fastapi.responses import HTMLResponse, Response
 
 from ....player_profiles import get_active_profile
 from ....infrastructure.persistence.database import get_session
-from ....infrastructure.persistence.models import EpisodeModel, MovieModel
+from sqlmodel import select
+
+from ....infrastructure.persistence.models import EpisodeModel, MovieModel, SeriesModel
 from .helpers import _find_movie_file
 
 router = APIRouter()
@@ -221,3 +223,40 @@ async def episode_play(request: Request, episode_id: int):
 
     pid, _ = _launch_player(resolved)
     return HTMLResponse(_playing_html(pid, "episodes", episode_id))
+
+
+@router.post("/series/{series_id}/play")
+async def series_play(request: Request, series_id: int):
+    """Lance le lecteur pour le premier episode disponible d'une serie."""
+    session = next(get_session())
+    try:
+        series = session.get(SeriesModel, series_id)
+        if not series:
+            return Response(status_code=404)
+        # Chercher le premier episode avec fichier (S01E01 en priorite)
+        episode = session.exec(
+            select(EpisodeModel)
+            .where(
+                EpisodeModel.series_id == series_id,
+                EpisodeModel.file_path.is_not(None),  # type: ignore[union-attr]
+            )
+            .order_by(EpisodeModel.season_number, EpisodeModel.episode_number)
+        ).first()
+        if not episode:
+            return HTMLResponse(
+                "<p class='reassociate-empty'>Aucun épisode avec fichier disponible</p>",
+                status_code=404,
+            )
+        file_path = episode.file_path
+    finally:
+        session.close()
+
+    resolved = _resolve_video_path(file_path)
+    if not resolved:
+        return HTMLResponse(
+            "<p class='reassociate-empty'>Fichier vidéo introuvable</p>",
+            status_code=404,
+        )
+
+    pid, _ = _launch_player(resolved)
+    return HTMLResponse(_playing_html(pid, "series", series_id))

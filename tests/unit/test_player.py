@@ -3,6 +3,9 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+from fastapi.testclient import TestClient
+
 from src.web.routes.library.player import (
     _launch_player,
     _map_path,
@@ -160,3 +163,83 @@ class TestLaunchPlayer:
 
         assert pid == 43
         assert is_remote is False
+
+
+class TestSeriesPlay:
+    """Tests de la route POST /library/series/{id}/play."""
+
+    @patch("src.web.routes.library.player._launch_player")
+    @patch("src.web.routes.library.player._resolve_video_path")
+    @patch("src.web.routes.library.player.get_session")
+    def test_lance_premier_episode(self, mock_get_session, mock_resolve, mock_launch):
+        """Lance le premier épisode (S01E01) ayant un fichier."""
+        from src.infrastructure.persistence.models import EpisodeModel, SeriesModel
+
+        # Simuler une série avec épisodes
+        mock_series = MagicMock(spec=SeriesModel)
+        mock_series.id = 1
+
+        mock_ep = MagicMock(spec=EpisodeModel)
+        mock_ep.file_path = "/path/to/S01E01.mkv"
+        mock_ep.id = 10
+
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_series
+        mock_session.exec.return_value.first.return_value = mock_ep
+        mock_get_session.return_value = iter([mock_session])
+
+        mock_resolve.return_value = Path("/path/to/S01E01.mkv")
+        mock_launch.return_value = (999, False)
+
+        from fastapi import FastAPI
+        from src.web.routes.library.player import router
+
+        app = FastAPI()
+        app.include_router(router, prefix="/library")
+        client = TestClient(app)
+
+        resp = client.post("/library/series/1/play")
+        assert resp.status_code == 200
+        assert "Lecture en cours" in resp.text
+        mock_launch.assert_called_once_with(Path("/path/to/S01E01.mkv"))
+
+    @patch("src.web.routes.library.player.get_session")
+    def test_serie_introuvable_retourne_404(self, mock_get_session):
+        """Série inexistante retourne 404."""
+        mock_session = MagicMock()
+        mock_session.get.return_value = None
+        mock_get_session.return_value = iter([mock_session])
+
+        from fastapi import FastAPI
+        from src.web.routes.library.player import router
+
+        app = FastAPI()
+        app.include_router(router, prefix="/library")
+        client = TestClient(app)
+
+        resp = client.post("/library/series/999/play")
+        assert resp.status_code == 404
+
+    @patch("src.web.routes.library.player.get_session")
+    def test_aucun_episode_avec_fichier(self, mock_get_session):
+        """Série sans épisode ayant un fichier retourne erreur."""
+        from src.infrastructure.persistence.models import SeriesModel
+
+        mock_series = MagicMock(spec=SeriesModel)
+        mock_series.id = 1
+
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_series
+        mock_session.exec.return_value.first.return_value = None
+        mock_get_session.return_value = iter([mock_session])
+
+        from fastapi import FastAPI
+        from src.web.routes.library.player import router
+
+        app = FastAPI()
+        app.include_router(router, prefix="/library")
+        client = TestClient(app)
+
+        resp = client.post("/library/series/1/play")
+        assert resp.status_code == 404
+        assert "Aucun épisode" in resp.text

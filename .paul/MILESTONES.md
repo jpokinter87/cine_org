@@ -8,6 +8,41 @@ Completed milestone log for this project.
 | v1.1 Enrichissement Données | 2026-02-24 | ~1 day | 3 phases, 3 plans |
 | v1.2 Gestion Associations | 2026-02-25 | ~2 days | 4 phases, 4 plans |
 | v1.3 Qualité & Fluidité | 2026-02-25 | ~1 day | 3 phases, 5 plans |
+| v1.4 Expérience Utilisateur | 2026-02-26 | ~1 day | 2 phases, 4 plans |
+
+---
+
+## v1.4 Expérience Utilisateur
+
+**Completed:** 2026-02-26
+**Duration:** ~1 day
+
+### Stats
+
+| Metric | Value |
+|--------|-------|
+| Phases | 2 (15, 16) |
+| Plans | 4 |
+
+### Key Accomplishments
+
+- Tag "déjà vu" et note étoiles (1-5) sur fiches films et séries
+- Page "Surprends-moi" avec suggestion aléatoire et filtres (genre, durée, note, type)
+- Navigation historique des suggestions (avant/arrière)
+- Bouton accueil avec animation glow ambrée
+- Lecteur vidéo configurable (mpv/vlc, local/remote, SSH)
+- Profils lecteur nommés avec CRUD et sélection rapide (JSON)
+- Mapping de chemins cross-platform (Linux→Linux, Linux→Windows)
+- Migration transparente des paramètres .env vers profils JSON
+
+### Key Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Suggestion random parmi éligibles | Simple et efficace, pas de ML |
+| Profils lecteur JSON plutôt que .env | Basculement rapide entre machines sans redémarrer |
+| SSH BatchMode=yes + ConnectTimeout=5 | Évite les blocages interactifs |
+| Path mapping par préfixe | Cross-platform Linux→Linux et Linux→Windows |
 
 ---
 

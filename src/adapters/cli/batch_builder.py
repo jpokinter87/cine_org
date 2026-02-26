@@ -321,6 +321,12 @@ async def build_transfers_batch(
     tvdb_client = container.tvdb_client()
     tmdb_client = container.tmdb_client()
 
+    # Instancier les repositories UNE SEULE FOIS hors de la boucle
+    # pour eviter d'epuiser le pool de connexions SQLite
+    movie_repo = container.movie_repository()
+    series_repo = container.series_repository()
+    episode_repo = container.episode_repository()
+
     transfers = []
 
     for pending in validated_list:
@@ -437,12 +443,10 @@ async def build_transfers_batch(
             )
 
             # Sauvegarder la serie en base (ou recuperer si existante)
-            series_repo = container.series_repository()
             saved_series = series_repo.save(series)
 
             # Sauvegarder l'episode en base
             episode.series_id = saved_series.id
-            episode_repo = container.episode_repository()
             # Verifier si l'episode existe deja
             existing_eps = episode_repo.get_by_series(
                 saved_series.id, season=season_num, episode=episode_num
@@ -515,7 +519,6 @@ async def build_transfers_batch(
             )
 
             # Sauvegarder le film dans la base de donnees
-            movie_repo = container.movie_repository()
             saved_movie = movie_repo.save(movie)
 
             # Afficher le feedback de sauvegarde avec les notes
