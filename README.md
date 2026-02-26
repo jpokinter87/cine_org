@@ -957,9 +957,108 @@ Lorsqu'un film ou une série est mal identifié par TMDB, le bouton **Corriger**
 
 ### Lecteur vidéo intégré
 
-Le bouton **Visionner** (films) ou le bouton **play** (épisodes) lance la lecture du fichier via `mpv` directement sur la machine serveur. Un indicateur de statut s'affiche pendant la lecture.
+Le bouton **Visionner** (films) ou le bouton **play** (épisodes) lance la lecture du fichier via le lecteur configuré. Un indicateur de statut s'affiche pendant la lecture.
 
-> **Note** : cette fonctionnalité est disponible uniquement en accès local. Depuis un poste distant du réseau, le lecteur s'ouvrirait sur la machine serveur (pas sur le client). Le streaming vers les clients distants est prévu dans une future version.
+**Trois modes de lecture** sont disponibles via les profils lecteur (`/config` > Lecteur) :
+
+| Mode | Target | Description |
+|------|--------|-------------|
+| **Local** | `local` | Lance le lecteur directement sur la machine serveur |
+| **SSH Linux** | `remote` | Lance le lecteur sur une machine Linux distante via SSH (ex: `env DISPLAY=:0 mpv`) |
+| **SSH Windows** | `remote` | Envoie le chemin à un watcher sur une machine Windows via SCP |
+
+#### Configuration d'un poste Windows distant
+
+Pour lancer des films/séries sur un PC Windows depuis CineOrg (serveur Linux), plusieurs étapes sont nécessaires :
+
+**1. Installer OpenSSH Server sur Windows**
+
+```
+Paramètres > Applications > Fonctionnalités facultatives > Ajouter une fonctionnalité > OpenSSH Server
+```
+
+Puis dans PowerShell (admin) :
+
+```powershell
+Start-Service sshd
+Set-Service -Name sshd -StartupType Automatic
+```
+
+**2. Configurer l'authentification par clé SSH**
+
+Sur le serveur Linux, copier la clé publique. Pour un compte administrateur Windows, la clé doit être dans `C:\ProgramData\ssh\administrators_authorized_keys` (et non `~/.ssh/authorized_keys`) :
+
+```bash
+# Depuis Linux, afficher la clé publique
+cat ~/.ssh/id_ed25519.pub
+```
+
+Sur Windows (PowerShell admin), créer le fichier et fixer les permissions :
+
+```powershell
+# Coller la clé publique dans le fichier
+Set-Content -Path "C:\ProgramData\ssh\administrators_authorized_keys" -Value "ssh-ed25519 AAAA... user@host"
+
+# Fixer les permissions (obligatoire)
+icacls "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "SYSTEM:F" /grant "Administrators:F"
+```
+
+Vérifier la connexion depuis Linux :
+
+```bash
+ssh Utilisateur@192.168.1.XX "echo OK"
+```
+
+**3. Installer mpv sur Windows**
+
+Télécharger mpv depuis https://mpv.io/installation/ et extraire dans `C:\Apps\mpv\`.
+
+Ajouter `C:\Apps\mpv` au PATH Windows (Paramètres > Variables d'environnement).
+
+**4. Accès au NAS via chemin UNC**
+
+Les lecteurs réseau mappés (ex: `N:`) ne sont pas visibles dans les sessions SSH. Il faut utiliser un chemin UNC avec authentification guest :
+
+```powershell
+net use \\192.168.1.XX\partage "" /user:guest
+```
+
+**5. Installer le watcher mpv**
+
+Le fichier `mpv_watcher.ps1` (inclus dans le dépôt) surveille un fichier queue et lance mpv dans la session interactive du bureau. SSH ne peut pas lancer directement une application GUI sur le bureau Windows.
+
+Copier le fichier sur Windows :
+
+```bash
+scp mpv_watcher.ps1 Utilisateur@192.168.1.XX:C:/Apps/mpv_watcher.ps1
+```
+
+Configurer le démarrage automatique (PowerShell sur Windows) :
+
+```powershell
+$WshShell = New-Object -ComObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\mpv_watcher.lnk")
+$Shortcut.TargetPath = "powershell.exe"
+$Shortcut.Arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -File C:\Apps\mpv_watcher.ps1"
+$Shortcut.Save()
+```
+
+Le watcher se lancera automatiquement à chaque connexion de l'utilisateur.
+
+**6. Configurer le profil dans CineOrg**
+
+Dans la page Configuration (`/config` > Lecteur), créer un profil avec :
+
+| Paramètre | Valeur |
+|-----------|--------|
+| Commande | `mpv` |
+| Cible | `remote` |
+| Hôte SSH | `192.168.1.XX` (IP du PC Windows) |
+| Utilisateur SSH | Nom d'utilisateur Windows |
+| Préfixe local | Chemin côté serveur (ex: `/media/NAS64`) |
+| Préfixe distant | Chemin UNC (ex: `\\192.168.1.XX\partage`) |
+
+> **Fonctionnement** : CineOrg envoie le chemin du fichier via SCP (pour préserver l'encodage UTF-8 des caractères accentués) dans `C:\Apps\mpv_queue.txt`. Le watcher détecte le fichier et lance mpv dans la session de bureau.
 
 ### Traitement et validation
 
