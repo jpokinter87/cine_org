@@ -7,8 +7,8 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 ## Current Milestone
 
 **v1.5 Polish & Corrections UX** (v1.5.0)
-Status: In Progress
-Phases: 2 of 3 complete
+Status: Complete
+Phases: 3 of 3 complete
 
 ## Phases
 
@@ -16,7 +16,7 @@ Phases: 2 of 3 complete
 |-------|------|-------|--------|-----------|
 | 17 | Visionner Surprends-moi | 1 | Complete | 2026-02-26 |
 | 18 | Ré-association Transfert | 2/2 | Complete | 2026-02-26 |
-| 19 | Config Accordéon | TBD | Not started | - |
+| 19 | Config Accordéon | 1/1 | Complete | 2026-02-26 |
 
 ## Phase Details
 

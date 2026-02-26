@@ -1,6 +1,6 @@
 [project]
 name = "cine-org"
-version = "1.0.0"
+version = "1.5.0"
 description = "Application de gestion de videotheque personnelle"
 readme = "README.md"
 requires-python = ">=3.11"

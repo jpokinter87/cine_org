@@ -25,8 +25,8 @@
 
     <form method="post" action="/config" class="config-form" id="config-form">
         {% for section in sections %}
-        <fieldset class="config-section" id="section-{{ section.id }}">
-            <legend class="config-section-legend">
+        <fieldset class="config-section {% if not loop.first %}config-section-collapsed{% endif %}" id="section-{{ section.id }}">
+            <legend class="config-section-legend" onclick="toggleConfigSection(this)">
                 {% if section.icon == 'folder' %}
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                 {% elif section.icon == 'database' %}
@@ -39,103 +39,109 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                 {% endif %}
                 {{ section.title }}
+                <svg class="config-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
             </legend>
 
-            {% for field in section.fields %}
-            <div class="config-field {% if errors and errors[field.key] %}config-field-error{% endif %}">
-                <div class="config-field-header">
-                    <label class="config-label" for="field-{{ field.key }}">{{ field.label }}</label>
-                    <span class="config-desc">{{ field.desc }}</span>
-                </div>
-                <div class="config-field-input">
-                    {% if field.type == 'path' %}
-                    <div class="config-path-wrap">
+            <div class="config-section-body">
+                {% for field in section.fields %}
+                <div class="config-field {% if errors and errors[field.key] %}config-field-error{% endif %}">
+                    <div class="config-field-header">
+                        <label class="config-label" for="field-{{ field.key }}">{{ field.label }}</label>
+                        <span class="config-desc">{{ field.desc }}</span>
+                    </div>
+                    <div class="config-field-input">
+                        {% if field.type == 'path' %}
+                        <div class="config-path-wrap">
+                            <input type="text"
+                                   id="field-{{ field.key }}"
+                                   name="{{ field.key }}"
+                                   class="config-input config-input-path"
+                                   value="{{ form_data[field.key] if form_data else field.value }}">
+                            {% if field.status %}
+                            <span class="config-path-status {% if field.status.exists and field.status.is_dir %}status-ok{% else %}status-missing{% endif %}"
+                                  title="{{ 'Répertoire existant' if field.status.exists and field.status.is_dir else 'Répertoire introuvable' }}">
+                                {% if field.status.exists and field.status.is_dir %}
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                                {% else %}
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                {% endif %}
+                            </span>
+                            {% endif %}
+                        </div>
+
+                        {% elif field.type == 'readonly' %}
+                        <input type="text"
+                               id="field-{{ field.key }}"
+                               class="config-input config-input-readonly"
+                               value="{{ field.value }}"
+                               readonly>
+
+                        {% elif field.type == 'secret' %}
+                        <div class="config-secret-wrap">
+                            <input type="password"
+                                   id="field-{{ field.key }}"
+                                   name="{{ field.key }}"
+                                   class="config-input config-input-secret"
+                                   value="{{ form_data[field.key] if form_data else (field.value if field.is_set else '') }}"
+                                   placeholder="Non configurée"
+                                   autocomplete="off">
+                            <button type="button" class="config-secret-toggle" onclick="toggleSecret(this)" title="Afficher/masquer">
+                                <svg class="eye-open" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                <svg class="eye-closed" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                            </button>
+                            <span class="config-api-badge {% if field.is_set %}api-set{% else %}api-unset{% endif %}">
+                                {{ 'Configurée' if field.is_set else 'Absente' }}
+                            </span>
+                        </div>
+
+                        {% elif field.type == 'number' %}
+                        <input type="number"
+                               id="field-{{ field.key }}"
+                               name="{{ field.key }}"
+                               class="config-input config-input-number"
+                               value="{{ form_data[field.key] if form_data else field.value }}"
+                               {% if field.min is defined %}min="{{ field.min }}"{% endif %}
+                               {% if field.max is defined %}max="{{ field.max }}"{% endif %}>
+
+                        {% elif field.type == 'select' %}
+                        <select id="field-{{ field.key }}"
+                                name="{{ field.key }}"
+                                class="config-input config-select">
+                            {% for opt in field.options %}
+                            <option value="{{ opt }}" {{ 'selected' if (form_data[field.key] if form_data else field.value) == opt }}>{{ opt }}</option>
+                            {% endfor %}
+                        </select>
+
+                        {% else %}
                         <input type="text"
                                id="field-{{ field.key }}"
                                name="{{ field.key }}"
-                               class="config-input config-input-path"
+                               class="config-input"
                                value="{{ form_data[field.key] if form_data else field.value }}">
-                        {% if field.status %}
-                        <span class="config-path-status {% if field.status.exists and field.status.is_dir %}status-ok{% else %}status-missing{% endif %}"
-                              title="{{ 'Répertoire existant' if field.status.exists and field.status.is_dir else 'Répertoire introuvable' }}">
-                            {% if field.status.exists and field.status.is_dir %}
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-                            {% else %}
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                            {% endif %}
-                        </span>
+                        {% endif %}
+
+                        {% if errors and errors[field.key] %}
+                        <span class="config-error-msg">{{ errors[field.key] }}</span>
                         {% endif %}
                     </div>
-
-                    {% elif field.type == 'readonly' %}
-                    <input type="text"
-                           id="field-{{ field.key }}"
-                           class="config-input config-input-readonly"
-                           value="{{ field.value }}"
-                           readonly>
-
-                    {% elif field.type == 'secret' %}
-                    <div class="config-secret-wrap">
-                        <input type="password"
-                               id="field-{{ field.key }}"
-                               name="{{ field.key }}"
-                               class="config-input config-input-secret"
-                               value="{{ form_data[field.key] if form_data else (field.value if field.is_set else '') }}"
-                               placeholder="Non configurée"
-                               autocomplete="off">
-                        <button type="button" class="config-secret-toggle" onclick="toggleSecret(this)" title="Afficher/masquer">
-                            <svg class="eye-open" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                            <svg class="eye-closed" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                        </button>
-                        <span class="config-api-badge {% if field.is_set %}api-set{% else %}api-unset{% endif %}">
-                            {{ 'Configurée' if field.is_set else 'Absente' }}
-                        </span>
-                    </div>
-
-                    {% elif field.type == 'number' %}
-                    <input type="number"
-                           id="field-{{ field.key }}"
-                           name="{{ field.key }}"
-                           class="config-input config-input-number"
-                           value="{{ form_data[field.key] if form_data else field.value }}"
-                           {% if field.min is defined %}min="{{ field.min }}"{% endif %}
-                           {% if field.max is defined %}max="{{ field.max }}"{% endif %}>
-
-                    {% elif field.type == 'select' %}
-                    <select id="field-{{ field.key }}"
-                            name="{{ field.key }}"
-                            class="config-input config-select">
-                        {% for opt in field.options %}
-                        <option value="{{ opt }}" {{ 'selected' if (form_data[field.key] if form_data else field.value) == opt }}>{{ opt }}</option>
-                        {% endfor %}
-                    </select>
-
-                    {% else %}
-                    <input type="text"
-                           id="field-{{ field.key }}"
-                           name="{{ field.key }}"
-                           class="config-input"
-                           value="{{ form_data[field.key] if form_data else field.value }}">
-                    {% endif %}
-
-                    {% if errors and errors[field.key] %}
-                    <span class="config-error-msg">{{ errors[field.key] }}</span>
-                    {% endif %}
                 </div>
+                {% endfor %}
             </div>
-            {% endfor %}
         </fieldset>
         {% endfor %}
 
     </form>
 
     {# Section Lecteur — profils gérés via HTMX (hors du formulaire .env) #}
-    <fieldset class="config-section" id="section-player">
-        <legend class="config-section-legend">
+    <fieldset class="config-section config-section-collapsed" id="section-player">
+        <legend class="config-section-legend" onclick="toggleConfigSection(this)">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
             Lecteur
+            <svg class="config-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
         </legend>
-        {% include "config/player_profiles.html" %}
+        <div class="config-section-body">
+            {% include "config/player_profiles.html" %}
+        </div>
     </fieldset>
 
     <div class="config-actions">
@@ -147,6 +153,11 @@
 </div>
 
 <script>
+function toggleConfigSection(legend) {
+    var section = legend.closest('.config-section');
+    section.classList.toggle('config-section-collapsed');
+}
+
 function toggleSecret(btn) {
     var input = btn.previousElementSibling;
     var eyeOpen = btn.querySelector('.eye-open');

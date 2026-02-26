@@ -12,7 +12,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 1.5 (CLI + Web + Polish UX) |
+| Version | 1.5.0 (CLI + Web + Polish UX) |
 | Status | Production — v1.5 in progress |
 | Last Updated | 2026-02-26 |
 
@@ -75,9 +75,13 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
   - Fix NullPool pour SQLite (QueuePool exhaustion) — Phase 18
   - Dialogues custom overlay pour toutes les confirmations destructives — Phase 18
 
+- [x] Config accordéon (v1.5)
+  - Sections config pliables/dépliables avec animation — Phase 19
+  - Version footer dynamique lue depuis pyproject.toml — Phase 19
+
 ### Active (In Progress)
 
-- [ ] Page config avec sous-sections pliables — Phase 19
+*(Aucune phase en cours — milestone v1.5 complet)*
 
 ### Out of Scope
 
