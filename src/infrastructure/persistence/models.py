@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Optional
 
 from sqlmodel import Field, Index, SQLModel
 
@@ -59,6 +59,8 @@ class MovieModel(SQLModel, table=True):
     imdb_votes: int | None = None  # Nombre de votes sur IMDb
     director: str | None = None  # Realisateur principal
     cast_json: str | None = None  # JSON: ["Acteur 1", "Acteur 2", ...]
+    watched: bool = Field(default=False, index=True)  # Film deja vu
+    personal_rating: Optional[int] = Field(default=None)  # Note personnelle 1-5
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 
@@ -124,6 +126,8 @@ class SeriesModel(SQLModel, table=True):
     imdb_votes: int | None = None  # Nombre de votes sur IMDb
     director: str | None = None  # Createur(s) / showrunner principal
     cast_json: str | None = None  # JSON: ["Acteur 1", "Acteur 2", ...]
+    watched: bool = Field(default=False, index=True)  # Serie deja vue
+    personal_rating: Optional[int] = Field(default=None)  # Note personnelle 1-5
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 

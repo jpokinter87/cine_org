@@ -13,9 +13,16 @@
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/></svg>
             </div>
             {% endif %}
-            <span class="lib-card-type {{ 'badge-film' if item.type == 'movie' else 'badge-series' }}">
-                {{ 'Film' if item.type == 'movie' else 'Serie' }}
-            </span>
+            <div class="lib-card-badges">
+                {% if item.watched %}
+                <span class="lib-card-watched" title="Déjà vu">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </span>
+                {% endif %}
+                <span class="lib-card-type {{ 'badge-film' if item.type == 'movie' else 'badge-series' }}">
+                    {{ 'Film' if item.type == 'movie' else 'Serie' }}
+                </span>
+            </div>
             {% if item.rating %}
             <span class="lib-card-rating {% if item.rating >= 7 %}rating-good{% elif item.rating >= 5 %}rating-ok{% else %}rating-low{% endif %}">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>

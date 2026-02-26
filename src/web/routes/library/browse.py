@@ -39,6 +39,7 @@ async def library_index(
     codec_video: Optional[str] = None,
     codec_audio: Optional[str] = None,
     search_mode: str = "title",
+    unwatched: Optional[str] = None,
     sort: str = "title",
     order: str = "desc",
     page: int = 1,
@@ -81,6 +82,8 @@ async def library_index(
                 movie_stmt = movie_stmt.where(MovieModel.codec_video == codec_video)
             if codec_audio:
                 movie_stmt = movie_stmt.where(MovieModel.codec_audio == codec_audio)
+            if unwatched == "1":
+                movie_stmt = movie_stmt.where(MovieModel.watched == False)  # noqa: E712
 
             movies = session.exec(movie_stmt).all()
 
@@ -108,6 +111,7 @@ async def library_index(
                         "resolution_label": _resolution_label(m.resolution),
                         "codec_video": m.codec_video,
                         "codec_audio": m.codec_audio,
+                        "watched": m.watched,
                     }
                 )
 
@@ -143,6 +147,9 @@ async def library_index(
                         | SeriesModel.cast_json.contains(person)
                     )
 
+            if unwatched == "1":
+                series_stmt = series_stmt.where(SeriesModel.watched == False)  # noqa: E712
+
             all_series = session.exec(series_stmt).all()
             for s in all_series:
                 rating = _best_rating(s.vote_average, s.imdb_rating)
@@ -162,6 +169,7 @@ async def library_index(
                         "resolution_label": "",
                         "codec_video": None,
                         "codec_audio": None,
+                        "watched": s.watched,
                     }
                 )
 
@@ -291,6 +299,7 @@ async def library_index(
         "current_codec_video": codec_video or "",
         "current_codec_audio": codec_audio or "",
         "current_search_mode": search_mode,
+        "current_unwatched": unwatched == "1",
         "current_sort": sort,
         "current_order": order,
     }

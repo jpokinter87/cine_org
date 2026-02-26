@@ -12,9 +12,9 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 1.3 (CLI + Web + Qualité & Fluidité) |
-| Status | Production — v1.3 complete |
-| Last Updated | 2026-02-25 |
+| Version | 1.4 (CLI + Web + Expérience Utilisateur) |
+| Status | Production — Phase 15 complete, Phase 16 planned |
+| Last Updated | 2026-02-26 |
 
 ## Requirements
 
@@ -56,14 +56,18 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 - [x] Workflow fluide (v1.3)
   - Boutons d'accès rapide guidant workflow → validation → transfert — Phase 14
   - Cohérence visuelle boutons page d'accueil — Phase 14
+- [x] Que regarder ce soir (v1.4)
+  - Tag "déjà vu" et note étoiles sur fiches films et séries — Phase 15
+  - Page "Surprends-moi" avec suggestion aléatoire et filtres (genre, durée, note, type) — Phase 15
+  - Bouton accueil avec animation glow ambrée — Phase 15
 
 ### Active (In Progress)
 
-(None — v1.3 complete)
+(None — ready to plan Phase 16)
 
 ### Planned (Next)
 
-(None — next milestone to define)
+- [ ] Lecteur distant configurable : mpv/vlc, machine cible LAN, SSH — Phase 16
 
 ### Out of Scope
 

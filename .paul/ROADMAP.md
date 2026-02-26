@@ -2,11 +2,52 @@
 
 ## Overview
 
-CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec données enrichies, un système de gestion des associations TMDB, des données nettoyées, un code refactoré et un workflow fluide. Prêt pour le prochain milestone.
+CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec données enrichies, un système de gestion des associations TMDB, des données nettoyées, un code refactoré et un workflow fluide. Le prochain objectif est d'améliorer l'expérience utilisateur au quotidien : suggestion de films et lecture à distance.
 
 ## Current Milestone
 
-No active milestone. Run `/paul:discuss-milestone` or `/paul:milestone` to define the next one.
+**v1.4 Expérience Utilisateur** (v1.4.0)
+Status: In Progress
+Phases: 1 of 2 complete
+
+## Phases
+
+| Phase | Name | Plans | Status | Completed |
+|-------|------|-------|--------|-----------|
+| 15 | Que Regarder Ce Soir | 2/2 | Complete | 2026-02-26 |
+| 16 | Lecteur Distant | TBD | Not started | - |
+
+## Phase Details
+
+### Phase 15: Que Regarder Ce Soir
+
+**Goal:** Ajouter une fonctionnalité "Surprends-moi" pour suggérer un film à regarder, avec tags "déjà vu" et notes étoiles
+**Depends on:** v1.3 (bibliothèque avec métadonnées riches)
+**Research:** Possible (algorithme de suggestion, UX du wizard)
+
+**Scope:**
+- Tag "déjà vu" en DB (toggle depuis la fiche film)
+- Note personnelle en étoiles (1-5) depuis la fiche film
+- Page/bouton "Surprends-moi" avec filtres optionnels (genre, durée dispo, humeur)
+- Algorithme de suggestion basé sur la bibliothèque (exclut "déjà vu" sauf bonne note)
+- Bouton d'accès rapide sur la page d'accueil (4ème bouton)
+
+**Plans:** TBD (defined during /paul:plan)
+
+### Phase 16: Lecteur Distant
+
+**Goal:** Rendre le lecteur vidéo configurable (programme et machine cible) pour lancer la lecture à distance via SSH
+**Depends on:** Phase 15 (le lecteur peut être lancé depuis la suggestion)
+**Research:** Likely (mécanisme SSH, compatibilité Windows/Linux/Mac)
+
+**Scope:**
+- Configuration du lecteur : choix du programme (mpv, vlc, autre exécutable)
+- Configuration de la machine cible : locale (défaut) ou distante (IP/hostname LAN)
+- Lancement distant via SSH avec authentification par clé
+- Page de configuration enrichie avec paramètres lecteur
+- Documentation prérequis SSH (activation OpenSSH Server sur Windows)
+
+**Plans:** TBD (defined during /paul:plan)
 
 ## Completed Milestones
 
@@ -53,4 +94,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-25 — Phase 14 complete, v1.3 milestone complete*
+*Last updated: 2026-02-26 — Phase 15 complete*

@@ -2,7 +2,7 @@
       hx-get="/library/"
       hx-target="#library-content"
       hx-push-url="true"
-      hx-trigger="change from:select, keyup changed delay:700ms from:find input[name=q]">
+      hx-trigger="change from:select, change from:input[type=checkbox], keyup changed delay:700ms from:find input[name=q]">
 
     <div class="lib-filters-row">
         <div class="lib-search-wrap">
@@ -73,6 +73,12 @@
             <option value="asc" {{ 'selected' if current_order == 'asc' }}>Croissant</option>
             <option value="desc" {{ 'selected' if current_order == 'desc' }}>Décroissant</option>
         </select>
+
+        <label class="lib-filter-checkbox">
+            <input type="checkbox" name="unwatched" value="1"
+                   {{ 'checked' if current_unwatched }}>
+            Non-vus
+        </label>
     </div>
 
     {% if current_person %}
@@ -83,7 +89,8 @@
     {% endif %}
 
     {% set person_params = "&person=" ~ (current_person or '') ~ "&person_role=" ~ current_person_role %}
-    {% set base_params = "type=" ~ current_type ~ "&genre=" ~ (current_genre or '') ~ "&year=" ~ (current_year or '') ~ "&q=" ~ current_q ~ person_params ~ "&resolution=" ~ current_resolution ~ "&codec_video=" ~ current_codec_video ~ "&codec_audio=" ~ current_codec_audio ~ "&search_mode=" ~ current_search_mode ~ "&sort=" ~ current_sort ~ "&order=" ~ current_order %}
+    {% set unwatched_param = "&unwatched=1" if current_unwatched else "" %}
+    {% set base_params = "type=" ~ current_type ~ "&genre=" ~ (current_genre or '') ~ "&year=" ~ (current_year or '') ~ "&q=" ~ current_q ~ person_params ~ "&resolution=" ~ current_resolution ~ "&codec_video=" ~ current_codec_video ~ "&codec_audio=" ~ current_codec_audio ~ "&search_mode=" ~ current_search_mode ~ "&sort=" ~ current_sort ~ "&order=" ~ current_order ~ unwatched_param %}
 
     {% if current_genre or current_year or current_q or current_type != 'all' or current_person or current_resolution or current_codec_video or current_codec_audio %}
     <div class="lib-active-filters">

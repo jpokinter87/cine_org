@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}Surprends-moi — CineOrg{% endblock %}
+{% block nav_library %}active{% endblock %}
+
+{% block content %}
+<section class="suggest-page">
+
+    <div class="suggest-header">
+        <h1 class="suggest-title">Surprends-moi</h1>
+        <p class="suggest-subtitle">Laisse le hasard choisir ton prochain visionnage</p>
+    </div>
+
+    <!-- Filtres (auto-submit au changement) -->
+    <form class="suggest-filters" id="suggest-form" method="get" action="/library/suggest">
+        <div class="suggest-filter-group">
+            <label class="suggest-filter-label" for="genre">Genre</label>
+            <select name="genre" id="genre" class="lib-filter-select" onchange="this.form.submit()">
+                <option value="">Tous les genres</option>
+                {% for g in genres %}
+                <option value="{{ g }}" {% if g == current_genre %}selected{% endif %}>{{ g }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="suggest-filter-group">
+            <label class="suggest-filter-label" for="max_duration">Temps disponible</label>
+            <select name="max_duration" id="max_duration" class="lib-filter-select" onchange="this.form.submit()">
+                <option value="">Pas de limite</option>
+                <option value="90" {% if current_max_duration == 90 %}selected{% endif %}>1h30 max</option>
+                <option value="120" {% if current_max_duration == 120 %}selected{% endif %}>2h max</option>
+                <option value="150" {% if current_max_duration == 150 %}selected{% endif %}>2h30 max</option>
+                <option value="180" {% if current_max_duration == 180 %}selected{% endif %}>3h max</option>
+            </select>
+        </div>
+
+        <div class="suggest-filter-group">
+            <label class="suggest-filter-label" for="min_rating">Note minimale</label>
+            <select name="min_rating" id="min_rating" class="lib-filter-select" onchange="this.form.submit()">
+                <option value="">Toutes notes</option>
+                <option value="6" {% if current_min_rating == "6" %}selected{% endif %}>6+ / 10</option>
+                <option value="7" {% if current_min_rating == "7" %}selected{% endif %}>7+ / 10</option>
+                <option value="8" {% if current_min_rating == "8" %}selected{% endif %}>8+ / 10</option>
+            </select>
+        </div>
+
+        <div class="suggest-filter-group">
+            <label class="suggest-filter-label" for="type">Type</label>
+            <select name="type" id="type" class="lib-filter-select" onchange="this.form.submit()">
+                <option value="all" {% if current_type == "all" %}selected{% endif %}>Tous</option>
+                <option value="movie" {% if current_type == "movie" %}selected{% endif %}>Films</option>
+                <option value="series" {% if current_type == "series" %}selected{% endif %}>Séries</option>
+            </select>
+        </div>
+
+        <button type="submit" class="action-btn action-primary suggest-btn-go">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Lancer
+        </button>
+    </form>
+
+    <!-- Résultat -->
+    {% if result %}
+    <div class="suggest-result">
+        <div class="suggest-poster">
+            {% if result.poster_url %}
+            <img src="{{ result.poster_url }}" alt="{{ result.title }}" loading="lazy">
+            {% else %}
+            <div class="suggest-no-poster">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="suggest-info">
+            <div class="suggest-type-badge suggest-type-{{ result.type }}">
+                {{ "Film" if result.type == "movie" else "Série" }}
+            </div>
+
+            <h2 class="suggest-result-title">{{ result.title }}</h2>
+
+            <div class="suggest-meta-row">
+                {% if result.year %}
+                <span class="suggest-meta-item">{{ result.year }}</span>
+                {% endif %}
+                {% if result.duration %}
+                <span class="suggest-meta-item">{{ result.duration }}</span>
+                {% endif %}
+                {% if result.rating %}
+                <span class="suggest-meta-item suggest-rating">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    {{ "%.1f"|format(result.rating) }}
+                    <span class="suggest-rating-source">{{ result.rating_source }}</span>
+                </span>
+                {% endif %}
+            </div>
+
+            {% if result.genres %}
+            <div class="suggest-genres">
+                {% for g in result.genres %}
+                <span class="suggest-genre-tag">{{ g }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if result.watched %}
+            <div class="suggest-rewatch-badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                Revoir — noté {{ result.personal_rating }}/5
+            </div>
+            {% endif %}
+
+            {% if result.overview %}
+            <p class="suggest-overview">{{ result.overview }}</p>
+            {% endif %}
+
+            <div class="suggest-actions">
+                <a href="/library/suggest?genre={{ current_genre }}&max_duration={{ current_max_duration }}&min_rating={{ current_min_rating }}&type={{ current_type }}" class="action-btn action-primary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    Autre suggestion
+                </a>
+                <a href="/library/{{ 'movies' if result.type == 'movie' else 'series' }}/{{ result.id }}" class="action-btn action-secondary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    Voir la fiche
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="suggest-pool-info">
+        {{ total_candidates }} titre{{ "s" if total_candidates > 1 }} éligible{{ "s" if total_candidates > 1 }}
+    </div>
+
+    {% else %}
+    <!-- Aucun résultat -->
+    <div class="suggest-empty">
+        <div class="suggest-empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+        </div>
+        <h2 class="suggest-empty-title">Aucun titre disponible</h2>
+        <p class="suggest-empty-text">
+            Essaie d'élargir tes filtres ou marque quelques titres comme "non vus" dans la bibliothèque.
+        </p>
+        <a href="/library" class="action-btn action-secondary">
+            Parcourir la bibliothèque
+        </a>
+    </div>
+    {% endif %}
+
+</section>
+{% endblock %}

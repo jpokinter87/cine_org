@@ -189,3 +189,41 @@ def _run_migrations() -> None:
                 text("CREATE INDEX IF NOT EXISTS ix_series_tmdb_id ON series(tmdb_id)")
             )
             conn.commit()
+
+        # Migration 7: Ajouter watched et personal_rating a movies si manquantes
+        result = conn.execute(text("PRAGMA table_info(movies)"))
+        movie_columns = [row[1] for row in result.fetchall()]
+
+        if "watched" not in movie_columns:
+            conn.execute(
+                text("ALTER TABLE movies ADD COLUMN watched BOOLEAN DEFAULT 0")
+            )
+            conn.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_movies_watched ON movies(watched)")
+            )
+            conn.commit()
+
+        if "personal_rating" not in movie_columns:
+            conn.execute(
+                text("ALTER TABLE movies ADD COLUMN personal_rating INTEGER")
+            )
+            conn.commit()
+
+        # Migration 8: Ajouter watched et personal_rating a series si manquantes
+        result = conn.execute(text("PRAGMA table_info(series)"))
+        series_columns = [row[1] for row in result.fetchall()]
+
+        if "watched" not in series_columns:
+            conn.execute(
+                text("ALTER TABLE series ADD COLUMN watched BOOLEAN DEFAULT 0")
+            )
+            conn.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_series_watched ON series(watched)")
+            )
+            conn.commit()
+
+        if "personal_rating" not in series_columns:
+            conn.execute(
+                text("ALTER TABLE series ADD COLUMN personal_rating INTEGER")
+            )
+            conn.commit()

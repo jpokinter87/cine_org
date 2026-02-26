@@ -55,6 +55,26 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
             Parcourir la bibliothèque
         </a>
+        <a href="/library/suggest" class="action-btn action-surprise" id="btn-surprise">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Surprends-moi
+        </a>
     </div>
 </section>
+
+<script>
+(function() {
+    var btn = document.getElementById('btn-surprise');
+    if (!btn) return;
+    var timeout;
+    document.addEventListener('mousemove', function() {
+        if (btn.classList.contains('surprise-glow')) return;
+        btn.classList.add('surprise-glow');
+        clearTimeout(timeout);
+        timeout = setTimeout(function() {
+            btn.classList.remove('surprise-glow');
+        }, 3000);
+    }, {passive: true});
+})();
+</script>
 {% endblock %}

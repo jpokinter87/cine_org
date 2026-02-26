@@ -262,13 +262,15 @@ a {
 /* ── Quick Actions ── */
 
 .actions-row {
-    display: flex;
-    gap: 0.75rem;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
 }
 
 .action-btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 0.5rem;
     padding: 0.75rem 1.25rem;
     border-radius: var(--radius-sm);
@@ -278,6 +280,7 @@ a {
     cursor: pointer;
     border: none;
     font-family: var(--font-body);
+    text-align: center;
 }
 
 .action-btn svg {
@@ -308,6 +311,64 @@ a {
 .action-secondary:hover {
     background: var(--bg-card-hover);
     color: var(--text-primary);
+}
+
+/* ── Bouton Surprends-moi ── */
+
+.action-surprise {
+    background: linear-gradient(135deg, var(--accent-amber), #d4913a);
+    color: var(--bg-deep);
+    position: relative;
+    overflow: hidden;
+}
+
+.action-surprise:hover {
+    background: linear-gradient(135deg, #f0b455, var(--accent-amber));
+}
+
+.action-surprise::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    background: conic-gradient(
+        from 0deg,
+        transparent 0%,
+        var(--accent-amber) 10%,
+        transparent 20%
+    );
+    opacity: 0;
+    z-index: -1;
+    transition: opacity 0.3s;
+}
+
+/* Animation glow : se déclenche à chaque mouvement de souris, dure 3s */
+.action-surprise.surprise-glow {
+    animation: surpriseReveal 3s ease both;
+}
+
+@keyframes surpriseReveal {
+    0% {
+        box-shadow: 0 0 0 0 rgba(232, 168, 73, 0);
+    }
+    10% {
+        box-shadow: 0 0 18px 4px rgba(232, 168, 73, 0.35),
+                    0 0 36px 8px rgba(232, 168, 73, 0.12);
+        transform: translateY(-2px) scale(1.03);
+    }
+    30% {
+        box-shadow: 0 0 24px 6px rgba(232, 168, 73, 0.45),
+                    0 0 48px 12px rgba(232, 168, 73, 0.15);
+        transform: translateY(-2px) scale(1.03);
+    }
+    60% {
+        box-shadow: 0 0 12px 3px rgba(232, 168, 73, 0.2);
+        transform: translateY(-1px) scale(1.01);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(232, 168, 73, 0);
+        transform: translateY(0) scale(1);
+    }
 }
 
 /* ── Footer ── */
@@ -371,12 +432,15 @@ a {
     }
 
     .actions-row {
-        flex-direction: column;
+        grid-template-columns: repeat(2, 1fr);
     }
 }
 
 @media (max-width: 480px) {
     .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    .actions-row {
         grid-template-columns: 1fr;
     }
 }
@@ -2847,10 +2911,17 @@ a.pagination-btn:hover {
     opacity: 0.25;
 }
 
-.lib-card-type {
+.lib-card-badges {
     position: absolute;
     top: 0.5rem;
     left: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    z-index: 2;
+}
+
+.lib-card-type {
     padding: 0.15rem 0.5rem;
     border-radius: 100px;
     font-size: 0.625rem;
@@ -5690,5 +5761,502 @@ details[open] > .maint-issue-toggle::before {
     }
     .qdash-section {
         padding: 1.25rem 1rem;
+    }
+}
+
+/* ═══════════════════════════════════════════
+   Personal — Toggle watched & Star rating
+   ═══════════════════════════════════════════ */
+
+.lib-detail-personal {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    margin: 0.75rem 0 0.25rem;
+}
+
+/* ── Watched toggle ── */
+
+.watched-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 0.01em;
+}
+
+.watched-btn:hover {
+    border-color: var(--accent-emerald);
+    color: var(--accent-emerald);
+    background: var(--accent-emerald-dim);
+}
+
+.watched-btn.watched-active {
+    border-color: var(--accent-emerald);
+    color: var(--accent-emerald);
+    background: var(--accent-emerald-dim);
+}
+
+.watched-btn.watched-active:hover {
+    border-color: var(--text-muted);
+    color: var(--text-secondary);
+    background: transparent;
+}
+
+/* ── Star rating ── */
+
+.star-rating {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+}
+
+.star {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    padding: 0.1rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.star:hover {
+    color: var(--accent-amber);
+    transform: scale(1.15);
+}
+
+.star-filled {
+    color: var(--accent-amber);
+}
+
+.star-filled:hover {
+    color: var(--text-muted);
+}
+
+/* Hover sur une étoile : remplir toutes les précédentes */
+.star-rating:hover .star {
+    color: var(--text-muted);
+}
+
+.star-rating:hover .star:hover,
+.star-rating:hover .star:hover ~ .star {
+    color: var(--text-muted);
+}
+
+.star-rating .star:hover,
+.star-rating .star:hover ~ .star {
+    /* reset — on gère via le sens inverse */
+}
+
+/* Astuce : survol colore les étoiles de gauche à droite via :has() */
+.star-rating:hover .star:hover,
+.star-rating:hover .star:has(~ .star:hover) {
+    color: var(--accent-amber);
+    transform: scale(1.1);
+}
+
+.star-rating-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-left: 0.4rem;
+    font-family: var(--font-body);
+}
+
+/* ── Checkbox filtre Non-vus (bibliothèque) ── */
+
+.lib-filter-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--font-body);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.45rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.lib-filter-checkbox:hover {
+    border-color: var(--accent-amber);
+    color: var(--text-primary);
+}
+
+.lib-filter-checkbox:has(input:checked) {
+    border-color: var(--accent-amber);
+    color: var(--accent-amber);
+    background: var(--accent-amber-dim);
+}
+
+.lib-filter-checkbox input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid var(--text-muted);
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.lib-filter-checkbox input[type="checkbox"]:checked {
+    background: var(--accent-amber);
+    border-color: var(--accent-amber);
+}
+
+.lib-filter-checkbox input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 3px;
+    top: 0.5px;
+    width: 5px;
+    height: 8px;
+    border: solid var(--bg-deep);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+/* ── Badge "Vu" sur jaquette grille ── */
+
+.lib-card-watched {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent-emerald);
+    color: var(--bg-deep);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+    flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════
+   Page "Surprends-moi" — suggestion aléatoire
+   ═══════════════════════════════════════════ */
+
+.suggest-page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+.suggest-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    animation: fadeInUp 0.4s ease both;
+}
+
+.suggest-title {
+    font-family: var(--font-display);
+    font-size: 2.5rem;
+    font-weight: 400;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    margin-bottom: 0.35rem;
+}
+
+.suggest-subtitle {
+    color: var(--text-muted);
+    font-size: 1rem;
+}
+
+/* ── Filtres ── */
+
+.suggest-filters {
+    display: flex;
+    align-items: flex-end;
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+    padding: 1.25rem;
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
+    animation: fadeInUp 0.4s ease 0.1s both;
+    flex-wrap: wrap;
+}
+
+.suggest-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    flex: 1;
+    min-width: 140px;
+}
+
+.suggest-filter-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+}
+
+.suggest-btn-go {
+    flex-shrink: 0;
+    align-self: flex-end;
+}
+
+/* ── Résultat ── */
+
+.suggest-result {
+    display: flex;
+    gap: 2rem;
+    padding: 1.5rem;
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card-hover);
+    animation: fadeInUp 0.5s ease 0.15s both;
+}
+
+.suggest-poster {
+    flex-shrink: 0;
+    width: 280px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.suggest-poster img {
+    width: 100%;
+    display: block;
+}
+
+.suggest-no-poster {
+    aspect-ratio: 2/3;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+}
+
+.suggest-no-poster svg {
+    width: 48px;
+    height: 48px;
+    opacity: 0.4;
+}
+
+.suggest-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.suggest-type-badge {
+    display: inline-block;
+    width: fit-content;
+    padding: 0.2rem 0.6rem;
+    border-radius: 100px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.suggest-type-movie {
+    background: var(--accent-amber-dim);
+    color: var(--accent-amber);
+}
+
+.suggest-type-series {
+    background: var(--accent-blue-dim);
+    color: var(--accent-blue);
+}
+
+.suggest-result-title {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 400;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+}
+
+.suggest-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.suggest-meta-item {
+    font-size: 0.9375rem;
+    color: var(--text-secondary);
+}
+
+.suggest-meta-item + .suggest-meta-item::before {
+    content: '\00b7';
+    margin-right: 0.75rem;
+    color: var(--text-muted);
+}
+
+.suggest-rating {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--accent-amber);
+}
+
+.suggest-rating svg {
+    width: 14px;
+    height: 14px;
+}
+
+.suggest-rating-source {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.suggest-genres {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.suggest-genre-tag {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    border-radius: 100px;
+    font-size: 0.75rem;
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+
+.suggest-rewatch-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: fit-content;
+    padding: 0.3rem 0.7rem;
+    border-radius: 100px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    background: var(--accent-emerald-dim);
+    color: var(--accent-emerald);
+}
+
+.suggest-rewatch-badge svg {
+    width: 14px;
+    height: 14px;
+}
+
+.suggest-overview {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    max-height: 7.5rem;
+    overflow-y: auto;
+}
+
+.suggest-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.suggest-pool-info {
+    text-align: center;
+    margin-top: 1.25rem;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    animation: fadeInUp 0.4s ease 0.3s both;
+}
+
+/* ── État vide ── */
+
+.suggest-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    text-align: center;
+    animation: fadeInUp 0.5s ease 0.15s both;
+}
+
+.suggest-empty-icon {
+    width: 56px;
+    height: 56px;
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+    opacity: 0.5;
+}
+
+.suggest-empty-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.suggest-empty-title {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.suggest-empty-text {
+    color: var(--text-muted);
+    font-size: 0.9375rem;
+    margin-bottom: 1.5rem;
+    max-width: 360px;
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 640px) {
+    .suggest-title {
+        font-size: 1.75rem;
+    }
+
+    .suggest-filters {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .suggest-btn-go {
+        align-self: stretch;
+        justify-content: center;
+    }
+
+    .suggest-result {
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+
+    .suggest-poster {
+        width: 100%;
+        max-width: 300px;
+        margin: 0 auto;
+    }
+
+    .suggest-result-title {
+        font-size: 1.5rem;
     }
 }

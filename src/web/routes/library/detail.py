@@ -2,7 +2,8 @@
 Routes de détail — fiches film et série.
 """
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Form, Request
+from fastapi.responses import HTMLResponse
 from sqlmodel import select
 
 from ....infrastructure.persistence.database import get_session
@@ -73,6 +74,9 @@ async def movie_detail(request: Request, movie_id: int):
         "library/movie_detail.html",
         {
             "movie": movie,
+            "movie_id": movie.id,
+            "watched": movie.watched,
+            "personal_rating": movie.personal_rating,
             "genres": genres,
             "poster_url": poster_url,
             "duration": duration,
@@ -83,6 +87,54 @@ async def movie_detail(request: Request, movie_id: int):
             "storage_genre": storage_genre,
             "storage_folder": storage_folder,
         },
+    )
+
+
+@router.post("/movies/{movie_id}/toggle-watched")
+async def toggle_watched(request: Request, movie_id: int):
+    """Toggle l'etat watched d'un film et retourne le fragment HTML mis a jour."""
+    session = next(get_session())
+    try:
+        movie = session.get(MovieModel, movie_id)
+        if not movie:
+            return HTMLResponse("Film non trouvé", status_code=404)
+        movie.watched = not movie.watched
+        session.add(movie)
+        session.commit()
+        session.refresh(movie)
+        watched = movie.watched
+    finally:
+        session.close()
+    return templates.TemplateResponse(
+        request,
+        "library/_watched_btn.html",
+        {"movie_id": movie_id, "watched": watched},
+    )
+
+
+@router.post("/movies/{movie_id}/rate")
+async def rate_movie(request: Request, movie_id: int, rating: int = Form(...)):
+    """Met a jour la note personnelle d'un film (toggle off si meme note)."""
+    session = next(get_session())
+    try:
+        movie = session.get(MovieModel, movie_id)
+        if not movie:
+            return HTMLResponse("Film non trouvé", status_code=404)
+        # Toggle off si meme note
+        if movie.personal_rating == rating:
+            movie.personal_rating = None
+        else:
+            movie.personal_rating = max(1, min(5, rating))
+        session.add(movie)
+        session.commit()
+        session.refresh(movie)
+        current_rating = movie.personal_rating
+    finally:
+        session.close()
+    return templates.TemplateResponse(
+        request,
+        "library/_star_rating.html",
+        {"movie_id": movie_id, "personal_rating": current_rating},
     )
 
 
@@ -142,6 +194,9 @@ async def series_detail(request: Request, series_id: int):
         "library/series_detail.html",
         {
             "series": series,
+            "series_id": series.id,
+            "watched": series.watched,
+            "personal_rating": series.personal_rating,
             "genres": genres,
             "poster_url": poster_url,
             "seasons": dict(sorted(seasons.items())),
@@ -152,4 +207,51 @@ async def series_detail(request: Request, series_id: int):
             "ep_languages": sorted(ep_languages),
             "first_episode": episodes[0] if episodes else None,
         },
+    )
+
+
+@router.post("/series/{series_id}/toggle-watched")
+async def toggle_series_watched(request: Request, series_id: int):
+    """Toggle l'etat watched d'une serie et retourne le fragment HTML mis a jour."""
+    session = next(get_session())
+    try:
+        series = session.get(SeriesModel, series_id)
+        if not series:
+            return HTMLResponse("Série non trouvée", status_code=404)
+        series.watched = not series.watched
+        session.add(series)
+        session.commit()
+        session.refresh(series)
+        watched = series.watched
+    finally:
+        session.close()
+    return templates.TemplateResponse(
+        request,
+        "library/_watched_btn_series.html",
+        {"series_id": series_id, "watched": watched},
+    )
+
+
+@router.post("/series/{series_id}/rate")
+async def rate_series(request: Request, series_id: int, rating: int = Form(...)):
+    """Met a jour la note personnelle d'une serie (toggle off si meme note)."""
+    session = next(get_session())
+    try:
+        series = session.get(SeriesModel, series_id)
+        if not series:
+            return HTMLResponse("Série non trouvée", status_code=404)
+        if series.personal_rating == rating:
+            series.personal_rating = None
+        else:
+            series.personal_rating = max(1, min(5, rating))
+        session.add(series)
+        session.commit()
+        session.refresh(series)
+        current_rating = series.personal_rating
+    finally:
+        session.close()
+    return templates.TemplateResponse(
+        request,
+        "library/_star_rating_series.html",
+        {"series_id": series_id, "personal_rating": current_rating},
     )

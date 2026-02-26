@@ -63,6 +63,15 @@
                 </button>
             </div>
 
+            <div class="lib-detail-personal">
+                <div id="watched-zone">
+                    {% include "library/_watched_btn.html" with context %}
+                </div>
+                <div id="rating-zone">
+                    {% include "library/_star_rating.html" with context %}
+                </div>
+            </div>
+
             <h1 class="lib-detail-title">{{ movie.title }}</h1>
             {% if movie.original_title and movie.original_title != movie.title %}
             <p class="lib-detail-original-title">{{ movie.original_title }}</p>
