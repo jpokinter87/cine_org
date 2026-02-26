@@ -42,6 +42,7 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - 1260 films sans file_path (noms trop différents pour match exact)
 - 367 épisodes sans titre (262 non trouvés TVDB + 105 sans tvdb_id)
 - Symlinks épisodes ne reflètent pas les nouveaux titres
+- Suppression depuis la bibliothèque : sélection de films/séries pour suppression (symlinks + stockage physique), cascade série complète si série sélectionnée
 - Test lecteur distant sur machine Windows (stand-by)
 
 ### Blockers/Concerns

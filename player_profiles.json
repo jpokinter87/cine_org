@@ -1,5 +1,5 @@
 {
-  "active": "Xubuntu Patricia",
+  "active": "Willow",
   "profiles": [
     {
       "name": "Local",
@@ -27,6 +27,15 @@
       "ssh_user": "pat",
       "local_path_prefix": null,
       "remote_path_prefix": null
+    },
+    {
+      "name": "Willow",
+      "command": "mpv",
+      "target": "remote",
+      "ssh_host": "192.168.1.27",
+      "ssh_user": "Willow",
+      "local_path_prefix": "/media/NAS64",
+      "remote_path_prefix": "\\\\192.168.1.33\\nas64"
     }
   ]
 }

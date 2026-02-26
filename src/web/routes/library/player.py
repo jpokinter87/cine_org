@@ -40,7 +40,11 @@ def _map_path(local_path: Path, profile: dict) -> str:
         return str(local_path)
     path_str = str(local_path)
     if path_str.startswith(local_prefix):
-        return remote_prefix + path_str[len(local_prefix):]
+        mapped = remote_prefix + path_str[len(local_prefix):]
+        # Chemins UNC Windows : convertir les / en \
+        if remote_prefix.startswith("\\\\"):
+            mapped = mapped.replace("/", "\\")
+        return mapped
     return path_str
 
 
@@ -57,7 +61,19 @@ def _launch_ssh(profile: dict, file_path: Path) -> subprocess.Popen:
     """Lance le lecteur sur une machine distante via SSH."""
     mapped = _map_path(file_path, profile)
     user_host = f"{profile['ssh_user']}@{profile['ssh_host']}"
-    remote_cmd = f"{profile['command']} '{mapped}'"
+    remote_prefix = profile.get("remote_path_prefix") or ""
+    if remote_prefix.startswith("\\\\"):
+        # Windows : SCP du chemin dans le fichier queue lu par mpv_watcher.ps1
+        # (SSH echo corrompt les accents, SCP préserve l'UTF-8)
+        tmp = Path("/tmp/mpv_queue.txt")
+        tmp.write_text(mapped, encoding="utf-8")
+        return subprocess.Popen(
+            ["scp", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes",
+             str(tmp), f"{user_host}:C:/Apps/mpv_queue.txt"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+    remote_cmd = f'{profile["command"]} "{mapped}"'
     return subprocess.Popen(
         ["ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes", user_host, remote_cmd],
         stdout=subprocess.DEVNULL,

@@ -128,7 +128,35 @@ class TestLaunchPlayer:
         args = mock_popen.call_args[0][0]
         assert args[0] == "ssh"
         assert "jp@192.168.1.20" in args
-        assert "mpv '/mnt/nas/storage/Films/Alien.mkv'" in args
+        assert 'mpv "/mnt/nas/storage/Films/Alien.mkv"' in args
+
+    @patch("src.web.routes.library.player.get_active_profile")
+    @patch("src.web.routes.library.player.subprocess.Popen")
+    def test_ssh_windows_unc_utilise_scp_queue(self, mock_popen, mock_get_profile):
+        """Avec chemin UNC Windows, envoie le chemin via SCP pour le watcher."""
+        mock_get_profile.return_value = _profile(
+            target="remote",
+            ssh_host="192.168.1.27",
+            ssh_user="Willow",
+            local_path_prefix="/media/NAS64",
+            remote_path_prefix="\\\\192.168.1.33\\nas64",
+        )
+
+        mock_proc = MagicMock()
+        mock_proc.pid = 777
+        mock_popen.return_value = mock_proc
+
+        pid, is_remote = _launch_player(Path("/media/NAS64/Films/Alien (1979)/Alien.mkv"))
+
+        assert pid == 777
+        assert is_remote is True
+        args = mock_popen.call_args[0][0]
+        assert args[0] == "scp"
+        assert "Willow@192.168.1.27:C:/Apps/mpv_queue.txt" in args
+        # Vérifie que le fichier temporaire contient le chemin mappé
+        tmp = Path("/tmp/mpv_queue.txt")
+        content = tmp.read_text(encoding="utf-8")
+        assert "\\\\192.168.1.33\\nas64\\Films\\Alien (1979)\\Alien.mkv" == content
 
     @patch("src.web.routes.library.player.get_active_profile")
     @patch("src.web.routes.library.player.subprocess.Popen")
