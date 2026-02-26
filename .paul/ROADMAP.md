@@ -15,7 +15,7 @@ Phases: 1 of 3 complete
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 17 | Visionner Surprends-moi | 1 | Complete | 2026-02-26 |
-| 18 | Ré-association Transfert | TBD | Not started | - |
+| 18 | Ré-association Transfert | 2 | Planning | - |
 | 19 | Config Accordéon | TBD | Not started | - |
 
 ## Phase Details
@@ -30,20 +30,19 @@ Phases: 1 of 3 complete
 - Lancement de la lecture directement depuis la page suggestion sans la quitter
 - Polling du statut de lecture (identique aux fiches détail)
 
-**Plans:** TBD (defined during /paul:plan)
+**Plans:** 1 plan (complete)
 
 ### Phase 18: Ré-association Transfert
 
-**Goal:** Permettre de renvoyer un fichier en validation depuis la page transfert si l'auto-validation était erronée
+**Goal:** Permettre de corriger les auto-validations erronées depuis la page transfert ET la page validation
 **Depends on:** Aucun
 
 **Scope:**
-- Cases à cocher sur les fichiers en attente de transfert
-- Bouton pour renvoyer les fichiers sélectionnés en phase de validation
-- Suppression de la validation automatique erronée
-- Retour au workflow normal de validation manuelle
+- Plan 01 : Bouton "Renvoyer en validation" sur chaque fichier de la page transfert + service reset_to_pending
+- Plan 02 : Section "Auto-validés" sur la page validation avec bouton "Revalider"
+- Le fichier renvoyé retourne en statut pending pour revalidation manuelle
 
-**Plans:** TBD (defined during /paul:plan)
+**Plans:** 2 plans (01: transfert, 02: validation)
 
 ### Phase 19: Config Accordéon
 

@@ -33,10 +33,7 @@
                     </button>
                     {% if profile.name != 'Local' %}
                     <button class="profile-delete-btn"
-                            hx-post="/config/player-profiles/{{ profile.name }}/delete"
-                            hx-target="#player-profiles"
-                            hx-swap="outerHTML"
-                            hx-confirm="Supprimer le profil « {{ profile.name }} » ?"
+                            onclick="showDeleteProfileDialog('{{ profile.name|e }}')"
                             title="Supprimer">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                     </button>
@@ -149,4 +146,36 @@
             </div>
         </form>
     </div>
+
+    <!-- Dialogue custom de suppression profil -->
+    <div class="reject-overlay" id="delete-profile-overlay" onclick="if(event.target===this)hideDeleteProfileDialog()">
+        <div class="reject-dialog">
+            <h3 class="reject-dialog-title">Supprimer ce profil ?</h3>
+            <p class="reject-dialog-text">
+                Le profil <strong id="delete-profile-name"></strong> sera définitivement supprimé.
+            </p>
+            <div class="reject-dialog-actions">
+                <button class="reject-dialog-cancel" onclick="hideDeleteProfileDialog()">Annuler</button>
+                <button class="reject-dialog-confirm" id="delete-profile-confirm-btn"
+                        hx-target="#player-profiles"
+                        hx-swap="outerHTML"
+                        onclick="hideDeleteProfileDialog()">
+                    Oui, supprimer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    function showDeleteProfileDialog(profileName) {
+        document.getElementById('delete-profile-name').textContent = profileName;
+        var btn = document.getElementById('delete-profile-confirm-btn');
+        btn.setAttribute('hx-post', '/config/player-profiles/' + encodeURIComponent(profileName) + '/delete');
+        htmx.process(btn);
+        document.getElementById('delete-profile-overlay').classList.add('active');
+    }
+    function hideDeleteProfileDialog() {
+        document.getElementById('delete-profile-overlay').classList.remove('active');
+    }
+    </script>
 </div>

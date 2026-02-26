@@ -1,5 +1,30 @@
 {# Arborescence des transferts prévus #}
 
+{# Macro pour un fichier dans l'arborescence #}
+{% macro tree_leaf(item) %}
+<div class="tree-leaf">
+    <div class="tree-leaf-main">
+        <svg class="tree-leaf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+        </svg>
+        <span class="tree-leaf-name">{{ item.new_filename }}</span>
+        <span class="tree-leaf-size">{{ item.source_size }}</span>
+        {% if item.pending_id %}
+        <button class="tree-leaf-sendback"
+                onclick="showSendbackDialog('{{ item.pending_id }}', '{{ item.new_filename|e }}')"
+                title="Renvoyer en validation">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <polyline points="1 4 1 10 7 10"/>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+            </svg>
+        </button>
+        {% endif %}
+    </div>
+    <div class="tree-leaf-dest">→ {{ item.storage_rel }}</div>
+</div>
+{% endmacro %}
+
 <div class="transfer-tree">
     {% if tree_data.movies %}
     <div class="tree-section">
@@ -30,32 +55,12 @@
                     {{ group.path }}
                 </div>
                 {% for item in group.files %}
-                <div class="tree-leaf">
-                    <div class="tree-leaf-main">
-                        <svg class="tree-leaf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                            <polyline points="14 2 14 8 20 8"/>
-                        </svg>
-                        <span class="tree-leaf-name">{{ item.new_filename }}</span>
-                        <span class="tree-leaf-size">{{ item.source_size }}</span>
-                    </div>
-                    <div class="tree-leaf-dest">→ {{ item.storage_rel }}</div>
-                </div>
+                {{ tree_leaf(item) }}
                 {% endfor %}
             </div>
             {% else %}
             {% for item in group.files %}
-            <div class="tree-leaf">
-                <div class="tree-leaf-main">
-                    <svg class="tree-leaf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                    </svg>
-                    <span class="tree-leaf-name">{{ item.new_filename }}</span>
-                    <span class="tree-leaf-size">{{ item.source_size }}</span>
-                </div>
-                <div class="tree-leaf-dest">→ {{ item.storage_rel }}</div>
-            </div>
+            {{ tree_leaf(item) }}
             {% endfor %}
             {% endif %}
             {% endfor %}
@@ -86,32 +91,12 @@
                     {{ group.path }}
                 </div>
                 {% for item in group.files %}
-                <div class="tree-leaf">
-                    <div class="tree-leaf-main">
-                        <svg class="tree-leaf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                            <polyline points="14 2 14 8 20 8"/>
-                        </svg>
-                        <span class="tree-leaf-name">{{ item.new_filename }}</span>
-                        <span class="tree-leaf-size">{{ item.source_size }}</span>
-                    </div>
-                    <div class="tree-leaf-dest">→ {{ item.storage_rel }}</div>
-                </div>
+                {{ tree_leaf(item) }}
                 {% endfor %}
             </div>
             {% else %}
             {% for item in group.files %}
-            <div class="tree-leaf">
-                <div class="tree-leaf-main">
-                    <svg class="tree-leaf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                    </svg>
-                    <span class="tree-leaf-name">{{ item.new_filename }}</span>
-                    <span class="tree-leaf-size">{{ item.source_size }}</span>
-                </div>
-                <div class="tree-leaf-dest">→ {{ item.storage_rel }}</div>
-            </div>
+            {{ tree_leaf(item) }}
             {% endfor %}
             {% endif %}
             {% endfor %}

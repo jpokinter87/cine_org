@@ -2398,6 +2398,31 @@ a.pagination-btn:hover {
     text-overflow: ellipsis;
 }
 
+.tree-leaf-sendback {
+    background: none;
+    border: 1px solid transparent;
+    color: var(--accent-rose);
+    cursor: pointer;
+    padding: 0.3rem 0.4rem;
+    margin-left: auto;
+    flex-shrink: 0;
+    opacity: 0.45;
+    transition: opacity 0.2s, background 0.2s, border-color 0.2s;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+}
+
+.tree-leaf:hover .tree-leaf-sendback {
+    opacity: 0.7;
+}
+
+.tree-leaf-sendback:hover {
+    opacity: 1;
+    background: var(--accent-rose-dim);
+    border-color: var(--accent-rose);
+}
+
 /* ── Transfer Details Table (résultats) ── */
 
 .transfer-details-table {

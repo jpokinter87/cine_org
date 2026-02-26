@@ -177,18 +177,19 @@ class ValidationService:
 
         # S'assurer que le candidat est dans la liste (pour les auto-validations)
         candidate_ids = [
-            c.id if hasattr(c, "id") else c.get("id", "")
-            for c in pending.candidates
+            c.id if hasattr(c, "id") else c.get("id", "") for c in pending.candidates
         ]
         if candidate.id not in candidate_ids:
             # Ajouter le candidat sous forme de dict pour la serialisation
-            pending.candidates.append({
-                "id": candidate.id,
-                "title": candidate.title,
-                "year": candidate.year,
-                "score": candidate.score,
-                "source": candidate.source,
-            })
+            pending.candidates.append(
+                {
+                    "id": candidate.id,
+                    "title": candidate.title,
+                    "year": candidate.year,
+                    "score": candidate.score,
+                    "source": candidate.source,
+                }
+            )
 
         # Persister les changements
         self._pending_repo.save(pending)
@@ -242,6 +243,24 @@ class ValidationService:
             L'entite mise a jour avec status=REJECTED
         """
         pending.validation_status = ValidationStatus.REJECTED
+        return self._pending_repo.save(pending)
+
+    def reset_to_pending(self, pending: PendingValidation) -> PendingValidation:
+        """
+        Remet une validation en statut pending pour re-validation manuelle.
+
+        Utilisé pour corriger une auto-validation erronée : le fichier
+        retourne dans la file d'attente de validation.
+
+        Args:
+            pending: L'entite PendingValidation a remettre en attente
+
+        Returns:
+            L'entite mise a jour avec status=PENDING
+        """
+        pending.validation_status = ValidationStatus.PENDING
+        pending.selected_candidate_id = None
+        pending.auto_validated = False
         return self._pending_repo.save(pending)
 
     async def search_manual(
@@ -350,15 +369,6 @@ class ValidationService:
         Returns:
             Liste des PendingValidation avec status=VALIDATED
         """
-        # Le repository n'a pas de methode list_validated,
-        # on filtre manuellement
-        all_pending = self._pending_repo.list_pending()
-        # list_pending ne retourne que les PENDING, on doit faire autrement
-
-        # Utiliser une requete directe via le repository
-        # Comme le repo n'expose pas cette methode, on utilise une approche alternative
-        # En attendant une methode dediee, on peut lister tous et filtrer
-        # Note: Idealement, ajouter list_by_status(status) au repository
         return self._list_by_status(ValidationStatus.VALIDATED)
 
     def _list_by_status(self, status: ValidationStatus) -> list[PendingValidation]:

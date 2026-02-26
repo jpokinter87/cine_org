@@ -368,6 +368,54 @@ class TestRejectPending:
 
 
 # ============================================================================
+# Tests: reset_to_pending
+# ============================================================================
+
+
+class TestResetToPending:
+    """Tests for reset_to_pending method."""
+
+    def test_reset_validated_to_pending(
+        self, validation_service, mock_pending_repo, sample_video_file
+    ):
+        """Remet un fichier auto-validé en statut pending."""
+        pending = PendingValidation(
+            id="1",
+            video_file=sample_video_file,
+            candidates=[],
+            validation_status=ValidationStatus.VALIDATED,
+            selected_candidate_id="tmdb:12345",
+            auto_validated=True,
+        )
+
+        result = validation_service.reset_to_pending(pending)
+
+        assert result.validation_status == ValidationStatus.PENDING
+        assert result.selected_candidate_id is None
+        assert result.auto_validated is False
+        mock_pending_repo.save.assert_called_once_with(pending)
+
+    def test_reset_manually_validated_to_pending(
+        self, validation_service, mock_pending_repo, sample_video_file
+    ):
+        """Remet un fichier validé manuellement en statut pending."""
+        pending = PendingValidation(
+            id="2",
+            video_file=sample_video_file,
+            candidates=[],
+            validation_status=ValidationStatus.VALIDATED,
+            selected_candidate_id="tvdb:67890",
+            auto_validated=False,
+        )
+
+        result = validation_service.reset_to_pending(pending)
+
+        assert result.validation_status == ValidationStatus.PENDING
+        assert result.selected_candidate_id is None
+        assert result.auto_validated is False
+
+
+# ============================================================================
 # Tests: search_manual
 # ============================================================================
 

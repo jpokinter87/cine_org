@@ -15,6 +15,7 @@ from typing import Optional
 
 from sqlmodel import Session, SQLModel, create_engine
 from sqlalchemy import Engine
+from sqlalchemy.pool import NullPool
 
 # Engine global - initialise lors du premier appel a get_engine()
 _engine: Optional[Engine] = None
@@ -41,6 +42,7 @@ def get_engine() -> Engine:
             db_url,
             echo=False,
             connect_args={"check_same_thread": False},
+            poolclass=NullPool,
         )
     return _engine
 

@@ -85,6 +85,7 @@ def _build_tree_data(transfers: list[dict], storage_dir: Path, video_dir: Path) 
         source = t.get("source")
         source_size = source.stat().st_size if source and source.exists() else 0
 
+        pending = t.get("pending")
         entry = {
             "new_filename": t["new_filename"],
             "source_name": source.name if source else "?",
@@ -93,6 +94,7 @@ def _build_tree_data(transfers: list[dict], storage_dir: Path, video_dir: Path) 
             "symlink_rel": "",
             "title": t.get("title", ""),
             "year": t.get("year"),
+            "pending_id": pending.id if pending else None,
         }
 
         # Calculer les chemins relatifs pour l'affichage
@@ -207,11 +209,13 @@ async def _run_web_transfer(
                     symlink_rel = str(sym.relative_to(video_dir))
                 except ValueError:
                     symlink_rel = str(sym)
-            progress.transferred_details.append({
-                "name": name,
-                "storage": storage_rel,
-                "symlink": symlink_rel,
-            })
+            progress.transferred_details.append(
+                {
+                    "name": name,
+                    "storage": storage_rel,
+                    "symlink": symlink_rel,
+                }
+            )
 
         for i, transfer in enumerate(transfers):
             source = transfer["source"]
@@ -235,7 +239,8 @@ async def _run_web_transfer(
                     progress.duplicates_ignored += 1
                     progress.duplicate_files.append(display_name)
                     progress.message = (
-                        f"[Simulation] Doublon : {display_name}" if dry_run
+                        f"[Simulation] Doublon : {display_name}"
+                        if dry_run
                         else f"Doublon ignoré : {display_name}"
                     )
                     await asyncio.sleep(0.1)
@@ -266,26 +271,34 @@ async def _run_web_transfer(
                     try:
                         existing_info = transferer._get_file_info(existing_path)
                         new_info = transferer._get_file_info(source)
-                        progress.conflict_data.update({
-                            "existing_resolution": existing_info.resolution or "?",
-                            "existing_video_codec": existing_info.video_codec or "?",
-                            "existing_audio_codec": existing_info.audio_codec or "?",
-                            "new_resolution": new_info.resolution or "?",
-                            "new_video_codec": new_info.video_codec or "?",
-                            "new_audio_codec": new_info.audio_codec or "?",
-                        })
+                        progress.conflict_data.update(
+                            {
+                                "existing_resolution": existing_info.resolution or "?",
+                                "existing_video_codec": existing_info.video_codec
+                                or "?",
+                                "existing_audio_codec": existing_info.audio_codec
+                                or "?",
+                                "new_resolution": new_info.resolution or "?",
+                                "new_video_codec": new_info.video_codec or "?",
+                                "new_audio_codec": new_info.audio_codec or "?",
+                            }
+                        )
                     except Exception:
-                        progress.conflict_data.update({
-                            "existing_resolution": "?",
-                            "existing_video_codec": "?",
-                            "existing_audio_codec": "?",
-                            "new_resolution": "?",
-                            "new_video_codec": "?",
-                            "new_audio_codec": "?",
-                        })
+                        progress.conflict_data.update(
+                            {
+                                "existing_resolution": "?",
+                                "existing_video_codec": "?",
+                                "existing_audio_codec": "?",
+                                "new_resolution": "?",
+                                "new_video_codec": "?",
+                                "new_audio_codec": "?",
+                            }
+                        )
 
                     progress.conflict_event.clear()
-                    progress.message = f"Conflit : {display_name} — en attente de résolution"
+                    progress.message = (
+                        f"Conflit : {display_name} — en attente de résolution"
+                    )
                     await progress.conflict_event.wait()
 
                     choice = progress.conflict_choice
@@ -295,7 +308,9 @@ async def _run_web_transfer(
 
                     if choice == "keep_old":
                         progress.conflicts_resolved += 1
-                        progress.message = f"Conflit résolu : ancien conservé pour {display_name}"
+                        progress.message = (
+                            f"Conflit résolu : ancien conservé pour {display_name}"
+                        )
                         await asyncio.sleep(0.1)
                         continue
 
@@ -303,7 +318,9 @@ async def _run_web_transfer(
                         if dry_run:
                             progress.transferred += 1
                             _record_transfer(display_name, destination, symlink_dest)
-                            progress.message = f"[Simulation] Remplacement : {display_name}"
+                            progress.message = (
+                                f"[Simulation] Remplacement : {display_name}"
+                            )
                         else:
                             try:
                                 trash_dir = getattr(
@@ -311,18 +328,23 @@ async def _run_web_transfer(
                                 )
                                 transferer.move_to_staging(existing_path, trash_dir)
                                 result = transferer.transfer_file(
-                                    source, destination,
+                                    source,
+                                    destination,
                                     create_symlink=True,
                                     symlink_destination=symlink_dest,
                                 )
                                 if result.success:
                                     progress.transferred += 1
-                                    _record_transfer(display_name, destination, symlink_dest)
+                                    _record_transfer(
+                                        display_name, destination, symlink_dest
+                                    )
                                 else:
                                     progress.errors += 1
                                     progress.error_files.append(display_name)
                             except Exception as e:
-                                logger.warning("Erreur transfert %s: %s", source_name, e)
+                                logger.warning(
+                                    "Erreur transfert %s: %s", source_name, e
+                                )
                                 progress.errors += 1
                                 progress.error_files.append(display_name)
                         progress.conflicts_resolved += 1
@@ -355,7 +377,8 @@ async def _run_web_transfer(
             else:
                 try:
                     result = transferer.transfer_file(
-                        source, destination,
+                        source,
+                        destination,
                         create_symlink=True,
                         symlink_destination=symlink_dest,
                     )
@@ -420,6 +443,7 @@ async def transfer_index(request: Request):
     # Utiliser un console silencieux pour supprimer les print Rich
     silent_console = RichConsole(file=StringIO(), quiet=True)
     import src.adapters.cli.batch_builder as bb
+
     original_console = bb.console
     bb.console = silent_console
 
@@ -510,9 +534,7 @@ async def transfer_progress_sse(request: Request):
         while not progress.complete:
             # Conflit en attente ?
             if progress.conflict_pending and progress.conflict_data:
-                conflict_json = json.dumps(
-                    progress.conflict_data, ensure_ascii=False
-                )
+                conflict_json = json.dumps(progress.conflict_data, ensure_ascii=False)
                 yield f"event: conflict\ndata: {conflict_json}\n\n"
                 # Attendre que le conflit soit résolu avant de continuer
                 await progress.conflict_event.wait()
@@ -521,14 +543,17 @@ async def transfer_progress_sse(request: Request):
                 continue
 
             # Progression normale
-            data = json.dumps({
-                "current": progress.current,
-                "total": progress.total,
-                "filename": progress.filename,
-                "message": progress.message,
-                "transferred": progress.transferred,
-                "duplicates": progress.duplicates_ignored,
-            }, ensure_ascii=False)
+            data = json.dumps(
+                {
+                    "current": progress.current,
+                    "total": progress.total,
+                    "filename": progress.filename,
+                    "message": progress.message,
+                    "transferred": progress.transferred,
+                    "duplicates": progress.duplicates_ignored,
+                },
+                ensure_ascii=False,
+            )
 
             if data != last_sent:
                 yield f"event: progress\ndata: {data}\n\n"
@@ -537,34 +562,38 @@ async def transfer_progress_sse(request: Request):
             await asyncio.sleep(0.4)
 
         # Envoyer le dernier état de progression (compteur final)
-        final_progress = json.dumps({
-            "current": progress.total,
-            "total": progress.total,
-            "filename": "",
-            "message": progress.message,
-            "transferred": progress.transferred,
-            "duplicates": progress.duplicates_ignored,
-        }, ensure_ascii=False)
+        final_progress = json.dumps(
+            {
+                "current": progress.total,
+                "total": progress.total,
+                "filename": "",
+                "message": progress.message,
+                "transferred": progress.transferred,
+                "duplicates": progress.duplicates_ignored,
+            },
+            ensure_ascii=False,
+        )
         yield f"event: progress\ndata: {final_progress}\n\n"
         await asyncio.sleep(0.2)
 
         # Résultat final
         if progress.error:
-            error_data = json.dumps(
-                {"message": progress.error}, ensure_ascii=False
-            )
+            error_data = json.dumps({"message": progress.error}, ensure_ascii=False)
             yield f"event: error\ndata: {error_data}\n\n"
         else:
-            complete_data = json.dumps({
-                "transferred": progress.transferred,
-                "duplicates_ignored": progress.duplicates_ignored,
-                "conflicts_resolved": progress.conflicts_resolved,
-                "errors": progress.errors,
-                "transferred_files": progress.transferred_files,
-                "transferred_details": progress.transferred_details,
-                "duplicate_files": progress.duplicate_files,
-                "error_files": progress.error_files,
-            }, ensure_ascii=False)
+            complete_data = json.dumps(
+                {
+                    "transferred": progress.transferred,
+                    "duplicates_ignored": progress.duplicates_ignored,
+                    "conflicts_resolved": progress.conflicts_resolved,
+                    "errors": progress.errors,
+                    "transferred_files": progress.transferred_files,
+                    "transferred_details": progress.transferred_details,
+                    "duplicate_files": progress.duplicate_files,
+                    "error_files": progress.error_files,
+                },
+                ensure_ascii=False,
+            )
             yield f"event: complete\ndata: {complete_data}\n\n"
 
     return StreamingResponse(
@@ -576,6 +605,52 @@ async def transfer_progress_sse(request: Request):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/send-back/{pending_id}", response_class=HTMLResponse)
+async def send_back(request: Request, pending_id: str):
+    """Renvoie un fichier validé en statut pending pour re-validation.
+
+    Pour les séries : renvoie aussi tous les épisodes de la même série
+    (même selected_candidate_id) — cascade inverse de l'auto-validation.
+    """
+    container = request.app.state.container
+    validation_service = container.validation_service()
+    pending = validation_service.get_pending_by_id(pending_id)
+
+    if pending is None:
+        return HTMLResponse(
+            '<div class="action-msg action-error">Fichier introuvable.</div>',
+            status_code=404,
+        )
+
+    candidate_id = pending.selected_candidate_id
+    validation_service.reset_to_pending(pending)
+
+    # Cascade inverse pour les séries : renvoyer tous les épisodes
+    # ayant le même candidat TVDB (miroir de _auto_validate_series_episodes)
+    cascade_count = 0
+    if candidate_id:
+        validated_list = validation_service.list_validated()
+        for other in validated_list:
+            if other.id != pending_id and other.selected_candidate_id == candidate_id:
+                validation_service.reset_to_pending(other)
+                cascade_count += 1
+
+    if cascade_count > 0:
+        msg = f"Fichier + {cascade_count} épisode(s) renvoyé(s) en validation."
+    else:
+        msg = "Fichier renvoyé en validation."
+
+    response = HTMLResponse(
+        '<div class="action-msg action-success">'
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+        'width="18" height="18"><polyline points="20 6 9 17 4 12"/></svg>'
+        f"{msg}"
+        "</div>"
+    )
+    response.headers["HX-Redirect"] = "/transfer"
+    return response
 
 
 @router.post("/resolve-conflict", response_class=HTMLResponse)

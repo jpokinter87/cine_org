@@ -76,10 +76,7 @@
             Simuler le transfert
         </button>
         <button class="action-btn action-primary transfer-start-btn"
-                hx-post="/transfer/start"
-                hx-target="#transfer-area"
-                hx-swap="innerHTML"
-                hx-confirm="Lancer le transfert de {{ tree_data.total }} fichier(s) ?">
+                onclick="showTransferDialog()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                 <polyline points="7 10 12 15 17 10"/>
@@ -90,4 +87,70 @@
     </div>
 </div>
 {% endif %}
+
+<!-- Dialogue custom de renvoi en validation -->
+<div class="reject-overlay" id="sendback-overlay" onclick="if(event.target===this)hideSendbackDialog()">
+    <div class="reject-dialog">
+        <h3 class="reject-dialog-title">Renvoyer en validation ?</h3>
+        <p class="reject-dialog-text">
+            Le fichier <strong id="sendback-filename"></strong> sera remis en attente de validation.
+        </p>
+        <p class="reject-dialog-note">
+            S'il s'agit d'un épisode de série, tous les épisodes de la même série seront également renvoyés.
+        </p>
+        <div class="reject-dialog-actions">
+            <button class="reject-dialog-cancel" onclick="hideSendbackDialog()">Annuler</button>
+            <button class="reject-dialog-confirm" id="sendback-confirm-btn"
+                    hx-swap="innerHTML"
+                    hx-target="#transfer-area"
+                    onclick="hideSendbackDialog()">
+                Oui, renvoyer
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Dialogue custom de confirmation transfert -->
+<div class="reject-overlay" id="transfer-overlay" onclick="if(event.target===this)hideTransferDialog()">
+    <div class="reject-dialog">
+        <h3 class="reject-dialog-title">Lancer le transfert ?</h3>
+        <p class="reject-dialog-text">
+            <strong>{{ tree_data.total if tree_data else 0 }} fichier(s)</strong> seront déplacés vers la vidéothèque
+            et les symlinks créés dans le répertoire de lecture.
+        </p>
+        <p class="reject-dialog-note">
+            Les conflits éventuels (doublons, collisions de noms) seront signalés au fur et à mesure.
+        </p>
+        <div class="reject-dialog-actions">
+            <button class="reject-dialog-cancel" onclick="hideTransferDialog()">Annuler</button>
+            <button class="action-btn action-primary"
+                    hx-post="/transfer/start"
+                    hx-target="#transfer-area"
+                    hx-swap="innerHTML"
+                    onclick="hideTransferDialog()"
+                    style="font-size: 0.875rem;">
+                Oui, transférer
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+function showSendbackDialog(pendingId, filename) {
+    document.getElementById('sendback-filename').textContent = filename;
+    var btn = document.getElementById('sendback-confirm-btn');
+    btn.setAttribute('hx-post', '/transfer/send-back/' + pendingId);
+    htmx.process(btn);
+    document.getElementById('sendback-overlay').classList.add('active');
+}
+function hideSendbackDialog() {
+    document.getElementById('sendback-overlay').classList.remove('active');
+}
+function showTransferDialog() {
+    document.getElementById('transfer-overlay').classList.add('active');
+}
+function hideTransferDialog() {
+    document.getElementById('transfer-overlay').classList.remove('active');
+}
+</script>
 {% endblock %}
