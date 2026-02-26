@@ -2,62 +2,32 @@
 
 ## Overview
 
-CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec données enrichies, un système de gestion des associations TMDB, des données nettoyées, un code refactoré, un workflow fluide, une suggestion de films et un lecteur distant. Le prochain objectif est de corriger les irritants UX identifiés pendant l'utilisation quotidienne.
+CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec données enrichies, un système de gestion des associations TMDB, des données nettoyées, un code refactoré, un workflow fluide, une suggestion de films, un lecteur distant et des corrections UX. L'application est stable en v1.5.
 
 ## Current Milestone
 
 **v1.5 Polish & Corrections UX** (v1.5.0)
 Status: Complete
-Phases: 3 of 3 complete
+Completed: 2026-02-26
 
-## Phases
+## Next Milestone
 
-| Phase | Name | Plans | Status | Completed |
-|-------|------|-------|--------|-----------|
-| 17 | Visionner Surprends-moi | 1 | Complete | 2026-02-26 |
-| 18 | Ré-association Transfert | 2/2 | Complete | 2026-02-26 |
-| 19 | Config Accordéon | 1/1 | Complete | 2026-02-26 |
-
-## Phase Details
-
-### Phase 17: Visionner Surprends-moi
-
-**Goal:** Ajouter le bouton Visionner sur les fiches de suggestion de la page Surprends-moi
-**Depends on:** Phase 16 (système de profils lecteur)
-
-**Scope:**
-- Bouton play identique à celui des fiches détail (utilise _play_button_html existant)
-- Lancement de la lecture directement depuis la page suggestion sans la quitter
-- Polling du statut de lecture (identique aux fiches détail)
-
-**Plans:** 1 plan (complete)
-
-### Phase 18: Ré-association Transfert
-
-**Goal:** Permettre de corriger les auto-validations erronées depuis la page transfert ET la page validation
-**Depends on:** Aucun
-
-**Scope:**
-- Plan 01 : Bouton "Renvoyer en validation" sur chaque fichier de la page transfert + service reset_to_pending
-- Plan 02 : Section "Auto-validés" sur la page validation avec bouton "Revalider"
-- Le fichier renvoyé retourne en statut pending pour revalidation manuelle
-
-**Plans:** 2 plans (01: transfert, 02: validation)
-
-### Phase 19: Config Accordéon
-
-**Goal:** Restructurer la page /config avec des sous-sections pliables pour réduire le scroll
-**Depends on:** Aucun
-
-**Scope:**
-- Chaque section (Répertoires, Base de données, Clés API, Traitement, Journalisation, Lecteur) est pliable/dépliable
-- CSS pur (details/summary) ou JS minimal
-- Section active ouverte par défaut, les autres fermées
-- Cohérence avec le thème sombre existant
-
-**Plans:** TBD (defined during /paul:plan)
+Run /paul:discuss-milestone or /paul:milestone to define.
 
 ## Completed Milestones
+
+<details>
+<summary>v1.5 Polish & Corrections UX — 2026-02-26 (3 phases)</summary>
+
+| Phase | Name | Plans | Completed |
+|-------|------|-------|-----------|
+| 17 | Visionner Surprends-moi | 1/1 | 2026-02-26 |
+| 18 | Ré-association Transfert | 2/2 | 2026-02-26 |
+| 19 | Config Accordéon | 1/1 | 2026-02-26 |
+
+Archive: `.paul/milestones/v1.5-ROADMAP.md`
+
+</details>
 
 <details>
 <summary>v1.4 Expérience Utilisateur — 2026-02-26 (2 phases)</summary>
@@ -114,4 +84,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-26 — Phase 18 complete*
+*Last updated: 2026-02-26 — Milestone v1.5 complete*

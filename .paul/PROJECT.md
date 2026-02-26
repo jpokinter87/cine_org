@@ -13,7 +13,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | Attribute | Value |
 |-----------|-------|
 | Version | 1.5.0 (CLI + Web + Polish UX) |
-| Status | Production — v1.5 in progress |
+| Status | Production — v1.5.0 complete |
 | Last Updated | 2026-02-26 |
 
 ## Requirements
@@ -81,7 +81,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-*(Aucune phase en cours — milestone v1.5 complet)*
+*(Aucun — milestone v1.5 complet)*
 
 ### Out of Scope
 
@@ -147,6 +147,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | SSH BatchMode=yes + ConnectTimeout=5 | Évite les blocages interactifs, erreurs rapides | 2026-02-26 | Active |
 | NullPool pour SQLite | Résout le QueuePool exhaustion avec providers.Factory | 2026-02-26 | Active |
 | Cascade inverse séries (send-back/reset) | Renvoyer un épisode renvoie toute la série | 2026-02-26 | Active |
+| Version footer dynamique via tomllib | Centralisé dans deps.py avec les templates Jinja2 | 2026-02-26 | Active |
 
 ## Success Metrics
 
@@ -170,4 +171,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-26 after Phase 18 (ré-association transfert)*
+*Last updated: 2026-02-26 after v1.5 milestone complete*

@@ -9,6 +9,42 @@ Completed milestone log for this project.
 | v1.2 Gestion Associations | 2026-02-25 | ~2 days | 4 phases, 4 plans |
 | v1.3 Qualité & Fluidité | 2026-02-25 | ~1 day | 3 phases, 5 plans |
 | v1.4 Expérience Utilisateur | 2026-02-26 | ~1 day | 2 phases, 4 plans |
+| v1.5 Polish & Corrections UX | 2026-02-26 | ~1 day | 3 phases, 4 plans |
+
+---
+
+## v1.5 Polish & Corrections UX
+
+**Completed:** 2026-02-26
+**Duration:** ~1 day
+
+### Stats
+
+| Metric | Value |
+|--------|-------|
+| Phases | 3 (17, 18, 19) |
+| Plans | 4 |
+| Files modified | ~21 |
+
+### Key Accomplishments
+
+- Bouton Visionner sur page Surprends-moi (films et séries, premier épisode S01E01)
+- Bouton "Renvoyer en validation" par fichier sur page transfert avec cascade inverse séries
+- Section "Auto-validés" sur page validation avec bouton Revalider et cascade série
+- Fix NullPool pour SQLite (résout QueuePool exhaustion avec providers.Factory)
+- Dialogues custom overlay pour toutes les confirmations destructives (remplacement confirm() natif)
+- Page config avec sections pliables (accordéon) et animation CSS fluide
+- Version footer dynamique lue depuis pyproject.toml via tomllib
+
+### Key Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Route series/play → premier épisode S01E01 | Plus propre que passer episode_id au template |
+| NullPool pour SQLite | Résout définitivement le QueuePool exhaustion avec providers.Factory |
+| Cascade inverse séries (send-back + reset) | Miroir de l'auto-validation cascade existante |
+| Dialogues custom overlay partout | Cohérence charte graphique, remplacement confirm() natif |
+| Version footer via tomllib dans deps.py | Centralisé avec les templates Jinja2 |
 
 ---
 
@@ -165,4 +201,4 @@ Completed milestone log for this project.
 
 ---
 
-*Last updated: 2026-02-25*
+*Last updated: 2026-02-26*

@@ -5,26 +5,25 @@
 See: .paul/PROJECT.md (updated 2026-02-26)
 
 **Core value:** Organiser et renommer automatiquement une vidéothèque personnelle à partir des téléchargements
-**Current focus:** v1.5 Polish & Corrections UX — Complete
+**Current focus:** Awaiting next milestone
 
 ## Current Position
 
-Milestone: v1.5 Polish & Corrections UX
-Phase: 19 of 19 — Config Accordéon — Complete
-Plan: 19-01 complete
-Status: Phase complete, milestone complete
-Last activity: 2026-02-26 — Plan 19-01 UNIFY
+Milestone: Awaiting next milestone
+Phase: None active
+Plan: None
+Status: Milestone v1.5 Polish & Corrections UX complete — ready for next
+Last activity: 2026-02-26 — Milestone completed
 
 Progress:
-- v1.5: [██████████] 100% (3/3 phases)
-- Phase 19: [██████████] 100%
+- v1.5: [██████████] 100% ✓
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop closed]
+  ○        ○        ○     [Milestone complete - ready for next]
 ```
 
 ## Accumulated Context
@@ -34,11 +33,10 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Stack : FastAPI + Jinja2 + HTMX (pas de SPA)
 - CSS custom thème sombre (Instrument Serif + DM Sans)
 - Profils lecteur JSON plutôt que .env (basculement rapide entre machines)
-- Route series/play cherche le premier épisode (S01E01) avec fichier
 - NullPool pour SQLite — supprime le QueuePool qui s'épuisait avec providers.Factory
 - Cascade inverse séries : renvoyer un épisode renvoie tous les épisodes du même candidat
 - Dialogues custom overlay au lieu de confirm() natif — cohérence charte graphique
-- Version footer lue dynamiquement depuis pyproject.toml via tomllib dans deps.py
+- Version footer dynamique via tomllib dans deps.py
 
 ### Deferred Issues
 - 1260 films sans file_path (noms trop différents pour match exact)
@@ -50,15 +48,15 @@ PLAN ──▶ APPLY ──▶ UNIFY
 None.
 
 ### Git State
-Last commit: adc7b95 feat(18-reassociation-transfert): ré-association transfert + validation — phase complete
+Last commit: 08a07c1 feat(19-config-accordeon): sections pliables + version dynamique footer — phase complete
 Branch: master
 
 ## Session Continuity
 
 Last session: 2026-02-26
-Stopped at: Phase 19 complete, milestone v1.5 complete
-Next action: Archive milestone v1.5, plan next milestone with /paul:discuss-milestone
-Resume file: .paul/phases/19-config-accordeon/19-01-SUMMARY.md
+Stopped at: Milestone v1.5 complete
+Next action: /paul:discuss-milestone or /paul:milestone
+Resume file: .paul/MILESTONES.md
 
 ---
 *STATE.md — Updated after every significant action*
