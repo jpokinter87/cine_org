@@ -6010,11 +6010,6 @@ details[open] > .maint-issue-toggle::before {
     color: var(--text-muted);
 }
 
-.suggest-btn-go {
-    flex-shrink: 0;
-    align-self: flex-end;
-}
-
 /* ── Résultat ── */
 
 .suggest-result {

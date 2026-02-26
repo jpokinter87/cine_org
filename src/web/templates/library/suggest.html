@@ -52,11 +52,6 @@
                 <option value="series" {% if current_type == "series" %}selected{% endif %}>Séries</option>
             </select>
         </div>
-
-        <button type="submit" class="action-btn action-primary suggest-btn-go">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-            Lancer
-        </button>
     </form>
 
     <!-- Résultat -->
@@ -115,7 +110,12 @@
             {% endif %}
 
             <div class="suggest-actions">
-                <a href="/library/suggest?genre={{ current_genre }}&max_duration={{ current_max_duration }}&min_rating={{ current_min_rating }}&type={{ current_type }}" class="action-btn action-primary">
+                {% if can_go_back %}
+                <a href="/library/suggest?genre={{ current_genre }}&max_duration={{ current_max_duration }}&min_rating={{ current_min_rating }}&type={{ current_type }}&history={{ history }}&pos={{ pos - 1 }}" class="action-btn action-secondary" id="btn-prev">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </a>
+                {% endif %}
+                <a href="/library/suggest?genre={{ current_genre }}&max_duration={{ current_max_duration }}&min_rating={{ current_min_rating }}&type={{ current_type }}&history={{ history }}{% if has_forward_history %}&pos={{ pos + 1 }}{% endif %}" class="action-btn action-primary" id="btn-next">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                     Autre suggestion
                 </a>
@@ -148,4 +148,17 @@
     {% endif %}
 
 </section>
+
+<script>
+document.addEventListener('keydown', function(e) {
+    if (e.target.closest('select, input')) return;
+    if (e.key === 'ArrowRight') {
+        var next = document.getElementById('btn-next');
+        if (next) window.location.href = next.href;
+    } else if (e.key === 'ArrowLeft') {
+        var prev = document.getElementById('btn-prev');
+        if (prev) window.location.href = prev.href;
+    }
+});
+</script>
 {% endblock %}
