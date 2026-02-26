@@ -26,7 +26,7 @@
     </a>
     {% endfor %}
 </section>
-{% else %}
+{% elif not auto_validated_items %}
 <section class="empty-state">
     <div class="empty-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -44,5 +44,88 @@
     <a href="/" class="action-btn action-secondary">Retour à l'accueil</a>
     {% endif %}
 </section>
+{% endif %}
+
+{% if auto_validated_items %}
+<section class="autovalidated-section">
+    <div class="autovalidated-header">
+        <div class="autovalidated-header-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+        </div>
+        <h2 class="autovalidated-title">Auto-validés</h2>
+        <span class="autovalidated-count">{{ auto_validated_items|length }}</span>
+    </div>
+    <p class="autovalidated-subtitle">
+        Fichiers validés automatiquement — cliquer sur Revalider pour choisir un autre candidat
+    </p>
+    <div class="autovalidated-list">
+        {% for item in auto_validated_items %}
+        <div class="autovalidated-card">
+            <div class="autovalidated-card-main">
+                <span class="type-badge {{ 'badge-series' if item.is_series else 'badge-film' }}">
+                    {{ 'Série' if item.is_series else 'Film' }}
+                </span>
+                <div class="autovalidated-card-info">
+                    <span class="autovalidated-filename" title="{{ item.filename }}">{{ item.filename }}</span>
+                    <span class="autovalidated-match">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="20 6 9 17 4 12"/></svg>
+                        {{ item.selected_title }}
+                    </span>
+                </div>
+            </div>
+            <div class="autovalidated-card-actions">
+                <span class="score-badge {{ item.score_class }}">{{ "%.0f"|format(item.selected_score) }}%</span>
+                <button class="autovalidated-reset-btn"
+                        onclick="showResetDialog('{{ item.id }}', '{{ item.filename|e }}')"
+                        title="Remettre en validation manuelle">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+                        <polyline points="1 4 1 10 7 10"/>
+                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                    </svg>
+                    Revalider
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+<!-- Dialogue custom de revalidation -->
+<div class="reject-overlay" id="reset-overlay" onclick="if(event.target===this)hideResetDialog()">
+    <div class="reject-dialog">
+        <h3 class="reject-dialog-title">Revalider ce fichier ?</h3>
+        <p class="reject-dialog-text">
+            Le fichier <strong id="reset-filename"></strong> sera remis en attente de validation manuelle.
+        </p>
+        <p class="reject-dialog-note">
+            S'il s'agit d'un épisode de série, tous les épisodes de la même série seront également renvoyés.
+        </p>
+        <div class="reject-dialog-actions">
+            <button class="reject-dialog-cancel" onclick="hideResetDialog()">Annuler</button>
+            <button class="reject-dialog-confirm" id="reset-confirm-btn"
+                    hx-swap="innerHTML"
+                    hx-target="body"
+                    onclick="hideResetDialog()">
+                Oui, revalider
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+function showResetDialog(pendingId, filename) {
+    document.getElementById('reset-filename').textContent = filename;
+    var btn = document.getElementById('reset-confirm-btn');
+    btn.setAttribute('hx-post', '/validation/' + pendingId + '/reset');
+    htmx.process(btn);
+    document.getElementById('reset-overlay').classList.add('active');
+}
+function hideResetDialog() {
+    document.getElementById('reset-overlay').classList.remove('active');
+}
+</script>
 {% endif %}
 {% endblock %}

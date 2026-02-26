@@ -10,7 +10,7 @@ from typing import Optional
 
 from sqlmodel import Session, select
 
-from src.core.entities.video import PendingValidation, ValidationStatus, VideoFile
+from src.core.entities.video import PendingValidation, ValidationStatus
 from src.infrastructure.persistence.models import PendingValidationModel, VideoFileModel
 from src.infrastructure.persistence.repositories.video_file_repository import (
     SQLModelVideoFileRepository,
@@ -52,9 +52,7 @@ class SQLModelPendingValidationRepository:
             if vf_model:
                 video_file = self._video_file_repo._to_entity(vf_model)
 
-        candidates = (
-            json.loads(model.candidates_json) if model.candidates_json else []
-        )
+        candidates = json.loads(model.candidates_json) if model.candidates_json else []
 
         return PendingValidation(
             id=str(model.id) if model.id else None,
@@ -81,7 +79,9 @@ class SQLModelPendingValidationRepository:
         """
         model = PendingValidationModel(
             video_file_id=video_file_id,
-            candidates_json=json.dumps(entity.candidates) if entity.candidates else None,
+            candidates_json=json.dumps(entity.candidates)
+            if entity.candidates
+            else None,
             auto_validated=entity.auto_validated,
             validation_status=entity.validation_status.value,
             selected_candidate_id=entity.selected_candidate_id,
@@ -131,6 +131,16 @@ class SQLModelPendingValidationRepository:
         )
         if limit > 0:
             statement = statement.limit(limit)
+        models = self._session.exec(statement).all()
+        return [self._to_entity(model) for model in models]
+
+    def list_auto_validated(self) -> list[PendingValidation]:
+        """Liste les validations auto-validees (candidats a la re-association)."""
+        statement = (
+            select(PendingValidationModel)
+            .where(PendingValidationModel.validation_status == "validated")
+            .where(PendingValidationModel.auto_validated == True)  # noqa: E712
+        )
         models = self._session.exec(statement).all()
         return [self._to_entity(model) for model in models]
 

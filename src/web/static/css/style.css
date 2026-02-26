@@ -2423,6 +2423,164 @@ a.pagination-btn:hover {
     border-color: var(--accent-rose);
 }
 
+/* ── Section Auto-validés (page validation) ── */
+
+.autovalidated-section {
+    margin-top: 2.5rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.autovalidated-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.25rem;
+}
+
+.autovalidated-header-icon {
+    color: var(--accent-amber);
+    opacity: 0.7;
+    display: flex;
+}
+
+.autovalidated-title {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 400;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.autovalidated-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 0.5rem;
+    border-radius: 100px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: var(--accent-amber-dim);
+    color: var(--accent-amber);
+}
+
+.autovalidated-subtitle {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin: 0.25rem 0 1.25rem 0;
+}
+
+.autovalidated-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.autovalidated-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
+    opacity: 0.75;
+    transition: opacity 0.2s, box-shadow 0.2s;
+}
+
+.autovalidated-card:hover {
+    opacity: 1;
+    box-shadow: var(--shadow-card-hover);
+}
+
+.autovalidated-card-main {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+    flex: 1;
+}
+
+.autovalidated-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.autovalidated-filename {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.autovalidated-match {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    color: var(--accent-emerald);
+    opacity: 0.8;
+}
+
+.autovalidated-match svg {
+    flex-shrink: 0;
+}
+
+.autovalidated-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-shrink: 0;
+}
+
+.autovalidated-reset-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.autovalidated-reset-btn:hover {
+    color: var(--accent-amber);
+    border-color: var(--accent-amber);
+    background: var(--accent-amber-dim);
+}
+
+.autovalidated-list .autovalidated-card {
+    animation: fadeInUp 0.3s ease both;
+}
+.autovalidated-list .autovalidated-card:nth-child(1) { animation-delay: 0.05s; }
+.autovalidated-list .autovalidated-card:nth-child(2) { animation-delay: 0.1s; }
+.autovalidated-list .autovalidated-card:nth-child(3) { animation-delay: 0.15s; }
+.autovalidated-list .autovalidated-card:nth-child(4) { animation-delay: 0.2s; }
+.autovalidated-list .autovalidated-card:nth-child(5) { animation-delay: 0.25s; }
+.autovalidated-list .autovalidated-card:nth-child(n+6) { animation-delay: 0.3s; }
+
+@media (max-width: 640px) {
+    .autovalidated-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    .autovalidated-card-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+
 /* ── Transfer Details Table (résultats) ── */
 
 .transfer-details-table {

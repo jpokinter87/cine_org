@@ -5,31 +5,26 @@
 See: .paul/PROJECT.md (updated 2026-02-26)
 
 **Core value:** Organiser et renommer automatiquement une vidéothèque personnelle à partir des téléchargements
-**Current focus:** v1.5 Polish & Corrections UX — Phase 18
+**Current focus:** v1.5 Polish & Corrections UX — Phase 19
 
 ## Current Position
 
 Milestone: v1.5 Polish & Corrections UX
-Phase: 18 of 19 — Ré-association Transfert — In Progress
-Plan: 18-01 complete ✓, 18-02 ready for APPLY
-Status: Plan 01 closed, proceeding to Plan 02
-Last activity: 2026-02-26 — Plan 18-01 UNIFY complete
+Phase: 19 of 19 — Config Accordéon — Not started
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-02-26 — Phase 18 complete, transitioned to Phase 19
 
 Progress:
-- v1.5: [███░░░░░░░] 33% (1/3 phases)
-- Phase 18: [█████░░░░░] 50% (plan 01/02)
+- v1.5: [██████░░░░] 67% (2/3 phases)
+- Phase 19: [░░░░░░░░░░] 0%
 
 ## Loop Position
 
 Current loop state:
 ```
-Plan 18-01:
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Complete]
-
-Plan 18-02:
-PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ○        ○     [Ready for APPLY]
+  ○        ○        ○     [Ready to plan Phase 19]
 ```
 
 ## Accumulated Context
@@ -49,21 +44,20 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - 367 épisodes sans titre (262 non trouvés TVDB + 105 sans tvdb_id)
 - Symlinks épisodes ne reflètent pas les nouveaux titres
 - Test lecteur distant sur machine Windows (stand-by)
-- Atiye / The Gift : deux tvdb_id distincts (372912/433737) — cas test Phase 18
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: (pending — plan 18-01 changes to commit)
+Last commit: (pending — phase 18 changes to commit)
 Branch: master
 
 ## Session Continuity
 
 Last session: 2026-02-26
-Stopped at: Plan 18-01 UNIFY complete
-Next action: Run /paul:apply for Plan 18-02
-Resume file: .paul/phases/18-reassociation-transfert/18-02-PLAN.md
+Stopped at: Phase 18 complete, ready to plan Phase 19
+Next action: /paul:plan for Phase 19
+Resume file: .paul/ROADMAP.md
 
 ---
 *STATE.md — Updated after every significant action*

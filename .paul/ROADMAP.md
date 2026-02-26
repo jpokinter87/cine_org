@@ -8,14 +8,14 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 **v1.5 Polish & Corrections UX** (v1.5.0)
 Status: In Progress
-Phases: 1 of 3 complete
+Phases: 2 of 3 complete
 
 ## Phases
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 17 | Visionner Surprends-moi | 1 | Complete | 2026-02-26 |
-| 18 | Ré-association Transfert | 2 | Planning | - |
+| 18 | Ré-association Transfert | 2/2 | Complete | 2026-02-26 |
 | 19 | Config Accordéon | TBD | Not started | - |
 
 ## Phase Details
@@ -114,4 +114,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-26 — Phase 17 complete*
+*Last updated: 2026-02-26 — Phase 18 complete*

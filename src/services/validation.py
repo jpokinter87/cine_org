@@ -362,6 +362,15 @@ class ValidationService:
         """
         return self._pending_repo.get_by_id(pending_id)
 
+    def list_auto_validated(self) -> list[PendingValidation]:
+        """
+        Liste les fichiers auto-valides (candidats a la re-association).
+
+        Returns:
+            Liste des PendingValidation avec auto_validated=True et status=VALIDATED
+        """
+        return self._pending_repo.list_auto_validated()
+
     def list_validated(self) -> list[PendingValidation]:
         """
         Liste toutes les validations avec statut 'validated'.

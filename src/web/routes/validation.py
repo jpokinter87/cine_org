@@ -52,7 +52,9 @@ def _format_duration(seconds: Optional[int]) -> Optional[str]:
     return f"{minutes} min"
 
 
-def _duration_match_class(file_duration: Optional[int], api_duration: Optional[int]) -> str:
+def _duration_match_class(
+    file_duration: Optional[int], api_duration: Optional[int]
+) -> str:
     """Retourne la classe CSS pour la comparaison de durée."""
     if not file_duration or not api_duration:
         return ""
@@ -88,18 +90,52 @@ async def validation_list(request: Request):
         best_score = candidates[0].score if candidates else 0.0
         is_series = _is_series(candidates, filename)
 
-        items.append({
-            "id": pending.id,
-            "filename": filename,
-            "is_series": is_series,
-            "candidate_count": len(candidates),
-            "best_score": best_score,
-            "score_class": _score_class(best_score),
-            "created_at": pending.created_at,
-        })
+        items.append(
+            {
+                "id": pending.id,
+                "filename": filename,
+                "is_series": is_series,
+                "candidate_count": len(candidates),
+                "best_score": best_score,
+                "score_class": _score_class(best_score),
+                "created_at": pending.created_at,
+            }
+        )
 
     # Trier par date décroissante
     items.sort(key=lambda x: x["created_at"] or "", reverse=True)
+
+    # Préparer les fichiers auto-validés pour la section dédiée
+    auto_validated_items = []
+    auto_validated_list = service.list_auto_validated()
+    for pending in auto_validated_list:
+        candidates = parse_candidates(pending.candidates)
+        filename = pending.video_file.filename if pending.video_file else "Inconnu"
+        is_series = _is_series(candidates, filename)
+
+        # Trouver le candidat sélectionné
+        selected_title = None
+        selected_score = 0.0
+        if pending.selected_candidate_id:
+            for c in candidates:
+                cid = c.id if hasattr(c, "id") else c.get("id", "")
+                if cid == pending.selected_candidate_id:
+                    selected_title = c.title if hasattr(c, "title") else c.get("title")
+                    selected_score = (
+                        c.score if hasattr(c, "score") else c.get("score", 0.0)
+                    )
+                    break
+
+        auto_validated_items.append(
+            {
+                "id": pending.id,
+                "filename": filename,
+                "is_series": is_series,
+                "selected_title": selected_title or pending.selected_candidate_id,
+                "selected_score": selected_score,
+                "score_class": _score_class(selected_score),
+            }
+        )
 
     # Vérifier s'il y a des fichiers validés prêts au transfert
     has_validated = False
@@ -110,7 +146,12 @@ async def validation_list(request: Request):
     return templates.TemplateResponse(
         request,
         "validation/list.html",
-        {"items": items, "total": len(items), "has_validated": has_validated},
+        {
+            "items": items,
+            "total": len(items),
+            "has_validated": has_validated,
+            "auto_validated_items": auto_validated_items,
+        },
     )
 
 
@@ -140,7 +181,9 @@ async def validation_detail(
     # Infos du fichier
     file_info = {
         "filename": filename,
-        "size": _format_size(pending.video_file.size_bytes) if pending.video_file else None,
+        "size": _format_size(pending.video_file.size_bytes)
+        if pending.video_file
+        else None,
         "duration": None,
         "duration_seconds": None,
     }
@@ -151,7 +194,9 @@ async def validation_detail(
 
     # Pagination
     total_candidates = len(candidates)
-    total_pages = max(1, (total_candidates + _MAX_ENRICHED_CANDIDATES - 1) // _MAX_ENRICHED_CANDIDATES)
+    total_pages = max(
+        1, (total_candidates + _MAX_ENRICHED_CANDIDATES - 1) // _MAX_ENRICHED_CANDIDATES
+    )
     page = min(page, total_pages)
     start = (page - 1) * _MAX_ENRICHED_CANDIDATES
     end = start + _MAX_ENRICHED_CANDIDATES
@@ -161,16 +206,20 @@ async def validation_detail(
     enriched = []
     for candidate in page_candidates:
         details = await _fetch_details(container, candidate.source, candidate.id)
-        enriched.append({
-            "candidate": candidate,
-            "details": details,
-            "score_class": _score_class(candidate.score),
-            "duration_str": _format_duration(details.duration_seconds) if details else None,
-            "duration_class": _duration_match_class(
-                file_info["duration_seconds"],
-                details.duration_seconds if details else None,
-            ),
-        })
+        enriched.append(
+            {
+                "candidate": candidate,
+                "details": details,
+                "score_class": _score_class(candidate.score),
+                "duration_str": _format_duration(details.duration_seconds)
+                if details
+                else None,
+                "duration_class": _duration_match_class(
+                    file_info["duration_seconds"],
+                    details.duration_seconds if details else None,
+                ),
+            }
+        )
 
     return templates.TemplateResponse(
         request,
@@ -230,34 +279,30 @@ async def validate_candidate(
     # Auto-valider les autres épisodes de la même série (source tvdb)
     auto_count = 0
     if selected.source == "tvdb":
-        auto_count = await _auto_validate_series_episodes(
-            service, pending, selected
-        )
+        auto_count = await _auto_validate_series_episodes(service, pending, selected)
 
     title = selected.title or candidate_id
     if auto_count > 0:
         msg = (
-            f'Validé : <strong>{title}</strong> '
-            f'+ {auto_count} autre(s) épisode(s) auto-validé(s) — Redirection…'
+            f"Validé : <strong>{title}</strong> "
+            f"+ {auto_count} autre(s) épisode(s) auto-validé(s) — Redirection…"
         )
     else:
-        msg = f'Validé : <strong>{title}</strong> — Redirection…'
+        msg = f"Validé : <strong>{title}</strong> — Redirection…"
 
     html = (
         f'<div class="action-msg action-success">'
         f'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
         f'width="18" height="18"><polyline points="20 6 9 17 4 12"/></svg>'
-        f'{msg}'
-        f'</div>'
+        f"{msg}"
+        f"</div>"
     )
     response = HTMLResponse(html)
     response.headers["HX-Redirect"] = "/validation"
     return response
 
 
-async def _auto_validate_series_episodes(
-    service, pending, candidate
-) -> int:
+async def _auto_validate_series_episodes(service, pending, candidate) -> int:
     """Auto-valide les autres épisodes de la même série.
 
     Parcourt les pending restants et valide ceux qui ont le même
@@ -272,7 +317,8 @@ async def _auto_validate_series_episodes(
     auto_count = 0
 
     remaining = [
-        p for p in service.list_pending()
+        p
+        for p in service.list_pending()
         if p.validation_status == ValidationStatus.PENDING
         and not p.auto_validated
         and p.id != pending.id
@@ -288,6 +334,51 @@ async def _auto_validate_series_episodes(
             logger.info("Auto-validé (cascade série): %s", fname)
 
     return auto_count
+
+
+@router.post("/{pending_id}/reset", response_class=HTMLResponse)
+async def reset_to_pending(request: Request, pending_id: str):
+    """Remet un fichier auto-validé en statut pending pour re-validation."""
+    container = request.app.state.container
+    service = container.validation_service()
+    pending = service.get_pending_by_id(pending_id)
+
+    if pending is None:
+        return HTMLResponse(
+            '<div class="action-msg action-error">Fichier introuvable.</div>',
+            status_code=404,
+        )
+
+    candidate_id = pending.selected_candidate_id
+    service.reset_to_pending(pending)
+
+    # Cascade série : renvoyer tous les épisodes du même candidat
+    cascade_count = 0
+    if candidate_id:
+        for other in service.list_auto_validated():
+            if other.id != pending_id and other.selected_candidate_id == candidate_id:
+                service.reset_to_pending(other)
+                cascade_count += 1
+
+    if cascade_count > 0:
+        msg = (
+            f"Fichier + {cascade_count} autre(s) épisode(s) remis en attente. "
+            "Redirection\u2026"
+        )
+    else:
+        msg = "Fichier remis en attente de validation. Redirection\u2026"
+
+    html = (
+        '<div class="action-msg action-success">'
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+        'width="18" height="18"><polyline points="1 4 1 10 7 10"/>'
+        f'<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>'
+        f"{msg}"
+        "</div>"
+    )
+    response = HTMLResponse(html)
+    response.headers["HX-Redirect"] = "/validation"
+    return response
 
 
 @router.post("/{pending_id}/reject", response_class=HTMLResponse)
@@ -312,8 +403,8 @@ async def reject_pending(
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
         'width="18" height="18"><line x1="18" y1="6" x2="6" y2="18"/>'
         '<line x1="6" y1="6" x2="18" y2="18"/></svg>'
-        'Fichier rejeté. Redirection…'
-        '</div>'
+        "Fichier rejeté. Redirection…"
+        "</div>"
     )
     response = HTMLResponse(html)
     response.headers["HX-Redirect"] = "/validation"
@@ -360,22 +451,30 @@ async def search_manual(
         file_duration = pending.video_file.media_info.duration_seconds
 
     scored = matcher.score_results(
-        results, q, query_year=year_int, query_duration=file_duration, is_series=is_series
+        results,
+        q,
+        query_year=year_int,
+        query_duration=file_duration,
+        is_series=is_series,
     )
 
     # Enrichir les top-10
     enriched = []
     for candidate in scored[:_MAX_ENRICHED_CANDIDATES]:
         details = await _fetch_details(container, candidate.source, candidate.id)
-        enriched.append({
-            "candidate": candidate,
-            "details": details,
-            "score_class": _score_class(candidate.score),
-            "duration_str": _format_duration(details.duration_seconds) if details else None,
-            "duration_class": _duration_match_class(
-                file_duration, details.duration_seconds if details else None
-            ),
-        })
+        enriched.append(
+            {
+                "candidate": candidate,
+                "details": details,
+                "score_class": _score_class(candidate.score),
+                "duration_str": _format_duration(details.duration_seconds)
+                if details
+                else None,
+                "duration_class": _duration_match_class(
+                    file_duration, details.duration_seconds if details else None
+                ),
+            }
+        )
 
     return templates.TemplateResponse(
         request,
@@ -411,8 +510,8 @@ async def search_by_id(
     if details is None:
         return HTMLResponse(
             '<div class="search-empty">'
-            f'<p>Aucun résultat pour {id_type.upper()} ID : <strong>{id_value}</strong></p>'
-            '</div>'
+            f"<p>Aucun résultat pour {id_type.upper()} ID : <strong>{id_value}</strong></p>"
+            "</div>"
         )
 
     # Construire un enriched candidate à partir des details
@@ -420,26 +519,34 @@ async def search_by_id(
     if pending.video_file and pending.video_file.media_info:
         file_duration = pending.video_file.media_info.duration_seconds
 
-    enriched = [{
-        "candidate": SearchResult(
-            id=id_value,
-            title=details.title or id_value,
-            year=details.year,
-            score=100.0,
-            source=id_type if id_type != "imdb" else "tmdb",
-        ),
-        "details": details,
-        "score_class": "score-high",
-        "duration_str": _format_duration(details.duration_seconds) if details else None,
-        "duration_class": _duration_match_class(
-            file_duration, details.duration_seconds if details else None
-        ),
-    }]
+    enriched = [
+        {
+            "candidate": SearchResult(
+                id=id_value,
+                title=details.title or id_value,
+                year=details.year,
+                score=100.0,
+                source=id_type if id_type != "imdb" else "tmdb",
+            ),
+            "details": details,
+            "score_class": "score-high",
+            "duration_str": _format_duration(details.duration_seconds)
+            if details
+            else None,
+            "duration_class": _duration_match_class(
+                file_duration, details.duration_seconds if details else None
+            ),
+        }
+    ]
 
     return templates.TemplateResponse(
         request,
         "validation/_search_results.html",
-        {"enriched_candidates": enriched, "pending_id": pending_id, "query": f"{id_type}:{id_value}"},
+        {
+            "enriched_candidates": enriched,
+            "pending_id": pending_id,
+            "query": f"{id_type}:{id_value}",
+        },
     )
 
 

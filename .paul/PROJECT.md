@@ -69,9 +69,14 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
   - Bouton Visionner sur page Surprends-moi (films et séries) — Phase 17
   - Route series/play → premier épisode (S01E01) avec fichier — Phase 17
 
+- [x] Ré-association transfert (v1.5)
+  - Bouton "Renvoyer en validation" par fichier sur page transfert + cascade inverse séries — Phase 18
+  - Section "Auto-validés" sur page validation avec bouton "Revalider" + cascade série — Phase 18
+  - Fix NullPool pour SQLite (QueuePool exhaustion) — Phase 18
+  - Dialogues custom overlay pour toutes les confirmations destructives — Phase 18
+
 ### Active (In Progress)
 
-- [ ] Ré-association in extremis en phase transfert — Phase 18
 - [ ] Page config avec sous-sections pliables — Phase 19
 
 ### Out of Scope
@@ -136,6 +141,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | Boutons accès rapide plutôt que redirections auto | Respect du rythme utilisateur, pas de timer ni countdown | 2026-02-25 | Active |
 | Profils lecteur JSON plutôt que .env | Basculement rapide entre machines sans redémarrer | 2026-02-26 | Active |
 | SSH BatchMode=yes + ConnectTimeout=5 | Évite les blocages interactifs, erreurs rapides | 2026-02-26 | Active |
+| NullPool pour SQLite | Résout le QueuePool exhaustion avec providers.Factory | 2026-02-26 | Active |
+| Cascade inverse séries (send-back/reset) | Renvoyer un épisode renvoie toute la série | 2026-02-26 | Active |
 
 ## Success Metrics
 
@@ -159,4 +166,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-26 after Phase 17 (visionner surprends-moi)*
+*Last updated: 2026-02-26 after Phase 18 (ré-association transfert)*
