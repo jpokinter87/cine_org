@@ -1,0 +1,254 @@
+/**
+ * Mode sélection pour suppression par lot.
+ *
+ * Gère l'activation du mode sélection, les cases à cocher sur les jaquettes,
+ * le compteur flottant, et l'envoi de la requête de suppression.
+ * L'état est persisté dans sessionStorage pour survivre à la navigation
+ * vers les fiches détail et au retour.
+ */
+
+(function () {
+    'use strict';
+
+    var STORAGE_KEY = 'cineorg_delete_selection';
+
+    // --- Chargement de l'état depuis sessionStorage ---
+    var selected = new Map();
+    var selectMode = false;
+
+    function saveState() {
+        var data = { mode: selectMode, items: {} };
+        selected.forEach(function (val, key) {
+            data.items[key] = val;
+        });
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }
+
+    function loadState() {
+        try {
+            var raw = sessionStorage.getItem(STORAGE_KEY);
+            if (!raw) return;
+            var data = JSON.parse(raw);
+            selectMode = data.mode || false;
+            if (data.items) {
+                Object.keys(data.items).forEach(function (key) {
+                    selected.set(key, data.items[key]);
+                });
+            }
+        } catch (e) {
+            // Ignorer les erreurs de parsing
+        }
+    }
+
+    function clearState() {
+        sessionStorage.removeItem(STORAGE_KEY);
+    }
+
+    var container = document.getElementById('library-content');
+    if (!container) return;
+
+    // --- Bouton d'activation ---
+    var toggleBtn = document.getElementById('delete-mode-toggle');
+    if (!toggleBtn) return;
+
+    // --- Barre flottante ---
+    var bar = document.getElementById('delete-bar');
+    var countSpan = document.getElementById('delete-count');
+    var confirmBtn = document.getElementById('delete-confirm-btn');
+    var cancelBtn = document.getElementById('delete-cancel-btn');
+
+    // --- Overlay confirmation ---
+    var overlay = document.getElementById('delete-overlay');
+    var overlayCount = document.getElementById('delete-overlay-count');
+    var overlayConfirmBtn = document.getElementById('delete-overlay-confirm');
+    var overlayCancelBtn = document.getElementById('delete-overlay-cancel');
+
+    function updateUI() {
+        var n = selected.size;
+        if (countSpan) countSpan.textContent = n;
+        if (bar) {
+            bar.classList.toggle('active', n > 0 && selectMode);
+        }
+    }
+
+    function enterSelectMode() {
+        selectMode = true;
+        document.body.classList.add('delete-mode');
+        toggleBtn.classList.add('active');
+        toggleBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Annuler la sélection';
+        attachCheckboxes();
+        updateUI();
+        saveState();
+    }
+
+    function exitSelectMode() {
+        selectMode = false;
+        selected.clear();
+        document.body.classList.remove('delete-mode');
+        toggleBtn.classList.remove('active');
+        toggleBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Sélectionner pour suppression';
+        removeCheckboxes();
+        updateUI();
+        clearState();
+    }
+
+    toggleBtn.addEventListener('click', function () {
+        if (selectMode) {
+            exitSelectMode();
+        } else {
+            enterSelectMode();
+        }
+    });
+
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function () {
+            exitSelectMode();
+        });
+    }
+
+    function attachCheckboxes() {
+        var cards = container.querySelectorAll('.lib-card');
+        cards.forEach(function (card) {
+            if (card.querySelector('.delete-checkbox')) return;
+
+            var href = card.getAttribute('href') || '';
+            // Parse: /library/movies/42 or /library/series/7
+            var match = href.match(/\/library\/(movies|series)\/(\d+)/);
+            if (!match) return;
+
+            var type = match[1] === 'movies' ? 'movie' : 'series';
+            var id = parseInt(match[2], 10);
+            var key = type + '-' + id;
+            var title = (card.querySelector('.lib-card-title') || {}).textContent || '';
+
+            // Restaurer l'état de sélection depuis sessionStorage
+            var isSelected = selected.has(key);
+            if (isSelected) {
+                card.classList.add('delete-selected');
+            }
+
+            var cb = document.createElement('label');
+            cb.className = 'delete-checkbox';
+            cb.innerHTML = '<input type="checkbox"' + (isSelected ? ' checked' : '') + ' data-key="' + key + '" data-type="' + type + '" data-id="' + id + '" data-title="' + title.replace(/"/g, '&quot;') + '">' +
+                '<span class="delete-checkbox-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>';
+
+            cb.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var input = cb.querySelector('input');
+                input.checked = !input.checked;
+
+                if (input.checked) {
+                    selected.set(key, { type: type, id: id, title: title });
+                    card.classList.add('delete-selected');
+                } else {
+                    selected.delete(key);
+                    card.classList.remove('delete-selected');
+                }
+                updateUI();
+                saveState();
+            });
+
+            var poster = card.querySelector('.lib-card-poster');
+            if (poster) {
+                poster.appendChild(cb);
+            }
+        });
+    }
+
+    function removeCheckboxes() {
+        var cbs = container.querySelectorAll('.delete-checkbox');
+        cbs.forEach(function (cb) { cb.remove(); });
+        var selectedCards = container.querySelectorAll('.delete-selected');
+        selectedCards.forEach(function (c) { c.classList.remove('delete-selected'); });
+    }
+
+    // --- Confirmation dialog ---
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', function () {
+            if (selected.size === 0) return;
+            if (overlayCount) overlayCount.textContent = selected.size;
+            if (overlay) overlay.classList.add('active');
+        });
+    }
+
+    if (overlayCancelBtn) {
+        overlayCancelBtn.addEventListener('click', function () {
+            if (overlay) overlay.classList.remove('active');
+        });
+    }
+
+    if (overlay) {
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) overlay.classList.remove('active');
+        });
+    }
+
+    if (overlayConfirmBtn) {
+        overlayConfirmBtn.addEventListener('click', function () {
+            if (selected.size === 0) return;
+
+            var items = [];
+            selected.forEach(function (val) {
+                items.push({ type: val.type, id: val.id });
+            });
+
+            overlayConfirmBtn.disabled = true;
+            overlayConfirmBtn.textContent = 'Suppression...';
+
+            fetch('/library/delete-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: items })
+            })
+                .then(function (res) {
+                    if (res.status === 403) {
+                        return res.json().then(function (data) {
+                            alert(data.error || 'Accès refusé.');
+                            throw new Error('forbidden');
+                        });
+                    }
+                    return res.json();
+                })
+                .then(function (data) {
+                    if (data.deleted !== undefined) {
+                        // Nettoyer l'état avant la redirection
+                        clearState();
+                        window.location.href = '/library/';
+                    }
+                })
+                .catch(function (err) {
+                    if (err.message !== 'forbidden') {
+                        alert('Erreur lors de la suppression.');
+                    }
+                    overlayConfirmBtn.disabled = false;
+                    overlayConfirmBtn.textContent = 'Confirmer la suppression';
+                    if (overlay) overlay.classList.remove('active');
+                });
+        });
+    }
+
+    // Ré-attacher les checkboxes après un swap HTMX (changement de filtre/page)
+    document.body.addEventListener('htmx:afterSwap', function (e) {
+        if (selectMode && e.detail.target && e.detail.target.id === 'library-content') {
+            setTimeout(function () { attachCheckboxes(); updateUI(); }, 50);
+        }
+    });
+
+    // Escape pour quitter le mode sélection
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && selectMode) {
+            if (overlay && overlay.classList.contains('active')) {
+                overlay.classList.remove('active');
+            } else {
+                exitSelectMode();
+            }
+        }
+    });
+
+    // --- Restauration de l'état au chargement de la page ---
+    loadState();
+    if (selectMode) {
+        enterSelectMode();
+    }
+})();

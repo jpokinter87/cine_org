@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Corbeille — CineOrg{% endblock %}
+{% block nav_library %}active{% endblock %}
+
+{% block content %}
+<div class="trash-page">
+    <div class="trash-header">
+        <h1>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -4px; margin-right: 0.3rem; opacity: 0.5;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Corbeille
+            {% if total_items > 0 %}
+            <span style="font-family: var(--font-body); font-size: 0.875rem; color: var(--text-muted); font-weight: 400; margin-left: 0.5rem;">{{ total_items }} élément{{ 's' if total_items != 1 else '' }}</span>
+            {% endif %}
+        </h1>
+        <div class="trash-header-actions">
+            <a href="/library/" class="reject-dialog-cancel" style="text-decoration: none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 3px;"><polyline points="15 18 9 12 15 6"/></svg>
+                Bibliothèque
+            </a>
+            {% if total_items > 0 and is_local %}
+            <button class="trash-empty-btn" onclick="document.getElementById('trash-empty-overlay').classList.add('active')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                Vider la corbeille
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if items %}
+    <div class="trash-list">
+        {% for item in items %}
+        <div class="trash-item">
+            <div class="trash-item-poster">
+                {% if item.poster_path %}
+                <img src="https://image.tmdb.org/t/p/w92{{ item.poster_path }}" alt="{{ item.title }}" loading="lazy">
+                {% else %}
+                <div class="trash-item-no-poster">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/></svg>
+                </div>
+                {% endif %}
+            </div>
+            <div class="trash-item-info">
+                <div class="trash-item-title">{{ item.title }}{% if item.year %} ({{ item.year }}){% endif %}</div>
+                <div class="trash-item-meta">
+                    <span class="trash-item-type {{ 'type-movie' if item.entity_type == 'movie' else 'type-series' }}">
+                        {{ 'Film' if item.entity_type == 'movie' else 'Série' }}
+                    </span>
+                    {% if item.entity_type == 'series' and item.episode_count %}
+                    <span>{{ item.episode_count }} épisode{{ 's' if item.episode_count != 1 else '' }}</span>
+                    {% endif %}
+                    <span>Supprimé le {{ item.deleted_at.strftime('%d/%m/%Y à %H:%M') if item.deleted_at else '?' }}</span>
+                </div>
+            </div>
+            <div class="trash-item-actions">
+                {% if is_local %}
+                <button class="trash-restore-btn"
+                        hx-post="/library/trash/{{ item.id }}/restore"
+                        hx-swap="none">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                    Restaurer
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% else %}
+    <div class="trash-empty-state">
+        <div class="trash-empty-icon">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </div>
+        <h2 class="trash-empty-title">La corbeille est vide</h2>
+        <p class="trash-empty-text">Les éléments supprimés depuis la bibliothèque apparaîtront ici.</p>
+    </div>
+    {% endif %}
+
+    {% if not is_local and total_items > 0 %}
+    <div style="text-align: center; padding: 1rem; color: var(--text-muted); font-size: 0.8125rem;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 3px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Les actions de restauration et de vidage sont uniquement disponibles depuis la machine maître.
+    </div>
+    {% endif %}
+</div>
+
+<!-- Dialogue de confirmation vidage -->
+{% if is_local %}
+<div class="trash-empty-overlay" id="trash-empty-overlay">
+    <div class="delete-dialog">
+        <div class="delete-dialog-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <h3 class="delete-dialog-title">Vider la corbeille ?</h3>
+        <p class="delete-dialog-text">Cette action est <strong>irréversible</strong>. Tous les fichiers physiques dans la zone de stockage seront définitivement supprimés.</p>
+        <div class="delete-dialog-warning">{{ total_items }} élément{{ 's' if total_items != 1 else '' }} sera{{ 'ont' if total_items != 1 else '' }} supprimé{{ 's' if total_items != 1 else '' }} définitivement.</div>
+        <div class="delete-dialog-actions">
+            <button class="reject-dialog-cancel" onclick="document.getElementById('trash-empty-overlay').classList.remove('active')">Annuler</button>
+            <button class="reject-dialog-confirm"
+                    hx-post="/library/trash/empty"
+                    hx-swap="none"
+                    onclick="this.textContent='Suppression...'; this.disabled=true;">
+                Supprimer définitivement
+            </button>
+        </div>
+    </div>
+</div>
+<script>
+document.getElementById('trash-empty-overlay').addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('active');
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        var ov = document.getElementById('trash-empty-overlay');
+        if (ov) ov.classList.remove('active');
+    }
+});
+</script>
+{% endif %}
+{% endblock %}

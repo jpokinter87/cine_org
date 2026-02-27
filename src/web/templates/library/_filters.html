@@ -60,6 +60,13 @@
             {% endfor %}
         </select>
 
+        <select name="language" class="lib-filter-select">
+            <option value="">Langue</option>
+            {% for l in languages %}
+            <option value="{{ l }}" {{ 'selected' if current_language == l }}>{{ l }}</option>
+            {% endfor %}
+        </select>
+
         <select name="sort" class="lib-filter-select">
             <option value="title" {{ 'selected' if current_sort == 'title' }}>Tri: Titre</option>
             <option value="year" {{ 'selected' if current_sort == 'year' }}>Tri: Année</option>
@@ -80,6 +87,18 @@
                    {{ 'checked' if current_unwatched }}>
             Non-vus
         </label>
+
+        <label class="lib-filter-checkbox">
+            <input type="checkbox" name="no_file" value="1"
+                   {{ 'checked' if current_no_file }}>
+            Sans fichier
+        </label>
+
+        <label class="lib-filter-checkbox">
+            <input type="checkbox" name="no_poster" value="1"
+                   {{ 'checked' if current_no_poster }}>
+            Sans poster
+        </label>
     </div>
 
     {% if current_person %}
@@ -91,9 +110,12 @@
 
     {% set person_params = "&person=" ~ (current_person or '') ~ "&person_role=" ~ current_person_role %}
     {% set unwatched_param = "&unwatched=1" if current_unwatched else "" %}
-    {% set base_params = "type=" ~ current_type ~ "&genre=" ~ (current_genre or '') ~ "&year=" ~ (current_year or '') ~ "&q=" ~ current_q ~ person_params ~ "&resolution=" ~ current_resolution ~ "&codec_video=" ~ current_codec_video ~ "&codec_audio=" ~ current_codec_audio ~ "&search_mode=" ~ current_search_mode ~ "&sort=" ~ current_sort ~ "&order=" ~ current_order ~ unwatched_param %}
+    {% set no_file_param = "&no_file=1" if current_no_file else "" %}
+    {% set no_poster_param = "&no_poster=1" if current_no_poster else "" %}
+    {% set language_param = "&language=" ~ current_language %}
+    {% set base_params = "type=" ~ current_type ~ "&genre=" ~ (current_genre or '') ~ "&year=" ~ (current_year or '') ~ "&q=" ~ current_q ~ person_params ~ "&resolution=" ~ current_resolution ~ "&codec_video=" ~ current_codec_video ~ "&codec_audio=" ~ current_codec_audio ~ language_param ~ "&search_mode=" ~ current_search_mode ~ "&sort=" ~ current_sort ~ "&order=" ~ current_order ~ unwatched_param ~ no_file_param ~ no_poster_param %}
 
-    {% if current_genre or current_year or current_q or current_type != 'all' or current_person or current_resolution or current_codec_video or current_codec_audio %}
+    {% if current_genre or current_year or current_q or current_type != 'all' or current_person or current_resolution or current_codec_video or current_codec_audio or current_language %}
     <div class="lib-active-filters">
         {% if current_type != 'all' %}
         <span class="lib-filter-tag">
@@ -152,7 +174,14 @@
         {% if current_codec_audio %}
         <span class="lib-filter-tag lib-filter-tag-tech">
             {{ current_codec_audio }}
-            <a href="/library/?type={{ current_type }}&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q={{ current_q }}&person={{ current_person }}&person_role={{ current_person_role }}&resolution={{ current_resolution }}&codec_video={{ current_codec_video }}&codec_audio=&search_mode={{ current_search_mode }}&sort={{ current_sort }}&order={{ current_order }}"
+            <a href="/library/?type={{ current_type }}&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q={{ current_q }}&person={{ current_person }}&person_role={{ current_person_role }}&resolution={{ current_resolution }}&codec_video={{ current_codec_video }}&codec_audio=&language={{ current_language }}&search_mode={{ current_search_mode }}&sort={{ current_sort }}&order={{ current_order }}"
+               class="lib-filter-tag-remove">&times;</a>
+        </span>
+        {% endif %}
+        {% if current_language %}
+        <span class="lib-filter-tag lib-filter-tag-tech">
+            Langue: {{ current_language }}
+            <a href="/library/?type={{ current_type }}&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q={{ current_q }}&person={{ current_person }}&person_role={{ current_person_role }}&resolution={{ current_resolution }}&codec_video={{ current_codec_video }}&codec_audio={{ current_codec_audio }}&language=&search_mode={{ current_search_mode }}&sort={{ current_sort }}&order={{ current_order }}"
                class="lib-filter-tag-remove">&times;</a>
         </span>
         {% endif %}

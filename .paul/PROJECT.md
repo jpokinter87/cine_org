@@ -84,7 +84,12 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 - [ ] Gestion & Qualité de Données (v1.6)
   - [x] Cartouches accueil cliquables, genres normalisés FR, tri récemment ajouté — Phase 20
   - [x] Résolution données manquantes (films sans file_path, épisodes sans titre) — Phase 21
-  - [ ] Suppression depuis la bibliothèque avec corbeille — Phase 22
+  - [x] Suppression depuis la bibliothèque avec corbeille — Phase 22
+    - Filtres enrichis (langue, sans fichier, sans poster) — Phase 22
+    - Mode sélection batch avec persistance sessionStorage — Phase 22
+    - Corbeille provisoire réversible (restauration individuelle, vidage définitif) — Phase 22
+    - Cascade bidirectionnelle séries (suppression + restauration) — Phase 22
+    - Sécurité localhost (suppression/restauration/vidage bloqués en distant) — Phase 22
   - [ ] Lectures simultanées — Phase 23
 
 ### Out of Scope
@@ -154,6 +159,9 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | Version footer dynamique via tomllib | Centralisé dans deps.py avec les templates Jinja2 | 2026-02-26 | Active |
 | Matching progressif link-movies | Normalisé→substring→contains→fuzzy (seuil 0.85) | 2026-02-27 | Active |
 | Recherche TVDB multi-titre | FR→original→racine (tiret) + nettoyage année | 2026-02-27 | Active |
+| Suppression : corbeille provisoire réversible | Suppression physique uniquement au vidage définitif | 2026-02-27 | Active |
+| Suppression restreinte localhost | Bouton masqué + routes 403 pour clients distants | 2026-02-27 | Active |
+| sessionStorage pour état UI sélection | Persistance entre pages sans polluer localStorage | 2026-02-27 | Active |
 
 ## Success Metrics
 
@@ -177,4 +185,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-27 after Phase 21 complete*
+*Last updated: 2026-02-27 after Phase 22 complete*

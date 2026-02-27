@@ -26,6 +26,9 @@ from src.infrastructure.persistence.repositories.video_file_repository import (
 from src.infrastructure.persistence.repositories.pending_validation_repository import (
     SQLModelPendingValidationRepository,
 )
+from src.infrastructure.persistence.repositories.trash_repository import (
+    SQLModelTrashRepository,
+)
 
 __all__ = [
     "SQLModelMovieRepository",
@@ -33,4 +36,5 @@ __all__ = [
     "SQLModelEpisodeRepository",
     "SQLModelVideoFileRepository",
     "SQLModelPendingValidationRepository",
+    "SQLModelTrashRepository",
 ]

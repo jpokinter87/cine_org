@@ -6737,3 +6737,470 @@ details[open] > .maint-issue-toggle::before {
         font-size: 1.5rem;
     }
 }
+
+/* ═══════════════════════════════════════════
+   Mode Sélection / Suppression par lot
+   ═══════════════════════════════════════════ */
+
+/* ── Bouton toggle ── */
+
+.delete-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.delete-mode-btn:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.delete-mode-btn.active {
+    background: var(--accent-rose-dim);
+    color: var(--accent-rose);
+    border-color: rgba(232, 93, 117, 0.3);
+}
+
+/* ── Checkboxes sur les jaquettes ── */
+
+.delete-checkbox {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 10;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.delete-mode .delete-checkbox {
+    opacity: 1;
+}
+
+.delete-checkbox input {
+    display: none;
+}
+
+.delete-checkbox-mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.delete-checkbox-mark svg {
+    opacity: 0;
+    transform: scale(0.5);
+    transition: opacity 0.15s, transform 0.15s;
+}
+
+.delete-checkbox:hover .delete-checkbox-mark {
+    border-color: var(--accent-rose);
+    transform: scale(1.1);
+}
+
+.delete-selected .delete-checkbox-mark {
+    background: var(--accent-rose);
+    border-color: var(--accent-rose);
+}
+
+.delete-selected .delete-checkbox-mark svg {
+    opacity: 1;
+    transform: scale(1);
+    stroke: #fff;
+}
+
+/* Atténuer les cartes en mode sélection sauf celles sélectionnées */
+.delete-mode .lib-card {
+    opacity: 0.65;
+    transition: opacity 0.2s ease;
+}
+
+.delete-mode .lib-card:hover,
+.delete-mode .lib-card.delete-selected {
+    opacity: 1;
+}
+
+.delete-mode .lib-card.delete-selected {
+    box-shadow: 0 0 0 2px var(--accent-rose), var(--shadow-card-hover);
+}
+
+/* ── Barre flottante ── */
+
+.delete-bar {
+    position: fixed;
+    bottom: -80px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 900;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    transition: bottom 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.delete-bar.active {
+    bottom: 2rem;
+}
+
+.delete-bar-count {
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.delete-bar-count span {
+    color: var(--accent-rose);
+    font-size: 1.1rem;
+}
+
+.delete-bar-btn {
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.delete-bar-btn-danger {
+    background: var(--accent-rose-dim);
+    color: var(--accent-rose);
+    border: 1px solid rgba(232, 93, 117, 0.3);
+}
+
+.delete-bar-btn-danger:hover {
+    background: rgba(232, 93, 117, 0.25);
+    border-color: rgba(232, 93, 117, 0.5);
+}
+
+.delete-bar-btn-cancel {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+
+.delete-bar-btn-cancel:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+/* ── Delete Overlay (confirmation) ── */
+
+.delete-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    align-items: center;
+    justify-content: center;
+}
+
+.delete-overlay.active {
+    display: flex;
+}
+
+.delete-dialog {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 2rem;
+    max-width: 460px;
+    width: 90%;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+    animation: dialogIn 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.delete-dialog-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--accent-rose-dim);
+    margin-bottom: 1rem;
+}
+
+.delete-dialog-icon svg {
+    color: var(--accent-rose);
+}
+
+.delete-dialog-title {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+}
+
+.delete-dialog-text {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 1.25rem;
+}
+
+.delete-dialog-warning {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    padding: 0.6rem 0.8rem;
+    background: rgba(232, 93, 117, 0.06);
+    border-radius: var(--radius-sm);
+    border-left: 2px solid var(--accent-rose);
+    margin-bottom: 1.5rem;
+}
+
+.delete-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+/* ═══════════════════════════════════════════
+   Page Corbeille
+   ═══════════════════════════════════════════ */
+
+.trash-page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+}
+
+.trash-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2rem;
+}
+
+.trash-header h1 {
+    font-family: var(--font-display);
+    font-size: 1.75rem;
+    color: var(--text-primary);
+}
+
+.trash-header-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.trash-empty-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.55rem 1.1rem;
+    border: 1px solid rgba(232, 93, 117, 0.3);
+    border-radius: var(--radius-sm);
+    background: var(--accent-rose-dim);
+    color: var(--accent-rose);
+    font-family: var(--font-body);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.trash-empty-btn:hover {
+    background: rgba(232, 93, 117, 0.2);
+    border-color: rgba(232, 93, 117, 0.5);
+}
+
+.trash-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.trash-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.trash-item:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border);
+}
+
+.trash-item-poster {
+    width: 40px;
+    height: 60px;
+    border-radius: 4px;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: var(--bg-surface);
+}
+
+.trash-item-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.trash-item-no-poster {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    opacity: 0.3;
+}
+
+.trash-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.trash-item-title {
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.trash-item-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.15rem;
+}
+
+.trash-item-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 100px;
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.trash-item-type.type-movie {
+    background: rgba(91, 141, 239, 0.12);
+    color: var(--accent-blue);
+}
+
+.trash-item-type.type-series {
+    background: rgba(78, 203, 141, 0.12);
+    color: var(--accent-emerald);
+}
+
+.trash-item-actions {
+    display: flex;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+.trash-restore-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.trash-restore-btn:hover {
+    background: var(--accent-emerald-dim);
+    color: var(--accent-emerald);
+    border-color: rgba(78, 203, 141, 0.3);
+}
+
+.trash-empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+}
+
+.trash-empty-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 1rem;
+    opacity: 0.15;
+    color: var(--text-muted);
+}
+
+.trash-empty-title {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.trash-empty-text {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+/* ── Corbeille overlay de confirmation vidage ── */
+
+.trash-empty-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    align-items: center;
+    justify-content: center;
+}
+
+.trash-empty-overlay.active {
+    display: flex;
+}
+
+/* ── Responsive corbeille ── */
+
+@media (max-width: 600px) {
+    .trash-item {
+        flex-wrap: wrap;
+    }
+    .trash-item-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}

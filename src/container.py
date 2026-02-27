@@ -21,6 +21,7 @@ from .infrastructure.persistence.repositories import (
     SQLModelEpisodeRepository,
     SQLModelVideoFileRepository,
     SQLModelPendingValidationRepository,
+    SQLModelTrashRepository,
 )
 from .infrastructure.persistence.hash_service import compute_file_hash
 from .services.enricher import EnricherService
@@ -99,6 +100,10 @@ class Container(containers.DeclarativeContainer):
     )
     pending_validation_repository = providers.Factory(
         SQLModelPendingValidationRepository,
+        session=session,
+    )
+    trash_repository = providers.Factory(
+        SQLModelTrashRepository,
         session=session,
     )
 

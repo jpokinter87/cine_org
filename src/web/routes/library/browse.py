@@ -60,6 +60,9 @@ async def library_index(
     resolution: Optional[str] = None,
     codec_video: Optional[str] = None,
     codec_audio: Optional[str] = None,
+    language: Optional[str] = None,
+    no_file: Optional[str] = None,
+    no_poster: Optional[str] = None,
     search_mode: str = "title",
     unwatched: Optional[str] = None,
     sort: str = "title",
@@ -84,7 +87,9 @@ async def library_index(
             movie_stmt = select(MovieModel)
             if q:
                 movie_stmt = movie_stmt.where(
-                    _title_search_filter(MovieModel, q, extended=(search_mode == "extended"))
+                    _title_search_filter(
+                        MovieModel, q, extended=(search_mode == "extended")
+                    )
                 )
             if year_int:
                 movie_stmt = movie_stmt.where(MovieModel.year == year_int)
@@ -113,6 +118,14 @@ async def library_index(
                 movie_stmt = movie_stmt.where(MovieModel.codec_video == codec_video)
             if codec_audio:
                 movie_stmt = movie_stmt.where(MovieModel.codec_audio == codec_audio)
+            if language:
+                movie_stmt = movie_stmt.where(
+                    MovieModel.languages_json.contains(f'"{language}"')
+                )
+            if no_file == "1":
+                movie_stmt = movie_stmt.where(MovieModel.file_path.is_(None))
+            if no_poster == "1":
+                movie_stmt = movie_stmt.where(MovieModel.poster_path.is_(None))
             if unwatched == "1":
                 movie_stmt = movie_stmt.where(MovieModel.watched == False)  # noqa: E712
 
@@ -148,17 +161,21 @@ async def library_index(
                 )
 
         # --- Series ---
-        # Les filtres techniques (resolution, codec) ne s'appliquent pas aux series
+        # Les filtres techniques (resolution, codec, langue) ne s'appliquent pas aux series
         if (
             type in ("all", "series")
             and not resolution
             and not codec_video
             and not codec_audio
+            and not language
+            and not no_file
         ):
             series_stmt = select(SeriesModel)
             if q:
                 series_stmt = series_stmt.where(
-                    _title_search_filter(SeriesModel, q, extended=(search_mode == "extended"))
+                    _title_search_filter(
+                        SeriesModel, q, extended=(search_mode == "extended")
+                    )
                 )
             if year_int:
                 series_stmt = series_stmt.where(SeriesModel.year == year_int)
@@ -188,6 +205,8 @@ async def library_index(
                         | SeriesModel.cast_json.contains(person)
                     )
 
+            if no_poster == "1":
+                series_stmt = series_stmt.where(SeriesModel.poster_path.is_(None))
             if unwatched == "1":
                 series_stmt = series_stmt.where(SeriesModel.watched == False)  # noqa: E712
 
@@ -219,11 +238,13 @@ async def library_index(
         descending = order == "desc"
         if sort == "year":
             items.sort(
-                key=lambda x: (x["year"] or 0, title_sort_key(x["title"])), reverse=descending
+                key=lambda x: (x["year"] or 0, title_sort_key(x["title"])),
+                reverse=descending,
             )
         elif sort == "rating":
             items.sort(
-                key=lambda x: (x["rating"] or 0, title_sort_key(x["title"])), reverse=descending
+                key=lambda x: (x["rating"] or 0, title_sort_key(x["title"])),
+                reverse=descending,
             )
         elif sort == "resolution":
             items.sort(
@@ -336,6 +357,22 @@ async def library_index(
             if r
         )
 
+        # --- Langues distinctes pour le filtre ---
+        import json as _json
+
+        raw_langs: set[str] = set()
+        all_movie_langs = session.exec(
+            select(MovieModel.languages_json).where(
+                MovieModel.languages_json.is_not(None)
+            )
+        ).all()
+        for lj in all_movie_langs:
+            try:
+                raw_langs.update(_json.loads(lj))
+            except (ValueError, TypeError):
+                pass
+        all_languages = sorted(raw_langs)
+
     finally:
         session.close()
 
@@ -349,6 +386,7 @@ async def library_index(
         "resolutions": all_resolutions,
         "codecs_video": all_codecs_video,
         "codecs_audio": all_codecs_audio,
+        "languages": all_languages,
         "current_type": type,
         "current_genre": genre,
         "current_year": year_int,
@@ -358,11 +396,18 @@ async def library_index(
         "current_resolution": resolution or "",
         "current_codec_video": codec_video or "",
         "current_codec_audio": codec_audio or "",
+        "current_language": language or "",
+        "current_no_file": no_file == "1",
+        "current_no_poster": no_poster == "1",
         "current_search_mode": search_mode,
         "current_unwatched": unwatched == "1",
         "current_sort": sort,
         "current_order": order,
     }
+
+    # Vérifier si l'utilisateur est sur la machine maître (pour bouton suppression)
+    client_host = request.client.host if request.client else ""
+    context["is_local"] = client_host in {"127.0.0.1", "::1", "localhost"}
 
     # Si requete HTMX, retourner filtres + grille (le bloc #library-content)
     if request.headers.get("HX-Request"):

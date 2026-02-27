@@ -10,6 +10,15 @@
         <p class="hero-subtitle" id="library-count">{{ total_items }} titre{{ 's' if total_items != 1 else '' }} dans votre collection</p>
     </div>
 
+    {% if is_local %}
+    <div style="text-align: right; margin-bottom: 0.5rem; padding: 0 0.5rem;">
+        <button id="delete-mode-toggle" class="delete-mode-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Sélectionner pour suppression
+        </button>
+    </div>
+    {% endif %}
+
     <div id="library-content">
         {% include "library/_filters.html" %}
         {% include "library/_grid.html" %}
@@ -20,6 +29,36 @@
 <div class="poster-lightbox" id="poster-lightbox" onclick="this.classList.remove('active')">
     <img id="poster-lightbox-img" src="" alt="">
 </div>
+
+{% if is_local %}
+<!-- Barre flottante de sélection -->
+<div class="delete-bar" id="delete-bar">
+    <div class="delete-bar-count"><span id="delete-count">0</span> sélectionné(s)</div>
+    <button class="delete-bar-btn delete-bar-btn-danger" id="delete-confirm-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 3px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        Supprimer la sélection
+    </button>
+    <button class="delete-bar-btn delete-bar-btn-cancel" id="delete-cancel-btn">Annuler</button>
+</div>
+
+<!-- Dialogue de confirmation suppression -->
+<div class="delete-overlay" id="delete-overlay">
+    <div class="delete-dialog">
+        <div class="delete-dialog-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        </div>
+        <h3 class="delete-dialog-title">Supprimer <span id="delete-overlay-count">0</span> élément(s) ?</h3>
+        <p class="delete-dialog-text">Les éléments sélectionnés seront déplacés dans la corbeille. Les symlinks vidéo seront supprimés mais les fichiers physiques seront conservés jusqu'au vidage de la corbeille.</p>
+        <div class="delete-dialog-warning">Les séries sélectionnées seront supprimées avec tous leurs épisodes.</div>
+        <div class="delete-dialog-actions">
+            <button class="reject-dialog-cancel" id="delete-overlay-cancel">Annuler</button>
+            <button class="reject-dialog-confirm" id="delete-overlay-confirm">Confirmer la suppression</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/delete.js"></script>
+{% endif %}
 
 <script>
 function openPosterLightbox(src) {

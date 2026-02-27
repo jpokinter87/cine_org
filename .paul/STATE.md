@@ -10,15 +10,16 @@ See: .paul/PROJECT.md (updated 2026-02-27)
 ## Current Position
 
 Milestone: v1.6 Gestion & Qualité de Données
-Phase: 22 of 4 (Suppression depuis la Bibliothèque) — Not started
+Phase: 23 of 4 (Lectures Simultanées) — Not started
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-02-27 — Phase 21 complete, transitioned to Phase 22
+Last activity: 2026-02-27 — Phase 22 complete, transitioned to Phase 23
 
 Progress:
-- v1.6: [█████░░░░░] 50%
+- v1.6: [███████░░░] 75%
 - Phase 20: [██████████] 100% ✓
 - Phase 21: [██████████] 100% ✓
+- Phase 22: [██████████] 100% ✓
 
 ## Loop Position
 
@@ -40,6 +41,8 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Dialogues custom overlay au lieu de confirm() natif — cohérence charte graphique
 - Version footer dynamique via tomllib dans deps.py
 - Suppression : corbeille provisoire réversible, suppression physique uniquement au vidage définitif
+- Suppression restreinte à la machine maître (localhost only — bouton masqué + 403)
+- sessionStorage pour persistance état sélection entre pages
 - Seuil fuzzy 0.85 validé pour link-movies et enrich-tvdb-ids
 - Index mémoire par année pour matching batch (pas de requête DB par symlink)
 - Recherche TVDB multi-titre : FR→original→racine (tiret) + nettoyage année
@@ -52,20 +55,23 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Outil pour lister facilement les épisodes/séries avec données manquantes (correction manuelle)
 - 285 épisodes sans titre (limites TVDB : séries anciennes, numérotation spéciale)
 - 5 séries sans tvdb_id (Dahmer="Monstre" sur TVDB, Ed Gein/Playgame/Suspect pas sur TVDB, Punisher=homonyme)
+- Lecteur distant : aucun message d'erreur si le profil est mal configuré (lecture s'arrête après 1s sans feedback)
+- Recherche symlinks : algorithme ne retrouve pas les symlinks existants quand l'arborescence video/ a divergé de storage/ (ex: Wadjda, subdivision/année différentes)
+- Test suppression depuis machine distante (vérifier bouton masqué + routes bloquées)
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: 8c1f466 feat(21-donnees-manquantes): link-movies amélioré
+Last commit: eabdc85 feat(21-donnees-manquantes): résolution données manquantes
 Branch: master
-Uncommitted: enrich-tvdb-ids (plan 21-02)
+Uncommitted: Phase 22 (suppression batch + corbeille)
 
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Phase 21 complete, ready to plan Phase 22
-Next action: /paul:plan for Phase 22 (Suppression depuis la Bibliothèque)
+Stopped at: Phase 22 complete, ready to plan Phase 23
+Next action: /paul:plan for Phase 23, or git commit Phase 22
 Resume file: .paul/ROADMAP.md
 
 ---
