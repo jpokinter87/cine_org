@@ -2,7 +2,7 @@
 
 ## Project Reference
 
-See: .paul/PROJECT.md (updated 2026-02-26)
+See: .paul/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Organiser et renommer automatiquement une vidéothèque personnelle à partir des téléchargements
 **Current focus:** v1.6 Gestion & Qualité de Données
@@ -10,14 +10,15 @@ See: .paul/PROJECT.md (updated 2026-02-26)
 ## Current Position
 
 Milestone: v1.6 Gestion & Qualité de Données
-Phase: 21 of 4 (Résolution Données Manquantes) — In Progress
-Plan: 21-01 complete, 21-02 to create (épisodes sans titres)
-Status: Ready for next PLAN
-Last activity: 2026-02-27 — Plan 21-01 unified (1040 films liés, 82.5%)
+Phase: 22 of 4 (Suppression depuis la Bibliothèque) — Not started
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-02-27 — Phase 21 complete, transitioned to Phase 22
 
 Progress:
-- v1.6: [███░░░░░░░] 30%
-- Phase 21: [█████░░░░░] 50% (plan 01/02)
+- v1.6: [█████░░░░░] 50%
+- Phase 20: [██████████] 100% ✓
+- Phase 21: [██████████] 100% ✓
 
 ## Loop Position
 
@@ -39,29 +40,33 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Dialogues custom overlay au lieu de confirm() natif — cohérence charte graphique
 - Version footer dynamique via tomllib dans deps.py
 - Suppression : corbeille provisoire réversible, suppression physique uniquement au vidage définitif
-- Seuil fuzzy 0.85 validé pour link-movies (bon ratio vrais/faux positifs)
+- Seuil fuzzy 0.85 validé pour link-movies et enrich-tvdb-ids
 - Index mémoire par année pour matching batch (pas de requête DB par symlink)
+- Recherche TVDB multi-titre : FR→original→racine (tiret) + nettoyage année
 
 ### Deferred Issues
 - Symlinks épisodes ne reflètent pas les nouveaux titres
 - Test lecteur distant sur machine Windows (stand-by)
-- ~10-12 films récupérables via normalisation de ponctuation (`:·?` → `-...`) — candidat plan 21-03 optionnel
+- ~10-12 films récupérables via normalisation de ponctuation (`:·?` → `-...`)
 - 197 films sans fichier physique correspondant — irrésoluble par matching
+- Outil pour lister facilement les épisodes/séries avec données manquantes (correction manuelle)
+- 285 épisodes sans titre (limites TVDB : séries anciennes, numérotation spéciale)
+- 5 séries sans tvdb_id (Dahmer="Monstre" sur TVDB, Ed Gein/Playgame/Suspect pas sur TVDB, Punisher=homonyme)
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: 5478a47 feat(20-navigation-affichage): cartouches cliquables, genres normalisés, tri récemment ajouté
+Last commit: 8c1f466 feat(21-donnees-manquantes): link-movies amélioré
 Branch: master
-Uncommitted: src/adapters/cli/commands/import_commands.py (link-movies amélioré)
+Uncommitted: enrich-tvdb-ids (plan 21-02)
 
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Plan 21-01 unified
-Next action: Commit changes, then run /paul:plan for plan 21-02 (épisodes sans titres, séries sans tvdb_id)
-Resume file: .paul/phases/21-donnees-manquantes/21-01-SUMMARY.md
+Stopped at: Phase 21 complete, ready to plan Phase 22
+Next action: /paul:plan for Phase 22 (Suppression depuis la Bibliothèque)
+Resume file: .paul/ROADMAP.md
 
 ---
 *STATE.md — Updated after every significant action*

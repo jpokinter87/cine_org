@@ -16,6 +16,7 @@ from src.adapters.cli.commands.import_commands import (
     clean_titles,
     enrich_episode_titles,
     enrich_tech,
+    enrich_tvdb_ids,
     import_library,
     enrich,
     link_movies,
@@ -94,4 +95,5 @@ __all__ = [
     "clean_titles",
     "enrich_tech",
     "enrich_episode_titles",
+    "enrich_tvdb_ids",
 ]

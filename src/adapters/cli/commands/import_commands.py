@@ -1231,3 +1231,206 @@ async def _enrich_episode_titles_async(
 
     if tvdb_client:
         await tvdb_client.close()
+
+
+# --- Commande enrich-tvdb-ids ---
+
+
+def enrich_tvdb_ids(
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Simule sans modifier la base"),
+    ] = False,
+    limit: Annotated[
+        int,
+        typer.Option("--limit", help="Nombre max de séries à traiter (0 = toutes)"),
+    ] = 0,
+) -> None:
+    """Peuple les tvdb_id manquants des séries via TMDB external_ids et recherche TVDB."""
+    asyncio.run(_enrich_tvdb_ids_async(dry_run, limit))
+
+
+@with_container()
+async def _enrich_tvdb_ids_async(
+    container, dry_run: bool, limit: int
+) -> None:
+    """Implémentation async de enrich-tvdb-ids."""
+    from difflib import SequenceMatcher
+
+    from sqlmodel import select
+
+    from src.infrastructure.persistence.models import SeriesModel
+
+    series_repo = container.series_repository()
+    session = series_repo._session
+    tmdb_client = container.tmdb_client()
+    tvdb_client = container.tvdb_client()
+
+    # Séries sans tvdb_id
+    series_list = list(
+        session.exec(
+            select(SeriesModel).where(SeriesModel.tvdb_id.is_(None))
+        ).all()
+    )
+    if limit > 0:
+        series_list = series_list[:limit]
+
+    console.print(
+        f"[bold cyan]Enrichissement tvdb_id[/bold cyan]: "
+        f"{len(series_list)} séries sans tvdb_id\n"
+    )
+    if not series_list:
+        console.print("[green]Aucune série à traiter.[/green]")
+        return
+
+    if dry_run:
+        console.print("[yellow]Mode dry-run — aucune modification[/yellow]\n")
+
+    found_tmdb = 0
+    found_tvdb = 0
+    not_found = 0
+    errors = 0
+
+    with suppress_loguru():
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("[cyan]Recherche...", total=len(series_list))
+
+            for series in series_list:
+                progress.update(
+                    task,
+                    description=f"[cyan]{series.title}",
+                )
+
+                tvdb_id = None
+                method = ""
+
+                # Stratégie 1 : TMDB external_ids (si tmdb_id disponible)
+                if series.tmdb_id:
+                    try:
+                        ext_ids = await tmdb_client.get_tv_external_ids(
+                            str(series.tmdb_id)
+                        )
+                        if ext_ids and ext_ids.get("tvdb_id"):
+                            tvdb_id = int(ext_ids["tvdb_id"])
+                            method = "TMDB external_ids"
+                    except Exception:
+                        pass
+
+                # Stratégie 2 : Recherche TVDB par titre (FR puis original, puis racine)
+                if tvdb_id is None:
+                    # Titres à chercher : FR d'abord, puis original si différent
+                    search_titles = [series.title]
+                    if (
+                        series.original_title
+                        and series.original_title.lower() != series.title.lower()
+                    ):
+                        search_titles.append(series.original_title)
+                    # Ajouter la racine (avant " - ") si le titre contient un tiret
+                    for t in list(search_titles):
+                        if " - " in t:
+                            root = t.split(" - ")[0].strip()
+                            if root not in search_titles:
+                                search_titles.append(root)
+
+                    try:
+                        for search_title in search_titles:
+                            if tvdb_id is not None:
+                                break
+                            results = await tvdb_client.search(
+                                search_title, series.year
+                            )
+                            if not results:
+                                continue
+
+                            # Comparer contre le titre FR, l'original, et le terme de recherche
+                            candidates = {series.title.lower()}
+                            if series.original_title:
+                                candidates.add(series.original_title.lower())
+                            candidates.add(search_title.lower())
+
+                            best = None
+                            # Préparer les variantes normalisées des candidats
+                            norm_candidates = {_normalize_for_match(c) for c in candidates}
+
+                            # Match exact (case-insensitive), y compris sans année entre ()
+                            for r in results:
+                                if r.title:
+                                    r_lower = r.title.lower()
+                                    r_clean = re.sub(r"\s*\(\d{4}\)\s*$", "", r_lower)
+                                    r_norm = _normalize_for_match(r.title)
+                                    r_norm_clean = _normalize_for_match(r_clean)
+                                    if (
+                                        r_lower in candidates
+                                        or r_clean in candidates
+                                        or r_norm in norm_candidates
+                                        or r_norm_clean in norm_candidates
+                                    ):
+                                        best = r
+                                        break
+                            # Match fuzzy ≥ 0.85 sur titres normalisés
+                            if best is None:
+                                for r in results:
+                                    if r.title:
+                                        r_norm = _normalize_for_match(r.title)
+                                        for nc in norm_candidates:
+                                            ratio = SequenceMatcher(
+                                                None, nc, r_norm
+                                            ).ratio()
+                                            if ratio >= 0.85:
+                                                best = r
+                                                break
+                                        if best:
+                                            break
+
+                            if best:
+                                tvdb_id = int(best.id)
+                                method = f"TVDB search \"{search_title}\" → \"{best.title}\""
+                    except Exception:
+                        errors += 1
+                        progress.advance(task)
+                        continue
+
+                if tvdb_id:
+                    if method.startswith("TMDB"):
+                        found_tmdb += 1
+                    else:
+                        found_tvdb += 1
+
+                    if dry_run:
+                        console.print(
+                            f"  [green]✓[/green] {series.title} ({series.year}) "
+                            f"→ tvdb_id={tvdb_id} [dim]({method})[/dim]"
+                        )
+                    else:
+                        series.tvdb_id = tvdb_id
+                        session.add(series)
+                        session.commit()
+                else:
+                    not_found += 1
+                    if dry_run:
+                        console.print(
+                            f"  [yellow]✗[/yellow] {series.title} ({series.year}) "
+                            f"— aucun match"
+                        )
+
+                progress.advance(task)
+
+    console.print("\n[bold]Résumé:[/bold]")
+    console.print(f"  [green]{found_tmdb}[/green] trouvé(s) via TMDB external_ids")
+    console.print(f"  [green]{found_tvdb}[/green] trouvé(s) via recherche TVDB")
+    console.print(f"  [bold green]{found_tmdb + found_tvdb}[/bold green] total")
+    if not_found > 0:
+        console.print(f"  [yellow]{not_found}[/yellow] non trouvé(s)")
+    if errors > 0:
+        console.print(f"  [red]{errors}[/red] erreur(s)")
+
+    if tmdb_client:
+        await tmdb_client.close()
+    if tvdb_client:
+        await tvdb_client.close()

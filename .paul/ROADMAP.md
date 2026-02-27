@@ -8,12 +8,12 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 **v1.6 Gestion & Qualité de Données** (v1.6.0)
 Status: In Progress
-Phases: 1 of 4 complete
+Phases: 2 of 4 complete
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 20 | Améliorations Navigation & Affichage | 1/1 | Complete | 2026-02-27 |
-| 21 | Résolution Données Manquantes | 1/2 | In Progress | - |
+| 21 | Résolution Données Manquantes | 2/2 | Complete | 2026-02-27 |
 | 22 | Suppression depuis la Bibliothèque | TBD | Not started | - |
 | 23 | Lectures Simultanées | TBD | Not started | - |
 
@@ -107,4 +107,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-27 — Phase 21 plan 01 complete (1040 films liés)*
+*Last updated: 2026-02-27 — Phase 21 complete (1040 films liés, 13 tvdb_id, 98 titres épisodes)*

@@ -83,7 +83,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 - [ ] Gestion & Qualité de Données (v1.6)
   - [x] Cartouches accueil cliquables, genres normalisés FR, tri récemment ajouté — Phase 20
-  - [ ] Résolution données manquantes (films sans file_path, épisodes sans titre) — Phase 21
+  - [x] Résolution données manquantes (films sans file_path, épisodes sans titre) — Phase 21
   - [ ] Suppression depuis la bibliothèque avec corbeille — Phase 22
   - [ ] Lectures simultanées — Phase 23
 
@@ -152,6 +152,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | NullPool pour SQLite | Résout le QueuePool exhaustion avec providers.Factory | 2026-02-26 | Active |
 | Cascade inverse séries (send-back/reset) | Renvoyer un épisode renvoie toute la série | 2026-02-26 | Active |
 | Version footer dynamique via tomllib | Centralisé dans deps.py avec les templates Jinja2 | 2026-02-26 | Active |
+| Matching progressif link-movies | Normalisé→substring→contains→fuzzy (seuil 0.85) | 2026-02-27 | Active |
+| Recherche TVDB multi-titre | FR→original→racine (tiret) + nettoyage année | 2026-02-27 | Active |
 
 ## Success Metrics
 
@@ -175,4 +177,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-26 after v1.5 milestone complete*
+*Last updated: 2026-02-27 after Phase 21 complete*
