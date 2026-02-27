@@ -81,7 +81,11 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-*(Aucun — milestone v1.5 complet)*
+- [ ] Gestion & Qualité de Données (v1.6)
+  - [x] Cartouches accueil cliquables, genres normalisés FR, tri récemment ajouté — Phase 20
+  - [ ] Résolution données manquantes (films sans file_path, épisodes sans titre) — Phase 21
+  - [ ] Suppression depuis la bibliothèque avec corbeille — Phase 22
+  - [ ] Lectures simultanées — Phase 23
 
 ### Out of Scope
 

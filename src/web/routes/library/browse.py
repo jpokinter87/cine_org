@@ -3,6 +3,7 @@ Route de navigation de la bibliothèque — listing avec filtres et pagination.
 """
 
 import math
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Request
@@ -22,6 +23,27 @@ from .helpers import (
     _resolution_pixels,
     _title_search_filter,
 )
+
+# Normalisation des genres anglais/composés vers le français
+_GENRE_NORMALIZE: dict[str, str | None] = {
+    "Drama": "Drame",
+    "Family": "Familial",
+    "Fantasy": "Fantastique",
+    "Mystery": "Mystère",
+    "Action & Adventure": "Action",
+    "War & Politics": "Guerre",
+    "Science-Fiction & Fantastique": "Science-Fiction",
+    "Kids": "Animation",
+    "Soap": None,
+    "Talk": None,
+    "Sport": None,
+}
+
+# Table inverse : français → liste de variantes anglaises
+_GENRE_VARIANTS: dict[str, list[str]] = {}
+for _en, _fr in _GENRE_NORMALIZE.items():
+    if _fr is not None:
+        _GENRE_VARIANTS.setdefault(_fr, []).append(_en)
 
 router = APIRouter()
 
@@ -67,7 +89,16 @@ async def library_index(
             if year_int:
                 movie_stmt = movie_stmt.where(MovieModel.year == year_int)
             if genre:
-                movie_stmt = movie_stmt.where(MovieModel.genres_json.contains(_genre_json_escaped(genre)))
+                from sqlalchemy import or_ as sa_or
+
+                genre_conditions = [
+                    MovieModel.genres_json.contains(_genre_json_escaped(genre))
+                ]
+                for variant in _GENRE_VARIANTS.get(genre, []):
+                    genre_conditions.append(
+                        MovieModel.genres_json.contains(_genre_json_escaped(variant))
+                    )
+                movie_stmt = movie_stmt.where(sa_or(*genre_conditions))
             if person:
                 if person_role == "director":
                     movie_stmt = movie_stmt.where(MovieModel.director.contains(person))
@@ -112,6 +143,7 @@ async def library_index(
                         "codec_video": m.codec_video,
                         "codec_audio": m.codec_audio,
                         "watched": m.watched,
+                        "created_at": m.created_at,
                     }
                 )
 
@@ -131,7 +163,16 @@ async def library_index(
             if year_int:
                 series_stmt = series_stmt.where(SeriesModel.year == year_int)
             if genre:
-                series_stmt = series_stmt.where(SeriesModel.genres_json.contains(_genre_json_escaped(genre)))
+                from sqlalchemy import or_ as sa_or
+
+                genre_conditions_s = [
+                    SeriesModel.genres_json.contains(_genre_json_escaped(genre))
+                ]
+                for variant in _GENRE_VARIANTS.get(genre, []):
+                    genre_conditions_s.append(
+                        SeriesModel.genres_json.contains(_genre_json_escaped(variant))
+                    )
+                series_stmt = series_stmt.where(sa_or(*genre_conditions_s))
             if person:
                 if person_role == "director":
                     series_stmt = series_stmt.where(
@@ -170,6 +211,7 @@ async def library_index(
                         "codec_video": None,
                         "codec_audio": None,
                         "watched": s.watched,
+                        "created_at": s.created_at,
                     }
                 )
 
@@ -207,6 +249,14 @@ async def library_index(
                 ),
                 reverse=descending,
             )
+        elif sort == "created_at":
+            items.sort(
+                key=lambda x: (
+                    x.get("created_at") or datetime.min,
+                    title_sort_key(x["title"]),
+                ),
+                reverse=descending,
+            )
         else:  # title
             items.sort(key=lambda x: title_sort_key(x["title"]), reverse=descending)
 
@@ -217,18 +267,28 @@ async def library_index(
         start = (page - 1) * ITEMS_PER_PAGE
         page_items = items[start : start + ITEMS_PER_PAGE]
 
-        # --- Genres distincts pour le filtre ---
-        all_genres: set[str] = set()
+        # --- Genres distincts pour le filtre (normalisés EN→FR) ---
+        raw_genres: set[str] = set()
         all_movie_genres = session.exec(
             select(MovieModel.genres_json).where(MovieModel.genres_json.is_not(None))
         ).all()
         for gj in all_movie_genres:
-            all_genres.update(_parse_genres(gj))
+            raw_genres.update(_parse_genres(gj))
         all_series_genres = session.exec(
             select(SeriesModel.genres_json).where(SeriesModel.genres_json.is_not(None))
         ).all()
         for gj in all_series_genres:
-            all_genres.update(_parse_genres(gj))
+            raw_genres.update(_parse_genres(gj))
+
+        # Normaliser : remplacer les variantes anglaises par le français
+        all_genres: set[str] = set()
+        for g in raw_genres:
+            if g in _GENRE_NORMALIZE:
+                normalized = _GENRE_NORMALIZE[g]
+                if normalized is not None:
+                    all_genres.add(normalized)
+            else:
+                all_genres.add(g)
 
         # --- Annees distinctes pour le filtre ---
         movie_years = session.exec(

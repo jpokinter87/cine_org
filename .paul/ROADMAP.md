@@ -6,13 +6,36 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 ## Current Milestone
 
-**v1.5 Polish & Corrections UX** (v1.5.0)
-Status: Complete
-Completed: 2026-02-26
+**v1.6 Gestion & Qualité de Données** (v1.6.0)
+Status: In Progress
+Phases: 1 of 4 complete
 
-## Next Milestone
+| Phase | Name | Plans | Status | Completed |
+|-------|------|-------|--------|-----------|
+| 20 | Améliorations Navigation & Affichage | 1/1 | Complete | 2026-02-27 |
+| 21 | Résolution Données Manquantes | TBD | Not started | - |
+| 22 | Suppression depuis la Bibliothèque | TBD | Not started | - |
+| 23 | Lectures Simultanées | TBD | Not started | - |
 
-Run /paul:discuss-milestone or /paul:milestone to define.
+### Phase 20: Améliorations Navigation & Affichage
+
+Focus: Quick wins UX — cartouches accueil cliquables (Films→Biblio Films, Séries→Biblio Séries, En attente→Validation), chemin S01E01 sur fiches séries, dédoublonnage genres (Drame/Drama), tri "récemment ajoutés"
+Plans: TBD (defined during /paul:plan)
+
+### Phase 21: Résolution Données Manquantes
+
+Focus: Combler les 1260 films sans file_path (matching fuzzy/normalisation), 367 épisodes sans titres (recherche alternative TVDB), diagnostic métadonnées techniques manquantes (cas "La Zone d'Intérêt")
+Plans: TBD (defined during /paul:plan)
+
+### Phase 22: Suppression depuis la Bibliothèque
+
+Focus: Sélection multiple de fiches avec filtres, confirmation obligatoire, corbeille provisoire (consultation, restauration individuelle, vidage définitif), cascade série complète. Suppression physique uniquement au vidage.
+Plans: TBD (defined during /paul:plan)
+
+### Phase 23: Lectures Simultanées
+
+Focus: Permettre plusieurs lectures vidéo en parallèle, supprimer la contrainte de profil lecteur unique actif, sessions de lecture indépendantes.
+Plans: TBD (defined during /paul:plan)
 
 ## Completed Milestones
 
@@ -84,4 +107,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-26 — Milestone v1.5 complete*
+*Last updated: 2026-02-27 — Phase 20 complete*
