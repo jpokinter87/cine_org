@@ -10,21 +10,21 @@ See: .paul/PROJECT.md (updated 2026-02-26)
 ## Current Position
 
 Milestone: v1.6 Gestion & Qualité de Données
-Phase: 21 of 4 (Résolution Données Manquantes)
-Plan: Not started
-Status: Phase 20 complete, ready to plan Phase 21
-Last activity: 2026-02-27 — Phase 20 complete
+Phase: 21 of 4 (Résolution Données Manquantes) — In Progress
+Plan: 21-01 complete, 21-02 to create (épisodes sans titres)
+Status: Ready for next PLAN
+Last activity: 2026-02-27 — Plan 21-01 unified (1040 films liés, 82.5%)
 
 Progress:
-- v1.6: [██░░░░░░░░] 25%
-- Phase 20: [██████████] 100% ✓
+- v1.6: [███░░░░░░░] 30%
+- Phase 21: [█████░░░░░] 50% (plan 01/02)
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop complete — Phase 20 done, ready for Phase 21]
+  ✓        ✓        ✓     [Loop complete — ready for next PLAN]
 ```
 
 ## Accumulated Context
@@ -39,24 +39,29 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Dialogues custom overlay au lieu de confirm() natif — cohérence charte graphique
 - Version footer dynamique via tomllib dans deps.py
 - Suppression : corbeille provisoire réversible, suppression physique uniquement au vidage définitif
+- Seuil fuzzy 0.85 validé pour link-movies (bon ratio vrais/faux positifs)
+- Index mémoire par année pour matching batch (pas de requête DB par symlink)
 
 ### Deferred Issues
 - Symlinks épisodes ne reflètent pas les nouveaux titres
 - Test lecteur distant sur machine Windows (stand-by)
+- ~10-12 films récupérables via normalisation de ponctuation (`:·?` → `-...`) — candidat plan 21-03 optionnel
+- 197 films sans fichier physique correspondant — irrésoluble par matching
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: c963ed9 chore: retirer player_profiles.json du dépôt (données personnelles)
+Last commit: 5478a47 feat(20-navigation-affichage): cartouches cliquables, genres normalisés, tri récemment ajouté
 Branch: master
+Uncommitted: src/adapters/cli/commands/import_commands.py (link-movies amélioré)
 
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Phase 20 complete, transition done
-Next action: /paul:plan for Phase 21
-Resume file: .paul/phases/20-navigation-affichage/20-01-SUMMARY.md
+Stopped at: Plan 21-01 unified
+Next action: Commit changes, then run /paul:plan for plan 21-02 (épisodes sans titres, séries sans tvdb_id)
+Resume file: .paul/phases/21-donnees-manquantes/21-01-SUMMARY.md
 
 ---
 *STATE.md — Updated after every significant action*

@@ -13,7 +13,7 @@ Phases: 1 of 4 complete
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 20 | Améliorations Navigation & Affichage | 1/1 | Complete | 2026-02-27 |
-| 21 | Résolution Données Manquantes | TBD | Not started | - |
+| 21 | Résolution Données Manquantes | 1/2 | In Progress | - |
 | 22 | Suppression depuis la Bibliothèque | TBD | Not started | - |
 | 23 | Lectures Simultanées | TBD | Not started | - |
 
@@ -107,4 +107,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-27 — Phase 20 complete*
+*Last updated: 2026-02-27 — Phase 21 plan 01 complete (1040 films liés)*

@@ -351,6 +351,23 @@ async def _populate_movies_async(container, limit: int, dry_run: bool) -> None:
 _FILM_NAME_RE = re.compile(r"^(.+?)\s*\((\d{4})\)")
 
 
+def _normalize_for_match(title: str) -> str:
+    """Normalise un titre pour comparaison : sans accents, minuscules, sans articles."""
+    import unicodedata
+
+    # Supprimer les accents (NFD decomposition puis filtrage des combining chars)
+    nfkd = unicodedata.normalize("NFKD", title)
+    ascii_str = "".join(c for c in nfkd if not unicodedata.combining(c))
+    result = ascii_str.lower().strip()
+    # Supprimer les articles en début de titre
+    result = re.sub(
+        r"^(l'|le |la |les |the |a |an |un |une |des |das |der |die |el |los |las )",
+        "",
+        result,
+    )
+    return result.strip()
+
+
 def link_movies(
     dry_run: Annotated[
         bool,
@@ -363,8 +380,10 @@ def link_movies(
 
 @with_container()
 async def _link_movies_async(container, dry_run: bool) -> None:
-    """Implementation async de link-movies."""
-    from sqlmodel import or_, select
+    """Implementation async de link-movies avec matching progressif."""
+    from difflib import SequenceMatcher
+
+    from sqlmodel import select
 
     from src.infrastructure.persistence.models import MovieModel
     from src.utils.constants import VIDEO_EXTENSIONS
@@ -378,7 +397,92 @@ async def _link_movies_async(container, dry_run: bool) -> None:
         console.print(f"[red]Erreur:[/red] Repertoire introuvable: {video_films_dir}")
         raise typer.Exit(code=1)
 
+    def _try_match_movie(
+        file_title: str,
+        year: int,
+        movies_by_year: dict[int, list[tuple[str, str | None, "MovieModel"]]],
+    ) -> tuple["MovieModel | None", str]:
+        """Cherche un film par matching progressif. Retourne (movie, methode)."""
+        candidates = movies_by_year.get(year, [])
+        if not candidates:
+            return None, ""
+
+        norm_file = _normalize_for_match(file_title)
+
+        # 1. Match normalisé exact
+        for norm_title, norm_original, movie in candidates:
+            if movie.file_path:
+                continue
+            if norm_file == norm_title or (norm_original and norm_file == norm_original):
+                return movie, "normalized"
+
+        # 2. Match par sous-titre (fichier contient " - " avec sous-titre)
+        if "  -  " in file_title or " - " in file_title:
+            separator = "  -  " if "  -  " in file_title else " - "
+            main_title = file_title.split(separator)[0].strip()
+            norm_main = _normalize_for_match(main_title)
+            for norm_title, norm_original, movie in candidates:
+                if movie.file_path:
+                    continue
+                if norm_main == norm_title or (
+                    norm_original and norm_main == norm_original
+                ):
+                    return movie, "substring"
+
+        # 3. Match par contenu (titre DB contenu dans nom fichier ou inversement)
+        for norm_title, norm_original, movie in candidates:
+            if movie.file_path:
+                continue
+            if len(norm_title) >= 5 and (
+                norm_title in norm_file or norm_file in norm_title
+            ):
+                return movie, "contains"
+            if (
+                norm_original
+                and len(norm_original) >= 5
+                and (norm_original in norm_file or norm_file in norm_original)
+            ):
+                return movie, "contains"
+
+        # 4. Match fuzzy (SequenceMatcher >= 0.85)
+        best_ratio = 0.0
+        best_movie = None
+        for norm_title, norm_original, movie in candidates:
+            if movie.file_path:
+                continue
+            ratio = SequenceMatcher(None, norm_file, norm_title).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_movie = movie
+            if norm_original:
+                ratio_orig = SequenceMatcher(None, norm_file, norm_original).ratio()
+                if ratio_orig > best_ratio:
+                    best_ratio = ratio_orig
+                    best_movie = movie
+        if best_ratio >= 0.85 and best_movie and not best_movie.file_path:
+            return best_movie, "fuzzy"
+
+        return None, ""
+
     with suppress_loguru():
+        # --- Pre-charger l'index des films sans file_path par annee ---
+        all_movies_no_fp = session.exec(
+            select(MovieModel).where(MovieModel.file_path.is_(None))
+        ).all()
+        movies_by_year: dict[int, list[tuple[str, str | None, MovieModel]]] = {}
+        for movie in all_movies_no_fp:
+            if movie.year:
+                entry = (
+                    _normalize_for_match(movie.title),
+                    _normalize_for_match(movie.original_title)
+                    if movie.original_title
+                    else None,
+                    movie,
+                )
+                movies_by_year.setdefault(movie.year, []).append(entry)
+
+        initial_no_fp = len(all_movies_no_fp)
+
         # Lister tous les symlinks video dans Films/
         symlinks = [
             f
@@ -388,13 +492,14 @@ async def _link_movies_async(container, dry_run: bool) -> None:
 
         console.print(
             f"[bold cyan]Association films ↔ fichiers[/bold cyan]: "
-            f"{len(symlinks)} symlinks dans {video_films_dir}\n"
+            f"{len(symlinks)} symlinks, {initial_no_fp} films sans fichier\n"
         )
 
         if dry_run:
             console.print("[yellow]Mode dry-run — aucune modification[/yellow]\n")
 
-        linked = 0
+        # Compteurs par methode
+        stats = {"exact": 0, "normalized": 0, "substring": 0, "contains": 0, "fuzzy": 0}
         already = 0
         not_found = 0
         no_target = 0
@@ -406,7 +511,9 @@ async def _link_movies_async(container, dry_run: bool) -> None:
             TaskProgressColumn(),
             console=console,
         ) as progress:
-            task = progress.add_task("[cyan]Association...", total=len(symlinks))
+            task = progress.add_task(
+                "[cyan]Passe 1 — symlinks...", total=len(symlinks)
+            )
 
             for symlink in symlinks:
                 m = _FILM_NAME_RE.match(symlink.name)
@@ -431,23 +538,13 @@ async def _link_movies_async(container, dry_run: bool) -> None:
 
                 file_path = str(target)
 
-                # Chercher le film en base (titre ou titre original + annee)
-                results = session.exec(
-                    select(MovieModel).where(
-                        or_(
-                            MovieModel.title == title,
-                            MovieModel.original_title == title,
-                        ),
-                        MovieModel.year == year,
-                    )
-                ).all()
+                # Matching progressif via l'index en memoire
+                movie, method = _try_match_movie(title, year, movies_by_year)
 
-                if not results:
+                if not movie:
                     not_found += 1
                     progress.advance(task)
                     continue
-
-                movie = results[0]
 
                 if movie.file_path:
                     already += 1
@@ -461,14 +558,14 @@ async def _link_movies_async(container, dry_run: bool) -> None:
                     session.add(movie)
                     session.commit()
 
-                linked += 1
+                stats[method] += 1
                 progress.advance(task)
 
-    # --- Passe 2 : recherche dans storage/ pour les films sans file_path ---
-    storage_linked = 0
+    # --- Passe 2 : recherche dans storage/ pour les films encore sans file_path ---
+    storage_stats = {"exact": 0, "normalized": 0, "substring": 0, "contains": 0, "fuzzy": 0}
     storage_films_dir = Path(config.storage_dir) / "Films"
     if storage_films_dir.exists():
-        # Films en base sans file_path
+        # Recharger les films encore sans file_path
         movies_no_fp = session.exec(
             select(MovieModel).where(MovieModel.file_path.is_(None))
         ).all()
@@ -476,16 +573,31 @@ async def _link_movies_async(container, dry_run: bool) -> None:
         if movies_no_fp:
             console.print(
                 f"\n[bold cyan]Passe 2 — recherche dans storage/[/bold cyan]: "
-                f"{len(movies_no_fp)} films sans fichier\n"
+                f"{len(movies_no_fp)} films encore sans fichier\n"
             )
 
-            # Index des fichiers storage par (titre, année)
-            storage_files: dict[tuple[str, int], Path] = {}
+            # Reconstruire l'index des films sans file_path
+            movies_by_year_2: dict[int, list[tuple[str, str | None, MovieModel]]] = {}
+            for movie in movies_no_fp:
+                if movie.year:
+                    entry = (
+                        _normalize_for_match(movie.title),
+                        _normalize_for_match(movie.original_title)
+                        if movie.original_title
+                        else None,
+                        movie,
+                    )
+                    movies_by_year_2.setdefault(movie.year, []).append(entry)
+
+            # Index des fichiers storage par (titre, annee, path)
+            storage_entries: list[tuple[str, int, Path]] = []
             for f in storage_films_dir.rglob("*"):
                 if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
-                    m = _FILM_NAME_RE.match(f.name)
-                    if m:
-                        storage_files[(m.group(1).strip(), int(m.group(2)))] = f
+                    fm = _FILM_NAME_RE.match(f.name)
+                    if fm:
+                        storage_entries.append(
+                            (fm.group(1).strip(), int(fm.group(2)), f)
+                        )
 
             with Progress(
                 SpinnerColumn(),
@@ -495,26 +607,23 @@ async def _link_movies_async(container, dry_run: bool) -> None:
                 console=console,
             ) as progress:
                 task = progress.add_task(
-                    "[cyan]Recherche storage...", total=len(movies_no_fp)
+                    "[cyan]Recherche storage...", total=len(storage_entries)
                 )
 
-                for movie in movies_no_fp:
-                    # Chercher par titre ou titre original + année
-                    found = None
-                    if movie.title and movie.year:
-                        found = storage_files.get((movie.title, movie.year))
-                    if not found and movie.original_title and movie.year:
-                        found = storage_files.get((movie.original_title, movie.year))
+                for file_title, year, file_path_obj in storage_entries:
+                    movie, method = _try_match_movie(
+                        file_title, year, movies_by_year_2
+                    )
 
-                    if found:
+                    if movie and not movie.file_path:
                         progress.update(
                             task, description=f"[cyan]{movie.title}"
                         )
                         if not dry_run:
-                            movie.file_path = str(found)
+                            movie.file_path = str(file_path_obj)
                             session.add(movie)
                             session.commit()
-                        storage_linked += 1
+                        storage_stats[method] += 1
 
                     progress.advance(task)
     else:
@@ -522,16 +631,29 @@ async def _link_movies_async(container, dry_run: bool) -> None:
             f"\n[dim]Storage non trouvé: {storage_films_dir} — passe 2 ignorée[/dim]"
         )
 
-    # Resume
+    # Resume detaille
+    total_linked = sum(stats.values())
+    total_storage = sum(storage_stats.values())
+    grand_total = total_linked + total_storage
+
     console.print("\n[bold]Résumé:[/bold]")
-    console.print(f"  [green]{linked}[/green] film(s) associé(s) via symlinks")
-    if storage_linked > 0:
-        console.print(
-            f"  [green]{storage_linked}[/green] film(s) associé(s) via storage"
-        )
-    console.print(f"  [yellow]{already}[/yellow] déjà associé(s)")
-    if not_found > 0:
-        console.print(f"  [dim]{not_found}[/dim] non trouvé(s) en base")
+    console.print(
+        f"  [green]{grand_total}[/green] film(s) associé(s) sur {initial_no_fp} manquants"
+    )
+    if total_linked > 0:
+        console.print(f"\n  [bold]Passe 1 — symlinks ({total_linked}):[/bold]")
+        for method, count in stats.items():
+            if count > 0:
+                console.print(f"    {method}: [green]{count}[/green]")
+    if total_storage > 0:
+        console.print(f"\n  [bold]Passe 2 — storage ({total_storage}):[/bold]")
+        for method, count in storage_stats.items():
+            if count > 0:
+                console.print(f"    {method}: [green]{count}[/green]")
+    console.print(f"\n  [yellow]{already}[/yellow] déjà associé(s)")
+    remaining = initial_no_fp - grand_total
+    if remaining > 0:
+        console.print(f"  [dim]{remaining}[/dim] non résolu(s)")
     if no_target > 0:
         console.print(f"  [red]{no_target}[/red] symlink(s) sans cible valide")
 
