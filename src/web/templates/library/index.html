@@ -10,15 +10,6 @@
         <p class="hero-subtitle" id="library-count">{{ total_items }} titre{{ 's' if total_items != 1 else '' }} dans votre collection</p>
     </div>
 
-    {% if is_local %}
-    <div style="text-align: right; margin-bottom: 0.5rem; padding: 0 0.5rem;">
-        <button id="delete-mode-toggle" class="delete-mode-btn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            Sélectionner pour suppression
-        </button>
-    </div>
-    {% endif %}
-
     <div id="library-content">
         {% include "library/_filters.html" %}
         {% include "library/_grid.html" %}

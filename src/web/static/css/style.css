@@ -2927,16 +2927,135 @@ a.pagination-btn:hover {
 /* ── Filters Bar ── */
 
 .lib-filters {
-    margin-bottom: 1.75rem;
+    margin-bottom: 1.25rem;
     animation: fadeInUp 0.4s ease 0.1s both;
 }
 
-.lib-filters-row {
+/* ── Ligne 1 : recherche et filtres principaux ── */
+
+.lib-filters-main {
     display: flex;
     gap: 0.5rem;
     align-items: stretch;
     flex-wrap: wrap;
 }
+
+/* ── Ligne 2 : tri, checkboxes, techniques, suppression ── */
+
+.lib-filters-secondary {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 0.4rem;
+}
+
+/* ── Bloc tri : select + flèches ── */
+
+.lib-sort-group {
+    display: flex;
+    align-items: stretch;
+}
+
+.lib-sort-select {
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+    border-right: none;
+}
+
+.lib-sort-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.2s, background 0.2s;
+}
+
+.lib-sort-arrow:last-child {
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.lib-sort-arrow:hover {
+    color: var(--text-primary);
+    background: var(--bg-card-hover);
+}
+
+.lib-sort-arrow.active {
+    color: var(--accent-amber);
+    background: var(--accent-amber-dim);
+}
+
+/* ── Section technique dépliable ── */
+
+.lib-filters-tech {
+    margin-top: 0.25rem;
+}
+
+.lib-tech-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: none;
+    border: none;
+    padding: 0.2rem 0.4rem;
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.2s;
+    user-select: none;
+}
+
+.lib-tech-toggle:hover {
+    color: var(--text-secondary);
+}
+
+.lib-tech-chevron {
+    transition: transform 0.3s ease;
+    flex-shrink: 0;
+}
+
+.lib-filters-tech.collapsed .lib-tech-chevron {
+    transform: rotate(-90deg);
+}
+
+.lib-tech-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 100px;
+    background: var(--accent-amber);
+    color: var(--bg-deep);
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.lib-tech-content {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.3rem;
+    max-height: 200px;
+    overflow: hidden;
+    opacity: 1;
+    transition: max-height 0.3s ease, opacity 0.2s ease, margin-top 0.2s ease;
+}
+
+.lib-filters-tech.collapsed .lib-tech-content {
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0;
+}
+
+/* ── Section technique dépliable (panneau sous la ligne 2) ── */
 
 .lib-search-wrap {
     flex: 1;
@@ -3789,11 +3908,7 @@ a.tech-badge-codec:hover {
     color: var(--text-secondary);
 }
 
-/* ── Filter Order Select ── */
-
-.lib-filter-order {
-    min-width: 120px;
-}
+/* (lib-filter-order supprimé — remplacé par lib-sort-arrow) */
 
 /* ── Pagination Top (compact, inline with filters) ── */
 
@@ -3813,12 +3928,28 @@ a.tech-badge-codec:hover {
 /* ── Library Responsive ── */
 
 @media (max-width: 768px) {
-    .lib-filters-row {
+    .lib-filters-main {
         flex-direction: column;
+    }
+
+    .lib-filters-secondary {
+        flex-wrap: wrap;
     }
 
     .lib-filter-select {
         width: 100%;
+    }
+
+    .lib-sort-group {
+        width: 100%;
+    }
+
+    .lib-sort-select {
+        flex: 1;
+    }
+
+    .lib-tech-content {
+        flex-direction: column;
     }
 
     .lib-grid {
@@ -6510,6 +6641,47 @@ details[open] > .maint-issue-toggle::before {
     transform: rotate(45deg);
 }
 
+/* ── Checkbox compacte (ligne secondaire filtres) ── */
+
+.lib-filter-checkbox-sm {
+    font-size: 0.75rem;
+    padding: 0.3rem 0.55rem;
+    gap: 0.3rem;
+}
+
+.lib-filter-checkbox-sm input[type="checkbox"] {
+    width: 12px;
+    height: 12px;
+}
+
+.lib-filter-checkbox-sm input[type="checkbox"]:checked::after {
+    left: 2px;
+    top: 0px;
+    width: 4px;
+    height: 7px;
+}
+
+/* ── Bouton suppression discret (rouge sombre) ── */
+
+.delete-mode-btn-subtle {
+    border-color: rgba(232, 93, 117, 0.2);
+    color: var(--accent-rose);
+    font-size: 0.75rem;
+    padding: 0.3rem 0.55rem;
+    opacity: 0.7;
+}
+
+.delete-mode-btn-subtle:hover {
+    opacity: 1;
+    background: var(--accent-rose-dim);
+    border-color: rgba(232, 93, 117, 0.35);
+    color: var(--accent-rose);
+}
+
+.delete-mode-btn-subtle.active {
+    opacity: 1;
+}
+
 /* ── Badge "Vu" sur jaquette grille ── */
 
 .lib-card-watched {
@@ -6869,17 +7041,18 @@ details[open] > .maint-issue-toggle::before {
 .delete-mode-btn {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.5rem 1rem;
+    gap: 0.35rem;
+    padding: 0.45rem 0.7rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-secondary);
     font-family: var(--font-body);
-    font-size: 0.8125rem;
+    font-size: 0.82rem;
     font-weight: 500;
     cursor: pointer;
     transition: background 0.15s, color 0.15s, border-color 0.15s;
+    white-space: nowrap;
 }
 
 .delete-mode-btn:hover {

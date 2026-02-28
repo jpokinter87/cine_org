@@ -5,25 +5,27 @@
 See: .paul/PROJECT.md (updated 2026-02-28)
 
 **Core value:** Organiser et renommer automatiquement une vidéothèque personnelle à partir des téléchargements
-**Current focus:** Awaiting next milestone
+**Current focus:** v1.7 Fiabilité & Ergonomie Bibliothèque
 
 ## Current Position
 
-Milestone: Awaiting next milestone
-Phase: None active
-Plan: None
-Status: Milestone v1.6 Gestion & Qualité de Données complete — ready for next
-Last activity: 2026-02-28 — Milestone v1.6 completed and archived
+Milestone: v1.7 Fiabilité & Ergonomie Bibliothèque
+Phase: 25 of 2 (Réconciliation Symlinks/Storage)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-02-28 — Phase 24 complete, transitioned to Phase 25
 
 Progress:
-- v1.6: [██████████] 100% ✓
+- v1.7: [█████░░░░░] 50%
+- Phase 24: [██████████] 100% ✓
+- Phase 25: [░░░░░░░░░░] 0%
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ○        ○        ○     [Milestone complete - ready for next]
+  ○        ○        ○     [Ready for Phase 25 PLAN]
 ```
 
 ## Accumulated Context
@@ -46,6 +48,10 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Partial Jinja2 _play_btn.html : template réutilisable pour bouton play + popover profil
 - Jinja2 global get_player_profiles : accès profils dans tous les templates sans modifier les routes
 - Popover épisodes vers le bas : overflow:hidden du conteneur saison empêche le popover vers le haut
+- Filtres bibliothèque 2 lignes : ligne 1 recherche/filtres, ligne 2 tri/checkboxes/techniques/suppression
+- Flèches tri ↑↓ au lieu de select asc/desc : hidden input + dispatchEvent HTMX
+- Section technique dépliable : collapsed class + max-height transition, auto-open si filtre actif
+- Bouton suppression intégré dans barre filtres (rouge sombre discret)
 
 ### Deferred Issues
 - Symlinks épisodes ne reflètent pas les nouveaux titres
@@ -59,21 +65,30 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Recherche symlinks : algorithme ne retrouve pas les symlinks existants quand l'arborescence video/ a divergé de storage/ (ex: Wadjda, subdivision/année différentes)
 - Test suppression depuis machine distante (vérifier bouton masqué + routes bloquées)
 - Test lectures simultanées sur profils différents (ordi Windows indisponible)
+- Logging serveur (uv run cineorg serve) : horodatage manquant dans les logs
+
+### Planned for v1.8 (Robustesse Workflow)
+- Performance matching séries : cache résultat TVDB par série (The Bear, The Boys bloquent le traitement)
+- Fix discordance compteurs workflow (barre 291/344 vs résultats 332+12+1=345)
+- Gestion VOSTFR : films étrangers affichés avec langue du film au lieu de VOSTFR
+- Films multi-parties : détection et préservation part1/part2 dans le renommage
+- Sagas de films : regroupement symlinks Die Hard, James Bond, etc. dans répertoire saga
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: e2018b2 feat(23-lectures-simultanees): popover sélecteur profil + lectures parallèles
+Last commit: 82be854 chore: milestone v1.6 complete — archive and version bump
 Branch: master
-Uncommitted: milestone completion files (pending commit)
+Tag: v1.6.0
+Uncommitted: milestone v1.7 creation
 
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Milestone v1.6 complete
-Next action: /paul:discuss-milestone or /paul:milestone
-Resume file: .paul/MILESTONES.md
+Stopped at: Phase 24 complete, ready to plan Phase 25
+Next action: /paul:plan for Phase 25
+Resume file: .paul/ROADMAP.md
 
 ---
 *STATE.md — Updated after every significant action*

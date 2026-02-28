@@ -86,7 +86,9 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-(Aucun — en attente du prochain milestone)
+- [ ] Fiabilité & Ergonomie Bibliothèque (v1.7)
+  - [x] Refonte UX filtres bibliothèque (2 lignes compactes, flèches tri, section technique dépliable) — Phase 24
+  - [ ] Réconciliation symlinks/storage (algorithme tolérant divergences) — Phase 25
 
 ### Out of Scope
 
@@ -161,6 +163,9 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | Partial Jinja2 _play_btn.html | Template réutilisable pour bouton play + popover profil | 2026-02-28 | Active |
 | Jinja2 global get_player_profiles | Accès profils dans tous les templates sans modifier les routes | 2026-02-28 | Active |
 | Popover épisodes vers le bas | overflow:hidden du conteneur saison empêche le popover vers le haut | 2026-02-28 | Active |
+| Filtres bibliothèque 2 lignes | Ligne 1 recherche/filtres, ligne 2 tri/checkboxes/techniques/suppression | 2026-02-28 | Active |
+| Flèches tri au lieu de select asc/desc | Hidden input + boutons ↑↓ + dispatchEvent pour HTMX | 2026-02-28 | Active |
+| Section technique dépliable filtres | collapsed class + max-height transition, auto-open si filtre actif | 2026-02-28 | Active |
 
 ## Success Metrics
 
@@ -184,4 +189,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-28 after Phase 23 complete*
+*Last updated: 2026-02-28 after Phase 24 complete*

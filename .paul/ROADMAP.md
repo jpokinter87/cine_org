@@ -4,9 +4,30 @@
 
 CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec données enrichies, un système de gestion des associations TMDB, des données nettoyées, un code refactoré, un workflow fluide, une suggestion de films, un lecteur distant, des corrections UX, et une gestion avancée des données. L'application est stable en v1.6.
 
-## Next Milestone
+## Current Milestone
 
-Run /paul:discuss-milestone or /paul:milestone to define.
+**v1.7 Fiabilité & Ergonomie Bibliothèque** (v1.7.0)
+Status: In Progress
+Phases: 1 of 2 complete
+
+| Phase | Name | Plans | Status | Completed |
+|-------|------|-------|--------|-----------|
+| 24 | Refonte UX Filtres Bibliothèque | 1/1 | Complete | 2026-02-28 |
+| 25 | Réconciliation Symlinks/Storage | TBD | Not started | - |
+
+### Phase 24: Refonte UX Filtres Bibliothèque
+
+Focus: Réorganiser les 14 contrôles filtres en groupes logiques (principaux, techniques dépliable, spéciaux), intégrer flèches asc/desc au cartouche Tri, design cohérent thème sombre
+Plans: TBD (defined during /paul:plan)
+
+### Phase 25: Réconciliation Symlinks/Storage
+
+Focus: Améliorer l'algorithme de recherche quand video/ et storage/ ont divergé (subdivision, année, genre), mise à jour symlinks épisodes pour refléter les titres enrichis TVDB
+Plans: TBD (defined during /paul:plan)
+
+## Next Milestone (planned)
+
+**v1.8 Robustesse Workflow** — Corriger les problèmes identifiés lors du traitement de 344 fichiers : cache matching séries, gestion VOSTFR, films multi-parties, sagas de films
 
 ## Completed Milestones
 
@@ -92,4 +113,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-28 — Milestone v1.6 complete and archived*
+*Last updated: 2026-02-28 — Milestone v1.7 created (Fiabilité & Ergonomie Bibliothèque)*

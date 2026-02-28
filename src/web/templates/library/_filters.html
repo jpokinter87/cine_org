@@ -2,9 +2,10 @@
       hx-get="/library/"
       hx-target="#library-content"
       hx-push-url="true"
-      hx-trigger="change from:select, change from:input[type=checkbox], keyup changed delay:700ms from:find input[name=q]">
+      hx-trigger="change from:select, change from:input[type=checkbox], change from:input[name=order], keyup changed delay:700ms from:find input[name=q]">
 
-    <div class="lib-filters-row">
+    {# ── Ligne 1 : recherche, mode, type, genre, année ── #}
+    <div class="lib-filters-main">
         <div class="lib-search-wrap">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             <input type="text"
@@ -38,67 +39,102 @@
             <option value="{{ y }}" {{ 'selected' if current_year == y }}>{{ y }}</option>
             {% endfor %}
         </select>
+    </div>
 
-        <select name="resolution" class="lib-filter-select">
-            <option value="">Résolution</option>
-            {% for r in resolutions %}
-            <option value="{{ r }}" {{ 'selected' if current_resolution == r }}>{{ r }}</option>
-            {% endfor %}
-        </select>
+    {# ── Ligne 2 : tri+flèches, checkboxes, filtres techniques toggle, suppression ── #}
+    {% set tech_active = current_resolution or current_codec_video or current_codec_audio or current_language %}
+    {% set tech_count = (1 if current_resolution else 0) + (1 if current_codec_video else 0) + (1 if current_codec_audio else 0) + (1 if current_language else 0) %}
+    <div class="lib-filters-secondary">
+        <div class="lib-sort-group">
+            <select name="sort" class="lib-filter-select lib-sort-select">
+                <option value="title" {{ 'selected' if current_sort == 'title' }}>Tri: Titre</option>
+                <option value="year" {{ 'selected' if current_sort == 'year' }}>Tri: Année</option>
+                <option value="rating" {{ 'selected' if current_sort == 'rating' }}>Tri: Note</option>
+                <option value="resolution" {{ 'selected' if current_sort == 'resolution' }}>Tri: Résolution</option>
+                <option value="codec_video" {{ 'selected' if current_sort == 'codec_video' }}>Tri: Codec vidéo</option>
+                <option value="codec_audio" {{ 'selected' if current_sort == 'codec_audio' }}>Tri: Codec audio</option>
+                <option value="created_at" {{ 'selected' if current_sort == 'created_at' }}>Tri: Récemment ajouté</option>
+            </select>
+            <input type="hidden" name="order" value="{{ current_order }}">
+            <button type="button"
+                    class="lib-sort-arrow{{ ' active' if current_order == 'asc' }}"
+                    data-order="asc"
+                    title="Croissant">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+            </button>
+            <button type="button"
+                    class="lib-sort-arrow{{ ' active' if current_order == 'desc' }}"
+                    data-order="desc"
+                    title="Décroissant">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+        </div>
 
-        <select name="codec_video" class="lib-filter-select">
-            <option value="">Codec vidéo</option>
-            {% for c in codecs_video %}
-            <option value="{{ c }}" {{ 'selected' if current_codec_video == c }}>{{ c }}</option>
-            {% endfor %}
-        </select>
-
-        <select name="codec_audio" class="lib-filter-select">
-            <option value="">Codec audio</option>
-            {% for c in codecs_audio %}
-            <option value="{{ c }}" {{ 'selected' if current_codec_audio == c }}>{{ c }}</option>
-            {% endfor %}
-        </select>
-
-        <select name="language" class="lib-filter-select">
-            <option value="">Langue</option>
-            {% for l in languages %}
-            <option value="{{ l }}" {{ 'selected' if current_language == l }}>{{ l }}</option>
-            {% endfor %}
-        </select>
-
-        <select name="sort" class="lib-filter-select">
-            <option value="title" {{ 'selected' if current_sort == 'title' }}>Tri: Titre</option>
-            <option value="year" {{ 'selected' if current_sort == 'year' }}>Tri: Année</option>
-            <option value="rating" {{ 'selected' if current_sort == 'rating' }}>Tri: Note</option>
-            <option value="resolution" {{ 'selected' if current_sort == 'resolution' }}>Tri: Résolution</option>
-            <option value="codec_video" {{ 'selected' if current_sort == 'codec_video' }}>Tri: Codec vidéo</option>
-            <option value="codec_audio" {{ 'selected' if current_sort == 'codec_audio' }}>Tri: Codec audio</option>
-            <option value="created_at" {{ 'selected' if current_sort == 'created_at' }}>Tri: Récemment ajouté</option>
-        </select>
-
-        <select name="order" class="lib-filter-select lib-filter-order">
-            <option value="asc" {{ 'selected' if current_order == 'asc' }}>Croissant</option>
-            <option value="desc" {{ 'selected' if current_order == 'desc' }}>Décroissant</option>
-        </select>
-
-        <label class="lib-filter-checkbox">
+        <label class="lib-filter-checkbox lib-filter-checkbox-sm">
             <input type="checkbox" name="unwatched" value="1"
                    {{ 'checked' if current_unwatched }}>
             Non-vus
         </label>
 
-        <label class="lib-filter-checkbox">
+        <label class="lib-filter-checkbox lib-filter-checkbox-sm">
             <input type="checkbox" name="no_file" value="1"
                    {{ 'checked' if current_no_file }}>
             Sans fichier
         </label>
 
-        <label class="lib-filter-checkbox">
+        <label class="lib-filter-checkbox lib-filter-checkbox-sm">
             <input type="checkbox" name="no_poster" value="1"
                    {{ 'checked' if current_no_poster }}>
             Sans poster
         </label>
+
+        <button type="button" class="lib-tech-toggle" data-target="lib-filters-tech-panel">
+            <svg class="lib-tech-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            <span>Techniques</span>
+            {% if tech_count > 0 %}
+            <span class="lib-tech-badge">{{ tech_count }}</span>
+            {% endif %}
+        </button>
+
+        {% if is_local %}
+        <button type="button" id="delete-mode-toggle" class="delete-mode-btn delete-mode-btn-subtle">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Suppression
+        </button>
+        {% endif %}
+    </div>
+
+    {# ── Panneau technique dépliable (sous la ligne 2) ── #}
+    <div id="lib-filters-tech-panel" class="lib-filters-tech{{ '' if tech_active else ' collapsed' }}">
+        <div class="lib-tech-content">
+            <select name="resolution" class="lib-filter-select">
+                <option value="">Résolution</option>
+                {% for r in resolutions %}
+                <option value="{{ r }}" {{ 'selected' if current_resolution == r }}>{{ r }}</option>
+                {% endfor %}
+            </select>
+
+            <select name="codec_video" class="lib-filter-select">
+                <option value="">Codec vidéo</option>
+                {% for c in codecs_video %}
+                <option value="{{ c }}" {{ 'selected' if current_codec_video == c }}>{{ c }}</option>
+                {% endfor %}
+            </select>
+
+            <select name="codec_audio" class="lib-filter-select">
+                <option value="">Codec audio</option>
+                {% for c in codecs_audio %}
+                <option value="{{ c }}" {{ 'selected' if current_codec_audio == c }}>{{ c }}</option>
+                {% endfor %}
+            </select>
+
+            <select name="language" class="lib-filter-select">
+                <option value="">Langue</option>
+                {% for l in languages %}
+                <option value="{{ l }}" {{ 'selected' if current_language == l }}>{{ l }}</option>
+                {% endfor %}
+            </select>
+        </div>
     </div>
 
     {% if current_person %}
@@ -188,6 +224,33 @@
     </div>
     {% endif %}
 </form>
+
+{# ── JS : flèches tri + toggle technique ── #}
+<script>
+(function() {
+    /* Flèches de tri */
+    document.querySelectorAll('.lib-sort-arrow').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var group = this.closest('.lib-sort-group');
+            var hidden = group.querySelector('input[name="order"]');
+            var newOrder = this.dataset.order;
+            hidden.value = newOrder;
+            group.querySelectorAll('.lib-sort-arrow').forEach(function(b) { b.classList.remove('active'); });
+            this.classList.add('active');
+            hidden.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+    });
+
+    /* Toggle section technique */
+    document.querySelectorAll('.lib-tech-toggle').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var targetId = this.dataset.target;
+            var panel = targetId ? document.getElementById(targetId) : this.closest('.lib-filters-tech');
+            if (panel) panel.classList.toggle('collapsed');
+        });
+    });
+})();
+</script>
 
 {% if total_pages > 1 %}
 {% with extra_class="pagination-top" %}
