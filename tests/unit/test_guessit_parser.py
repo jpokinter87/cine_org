@@ -246,3 +246,87 @@ class TestGuessitFilenameParserEdgeCases:
         # Pour un nom tres generique, le type peut etre UNKNOWN
         # ou guessit peut deviner MOVIE par defaut
         assert result.media_type in [MediaType.UNKNOWN, MediaType.MOVIE]
+
+
+class TestGuessitParserVOSTFRAndMulti:
+    """Tests pour le parsing VOSTFR et MULTI."""
+
+    @pytest.fixture
+    def parser(self) -> GuessitFilenameParser:
+        return GuessitFilenameParser()
+
+    def test_vostfr_sets_subtitle_language(
+        self, parser: GuessitFilenameParser
+    ) -> None:
+        """VOSTFR detecte comme subtitle_language=FR."""
+        result = parser.parse("MonFilm.VOSTFR.1080p.BluRay.mkv", MediaType.MOVIE)
+
+        assert result.subtitle_language == "FR"
+
+    def test_multi_sets_language_multi(
+        self, parser: GuessitFilenameParser
+    ) -> None:
+        """MULTI detecte comme language=Multi (pas MUL)."""
+        result = parser.parse("MonFilm.MULTI.1080p.mkv", MediaType.MOVIE)
+
+        assert result.language == "Multi"
+
+    def test_no_subtitle_language_when_absent(
+        self, parser: GuessitFilenameParser
+    ) -> None:
+        """Pas de subtitle_language quand absent du nom de fichier."""
+        result = parser.parse("Inception.2010.1080p.BluRay.mkv", MediaType.MOVIE)
+
+        assert result.subtitle_language is None
+
+    def test_french_language_no_subtitle(
+        self, parser: GuessitFilenameParser
+    ) -> None:
+        """Film FRENCH n'a pas de subtitle_language."""
+        result = parser.parse("Film.FRENCH.1080p.mkv", MediaType.MOVIE)
+
+        assert result.language == "FR"
+        assert result.subtitle_language is None
+
+
+class TestGuessitParserEdgeCases:
+    """Tests pour les cas limites du parser (branches internes)."""
+
+    @pytest.fixture
+    def parser(self) -> GuessitFilenameParser:
+        return GuessitFilenameParser()
+
+    def test_extract_language_empty_list(
+        self, parser: GuessitFilenameParser
+    ) -> None:
+        """Liste de langues vide retourne None."""
+        result = parser._extract_language({"language": []})
+        assert result is None
+
+    def test_extract_language_string_fallback(
+        self, parser: GuessitFilenameParser
+    ) -> None:
+        """Objet sans alpha2 utilise str() comme fallback."""
+        result = parser._extract_language({"language": "fr"})
+        assert result == "FR"
+
+    def test_extract_subtitle_language_empty_list(
+        self, parser: GuessitFilenameParser
+    ) -> None:
+        """Liste de sous-titres vide retourne None."""
+        result = parser._extract_subtitle_language({"subtitle_language": []})
+        assert result is None
+
+    def test_extract_subtitle_language_string_fallback(
+        self, parser: GuessitFilenameParser
+    ) -> None:
+        """Objet sous-titre sans alpha2 utilise str() comme fallback."""
+        result = parser._extract_subtitle_language({"subtitle_language": "fr"})
+        assert result == "FR"
+
+    def test_extract_subtitle_language_list_first(
+        self, parser: GuessitFilenameParser
+    ) -> None:
+        """Liste de sous-titres prend le premier élément."""
+        result = parser._extract_subtitle_language({"subtitle_language": ["en", "fr"]})
+        assert result == "EN"

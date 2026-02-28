@@ -45,6 +45,10 @@ cineorg = "src.main:main"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "strict"
+filterwarnings = [
+    "ignore:install \"ipywidgets\" for Jupyter support:UserWarning",
+    "ignore:datetime.datetime.utcnow\\(\\) is deprecated:DeprecationWarning",
+]
 
 [build-system]
 requires = ["hatchling"]

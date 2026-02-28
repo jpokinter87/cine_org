@@ -105,6 +105,8 @@ class GuessitFilenameParser(IFilenameParser):
         release_group = result.get("release_group")
         language = self._extract_language(result)
 
+        subtitle_language = self._extract_subtitle_language(result)
+
         return ParsedFilename(
             title=title,
             year=year,
@@ -119,6 +121,7 @@ class GuessitFilenameParser(IFilenameParser):
             source=source,
             release_group=release_group,
             language=language,
+            subtitle_language=subtitle_language,
         )
 
     def _extract_title(self, result: dict[str, Any]) -> str:
@@ -254,12 +257,13 @@ class GuessitFilenameParser(IFilenameParser):
 
         Guessit retourne un objet Language de Babelfish.
         On extrait le code alpha2 en majuscules.
+        Cas special : "mul" (multiple) est normalise en "Multi".
 
         Args:
             result: Dictionnaire retourne par guessit
 
         Returns:
-            Code langue en majuscules (ex: "FR", "EN"), ou None
+            Code langue en majuscules (ex: "FR", "EN", "Multi"), ou None
         """
         language = result.get("language")
         if language is None:
@@ -273,6 +277,38 @@ class GuessitFilenameParser(IFilenameParser):
 
         # Babelfish Language object a un attribut alpha2
         try:
-            return language.alpha2.upper()
+            code = language.alpha2
         except AttributeError:
-            return str(language).upper()
+            code = str(language)
+
+        # Normaliser "mul" (multiple languages) en "Multi"
+        if code.lower() == "mul":
+            return "Multi"
+
+        return code.upper()
+
+    def _extract_subtitle_language(self, result: dict[str, Any]) -> Optional[str]:
+        """
+        Extrait la langue des sous-titres depuis le resultat guessit.
+
+        Guessit detecte "VOSTFR" comme subtitle_language=fr.
+
+        Args:
+            result: Dictionnaire retourne par guessit
+
+        Returns:
+            Code langue en majuscules (ex: "FR"), ou None
+        """
+        sub_lang = result.get("subtitle_language")
+        if sub_lang is None:
+            return None
+
+        if isinstance(sub_lang, list):
+            if len(sub_lang) == 0:
+                return None
+            sub_lang = sub_lang[0]
+
+        try:
+            return sub_lang.alpha2.upper()
+        except AttributeError:
+            return str(sub_lang).upper()

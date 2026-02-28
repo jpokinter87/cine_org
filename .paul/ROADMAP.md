@@ -8,12 +8,12 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 **v1.8 Robustesse Workflow & Corrections UX** (v1.8.0)
 Status: In Progress
-Phases: 1 of 3 complete
+Phases: 2 of 3 complete
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 26 | Corrections UX Mineures | 1/1 | Complete | 2026-02-28 |
-| 27 | Performance & Robustesse Matching | TBD | Not started | - |
+| 27 | Performance & Robustesse Matching | 1/1 | Complete | 2026-02-28 |
 | 28 | Films Spéciaux | TBD | Not started | - |
 
 ### Phase 26: Corrections UX Mineures ✓
@@ -21,10 +21,10 @@ Phases: 1 of 3 complete
 Popover dynamique dessous/dessus, profil Migré supprimé, reset workflow web, logs serveur horodatés.
 Completed: 2026-02-28
 
-### Phase 27: Performance & Robustesse Matching
+### Phase 27: Performance & Robustesse Matching ✓
 
-Focus: Cache résultat TVDB par série, fix discordance compteurs workflow, gestion VOSTFR films étrangers
-Plans: TBD (defined during /paul:plan)
+Cache TVDB bulk par saison, compteurs workflow fiables, parsing/renommage VOSTFR.
+Completed: 2026-02-28
 
 ### Phase 28: Films Spéciaux
 
@@ -131,4 +131,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-28 — Phase 26 complete*
+*Last updated: 2026-02-28 — Phase 27 complete*

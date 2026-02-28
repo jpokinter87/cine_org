@@ -134,14 +134,17 @@ def format_language_code(languages: tuple[str, ...]) -> str:
 def _build_tech_suffix(
     media_info: Optional[MediaInfo],
     fallback_language: Optional[str] = None,
+    fallback_subtitle_language: Optional[str] = None,
 ) -> str:
     """
-    Construit le suffixe technique (Langue Codec Résolution).
+    Construit le suffixe technique (Langue VOSTFR Codec Résolution).
 
     Args:
         media_info: Informations techniques du fichier.
         fallback_language: Code langue de fallback (depuis guessit)
                           si mediainfo ne détecte pas de langue.
+        fallback_subtitle_language: Code langue des sous-titres (depuis guessit).
+                                   Si "FR" et audio non français → ajoute "VOSTFR".
 
     Returns:
         Suffixe technique ou chaîne vide si pas d'infos.
@@ -149,14 +152,22 @@ def _build_tech_suffix(
     parts: list[str] = []
 
     # Langue(s) audio - avec fallback si mediainfo n'a rien
+    audio_lang_str = ""
     if media_info and media_info.audio_languages:
         lang_codes = tuple(lang.code for lang in media_info.audio_languages)
-        lang_str = format_language_code(lang_codes)
-        if lang_str:
-            parts.append(lang_str)
+        audio_lang_str = format_language_code(lang_codes)
+        if audio_lang_str:
+            parts.append(audio_lang_str)
     elif fallback_language:
         # Fallback sur la langue du nom de fichier (guessit)
-        parts.append(fallback_language.upper())
+        # Garder la casse d'origine (ex: "Multi" pas "MULTI")
+        audio_lang_str = fallback_language if fallback_language == "Multi" else fallback_language.upper()
+        parts.append(audio_lang_str)
+
+    # VOSTFR : sous-titres FR avec audio non français et non Multi
+    if fallback_subtitle_language and fallback_subtitle_language.upper() == "FR":
+        if audio_lang_str.upper() not in ("FR", "MULTI"):
+            parts.append("VOSTFR")
 
     # Codec vidéo
     if media_info and media_info.video_codec:
@@ -177,11 +188,12 @@ def generate_movie_filename(
     media_info: Optional[MediaInfo],
     extension: str,
     fallback_language: Optional[str] = None,
+    fallback_subtitle_language: Optional[str] = None,
 ) -> str:
     """
     Génère le nom de fichier standardisé pour un film.
 
-    Format : Titre (Année) Langue Codec Résolution.ext
+    Format : Titre (Année) Langue [VOSTFR] Codec Résolution.ext
 
     Chaque élément est omis s'il est absent.
 
@@ -191,6 +203,7 @@ def generate_movie_filename(
         extension: Extension du fichier (avec le point).
         fallback_language: Code langue de fallback (depuis guessit)
                           si mediainfo ne détecte pas de langue.
+        fallback_subtitle_language: Code langue des sous-titres (depuis guessit).
 
     Returns:
         Nom de fichier formaté et nettoyé.
@@ -206,7 +219,7 @@ def generate_movie_filename(
         parts.append(f"({movie.year})")
 
     # Suffixe technique
-    tech_suffix = _build_tech_suffix(media_info, fallback_language)
+    tech_suffix = _build_tech_suffix(media_info, fallback_language, fallback_subtitle_language)
     if tech_suffix:
         parts.append(tech_suffix)
 
@@ -223,11 +236,12 @@ def generate_series_filename(
     media_info: Optional[MediaInfo],
     extension: str,
     fallback_language: Optional[str] = None,
+    fallback_subtitle_language: Optional[str] = None,
 ) -> str:
     """
     Génère le nom de fichier standardisé pour un épisode de série.
 
-    Format : Titre (Année) - SxxExx - TitreEpisode - Langue Codec Résolution.ext
+    Format : Titre (Année) - SxxExx - TitreEpisode - Langue [VOSTFR] Codec Résolution.ext
 
     Les éléments absents (année, titre d'épisode) sont omis.
 
@@ -238,6 +252,7 @@ def generate_series_filename(
         extension: Extension du fichier (avec le point).
         fallback_language: Code langue de fallback (depuis guessit)
                           si mediainfo ne détecte pas de langue.
+        fallback_subtitle_language: Code langue des sous-titres (depuis guessit).
 
     Returns:
         Nom de fichier formaté et nettoyé.
@@ -266,7 +281,7 @@ def generate_series_filename(
         parts.append(episode_title)
 
     # Suffixe technique
-    tech_suffix = _build_tech_suffix(media_info, fallback_language)
+    tech_suffix = _build_tech_suffix(media_info, fallback_language, fallback_subtitle_language)
     if tech_suffix:
         parts.append("-")
         parts.append(tech_suffix)
@@ -294,13 +309,16 @@ class RenamerService:
         media_info: Optional[MediaInfo],
         extension: str,
         fallback_language: Optional[str] = None,
+        fallback_subtitle_language: Optional[str] = None,
     ) -> str:
         """
         Génère le nom de fichier pour un film.
 
         Voir generate_movie_filename() pour les détails.
         """
-        return generate_movie_filename(movie, media_info, extension, fallback_language)
+        return generate_movie_filename(
+            movie, media_info, extension, fallback_language, fallback_subtitle_language
+        )
 
     def generate_series_filename(
         self,
@@ -309,10 +327,13 @@ class RenamerService:
         media_info: Optional[MediaInfo],
         extension: str,
         fallback_language: Optional[str] = None,
+        fallback_subtitle_language: Optional[str] = None,
     ) -> str:
         """
         Génère le nom de fichier pour un épisode de série.
 
         Voir generate_series_filename() pour les détails.
         """
-        return generate_series_filename(series, episode, media_info, extension, fallback_language)
+        return generate_series_filename(
+            series, episode, media_info, extension, fallback_language, fallback_subtitle_language
+        )

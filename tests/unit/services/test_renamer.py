@@ -517,3 +517,71 @@ class TestLanguageFallback:
         )
         assert "FR" in result
         assert "fr" not in result
+
+
+class TestVOSTFRRenaming:
+    """Tests pour le renommage VOSTFR."""
+
+    def test_vostfr_in_movie_filename(
+        self,
+        movie_fixture: Movie,
+    ) -> None:
+        """Film avec audio EN + sous-titres FR → VOSTFR dans le nom."""
+        result = generate_movie_filename(
+            movie_fixture, None, ".mkv",
+            fallback_language="EN",
+            fallback_subtitle_language="FR",
+        )
+        assert "VOSTFR" in result
+        assert result == "Matrix (1999) EN VOSTFR.mkv"
+
+    def test_no_vostfr_when_audio_french(
+        self,
+        movie_fixture: Movie,
+    ) -> None:
+        """Film avec audio FR + sous-titres FR → pas de VOSTFR."""
+        result = generate_movie_filename(
+            movie_fixture, None, ".mkv",
+            fallback_language="FR",
+            fallback_subtitle_language="FR",
+        )
+        assert "VOSTFR" not in result
+        assert result == "Matrix (1999) FR.mkv"
+
+    def test_no_vostfr_when_multi(
+        self,
+        movie_fixture: Movie,
+    ) -> None:
+        """Film MULTI + sous-titres FR → pas de VOSTFR (implicite)."""
+        result = generate_movie_filename(
+            movie_fixture, None, ".mkv",
+            fallback_language="Multi",
+            fallback_subtitle_language="FR",
+        )
+        assert "VOSTFR" not in result
+        assert "Multi" in result
+
+    def test_no_vostfr_without_subtitle(
+        self,
+        movie_fixture: Movie,
+    ) -> None:
+        """Film sans subtitle_language → pas de VOSTFR."""
+        result = generate_movie_filename(
+            movie_fixture, None, ".mkv",
+            fallback_language="EN",
+        )
+        assert "VOSTFR" not in result
+
+    def test_vostfr_in_series_filename(
+        self,
+        series_fixture: Series,
+        episode_fixture: Episode,
+    ) -> None:
+        """Série avec audio EN + sous-titres FR → VOSTFR."""
+        result = generate_series_filename(
+            series_fixture, episode_fixture, None, ".mkv",
+            fallback_language="EN",
+            fallback_subtitle_language="FR",
+        )
+        assert "VOSTFR" in result
+        assert "EN VOSTFR" in result

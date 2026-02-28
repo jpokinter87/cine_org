@@ -339,8 +339,9 @@ class TVDBClient(IMediaAPIClient):
         Privilegie le titre en francais, avec fallback sur l'anglais
         si la traduction francaise n'existe pas.
 
-        Verifie le cache avant d'appeler l'API. Les details sont caches
-        pendant 7 jours.
+        Utilise un fetch bulk par saison : le premier appel pour un episode
+        d'une saison charge tous les episodes de cette saison en une seule
+        requete API, les suivants sont servis depuis le cache.
 
         Args:
             series_id: ID TVDB de la serie
@@ -356,87 +357,150 @@ class TVDBClient(IMediaAPIClient):
         if cached is not None:
             return cached
 
-        # Cache miss: obtenir le token et faire la requete
+        # Cache miss: pré-peupler le cache via bulk fetch de la saison
+        await self._fetch_season_episodes(series_id, season)
+
+        # Vérifier si l'épisode est maintenant en cache après le bulk fetch
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        # Épisode non trouvé dans la saison (numéro invalide)
+        return None
+
+    async def _fetch_season_episodes(
+        self,
+        series_id: str,
+        season: int,
+    ) -> dict[int, EpisodeDetails]:
+        """
+        Charge tous les episodes d'une saison en bulk et les met en cache.
+
+        Si la saison a deja ete chargee (cle bulk marker), retourne
+        immediatement sans appel API.
+
+        Args:
+            series_id: ID TVDB de la serie
+            season: Numero de saison
+
+        Returns:
+            Dictionnaire episode_number -> EpisodeDetails
+        """
+        # Vérifier si la saison a déjà été pré-peuplée
+        bulk_key = f"tvdb:season_bulk:{series_id}:S{season:02d}"
+        cached_bulk = await self._cache.get(bulk_key)
+        if cached_bulk is not None:
+            return {}  # Déjà pré-peuplé, les épisodes sont dans le cache individuel
+
         await self._ensure_token()
         client = await self._get_client()
 
-        # Essayer d'abord en francais
-        ep_data = await self._fetch_episode(
-            client, series_id, season, episode, language="fr"
+        # Fetch FR puis EN pour titres fallback
+        fr_episodes = await self._fetch_all_season_episodes_raw(
+            client, series_id, season, language="fr"
+        )
+        en_episodes = await self._fetch_all_season_episodes_raw(
+            client, series_id, season, language="en"
         )
 
-        # Si pas de titre en francais, essayer en anglais
-        episode_title = ep_data.get("episodeName", "") if ep_data else ""
-        if not episode_title and ep_data:
-            ep_data_en = await self._fetch_episode(
-                client, series_id, season, episode, language="en"
+        # Index EN par numéro d'épisode pour fallback titre
+        en_by_num: dict[int, dict] = {}
+        for ep in en_episodes:
+            ep_num = ep.get("airedEpisodeNumber")
+            if ep_num is not None:
+                en_by_num[ep_num] = ep
+
+        # Construire et cacher chaque épisode
+        result: dict[int, EpisodeDetails] = {}
+        for ep_data in fr_episodes:
+            ep_num = ep_data.get("airedEpisodeNumber")
+            if ep_num is None:
+                continue
+
+            # Fallback titre EN si FR vide
+            episode_title = ep_data.get("episodeName", "")
+            if not episode_title:
+                en_ep = en_by_num.get(ep_num)
+                if en_ep:
+                    episode_title = en_ep.get("episodeName", "")
+                    if episode_title:
+                        ep_data = en_ep
+
+            details = EpisodeDetails(
+                id=str(ep_data.get("id", "")),
+                title=ep_data.get("episodeName", ""),
+                season_number=ep_data.get("airedSeason", season),
+                episode_number=ep_num,
+                overview=ep_data.get("overview"),
+                air_date=ep_data.get("firstAired"),
             )
-            if ep_data_en:
-                episode_title = ep_data_en.get("episodeName", "")
-                # Utiliser les donnees anglaises si meilleures
-                if episode_title:
-                    ep_data = ep_data_en
 
-        if not ep_data:
-            return None
+            # Cacher individuellement
+            ep_cache_key = f"tvdb:episode:{series_id}:S{season:02d}E{ep_num:02d}"
+            await self._cache.set_details(ep_cache_key, details)
+            result[ep_num] = details
 
-        details = EpisodeDetails(
-            id=str(ep_data.get("id", "")),
-            title=ep_data.get("episodeName", ""),
-            season_number=ep_data.get("airedSeason", season),
-            episode_number=ep_data.get("airedEpisodeNumber", episode),
-            overview=ep_data.get("overview"),
-            air_date=ep_data.get("firstAired"),
-        )
+        # Cacher aussi le count de la saison
+        count_key = f"tvdb:season_count:{series_id}:S{season:02d}"
+        await self._cache.set_details(count_key, len(fr_episodes))
 
-        # Cacher les details (utilise set_details car meme duree de cache)
-        await self._cache.set_details(cache_key, details)
-        return details
+        # Marquer la saison comme pré-peuplée
+        await self._cache.set_details(bulk_key, True)
 
-    async def _fetch_episode(
+        return result
+
+    async def _fetch_all_season_episodes_raw(
         self,
         client: httpx.AsyncClient,
         series_id: str,
         season: int,
-        episode: int,
         language: str,
-    ) -> Optional[dict]:
+    ) -> list[dict]:
         """
-        Recupere les donnees brutes d'un episode depuis l'API.
+        Recupere toutes les donnees brutes des episodes d'une saison (paginee).
 
         Args:
             client: Client HTTP
             series_id: ID TVDB de la serie
             season: Numero de saison
-            episode: Numero d'episode
             language: Code langue (fr, en)
 
         Returns:
-            Dictionnaire des donnees episode ou None
+            Liste des dictionnaires episode bruts
         """
-        try:
-            response = await request_with_retry(
-                client,
-                "GET",
-                f"/series/{series_id}/episodes/query",
-                params={
-                    "airedSeason": str(season),
-                    "airedEpisode": str(episode),
-                },
-                headers=self._get_auth_headers(language=language),
-            )
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                return None
-            raise
+        all_episodes: list[dict] = []
+        page = 1
 
-        data = response.json()
-        episodes = data.get("data", [])
+        while True:
+            try:
+                params: dict[str, str] = {"airedSeason": str(season)}
+                if page > 1:
+                    params["page"] = str(page)
 
-        if not episodes:
-            return None
+                response = await request_with_retry(
+                    client,
+                    "GET",
+                    f"/series/{series_id}/episodes/query",
+                    params=params,
+                    headers=self._get_auth_headers(language=language),
+                )
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    return []
+                raise
 
-        return episodes[0]
+            data = response.json()
+            episodes = data.get("data", [])
+            all_episodes.extend(episodes)
+
+            # Vérifier pagination
+            links = data.get("links", {})
+            last_page = links.get("last", 1)
+            if page >= last_page:
+                break
+            page += 1
+
+        return all_episodes
 
     async def get_season_episode_count(
         self, series_id: str, season: int
@@ -444,8 +508,8 @@ class TVDBClient(IMediaAPIClient):
         """
         Retourne le nombre d'episodes d'une saison pour une serie.
 
-        Utilise l'endpoint /series/{id}/episodes/query avec pagination.
-        Le resultat est cache 7 jours via set_details.
+        Utilise le bulk fetch par saison si pas en cache, ce qui
+        pre-peuple aussi les details de chaque episode.
 
         Args:
             series_id: ID TVDB de la serie
@@ -459,43 +523,16 @@ class TVDBClient(IMediaAPIClient):
         if cached is not None:
             return cached
 
-        await self._ensure_token()
-        client = await self._get_client()
+        # Utiliser le bulk fetch qui cache aussi le count
+        episodes = await self._fetch_season_episodes(series_id, season)
 
-        total_count = 0
-        page = 1
+        # Re-vérifier le cache (le bulk fetch l'a peuplé)
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            return cached
 
-        while True:
-            try:
-                params = {"airedSeason": str(season)}
-                if page > 1:
-                    params["page"] = str(page)
-
-                response = await request_with_retry(
-                    client,
-                    "GET",
-                    f"/series/{series_id}/episodes/query",
-                    params=params,
-                    headers=self._get_auth_headers(),
-                )
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
-                    return None
-                raise
-
-            data = response.json()
-            episodes = data.get("data", [])
-            total_count += len(episodes)
-
-            # Verifier s'il y a d'autres pages
-            links = data.get("links", {})
-            last_page = links.get("last", 1)
-            if page >= last_page:
-                break
-            page += 1
-
-        await self._cache.set_details(cache_key, total_count)
-        return total_count
+        # Si la saison n'existe pas (0 épisodes retournés par le bulk)
+        return len(episodes) if episodes else None
 
     @property
     def source(self) -> str:

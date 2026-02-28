@@ -112,7 +112,6 @@ async def _run_web_workflow(
             progress.current = len(scan_results)
             progress.filename = result.video_file.filename
             progress.message = f"Scan : {result.video_file.filename}"
-            progress.scanned_files.append(result.video_file.filename)
 
         # Compter les undersized ignorés (pas de Confirm en web)
         undersized = list(scanner.scan_undersized_files())
@@ -122,7 +121,6 @@ async def _run_web_workflow(
         progress.undersized_ignored = len(undersized_filtered)
         progress.undersized_files = [r.video_file.filename for r in undersized_filtered]
 
-        progress.scanned = len(scan_results)
         progress.total = len(scan_results)
 
         if not scan_results:
@@ -157,6 +155,7 @@ async def _run_web_workflow(
             saved_vf = video_file_repo.save(video_file)
             if saved_vf.id:
                 created_video_file_ids.append(saved_vf.id)
+                progress.scanned_files.append(result.video_file.filename)
             pending.video_file = saved_vf
             pending_repo.save(pending)
 
@@ -164,7 +163,9 @@ async def _run_web_workflow(
             if i % 3 == 0:
                 await asyncio.sleep(0)
 
-        progress.message = f"{len(scan_results)} fichier(s) matchés"
+        # Compteur scanned = nombre réel de fichiers sauvegardés en DB
+        progress.scanned = len(created_video_file_ids)
+        progress.message = f"{progress.scanned} fichier(s) matchés"
         await asyncio.sleep(0.2)
 
         # ── Étape 4/4 : Auto-validation ──
@@ -193,15 +194,24 @@ async def _run_web_workflow(
 
         progress.auto_validated = auto_count
 
-        # Compter les pending restants
+        # Compter les pending restants (PENDING uniquement, pas VALIDATED)
         remaining = [
             p for p in validation_service.list_pending()
-            if p.validation_status == ValidationStatus.PENDING and not p.auto_validated
+            if p.validation_status == ValidationStatus.PENDING
         ]
         progress.pending_remaining = len(remaining)
         progress.pending_files = [
             p.video_file.filename for p in remaining if p.video_file
         ]
+
+        # Vérification de cohérence des compteurs
+        if progress.scanned != progress.auto_validated + progress.pending_remaining:
+            logger.warning(
+                "Décalage compteurs: scanned=%d, auto=%d, pending=%d",
+                progress.scanned,
+                progress.auto_validated,
+                progress.pending_remaining,
+            )
 
         progress.message = "Traitement terminé"
         progress.complete = True

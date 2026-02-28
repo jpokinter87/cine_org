@@ -10,21 +10,21 @@ See: .paul/PROJECT.md (updated 2026-02-28)
 ## Current Position
 
 Milestone: v1.8 Robustesse Workflow & Corrections UX
-Phase: 26 of 3 (Corrections UX Mineures) — Complete
-Plan: 26-01 complete
-Status: Phase 26 complete, ready for Phase 27
-Last activity: 2026-02-28 — Phase 26 complete, SUMMARY created
+Phase: 28 of 3 (Films Spéciaux) — Not started
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-02-28 — Phase 27 complete, transitioned to Phase 28
 
 Progress:
-- v1.8: [███░░░░░░░] 33%
-- Phase 26: [██████████] 100%
+- v1.8: [██████░░░░] 67%
+- Phase 28: [░░░░░░░░░░] 0%
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop complete — Phase 26 done]
+  ✓        ✓        ✓     [Phase 27 loop complete — ready for next PLAN]
 ```
 
 ## Accumulated Context
@@ -56,6 +56,10 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Index rapide dict O(1) pour matching symlinks (remplace rglob linéaire)
 - Phase 0 DB↔storage : réconcilier file_path NULL avant réparation symlinks
 - db_session optionnel dans RepairService pour compatibilité tests
+- Cache TVDB bulk par saison : 1 requête FR+EN, cache individuel par épisode + marker bulk
+- Compteurs workflow = réalité DB : scanned basé sur created_video_file_ids
+- VOSTFR conditionnel : subtitle_language FR + audio non-FR/non-Multi → suffixe VOSTFR
+- "mul" normalisé en "Multi" (pas "MUL") dans le parsing guessit
 
 ### Deferred Issues
 - Test lecteur distant sur machine Windows (stand-by)
@@ -72,23 +76,23 @@ PLAN ──▶ APPLY ──▶ UNIFY
 
 ### Planned for v1.8
 - ~~Phase 26 : Corrections UX mineures~~ ✓ (2026-02-28)
-- Phase 27 : Performance & Robustesse Matching (cache TVDB, compteurs workflow, VOSTFR)
+- ~~Phase 27 : Performance & Robustesse Matching~~ ✓ (2026-02-28)
 - Phase 28 : Films spéciaux (multi-parties, sagas)
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: (pending — phase 26 commit)
+Last commit: (pending — phase 27 commit)
 Branch: master
 Tag: v1.6.0 (v1.7.0 à tagger via /paul:complete-milestone)
 
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Phase 26 complete
-Next action: Run /paul:plan for Phase 27 or pause
-Resume file: .paul/phases/26-corrections-ux-mineures/26-01-SUMMARY.md
+Stopped at: Phase 27 complete, ready to plan Phase 28
+Next action: /paul:plan for Phase 28
+Resume file: .paul/ROADMAP.md
 
 ---
 *STATE.md — Updated after every significant action*

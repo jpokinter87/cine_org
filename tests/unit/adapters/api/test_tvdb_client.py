@@ -669,15 +669,11 @@ class TestTVDBClientGetSeasonEpisodeCount:
             return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
         )
 
-        call_count = 0
-
         def episodes_response(request: httpx.Request) -> httpx.Response:
-            nonlocal call_count
-            call_count += 1
             page = request.url.params.get("page", "1")
-            if page == "1" or call_count == 1:
-                return httpx.Response(200, json=TVDB_SEASON_EPISODES_PAGE1_RESPONSE)
-            return httpx.Response(200, json=TVDB_SEASON_EPISODES_PAGE2_RESPONSE)
+            if page == "2":
+                return httpx.Response(200, json=TVDB_SEASON_EPISODES_PAGE2_RESPONSE)
+            return httpx.Response(200, json=TVDB_SEASON_EPISODES_PAGE1_RESPONSE)
 
         respx.get("https://api.thetvdb.com/series/81189/episodes/query").mock(
             side_effect=episodes_response
@@ -696,7 +692,7 @@ class TestTVDBClientGetSeasonEpisodeCount:
     async def test_caches_result_with_details_ttl(
         self, mock_cache: MagicMock, api_key: str
     ) -> None:
-        """Le resultat est cache avec set_details (TTL 7 jours)."""
+        """Le resultat est cache avec set_details (TTL 7 jours) via bulk fetch."""
         from src.adapters.api.tvdb_client import TVDBClient
 
         respx.post("https://api.thetvdb.com/login").mock(
@@ -710,10 +706,25 @@ class TestTVDBClientGetSeasonEpisodeCount:
         try:
             await client.get_season_episode_count("81189", 1)
 
-            mock_cache.set_details.assert_called_once()
-            call_args = mock_cache.set_details.call_args
-            assert call_args[0][0] == "tvdb:season_count:81189:S01"
-            assert call_args[0][1] == 13
+            # Le bulk fetch cache chaque épisode + le count + le marker bulk
+            # 13 épisodes + 1 count + 1 bulk = 15 appels set_details
+            assert mock_cache.set_details.call_count == 15
+
+            # Vérifier que le count est bien caché
+            count_calls = [
+                c for c in mock_cache.set_details.call_args_list
+                if c[0][0] == "tvdb:season_count:81189:S01"
+            ]
+            assert len(count_calls) == 1
+            assert count_calls[0][0][1] == 13
+
+            # Vérifier que le marker bulk est caché
+            bulk_calls = [
+                c for c in mock_cache.set_details.call_args_list
+                if c[0][0] == "tvdb:season_bulk:81189:S01"
+            ]
+            assert len(bulk_calls) == 1
+            assert bulk_calls[0][0][1] is True
         finally:
             await client.close()
 
@@ -731,5 +742,209 @@ class TestTVDBClientGetSeasonEpisodeCount:
             count = await client.get_season_episode_count("81189", 1)
             assert count == 13
             mock_cache.get.assert_called_once_with("tvdb:season_count:81189:S01")
+        finally:
+            await client.close()
+
+
+class TestTVDBClientGetEpisodeDetails:
+    """Tests pour get_episode_details avec bulk fetch."""
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_returns_episode_from_bulk_fetch(
+        self, mock_cache: MagicMock, api_key: str
+    ) -> None:
+        """get_episode_details charge la saison en bulk et retourne l'épisode."""
+        from src.adapters.api.tvdb_client import TVDBClient
+
+        respx.post("https://api.thetvdb.com/login").mock(
+            return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
+        )
+        respx.get("https://api.thetvdb.com/series/81189/episodes/query").mock(
+            return_value=httpx.Response(200, json=TVDB_SEASON_EPISODES_RESPONSE)
+        )
+
+        # Simuler que le cache stocke puis retourne les valeurs
+        stored: dict[str, object] = {}
+
+        async def mock_get(key: str):
+            return stored.get(key)
+
+        async def mock_set_details(key: str, value: object):
+            stored[key] = value
+
+        mock_cache.get = AsyncMock(side_effect=mock_get)
+        mock_cache.set_details = AsyncMock(side_effect=mock_set_details)
+
+        client = TVDBClient(api_key=api_key, cache=mock_cache)
+        try:
+            details = await client.get_episode_details("81189", 1, 5)
+            assert details is not None
+            assert details.episode_number == 5
+            assert details.title == "Episode 5"
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_returns_cached_episode(
+        self, mock_cache: MagicMock, api_key: str
+    ) -> None:
+        """Retourne l'épisode depuis le cache sans appel API."""
+        from src.adapters.api.tvdb_client import TVDBClient
+        from src.core.ports.api_clients import EpisodeDetails
+
+        cached_ep = EpisodeDetails(
+            id="5", title="Episode 5", season_number=1, episode_number=5
+        )
+        mock_cache.get = AsyncMock(return_value=cached_ep)
+
+        client = TVDBClient(api_key=api_key, cache=mock_cache)
+        try:
+            details = await client.get_episode_details("81189", 1, 5)
+            assert details == cached_ep
+            mock_cache.get.assert_called_once_with("tvdb:episode:81189:S01E05")
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_returns_none_for_invalid_episode(
+        self, mock_cache: MagicMock, api_key: str
+    ) -> None:
+        """Retourne None si l'épisode n'existe pas dans la saison."""
+        from src.adapters.api.tvdb_client import TVDBClient
+
+        respx.post("https://api.thetvdb.com/login").mock(
+            return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
+        )
+        respx.get("https://api.thetvdb.com/series/81189/episodes/query").mock(
+            return_value=httpx.Response(200, json=TVDB_SEASON_EPISODES_RESPONSE)
+        )
+
+        # Le cache retourne toujours None (épisode 99 n'existe pas dans la saison)
+        client = TVDBClient(api_key=api_key, cache=mock_cache)
+        try:
+            details = await client.get_episode_details("81189", 1, 99)
+            assert details is None
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_bulk_fetch_skips_when_already_populated(
+        self, mock_cache: MagicMock, api_key: str
+    ) -> None:
+        """Le bulk fetch ne refait pas d'appel API si déjà pré-peuplé."""
+        from src.adapters.api.tvdb_client import TVDBClient
+        from src.core.ports.api_clients import EpisodeDetails
+
+        cached_ep = EpisodeDetails(
+            id="5", title="Episode 5", season_number=1, episode_number=5
+        )
+
+        call_count = 0
+
+        async def mock_get(key: str):
+            nonlocal call_count
+            call_count += 1
+            if key == "tvdb:episode:81189:S01E05":
+                # Premier appel : cache miss, deuxième : cache hit
+                if call_count <= 1:
+                    return None
+                return cached_ep
+            if key == "tvdb:season_bulk:81189:S01":
+                return True  # Déjà pré-peuplé
+            return None
+
+        mock_cache.get = AsyncMock(side_effect=mock_get)
+
+        # Pas de login mock car aucun appel API ne devrait être fait
+        client = TVDBClient(api_key=api_key, cache=mock_cache)
+        try:
+            details = await client.get_episode_details("81189", 1, 5)
+            assert details == cached_ep
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_bulk_fetch_fallback_en_title(
+        self, mock_cache: MagicMock, api_key: str
+    ) -> None:
+        """Le bulk fetch utilise le titre EN quand FR est vide."""
+        from src.adapters.api.tvdb_client import TVDBClient
+
+        # Réponse FR avec titre vide pour épisode 1
+        fr_response = {
+            "links": {"first": 1, "last": 1, "next": None, "prev": None},
+            "data": [
+                {"id": 1, "airedSeason": 1, "airedEpisodeNumber": 1, "episodeName": ""},
+            ],
+        }
+        # Réponse EN avec titre
+        en_response = {
+            "links": {"first": 1, "last": 1, "next": None, "prev": None},
+            "data": [
+                {"id": 1, "airedSeason": 1, "airedEpisodeNumber": 1, "episodeName": "Pilot"},
+            ],
+        }
+
+        respx.post("https://api.thetvdb.com/login").mock(
+            return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
+        )
+
+        call_count = 0
+
+        def episodes_response(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            lang = request.headers.get("Accept-Language", "")
+            if lang == "fr" or call_count <= 1:
+                return httpx.Response(200, json=fr_response)
+            return httpx.Response(200, json=en_response)
+
+        respx.get("https://api.thetvdb.com/series/81189/episodes/query").mock(
+            side_effect=episodes_response
+        )
+
+        stored: dict[str, object] = {}
+
+        async def mock_get(key: str):
+            return stored.get(key)
+
+        async def mock_set_details(key: str, value: object):
+            stored[key] = value
+
+        mock_cache.get = AsyncMock(side_effect=mock_get)
+        mock_cache.set_details = AsyncMock(side_effect=mock_set_details)
+
+        client = TVDBClient(api_key=api_key, cache=mock_cache)
+        try:
+            details = await client.get_episode_details("81189", 1, 1)
+            assert details is not None
+            assert details.title == "Pilot"
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_returns_none_on_404_season(
+        self, mock_cache: MagicMock, api_key: str
+    ) -> None:
+        """Retourne None si la saison n'existe pas (404)."""
+        from src.adapters.api.tvdb_client import TVDBClient
+
+        respx.post("https://api.thetvdb.com/login").mock(
+            return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
+        )
+        respx.get("https://api.thetvdb.com/series/81189/episodes/query").mock(
+            return_value=httpx.Response(404, json={"Error": "Resource not found"})
+        )
+
+        client = TVDBClient(api_key=api_key, cache=mock_cache)
+        try:
+            details = await client.get_episode_details("81189", 99, 1)
+            assert details is None
         finally:
             await client.close()

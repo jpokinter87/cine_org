@@ -88,6 +88,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 - [ ] Robustesse Workflow & Corrections UX (v1.8)
   - [x] Corrections UX mineures (popover dynamique, profil Migré, reset workflow, logs serveur) — Phase 26
+  - [x] Performance & Robustesse Matching (cache TVDB bulk, compteurs workflow, VOSTFR) — Phase 27
 
 ### Validated (Recently Shipped)
 
@@ -175,6 +176,10 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | Index rapide dict O(1) pour matching symlinks | Remplace rglob linéaire pour 54K+ fichiers | 2026-02-28 | Active |
 | Phase 0 DB↔storage avant réparation symlinks | Résout file_path NULL avant de chercher les symlinks cassés | 2026-02-28 | Active |
 | db_session optionnel dans RepairService | Compatibilité tests sans accès DB | 2026-02-28 | Active |
+| Cache TVDB bulk par saison | 1 requête FR+EN par saison, cache individuel par épisode + marker bulk | 2026-02-28 | Active |
+| Compteurs workflow = réalité DB | scanned basé sur created_video_file_ids, pas scan_results | 2026-02-28 | Active |
+| VOSTFR conditionnel dans renommage | subtitle_language FR + audio non-FR/non-Multi → suffixe VOSTFR | 2026-02-28 | Active |
+| "mul" normalisé en "Multi" | Guessit alpha2 "mul" → "Multi" au lieu de "MUL" | 2026-02-28 | Active |
 
 ## Success Metrics
 
@@ -198,4 +203,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-28 after Phase 25 complete*
+*Last updated: 2026-02-28 after Phase 27 complete*
