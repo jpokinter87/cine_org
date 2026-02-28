@@ -12,10 +12,16 @@ from typing import Optional
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
-from starlette.responses import StreamingResponse
+from starlette.responses import RedirectResponse, StreamingResponse
+
+from sqlmodel import delete, select
 
 from ...core.entities.video import ValidationStatus
 from ...core.value_objects.parsed_info import MediaType
+from ...infrastructure.persistence.models import (
+    PendingValidationModel,
+    VideoFileModel,
+)
 from ...services.workflow.pending_factory import create_pending_validation
 from ..deps import templates
 
@@ -77,8 +83,6 @@ async def _run_web_workflow(
         progress.message = "Suppression des traitements précédents…"
 
         # Supprimer toutes les entrées (pending + validated + rejected)
-        from sqlmodel import select
-        from ...infrastructure.persistence.models import PendingValidationModel
         all_entries = pending_repo._session.exec(
             select(PendingValidationModel)
         ).all()
@@ -342,6 +346,35 @@ async def workflow_progress_sse(request: Request):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/reset", response_class=HTMLResponse)
+async def workflow_reset(request: Request):
+    """Réinitialise le workflow en supprimant toutes les données intermédiaires."""
+    container = request.app.state.container
+    session = container.pending_validation_repository()._session
+
+    pending_count = session.exec(
+        select(PendingValidationModel)
+    ).all()
+    video_count = session.exec(
+        select(VideoFileModel)
+    ).all()
+
+    session.exec(delete(PendingValidationModel))
+    session.exec(delete(VideoFileModel))
+    session.commit()
+
+    logger.info(
+        "Workflow réinitialisé : %d validations et %d fichiers supprimés",
+        len(pending_count),
+        len(video_count),
+    )
+
+    # Nettoyer l'état de progression
+    request.app.state.workflow_progress = None
+
+    return RedirectResponse(url="/workflow/", status_code=303)
 
 
 def _escape_json(s: str) -> str:

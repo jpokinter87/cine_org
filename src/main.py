@@ -170,10 +170,40 @@ def serve(
     reload: Annotated[bool, typer.Option(help="Rechargement automatique")] = False,
 ) -> None:
     """Lance le serveur web CineOrg."""
+    import logging
+
     import uvicorn
 
+    # Configurer uvicorn pour router ses logs via loguru (horodatage)
+    class _LoguruInterceptHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            try:
+                level = logger.level(record.levelname).name
+            except ValueError:
+                level = record.levelno
+            logger.opt(depth=6, exception=record.exc_info).log(
+                level, record.getMessage()
+            )
+
+    log_config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "handlers": {
+            "loguru": {
+                "()": lambda: _LoguruInterceptHandler(),
+            },
+        },
+        "loggers": {
+            "uvicorn": {"handlers": ["loguru"], "level": "INFO", "propagate": False},
+            "uvicorn.error": {"handlers": ["loguru"], "level": "INFO", "propagate": False},
+            "uvicorn.access": {"handlers": ["loguru"], "level": "INFO", "propagate": False},
+        },
+    }
+
     typer.echo(f"Démarrage du serveur sur {host}:{port}")
-    uvicorn.run("src.web.app:app", host=host, port=port, reload=reload)
+    uvicorn.run(
+        "src.web.app:app", host=host, port=port, reload=reload, log_config=log_config
+    )
 
 
 def main() -> None:

@@ -3,7 +3,7 @@
 <div class="workflow-results-card">
     <h2 class="results-title">Dernier traitement</h2>
     <div class="results-grid">
-        <div class="result-item result-has-tooltip">
+        <div class="result-item result-has-tooltip" onclick="toggleResultTooltip(this)">
             <span class="result-value">{{ progress.scanned }}</span>
             <span class="result-label">Fichier(s) scanné(s)</span>
             {% if progress.scanned_files %}
@@ -12,7 +12,7 @@
             </div>
             {% endif %}
         </div>
-        <div class="result-item result-success result-has-tooltip">
+        <div class="result-item result-success result-has-tooltip" onclick="toggleResultTooltip(this)">
             <span class="result-value">{{ progress.auto_validated }}</span>
             <span class="result-label">Auto-validé(s)</span>
             {% if progress.auto_validated_files %}
@@ -21,7 +21,7 @@
             </div>
             {% endif %}
         </div>
-        <div class="result-item {% if progress.pending_remaining > 0 %}result-pending{% endif %} result-has-tooltip">
+        <div class="result-item {% if progress.pending_remaining > 0 %}result-pending{% endif %} result-has-tooltip" onclick="toggleResultTooltip(this)">
             <span class="result-value">{{ progress.pending_remaining }}</span>
             <span class="result-label">En attente</span>
             {% if progress.pending_files %}
@@ -31,7 +31,7 @@
             {% endif %}
         </div>
         {% if progress.undersized_ignored > 0 %}
-        <div class="result-item result-muted result-has-tooltip">
+        <div class="result-item result-muted result-has-tooltip" onclick="toggleResultTooltip(this)">
             <span class="result-value">{{ progress.undersized_ignored }}</span>
             <span class="result-label">Sous-dimensionné(s) ignoré(s)</span>
             {% if progress.undersized_files %}

@@ -86,7 +86,12 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-- [ ] Fiabilité & Ergonomie Bibliothèque (v1.7)
+- [ ] Robustesse Workflow & Corrections UX (v1.8)
+  - [x] Corrections UX mineures (popover dynamique, profil Migré, reset workflow, logs serveur) — Phase 26
+
+### Validated (Recently Shipped)
+
+- [x] Fiabilité & Ergonomie Bibliothèque (v1.7)
   - [x] Refonte UX filtres bibliothèque (2 lignes compactes, flèches tri, section technique dépliable) — Phase 24
   - [x] Réconciliation symlinks/storage (commande reconcile 3 phases, index rapide, titres TVDB) — Phase 25
 
@@ -162,7 +167,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | sessionStorage pour état UI sélection | Persistance entre pages sans polluer localStorage | 2026-02-27 | Active |
 | Partial Jinja2 _play_btn.html | Template réutilisable pour bouton play + popover profil | 2026-02-28 | Active |
 | Jinja2 global get_player_profiles | Accès profils dans tous les templates sans modifier les routes | 2026-02-28 | Active |
-| Popover épisodes vers le bas | overflow:hidden du conteneur saison empêche le popover vers le haut | 2026-02-28 | Active |
+| Popover dynamique dessous/dessus | position: absolute + getBoundingClientRect() flip, overflow:hidden retiré | 2026-02-28 | Active |
+| Uvicorn logging via loguru | log_config dict routant uvicorn loggers vers _LoguruInterceptHandler | 2026-02-28 | Active |
 | Filtres bibliothèque 2 lignes | Ligne 1 recherche/filtres, ligne 2 tri/checkboxes/techniques/suppression | 2026-02-28 | Active |
 | Flèches tri au lieu de select asc/desc | Hidden input + boutons ↑↓ + dispatchEvent pour HTMX | 2026-02-28 | Active |
 | Section technique dépliable filtres | collapsed class + max-height transition, auto-open si filtre actif | 2026-02-28 | Active |

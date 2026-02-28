@@ -128,23 +128,23 @@
         html += '<h2 class="results-title">Résultats</h2>';
         html += '<div class="results-grid">';
 
-        html += '<div class="result-item result-has-tooltip">' +
+        html += '<div class="result-item result-has-tooltip" onclick="toggleResultTooltip(this)">' +
             '<span class="result-value">' + d.scanned + '</span>' +
             '<span class="result-label">Fichier(s) scanné(s)</span>' +
             tooltipHtml(d.scanned_files) + '</div>';
 
-        html += '<div class="result-item result-success result-has-tooltip">' +
+        html += '<div class="result-item result-success result-has-tooltip" onclick="toggleResultTooltip(this)">' +
             '<span class="result-value">' + d.auto_validated + '</span>' +
             '<span class="result-label">Auto-validé(s)</span>' +
             tooltipHtml(d.auto_validated_files) + '</div>';
 
-        html += '<div class="result-item' + (d.pending_remaining > 0 ? ' result-pending' : '') + ' result-has-tooltip">' +
+        html += '<div class="result-item' + (d.pending_remaining > 0 ? ' result-pending' : '') + ' result-has-tooltip" onclick="toggleResultTooltip(this)">' +
             '<span class="result-value">' + d.pending_remaining + '</span>' +
             '<span class="result-label">En attente</span>' +
             tooltipHtml(d.pending_files) + '</div>';
 
         if (d.undersized_ignored > 0) {
-            html += '<div class="result-item result-muted result-has-tooltip">' +
+            html += '<div class="result-item result-muted result-has-tooltip" onclick="toggleResultTooltip(this)">' +
                 '<span class="result-value">' + d.undersized_ignored + '</span>' +
                 '<span class="result-label">Sous-dimensionné(s) ignoré(s)</span>' +
                 tooltipHtml(d.undersized_files) + '</div>';

@@ -34,59 +34,28 @@ def _ensure_profile(profile: dict) -> dict:
     return result
 
 
-def _migrate_from_env() -> dict | None:
-    """Tente de créer un profil à partir des anciens champs player_* du .env."""
-    env_file = _PROJECT_ROOT / ".env"
-    if not env_file.exists():
-        return None
-    env_values = {}
-    for line in env_file.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#") and "=" in stripped:
-            key, val = stripped.split("=", 1)
-            env_values[key.strip().upper()] = val.strip()
-
-    # Vérifier s'il y a des champs player_* dans le .env
-    mapping = {
-        "CINEORG_PLAYER_COMMAND": "command",
-        "CINEORG_PLAYER_TARGET": "target",
-        "CINEORG_PLAYER_SSH_HOST": "ssh_host",
-        "CINEORG_PLAYER_SSH_USER": "ssh_user",
-        "CINEORG_PLAYER_LOCAL_PATH_PREFIX": "local_path_prefix",
-        "CINEORG_PLAYER_REMOTE_PATH_PREFIX": "remote_path_prefix",
-    }
-    profile = {"name": "Migré"}
-    found = False
-    for env_key, field in mapping.items():
-        if env_key in env_values and env_values[env_key]:
-            profile[field] = env_values[env_key]
-            found = True
-
-    return _ensure_profile(profile) if found else None
-
-
 def load_profiles() -> dict:
     """Charge les profils depuis le JSON. Crée le fichier par défaut si absent."""
     if _PROFILES_FILE.exists():
         try:
             data = json.loads(_PROFILES_FILE.read_text(encoding="utf-8"))
             if "profiles" in data and data["profiles"]:
+                # Filtrer le profil "Migré" (vestige de l'ancienne migration .env)
+                original_len = len(data["profiles"])
+                data["profiles"] = [
+                    p for p in data["profiles"] if p.get("name") != "Migré"
+                ]
+                if data.get("active") == "Migré":
+                    data["active"] = "Local"
+                # Persister le nettoyage si des profils ont été retirés
+                if len(data["profiles"]) < original_len:
+                    save_profiles(data)
                 return data
         except (json.JSONDecodeError, KeyError):
             pass
 
     # Fichier absent ou invalide — créer avec le profil par défaut
-    profiles = [dict(_DEFAULT_PROFILE)]
-
-    # Migration depuis les anciens champs .env
-    migrated = _migrate_from_env()
-    if migrated and migrated.get("target") == "remote":
-        profiles.append(migrated)
-        active = migrated["name"]
-    else:
-        active = "Local"
-
-    data = {"active": active, "profiles": profiles}
+    data = {"active": "Local", "profiles": [dict(_DEFAULT_PROFILE)]}
     save_profiles(data)
     return data
 

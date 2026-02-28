@@ -5,27 +5,26 @@
 See: .paul/PROJECT.md (updated 2026-02-28)
 
 **Core value:** Organiser et renommer automatiquement une vidéothèque personnelle à partir des téléchargements
-**Current focus:** v1.7 complete — prêt pour v1.8 Robustesse Workflow
+**Current focus:** v1.8 Robustesse Workflow & Corrections UX
 
 ## Current Position
 
-Milestone: v1.7 Fiabilité & Ergonomie Bibliothèque — Complete
-Phase: 25 of 2 (Réconciliation Symlinks/Storage) — Complete
-Plan: 25-01 complete
-Status: Milestone v1.7 complete, ready for v1.8
-Last activity: 2026-02-28 — Phase 25 complete, milestone v1.7 closed
+Milestone: v1.8 Robustesse Workflow & Corrections UX
+Phase: 26 of 3 (Corrections UX Mineures) — Complete
+Plan: 26-01 complete
+Status: Phase 26 complete, ready for Phase 27
+Last activity: 2026-02-28 — Phase 26 complete, SUMMARY created
 
 Progress:
-- v1.7: [██████████] 100% ✓
-- Phase 24: [██████████] 100% ✓
-- Phase 25: [██████████] 100% ✓
+- v1.8: [███░░░░░░░] 33%
+- Phase 26: [██████████] 100%
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop complete — milestone v1.7 done]
+  ✓        ✓        ✓     [Loop complete — Phase 26 done]
 ```
 
 ## Accumulated Context
@@ -47,7 +46,9 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Recherche TVDB multi-titre : FR→original→racine (tiret) + nettoyage année
 - Partial Jinja2 _play_btn.html : template réutilisable pour bouton play + popover profil
 - Jinja2 global get_player_profiles : accès profils dans tous les templates sans modifier les routes
-- Popover épisodes vers le bas : overflow:hidden du conteneur saison empêche le popover vers le haut
+- Popover dynamique dessous/dessus : position absolute + getBoundingClientRect() flip
+- overflow:hidden retiré de .lib-season-group — cause racine popover tronqué
+- Uvicorn logging via loguru : log_config dict avec _LoguruInterceptHandler
 - Filtres bibliothèque 2 lignes : ligne 1 recherche/filtres, ligne 2 tri/checkboxes/techniques/suppression
 - Flèches tri ↑↓ au lieu de select asc/desc : hidden input + dispatchEvent HTMX
 - Section technique dépliable : collapsed class + max-height transition, auto-open si filtre actif
@@ -67,32 +68,27 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - ~100 symlinks cassés irréductibles (fichiers source supprimés du storage)
 - Test suppression depuis machine distante (vérifier bouton masqué + routes bloquées)
 - Test lectures simultanées sur profils différents (ordi Windows indisponible)
-- Logging serveur (uv run cineorg serve) : horodatage manquant dans les logs
-- Supprimer l'option "migré" de la liste des lecteurs (laisser juste Local + profils enregistrés)
-- Ajouter option de réinitialisation workflow depuis l'interface web
-- Popover sélection lecteur : parfois trop haut, cache les 2 premières lignes
+- Vérification tooltips workflow click-to-toggle (pas de fichiers à traiter pour tester)
 
-### Planned for v1.8 (Robustesse Workflow)
-- Performance matching séries : cache résultat TVDB par série (The Bear, The Boys bloquent le traitement)
-- Fix discordance compteurs workflow (barre 291/344 vs résultats 332+12+1=345)
-- Gestion VOSTFR : films étrangers affichés avec langue du film au lieu de VOSTFR
-- Films multi-parties : détection et préservation part1/part2 dans le renommage
-- Sagas de films : regroupement symlinks Die Hard, James Bond, etc. dans répertoire saga
+### Planned for v1.8
+- ~~Phase 26 : Corrections UX mineures~~ ✓ (2026-02-28)
+- Phase 27 : Performance & Robustesse Matching (cache TVDB, compteurs workflow, VOSTFR)
+- Phase 28 : Films spéciaux (multi-parties, sagas)
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: ec07756 feat(24-refonte-filtres-bibliotheque): refonte UX filtres bibliothèque
+Last commit: (pending — phase 26 commit)
 Branch: master
-Tag: v1.6.0
+Tag: v1.6.0 (v1.7.0 à tagger via /paul:complete-milestone)
 
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Milestone v1.7 complete
-Next action: /paul:complete-milestone or /paul:discuss-milestone for v1.8
-Resume file: .paul/ROADMAP.md
+Stopped at: Phase 26 complete
+Next action: Run /paul:plan for Phase 27 or pause
+Resume file: .paul/phases/26-corrections-ux-mineures/26-01-SUMMARY.md
 
 ---
 *STATE.md — Updated after every significant action*

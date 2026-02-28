@@ -39,10 +39,45 @@
         <span class="footer-text">{{ app_version }}</span>
     </footer>
     <script>
+    /* Placement dynamique du popover lecteur : en dessous par défaut, au-dessus si pas assez de place */
+    function togglePlayPopover(btn) {
+        var wrapper = btn.parentElement;
+        var isOpen = wrapper.classList.contains('popover-open');
+        /* Fermer tous les popovers ouverts */
+        document.querySelectorAll('.play-wrapper.popover-open').forEach(function(el) {
+            el.classList.remove('popover-open', 'popover-above');
+        });
+        if (isOpen) return;
+        /* Ouvrir en dessous d'abord */
+        wrapper.classList.remove('popover-above');
+        wrapper.classList.add('popover-open');
+        /* Vérifier si le popover déborde du viewport — si oui, basculer au-dessus */
+        var popover = wrapper.querySelector('.play-profile-popover');
+        if (popover) {
+            var rect = popover.getBoundingClientRect();
+            if (rect.bottom > window.innerHeight) {
+                wrapper.classList.add('popover-above');
+            }
+        }
+    }
+    /* Tooltip résultats workflow : click-to-toggle (évite le problème de scroll hover) */
+    function toggleResultTooltip(el) {
+        var wasOpen = el.classList.contains('tooltip-open');
+        /* Fermer tous les tooltips ouverts */
+        document.querySelectorAll('.result-has-tooltip.tooltip-open').forEach(function(t) {
+            t.classList.remove('tooltip-open');
+        });
+        if (!wasOpen) el.classList.add('tooltip-open');
+    }
     document.addEventListener('click', function(e) {
         if (!e.target.closest('.play-wrapper')) {
             document.querySelectorAll('.play-wrapper.popover-open').forEach(function(el) {
-                el.classList.remove('popover-open');
+                el.classList.remove('popover-open', 'popover-above');
+            });
+        }
+        if (!e.target.closest('.result-has-tooltip')) {
+            document.querySelectorAll('.result-has-tooltip.tooltip-open').forEach(function(el) {
+                el.classList.remove('tooltip-open');
             });
         }
     });

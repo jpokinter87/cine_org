@@ -70,7 +70,47 @@
             <span class="workflow-status-label">Validé(s), en attente de transfert</span>
         </div>
     </div>
+    {% if pending_count + validated_count > 0 %}
+    <div style="margin-top: 1rem; text-align: right;">
+        <button class="workflow-reset-btn" onclick="showWorkflowResetDialog()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Réinitialiser
+        </button>
+    </div>
+    {% endif %}
 </section>
+
+{% if pending_count + validated_count > 0 %}
+<!-- Dialogue custom de réinitialisation workflow -->
+<div class="reject-overlay" id="workflow-reset-overlay" onclick="if(event.target===this)hideWorkflowResetDialog()">
+    <div class="reject-dialog">
+        <h3 class="reject-dialog-title">Réinitialiser le workflow ?</h3>
+        <p class="reject-dialog-text">
+            Cette action supprimera <strong>{{ pending_count + validated_count }}</strong> résultat(s) intermédiaire(s) (validations en attente et fichiers associés).
+        </p>
+        <p class="reject-dialog-note">
+            Les fichiers dans les téléchargements ne seront pas affectés. Vous pourrez relancer le traitement ensuite.
+        </p>
+        <div class="reject-dialog-actions">
+            <button class="reject-dialog-cancel" onclick="hideWorkflowResetDialog()">Annuler</button>
+            <form method="post" action="/workflow/reset" style="display:inline">
+                <button type="submit" class="reject-dialog-confirm">
+                    Oui, réinitialiser
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function showWorkflowResetDialog() {
+    document.getElementById('workflow-reset-overlay').classList.add('active');
+}
+function hideWorkflowResetDialog() {
+    document.getElementById('workflow-reset-overlay').classList.remove('active');
+}
+</script>
+{% endif %}
 {% endif %}
 
 {# ── Pipeline visuel ── #}
