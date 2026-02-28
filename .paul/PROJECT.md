@@ -81,7 +81,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-- [ ] Gestion & Qualité de Données (v1.6)
+- [x] Gestion & Qualité de Données (v1.6)
   - [x] Cartouches accueil cliquables, genres normalisés FR, tri récemment ajouté — Phase 20
   - [x] Résolution données manquantes (films sans file_path, épisodes sans titre) — Phase 21
   - [x] Suppression depuis la bibliothèque avec corbeille — Phase 22
@@ -90,7 +90,11 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
     - Corbeille provisoire réversible (restauration individuelle, vidage définitif) — Phase 22
     - Cascade bidirectionnelle séries (suppression + restauration) — Phase 22
     - Sécurité localhost (suppression/restauration/vidage bloqués en distant) — Phase 22
-  - [ ] Lectures simultanées — Phase 23
+  - [x] Lectures simultanées — Phase 23
+    - Sélecteur de profil intégré au bouton Visionner (popover) — Phase 23
+    - Lectures parallèles sur différents profils avec tracking indépendant — Phase 23
+    - Statut "Lecture en cours… (Nom du profil)" — Phase 23
+    - Template partiel _play_btn.html réutilisable — Phase 23
 
 ### Out of Scope
 
@@ -162,6 +166,9 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | Suppression : corbeille provisoire réversible | Suppression physique uniquement au vidage définitif | 2026-02-27 | Active |
 | Suppression restreinte localhost | Bouton masqué + routes 403 pour clients distants | 2026-02-27 | Active |
 | sessionStorage pour état UI sélection | Persistance entre pages sans polluer localStorage | 2026-02-27 | Active |
+| Partial Jinja2 _play_btn.html | Template réutilisable pour bouton play + popover profil | 2026-02-28 | Active |
+| Jinja2 global get_player_profiles | Accès profils dans tous les templates sans modifier les routes | 2026-02-28 | Active |
+| Popover épisodes vers le bas | overflow:hidden du conteneur saison empêche le popover vers le haut | 2026-02-28 | Active |
 
 ## Success Metrics
 
@@ -185,4 +192,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-27 after Phase 22 complete*
+*Last updated: 2026-02-28 after Phase 23 complete*

@@ -78,10 +78,11 @@ class TestLaunchPlayer:
         mock_proc.pid = 12345
         mock_popen.return_value = mock_proc
 
-        pid, is_remote = _launch_player(Path("/home/jp/Videos/film.mkv"))
+        pid, is_remote, pname = _launch_player(Path("/home/jp/Videos/film.mkv"))
 
         assert pid == 12345
         assert is_remote is False
+        assert pname == "Test"
         mock_popen.assert_called_once_with(
             ["mpv", "/home/jp/Videos/film.mkv"],
             stdout=-3,  # subprocess.DEVNULL
@@ -98,10 +99,11 @@ class TestLaunchPlayer:
         mock_proc.pid = 99
         mock_popen.return_value = mock_proc
 
-        pid, is_remote = _launch_player(Path("/home/jp/Videos/film.mkv"))
+        pid, is_remote, pname = _launch_player(Path("/home/jp/Videos/film.mkv"))
 
         assert pid == 99
         assert is_remote is False
+        assert pname == "Test"
         args = mock_popen.call_args[0][0]
         assert args[0] == "vlc"
 
@@ -121,10 +123,11 @@ class TestLaunchPlayer:
         mock_proc.pid = 555
         mock_popen.return_value = mock_proc
 
-        pid, is_remote = _launch_player(Path("/home/jp/Videos/storage/Films/Alien.mkv"))
+        pid, is_remote, pname = _launch_player(Path("/home/jp/Videos/storage/Films/Alien.mkv"))
 
         assert pid == 555
         assert is_remote is True
+        assert pname == "Test"
         args = mock_popen.call_args[0][0]
         assert args[0] == "ssh"
         assert "jp@192.168.1.20" in args
@@ -146,10 +149,11 @@ class TestLaunchPlayer:
         mock_proc.pid = 777
         mock_popen.return_value = mock_proc
 
-        pid, is_remote = _launch_player(Path("/media/NAS64/Films/Alien (1979)/Alien.mkv"))
+        pid, is_remote, pname = _launch_player(Path("/media/NAS64/Films/Alien (1979)/Alien.mkv"))
 
         assert pid == 777
         assert is_remote is True
+        assert pname == "Test"
         args = mock_popen.call_args[0][0]
         assert args[0] == "scp"
         assert "Willow@192.168.1.27:C:/Apps/mpv_queue.txt" in args
@@ -168,7 +172,7 @@ class TestLaunchPlayer:
         mock_proc.pid = 42
         mock_popen.return_value = mock_proc
 
-        pid, is_remote = _launch_player(Path("/home/jp/Videos/film.mkv"))
+        pid, is_remote, pname = _launch_player(Path("/home/jp/Videos/film.mkv"))
 
         assert pid == 42
         assert is_remote is False
@@ -187,7 +191,7 @@ class TestLaunchPlayer:
         mock_proc.pid = 43
         mock_popen.return_value = mock_proc
 
-        pid, is_remote = _launch_player(Path("/home/jp/Videos/film.mkv"))
+        pid, is_remote, pname = _launch_player(Path("/home/jp/Videos/film.mkv"))
 
         assert pid == 43
         assert is_remote is False
@@ -217,7 +221,7 @@ class TestSeriesPlay:
         mock_get_session.return_value = iter([mock_session])
 
         mock_resolve.return_value = Path("/path/to/S01E01.mkv")
-        mock_launch.return_value = (999, False)
+        mock_launch.return_value = (999, False, "Local")
 
         from fastapi import FastAPI
         from src.web.routes.library.player import router
@@ -229,7 +233,7 @@ class TestSeriesPlay:
         resp = client.post("/library/series/1/play")
         assert resp.status_code == 200
         assert "Lecture en cours" in resp.text
-        mock_launch.assert_called_once_with(Path("/path/to/S01E01.mkv"))
+        mock_launch.assert_called_once_with(Path("/path/to/S01E01.mkv"), profile_name=None)
 
     @patch("src.web.routes.library.player.get_session")
     def test_serie_introuvable_retourne_404(self, mock_get_session):

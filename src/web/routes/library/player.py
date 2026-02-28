@@ -1,18 +1,21 @@
 """
 Routes de lecture vidéo intégrée — lancement local ou distant (SSH) et suivi de statut.
+
+Supporte les lectures simultanées sur différents profils.
 """
 
+import html
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
-
-from ....player_profiles import get_active_profile
-from ....infrastructure.persistence.database import get_session
 from sqlmodel import select
 
+from ....infrastructure.persistence.database import get_session
 from ....infrastructure.persistence.models import EpisodeModel, MovieModel, SeriesModel
+from ....player_profiles import get_active_profile, get_profile_by_name, load_profiles
 from .helpers import _find_movie_file
 
 router = APIRouter()
@@ -28,8 +31,8 @@ def _resolve_video_path(file_path: str | None) -> Path | None:
     return path if path.exists() else None
 
 
-# Stockage des processus en cours pour suivi (PID → (Popen, is_remote))
-_active_players: dict[int, tuple[subprocess.Popen, bool]] = {}
+# Stockage des processus en cours pour suivi (PID → (Popen, is_remote, profile_name))
+_active_players: dict[int, tuple[subprocess.Popen, bool, str]] = {}
 
 
 def _map_path(local_path: Path, profile: dict) -> str:
@@ -81,9 +84,20 @@ def _launch_ssh(profile: dict, file_path: Path) -> subprocess.Popen:
     )
 
 
-def _launch_player(file_path: Path) -> tuple[int, bool]:
-    """Lance le lecteur selon le profil actif. Retourne (pid, is_remote)."""
-    profile = get_active_profile()
+def _launch_player(
+    file_path: Path, profile_name: str | None = None
+) -> tuple[int, bool, str]:
+    """Lance le lecteur selon le profil spécifié ou actif.
+
+    Retourne (pid, is_remote, profile_name).
+    """
+    if profile_name:
+        profile = get_profile_by_name(profile_name)
+        if not profile:
+            profile = get_active_profile()
+    else:
+        profile = get_active_profile()
+
     is_remote = (
         profile["target"] == "remote"
         and profile.get("ssh_host")
@@ -93,45 +107,126 @@ def _launch_player(file_path: Path) -> tuple[int, bool]:
         proc = _launch_ssh(profile, file_path)
     else:
         proc = _launch_local(profile["command"], file_path)
-    _active_players[proc.pid] = (proc, bool(is_remote))
-    return proc.pid, bool(is_remote)
+    _active_players[proc.pid] = (proc, bool(is_remote), profile["name"])
+    return proc.pid, bool(is_remote), profile["name"]
 
 
 def _play_button_html(entity_type: str, entity_id: int) -> str:
-    """Genere le bouton Visionner pour un film ou episode."""
-    profile = get_active_profile()
-    player_label = profile["command"]
+    """Genere le bouton Visionner avec sélecteur de profil si nécessaire."""
+    data = load_profiles()
+    profiles = data.get("profiles", [])
+    active_name = data.get("active", "Local")
+
+    if len(profiles) <= 1:
+        # Un seul profil : bouton direct sans popover
+        profile = profiles[0] if profiles else {"command": "mpv", "name": "Local"}
+        if entity_type == "episodes":
+            return (
+                f'<button class="lib-episode-play-btn"'
+                f' hx-post="/library/episodes/{entity_id}/play"'
+                f' hx-swap="outerHTML"'
+                f' title="Ouvrir dans {html.escape(profile["command"])}">'
+                f'<svg width="14" height="14" viewBox="0 0 24 24" fill="none"'
+                f' stroke="currentColor" stroke-width="2">'
+                f'<polygon points="5 3 19 12 5 21 5 3"/></svg></button>'
+            )
+        return (
+            f'<button class="play-btn"'
+            f' hx-post="/library/{entity_type}/{entity_id}/play"'
+            f' hx-swap="outerHTML"'
+            f' title="Ouvrir dans {html.escape(profile["command"])}">'
+            f'<svg width="12" height="12" viewBox="0 0 24 24" fill="none"'
+            f' stroke="currentColor" stroke-width="2">'
+            f'<polygon points="5 3 19 12 5 21 5 3"/></svg>'
+            f" Visionner</button>"
+        )
+
+    # Plusieurs profils : bouton avec popover sélecteur
+    play_icon = (
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"'
+        ' stroke="currentColor" stroke-width="2">'
+        '<polygon points="5 3 19 12 5 21 5 3"/></svg>'
+    )
+    play_icon_small = (
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"'
+        ' stroke="currentColor" stroke-width="2">'
+        '<polygon points="5 3 19 12 5 21 5 3"/></svg>'
+    )
+
+    # Icônes cible
+    icon_local = (
+        '<svg class="play-profile-icon" width="14" height="14" viewBox="0 0 24 24"'
+        ' fill="none" stroke="currentColor" stroke-width="2">'
+        '<rect x="2" y="3" width="20" height="14" rx="2"/>'
+        '<line x1="8" y1="21" x2="16" y2="21"/>'
+        '<line x1="12" y1="17" x2="12" y2="21"/></svg>'
+    )
+    icon_remote = (
+        '<svg class="play-profile-icon" width="14" height="14" viewBox="0 0 24 24"'
+        ' fill="none" stroke="currentColor" stroke-width="2">'
+        '<rect x="2" y="7" width="20" height="15" rx="2"/>'
+        '<polyline points="17 2 12 7 7 2"/></svg>'
+    )
+
+    # Options du popover
+    options_html = ""
+    for p in profiles:
+        name_esc = html.escape(p["name"])
+        icon = icon_remote if p.get("target") == "remote" else icon_local
+        default_mark = ' <span class="play-profile-default">(défaut)</span>' if p["name"] == active_name else ""
+        css_class = "play-profile-option default" if p["name"] == active_name else "play-profile-option"
+
+        if entity_type == "episodes":
+            post_url = f"/library/episodes/{entity_id}/play?profile={html.escape(p['name'])}"
+        else:
+            post_url = f"/library/{entity_type}/{entity_id}/play?profile={html.escape(p['name'])}"
+
+        options_html += (
+            f'<button class="{css_class}"'
+            f' hx-post="{post_url}"'
+            f' hx-swap="outerHTML" hx-target="closest .play-wrapper"'
+            f' onclick="event.stopPropagation()">'
+            f'{icon} {name_esc}{default_mark}</button>'
+        )
+
+    popover = (
+        f'<div class="play-profile-popover">{options_html}</div>'
+    )
+
+    toggle = "onclick=\"this.parentElement.classList.toggle('popover-open')\""
+
     if entity_type == "episodes":
         return (
-            f'<button class="lib-episode-play-btn"'
-            f' hx-post="/library/episodes/{entity_id}/play"'
-            f' hx-swap="outerHTML"'
-            f' title="Ouvrir dans {player_label}">'
-            f'<svg width="14" height="14" viewBox="0 0 24 24" fill="none"'
-            f' stroke="currentColor" stroke-width="2">'
-            f'<polygon points="5 3 19 12 5 21 5 3"/></svg></button>'
+            f'<span class="play-wrapper play-wrapper-episode">'
+            f'<button class="lib-episode-play-btn play-popover-trigger"'
+            f' title="Choisir le lecteur" {toggle}>'
+            f'{play_icon_small}</button>'
+            f'{popover}</span>'
         )
+
     return (
-        f'<button class="play-btn"'
-        f' hx-post="/library/{entity_type}/{entity_id}/play"'
-        f' hx-swap="outerHTML"'
-        f' title="Ouvrir dans {player_label}">'
-        f'<svg width="12" height="12" viewBox="0 0 24 24" fill="none"'
-        f' stroke="currentColor" stroke-width="2">'
-        f'<polygon points="5 3 19 12 5 21 5 3"/></svg>'
-        f" Visionner</button>"
+        f'<span class="play-wrapper">'
+        f'<button class="play-btn play-popover-trigger"'
+        f' title="Choisir le lecteur" {toggle}>'
+        f'{play_icon} Visionner</button>'
+        f'{popover}</span>'
     )
 
 
-def _playing_html(pid: int, entity_type: str, entity_id: int) -> str:
+def _playing_html(
+    pid: int, entity_type: str, entity_id: int, profile_name: str = ""
+) -> str:
     """Fragment HTML avec polling status pendant la lecture."""
+    label = "Lecture en cours…"
+    if profile_name:
+        label = f"Lecture en cours… ({html.escape(profile_name)})"
     return (
         f'<span class="play-launched"'
         f' hx-get="/library/play-status/{pid}?entity_type={entity_type}'
         f'&entity_id={entity_id}"'
         f' hx-trigger="load delay:2s"'
         f' hx-swap="outerHTML">'
-        f"Lecture en cours…</span>"
+        f"{label}</span>"
     )
 
 
@@ -160,10 +255,10 @@ async def play_status(
     if not entry:
         return HTMLResponse(_play_button_html(entity_type, entity_id))
 
-    proc, is_remote = entry
+    proc, is_remote, profile_name = entry
     if proc.poll() is None:
         # Processus encore vivant — continuer le polling
-        return HTMLResponse(_playing_html(pid, entity_type, entity_id))
+        return HTMLResponse(_playing_html(pid, entity_type, entity_id, profile_name))
 
     # Processus terminé — nettoyer
     _active_players.pop(pid, None)
@@ -187,7 +282,9 @@ async def play_status(
 
 
 @router.post("/movies/{movie_id}/play")
-async def movie_play(request: Request, movie_id: int):
+async def movie_play(
+    request: Request, movie_id: int, profile: Optional[str] = None
+):
     """Lance le lecteur pour visionner un film."""
     session = next(get_session())
     try:
@@ -214,12 +311,14 @@ async def movie_play(request: Request, movie_id: int):
             status_code=404,
         )
 
-    pid, _ = _launch_player(resolved)
-    return HTMLResponse(_playing_html(pid, "movies", movie_id))
+    pid, _, pname = _launch_player(resolved, profile_name=profile)
+    return HTMLResponse(_playing_html(pid, "movies", movie_id, pname))
 
 
 @router.post("/episodes/{episode_id}/play")
-async def episode_play(request: Request, episode_id: int):
+async def episode_play(
+    request: Request, episode_id: int, profile: Optional[str] = None
+):
     """Lance le lecteur pour visionner un episode."""
     session = next(get_session())
     try:
@@ -237,12 +336,14 @@ async def episode_play(request: Request, episode_id: int):
             status_code=404,
         )
 
-    pid, _ = _launch_player(resolved)
-    return HTMLResponse(_playing_html(pid, "episodes", episode_id))
+    pid, _, pname = _launch_player(resolved, profile_name=profile)
+    return HTMLResponse(_playing_html(pid, "episodes", episode_id, pname))
 
 
 @router.post("/series/{series_id}/play")
-async def series_play(request: Request, series_id: int):
+async def series_play(
+    request: Request, series_id: int, profile: Optional[str] = None
+):
     """Lance le lecteur pour le premier episode disponible d'une serie."""
     session = next(get_session())
     try:
@@ -274,5 +375,5 @@ async def series_play(request: Request, series_id: int):
             status_code=404,
         )
 
-    pid, _ = _launch_player(resolved)
-    return HTMLResponse(_playing_html(pid, "series", series_id))
+    pid, _, pname = _launch_player(resolved, profile_name=profile)
+    return HTMLResponse(_playing_html(pid, "series", series_id, pname))

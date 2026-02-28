@@ -147,6 +147,15 @@ def update_profile(name: str, profile: dict) -> None:
             return
 
 
+def get_profile_by_name(name: str) -> dict | None:
+    """Retourne un profil par son nom, ou None si introuvable."""
+    data = load_profiles()
+    for p in data.get("profiles", []):
+        if p["name"] == name:
+            return _ensure_profile(p)
+    return None
+
+
 def delete_profile(name: str) -> bool:
     """Supprime un profil. Retourne False si c'est le profil 'Local' (protégé)."""
     if name == "Local":

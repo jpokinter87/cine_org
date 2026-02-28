@@ -18,3 +18,8 @@ templates = Jinja2Templates(directory=_WEB_DIR / "templates")
 with open(_PROJECT_ROOT / "pyproject.toml", "rb") as f:
     _pyproject = tomllib.load(f)
 templates.env.globals["app_version"] = f"CineOrg v{_pyproject['project']['version']}"
+
+# Profils lecteur accessibles dans tous les templates (pour le sélecteur de profil)
+from ..player_profiles import load_profiles as _load_profiles  # noqa: E402
+
+templates.env.globals["get_player_profiles"] = _load_profiles

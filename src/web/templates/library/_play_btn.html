@@ -1,0 +1,49 @@
+{#
+  Bouton Visionner avec sélecteur de profil.
+
+  Variables attendues :
+    - play_entity_type: "movies" | "episodes" | "series"
+    - play_entity_id: int
+    - play_btn_class: "play-btn" | "lib-episode-play-btn" | "play-btn suggest-play-btn"
+    - play_show_label: true/false (afficher "Visionner" ou juste l'icône)
+#}
+{% set _pdata = get_player_profiles() %}
+{% set _profiles = _pdata.get('profiles', []) %}
+{% set _active = _pdata.get('active', 'Local') %}
+
+{% if _profiles | length <= 1 %}
+  {# Un seul profil : bouton direct #}
+  <button class="{{ play_btn_class }}"
+      hx-post="/library/{{ play_entity_type }}/{{ play_entity_id }}/play"
+      hx-swap="outerHTML"
+      title="Ouvrir dans {{ (_profiles[0].command if _profiles else 'mpv') }}">
+      <svg width="{{ '14' if not play_show_label else '12' }}" height="{{ '14' if not play_show_label else '12' }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      {% if play_show_label %} Visionner{% endif %}
+  </button>
+{% else %}
+  {# Plusieurs profils : bouton avec popover sélecteur #}
+  <span class="play-wrapper{% if 'episode' in play_btn_class %} play-wrapper-episode{% endif %}">
+      <button class="{{ play_btn_class }} play-popover-trigger"
+          title="Choisir le lecteur"
+          onclick="this.parentElement.classList.toggle('popover-open')">
+          <svg width="{{ '14' if not play_show_label else '12' }}" height="{{ '14' if not play_show_label else '12' }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          {% if play_show_label %} Visionner{% endif %}
+      </button>
+      <div class="play-profile-popover">
+          {% for p in _profiles %}
+          <button class="play-profile-option{% if p.name == _active %} default{% endif %}"
+              hx-post="/library/{{ play_entity_type }}/{{ play_entity_id }}/play?profile={{ p.name | urlencode }}"
+              hx-swap="outerHTML" hx-target="closest .play-wrapper"
+              onclick="event.stopPropagation()">
+              {% if p.target == 'remote' %}
+              <svg class="play-profile-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2"/><polyline points="17 2 12 7 7 2"/></svg>
+              {% else %}
+              <svg class="play-profile-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              {% endif %}
+              {{ p.name }}
+              {% if p.name == _active %}<span class="play-profile-default">(défaut)</span>{% endif %}
+          </button>
+          {% endfor %}
+      </div>
+  </span>
+{% endif %}

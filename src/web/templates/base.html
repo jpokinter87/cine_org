@@ -38,5 +38,14 @@
     <footer class="main-footer">
         <span class="footer-text">{{ app_version }}</span>
     </footer>
+    <script>
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.play-wrapper')) {
+            document.querySelectorAll('.play-wrapper.popover-open').forEach(function(el) {
+                el.classList.remove('popover-open');
+            });
+        }
+    });
+    </script>
 </body>
 </html>

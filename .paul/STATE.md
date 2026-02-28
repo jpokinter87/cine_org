@@ -2,31 +2,32 @@
 
 ## Project Reference
 
-See: .paul/PROJECT.md (updated 2026-02-27)
+See: .paul/PROJECT.md (updated 2026-02-28)
 
 **Core value:** Organiser et renommer automatiquement une vidéothèque personnelle à partir des téléchargements
-**Current focus:** v1.6 Gestion & Qualité de Données
+**Current focus:** v1.6 Gestion & Qualité de Données — COMPLETE
 
 ## Current Position
 
-Milestone: v1.6 Gestion & Qualité de Données
-Phase: 23 of 4 (Lectures Simultanées) — Not started
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-02-27 — Phase 22 complete, transitioned to Phase 23
+Milestone: v1.6 Gestion & Qualité de Données — Complete
+Phase: 23 of 4 (Lectures Simultanées) — Complete
+Plan: 01 of 1 complete
+Status: Milestone v1.6 complete, all 4 phases done
+Last activity: 2026-02-28 — Phase 23 complete, milestone v1.6 closed
 
 Progress:
-- v1.6: [███████░░░] 75%
+- v1.6: [██████████] 100% ✓
 - Phase 20: [██████████] 100% ✓
 - Phase 21: [██████████] 100% ✓
 - Phase 22: [██████████] 100% ✓
+- Phase 23: [██████████] 100% ✓
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop complete — ready for next PLAN]
+  ✓        ✓        ✓     [Loop complete — milestone v1.6 done]
 ```
 
 ## Accumulated Context
@@ -46,6 +47,9 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Seuil fuzzy 0.85 validé pour link-movies et enrich-tvdb-ids
 - Index mémoire par année pour matching batch (pas de requête DB par symlink)
 - Recherche TVDB multi-titre : FR→original→racine (tiret) + nettoyage année
+- Partial Jinja2 _play_btn.html : template réutilisable pour bouton play + popover profil
+- Jinja2 global get_player_profiles : accès profils dans tous les templates sans modifier les routes
+- Popover épisodes vers le bas : overflow:hidden du conteneur saison empêche le popover vers le haut
 
 ### Deferred Issues
 - Symlinks épisodes ne reflètent pas les nouveaux titres
@@ -58,20 +62,21 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Lecteur distant : aucun message d'erreur si le profil est mal configuré (lecture s'arrête après 1s sans feedback)
 - Recherche symlinks : algorithme ne retrouve pas les symlinks existants quand l'arborescence video/ a divergé de storage/ (ex: Wadjda, subdivision/année différentes)
 - Test suppression depuis machine distante (vérifier bouton masqué + routes bloquées)
+- Test lectures simultanées sur profils différents (ordi Windows indisponible)
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: eabdc85 feat(21-donnees-manquantes): résolution données manquantes
+Last commit: 48d6787 feat(23-lectures-simultanees): popover sélecteur profil + lectures parallèles
 Branch: master
-Uncommitted: Phase 22 (suppression batch + corbeille)
+Uncommitted: none
 
 ## Session Continuity
 
-Last session: 2026-02-27
-Stopped at: Phase 22 complete, ready to plan Phase 23
-Next action: /paul:plan for Phase 23, or git commit Phase 22
+Last session: 2026-02-28
+Stopped at: Milestone v1.6 complete
+Next action: /paul:complete-milestone or start planning v1.7
 Resume file: .paul/ROADMAP.md
 
 ---
