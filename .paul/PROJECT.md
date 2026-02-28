@@ -12,9 +12,9 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 1.5.0 (CLI + Web + Polish UX) |
-| Status | Production — v1.5.0 complete |
-| Last Updated | 2026-02-26 |
+| Version | 1.6.0 (CLI + Web + Gestion & Qualité de Données) |
+| Status | Production — v1.6.0 complete |
+| Last Updated | 2026-02-28 |
 
 ## Requirements
 
@@ -78,23 +78,15 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 - [x] Config accordéon (v1.5)
   - Sections config pliables/dépliables avec animation — Phase 19
   - Version footer dynamique lue depuis pyproject.toml — Phase 19
+- [x] Gestion & Qualité de Données (v1.6)
+  - Cartouches accueil cliquables, genres normalisés FR, tri récemment ajouté — Phase 20
+  - Résolution données manquantes (1040 films liés, 13 séries tvdb_id, 98 épisodes titrés) — Phase 21
+  - Suppression depuis la bibliothèque avec corbeille réversible et sécurité localhost — Phase 22
+  - Lectures simultanées : popover sélecteur de profil, lectures parallèles multi-profils — Phase 23
 
 ### Active (In Progress)
 
-- [x] Gestion & Qualité de Données (v1.6)
-  - [x] Cartouches accueil cliquables, genres normalisés FR, tri récemment ajouté — Phase 20
-  - [x] Résolution données manquantes (films sans file_path, épisodes sans titre) — Phase 21
-  - [x] Suppression depuis la bibliothèque avec corbeille — Phase 22
-    - Filtres enrichis (langue, sans fichier, sans poster) — Phase 22
-    - Mode sélection batch avec persistance sessionStorage — Phase 22
-    - Corbeille provisoire réversible (restauration individuelle, vidage définitif) — Phase 22
-    - Cascade bidirectionnelle séries (suppression + restauration) — Phase 22
-    - Sécurité localhost (suppression/restauration/vidage bloqués en distant) — Phase 22
-  - [x] Lectures simultanées — Phase 23
-    - Sélecteur de profil intégré au bouton Visionner (popover) — Phase 23
-    - Lectures parallèles sur différents profils avec tracking indépendant — Phase 23
-    - Statut "Lecture en cours… (Nom du profil)" — Phase 23
-    - Template partiel _play_btn.html réutilisable — Phase 23
+(Aucun — en attente du prochain milestone)
 
 ### Out of Scope
 

@@ -10,6 +10,48 @@ Completed milestone log for this project.
 | v1.3 Qualité & Fluidité | 2026-02-25 | ~1 day | 3 phases, 5 plans |
 | v1.4 Expérience Utilisateur | 2026-02-26 | ~1 day | 2 phases, 4 plans |
 | v1.5 Polish & Corrections UX | 2026-02-26 | ~1 day | 3 phases, 4 plans |
+| v1.6 Gestion & Qualité de Données | 2026-02-28 | ~2 days | 4 phases, 5 plans |
+
+---
+
+## ✅ v1.6 Gestion & Qualité de Données
+
+**Completed:** 2026-02-28
+**Duration:** ~2 days (2026-02-27 → 2026-02-28)
+
+### Stats
+
+| Metric | Value |
+|--------|-------|
+| Phases | 4 (20, 21, 22, 23) |
+| Plans | 5 |
+| Files created | 6 |
+| Files modified | 26 |
+
+### Key Accomplishments
+
+- 1040 films liés à leurs fichiers via matching fuzzy progressif 4 stratégies (seuil 0.85)
+- Suppression batch depuis la bibliothèque avec corbeille provisoire réversible et sécurité localhost
+- 13 séries enrichies tvdb_id via recherche multi-titre TVDB (FR→original→racine)
+- 98 épisodes enrichis avec titres manquants via TVDB
+- Sélecteur de profil lecteur popover + lectures parallèles multi-profils
+- Cartouches accueil cliquables, genres normalisés FR, tri "récemment ajouté"
+- Filtres enrichis : langue, sans fichier, sans poster
+- Template partiel réutilisable `_play_btn.html` (élimine la duplication bouton play)
+- Persistance sélection via sessionStorage entre pages
+
+### Key Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Normalisation genres à l'affichage uniquement | Préservation intégrité DB |
+| Seuil fuzzy 0.85 pour link-movies et enrich-tvdb-ids | Sweet spot évitant les faux positifs |
+| Index mémoire par année pour matching batch | Performance O(1) vs N requêtes DB |
+| Corbeille provisoire avant suppression physique | Filet de sécurité réversible |
+| Suppression restreinte localhost | Sécurité — machine maître uniquement |
+| sessionStorage pour état sélection | Persiste entre pages sans polluer localStorage |
+| Partial Jinja2 pour bouton play | Séparation template/logique, réutilisable |
+| Popover épisodes vers le bas | Contournement overflow:hidden du conteneur saison |
 
 ---
 

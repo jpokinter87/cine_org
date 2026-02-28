@@ -5,29 +5,25 @@
 See: .paul/PROJECT.md (updated 2026-02-28)
 
 **Core value:** Organiser et renommer automatiquement une vidéothèque personnelle à partir des téléchargements
-**Current focus:** v1.6 Gestion & Qualité de Données — COMPLETE
+**Current focus:** Awaiting next milestone
 
 ## Current Position
 
-Milestone: v1.6 Gestion & Qualité de Données — Complete
-Phase: 23 of 4 (Lectures Simultanées) — Complete
-Plan: 01 of 1 complete
-Status: Milestone v1.6 complete, all 4 phases done
-Last activity: 2026-02-28 — Phase 23 complete, milestone v1.6 closed
+Milestone: Awaiting next milestone
+Phase: None active
+Plan: None
+Status: Milestone v1.6 Gestion & Qualité de Données complete — ready for next
+Last activity: 2026-02-28 — Milestone v1.6 completed and archived
 
 Progress:
 - v1.6: [██████████] 100% ✓
-- Phase 20: [██████████] 100% ✓
-- Phase 21: [██████████] 100% ✓
-- Phase 22: [██████████] 100% ✓
-- Phase 23: [██████████] 100% ✓
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop complete — milestone v1.6 done]
+  ○        ○        ○     [Milestone complete - ready for next]
 ```
 
 ## Accumulated Context
@@ -68,16 +64,16 @@ PLAN ──▶ APPLY ──▶ UNIFY
 None.
 
 ### Git State
-Last commit: 48d6787 feat(23-lectures-simultanees): popover sélecteur profil + lectures parallèles
+Last commit: e2018b2 feat(23-lectures-simultanees): popover sélecteur profil + lectures parallèles
 Branch: master
-Uncommitted: none
+Uncommitted: milestone completion files (pending commit)
 
 ## Session Continuity
 
 Last session: 2026-02-28
 Stopped at: Milestone v1.6 complete
-Next action: /paul:complete-milestone or start planning v1.7
-Resume file: .paul/ROADMAP.md
+Next action: /paul:discuss-milestone or /paul:milestone
+Resume file: .paul/MILESTONES.md
 
 ---
 *STATE.md — Updated after every significant action*
