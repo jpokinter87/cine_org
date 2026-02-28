@@ -56,6 +56,9 @@ from src.adapters.cli.commands.fix_bad_links_command import (
 from src.adapters.cli.commands.fix_symlinks_command import (
     fix_symlinks,
 )
+from src.adapters.cli.commands.reconcile_command import (
+    reconcile,
+)
 
 __all__ = [
     # workflow
@@ -96,4 +99,5 @@ __all__ = [
     "enrich_tech",
     "enrich_episode_titles",
     "enrich_tvdb_ids",
+    "reconcile",
 ]

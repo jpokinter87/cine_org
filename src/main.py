@@ -31,6 +31,7 @@ from .adapters.cli.commands import (
     populate_movies,
     populate_series,
     process,
+    reconcile,
     regroup,
     repair_links,
     validate_app,
@@ -95,6 +96,7 @@ app.command(name="clean-titles")(clean_titles)
 app.command(name="enrich-tech")(enrich_tech)
 app.command(name="enrich-episode-titles")(enrich_episode_titles)
 app.command(name="enrich-tvdb-ids")(enrich_tvdb_ids)
+app.command()(reconcile)
 
 # Monter validate_app comme sous-commande
 app.add_typer(validate_app, name="validate")

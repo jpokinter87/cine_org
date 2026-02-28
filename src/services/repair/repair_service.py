@@ -52,6 +52,7 @@ class RepairService:
         storage_dir: Optional[Path] = None,
         video_dir: Optional[Path] = None,
         trash_dir: Optional[Path] = None,
+        db_session: Any = None,
     ) -> None:
         """
         Initialise le service de reparation.
@@ -62,12 +63,14 @@ class RepairService:
             storage_dir: Dossier de stockage physique
             video_dir: Dossier des symlinks video
             trash_dir: Dossier pour les fichiers orphelins
+            db_session: Session SQLModel optionnelle pour la recherche métadonnées
         """
         self._file_system = file_system
         self._video_file_repo = video_file_repo
         self._storage_dir = storage_dir
         self._video_dir = video_dir
         self._trash_dir = trash_dir
+        self._db_session = db_session
         # Deleguer l'indexation au FileIndexer
         self._indexer = FileIndexer(storage_dir)
 
@@ -172,6 +175,221 @@ class RepairService:
             return []
 
         return self._file_system.find_broken_links(self._video_dir)
+
+    # --- Recherche par métadonnées DB ---
+
+    def _find_by_metadata(self, link: Path) -> list[tuple[Path, float]]:
+        """
+        Recherche des fichiers physiques via les métadonnées en base de données.
+
+        Stratégie :
+        1. Extraire le titre/année/saison/épisode depuis le nom du symlink
+        2. Requêter MovieModel ou EpisodeModel par titre normalisé
+        3. Si le file_path en DB existe sur disque → retourner directement
+        4. Sinon chercher le fichier dans storage/ via rglob ou index
+
+        Args:
+            link: Chemin du symlink cassé
+
+        Returns:
+            Liste de tuples (chemin, score) triée par score décroissant
+        """
+        from sqlmodel import select
+
+        from src.infrastructure.persistence.models import (
+            EpisodeModel,
+            MovieModel,
+            SeriesModel,
+        )
+
+        # Session DB requise pour la recherche métadonnées
+        if not self._db_session:
+            return []
+
+        link_name = link.name
+        media_type, _ = self._detect_media_context(link)
+
+        # Déterminer si c'est un épisode de série
+        title, season, episode_num, year = extract_series_info(link_name)
+        is_episode = season is not None and episode_num is not None
+
+        session = self._db_session
+
+        candidates: list[tuple[Path, float]] = []
+
+        try:
+            if is_episode and media_type != "Films":
+                # Recherche épisode via série + saison + épisode
+                candidates = self._find_episode_by_metadata(
+                    session, select, title, season, episode_num, year,
+                    SeriesModel, EpisodeModel,
+                )
+            else:
+                # Recherche film par titre normalisé
+                candidates = self._find_movie_by_metadata(
+                    session, select, title, year, link_name, MovieModel,
+                )
+        except Exception as e:
+            logger.debug(f"Erreur recherche métadonnées DB: {e}")
+
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        return candidates
+
+    def _find_movie_by_metadata(
+        self, session, select, title: str, year: int | None,
+        link_name: str, MovieModel,
+    ) -> list[tuple[Path, float]]:
+        """Recherche un film via les métadonnées DB."""
+        from difflib import SequenceMatcher
+
+        candidates: list[tuple[Path, float]] = []
+
+        # Requête par titre (LIKE %titre%)
+        query = select(MovieModel).where(MovieModel.title.contains(title))
+        if year:
+            query = query.where(MovieModel.year == year)
+        movies = session.exec(query).all()
+
+        # Si pas de résultat avec l'année, essayer sans
+        if not movies and year:
+            movies = session.exec(
+                select(MovieModel).where(MovieModel.title.contains(title))
+            ).all()
+
+        for movie in movies:
+            # Calculer un score de similitude titre
+            norm_db = movie.title.lower().strip()
+            norm_link = title.lower().strip()
+            ratio = SequenceMatcher(None, norm_link, norm_db).ratio()
+
+            # Vérifier aussi le titre original
+            if movie.original_title:
+                ratio_orig = SequenceMatcher(
+                    None, norm_link, movie.original_title.lower().strip()
+                ).ratio()
+                ratio = max(ratio, ratio_orig)
+
+            # Bonus année
+            if year and movie.year == year:
+                ratio = min(ratio + 0.1, 1.0)
+
+            if ratio < 0.6:
+                continue
+
+            score = ratio * 100
+
+            if movie.file_path:
+                fp = Path(movie.file_path)
+                if fp.exists():
+                    candidates.append((fp, score))
+                    continue
+
+            # file_path inexistant → chercher dans storage via l'index ou rglob
+            found = self._search_file_in_storage(movie.file_path, "Films")
+            if found:
+                candidates.append((found, score))
+
+        return candidates
+
+    def _find_episode_by_metadata(
+        self, session, select, title: str, season: int, episode_num: int,
+        year: int | None, SeriesModel, EpisodeModel,
+    ) -> list[tuple[Path, float]]:
+        """Recherche un épisode via les métadonnées DB."""
+        from difflib import SequenceMatcher
+
+        candidates: list[tuple[Path, float]] = []
+
+        # Chercher la série par titre
+        query = select(SeriesModel).where(SeriesModel.title.contains(title))
+        if year:
+            query = query.where(SeriesModel.year == year)
+        series_list = session.exec(query).all()
+
+        # Si pas de résultat avec l'année, essayer sans
+        if not series_list and year:
+            series_list = session.exec(
+                select(SeriesModel).where(SeriesModel.title.contains(title))
+            ).all()
+
+        for series in series_list:
+            # Vérifier la similitude du titre
+            norm_db = series.title.lower().strip()
+            norm_link = title.lower().strip()
+            ratio = SequenceMatcher(None, norm_link, norm_db).ratio()
+
+            if series.original_title:
+                ratio_orig = SequenceMatcher(
+                    None, norm_link, series.original_title.lower().strip()
+                ).ratio()
+                ratio = max(ratio, ratio_orig)
+
+            if ratio < 0.5:
+                continue
+
+            # Chercher l'épisode exact
+            episode = session.exec(
+                select(EpisodeModel).where(
+                    EpisodeModel.series_id == series.id,
+                    EpisodeModel.season_number == season,
+                    EpisodeModel.episode_number == episode_num,
+                )
+            ).first()
+
+            if not episode:
+                continue
+
+            score = ratio * 100
+            if year and series.year == year:
+                score = min(score + 10, 100)
+
+            if episode.file_path:
+                fp = Path(episode.file_path)
+                if fp.exists():
+                    candidates.append((fp, score))
+                    continue
+
+            # file_path inexistant → chercher dans storage
+            found = self._search_file_in_storage(episode.file_path, "Séries")
+            if found:
+                candidates.append((found, score))
+
+        return candidates
+
+    def _search_file_in_storage(
+        self, old_file_path: str | None, media_subdir: str,
+    ) -> Path | None:
+        """
+        Cherche un fichier dans storage/ quand le file_path DB est périmé.
+
+        Utilise l'index pré-construit si disponible, sinon rglob.
+        """
+        if not self._storage_dir:
+            return None
+
+        if not old_file_path:
+            return None
+
+        target_name = Path(old_file_path).name
+        search_dir = self._storage_dir / media_subdir
+
+        # Utiliser l'index pré-construit si disponible
+        if self._indexer.index_built:
+            search_str = str(search_dir)
+            for candidate_path, _, _ in self._indexer.file_index:
+                if not str(candidate_path).startswith(search_str):
+                    continue
+                if candidate_path.name == target_name:
+                    return candidate_path
+            return None
+
+        # Fallback: rglob (plus lent)
+        if search_dir.exists():
+            for f in search_dir.rglob(target_name):
+                if f.is_file() and not f.is_symlink():
+                    return f
+
+        return None
 
     # --- Recherche de cibles ---
 
@@ -330,6 +548,11 @@ class RepairService:
         if not self._storage_dir or not self._storage_dir.exists():
             return []
 
+        # Phase 0 : recherche par métadonnées DB (prioritaire, la plus fiable)
+        metadata_candidates = self._find_by_metadata(link)
+        if metadata_candidates and metadata_candidates[0][1] >= 90:
+            return metadata_candidates
+
         # Phase 1 : recherche ciblee regroup (peu de candidats, rapide)
         regroup_candidates = self._find_regroup_candidates(
             link, alternative_names=alternative_names
@@ -345,17 +568,19 @@ class RepairService:
             link, self._storage_dir, min_score, media_type_filter=media_type
         )
 
-        # Fusionner : si les deux phases ont des resultats, combiner sans doublons
-        if regroup_candidates and index_candidates:
-            seen = {str(p) for p, _ in index_candidates}
-            merged = list(index_candidates)
-            for path, score in regroup_candidates:
-                if str(path) not in seen:
-                    merged.append((path, score))
-            merged.sort(key=lambda x: x[1], reverse=True)
-            return merged[:15]
+        # Fusionner tous les résultats sans doublons
+        all_candidates = []
+        seen: set[str] = set()
 
-        return index_candidates or regroup_candidates
+        for source in [metadata_candidates, index_candidates, regroup_candidates]:
+            for path, score in source:
+                key = str(path)
+                if key not in seen:
+                    seen.add(key)
+                    all_candidates.append((path, score))
+
+        all_candidates.sort(key=lambda x: x[1], reverse=True)
+        return all_candidates[:15]
 
     def _detect_media_context(self, link: Path) -> tuple[str | None, str | None]:
         """

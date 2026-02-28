@@ -12,8 +12,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 1.6.0 (CLI + Web + Gestion & Qualité de Données) |
-| Status | Production — v1.6.0 complete |
+| Version | 1.7.0 (CLI + Web + Fiabilité & Ergonomie) |
+| Status | Production — v1.7.0 complete |
 | Last Updated | 2026-02-28 |
 
 ## Requirements
@@ -88,7 +88,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 - [ ] Fiabilité & Ergonomie Bibliothèque (v1.7)
   - [x] Refonte UX filtres bibliothèque (2 lignes compactes, flèches tri, section technique dépliable) — Phase 24
-  - [ ] Réconciliation symlinks/storage (algorithme tolérant divergences) — Phase 25
+  - [x] Réconciliation symlinks/storage (commande reconcile 3 phases, index rapide, titres TVDB) — Phase 25
 
 ### Out of Scope
 
@@ -166,6 +166,9 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | Filtres bibliothèque 2 lignes | Ligne 1 recherche/filtres, ligne 2 tri/checkboxes/techniques/suppression | 2026-02-28 | Active |
 | Flèches tri au lieu de select asc/desc | Hidden input + boutons ↑↓ + dispatchEvent pour HTMX | 2026-02-28 | Active |
 | Section technique dépliable filtres | collapsed class + max-height transition, auto-open si filtre actif | 2026-02-28 | Active |
+| Index rapide dict O(1) pour matching symlinks | Remplace rglob linéaire pour 54K+ fichiers | 2026-02-28 | Active |
+| Phase 0 DB↔storage avant réparation symlinks | Résout file_path NULL avant de chercher les symlinks cassés | 2026-02-28 | Active |
+| db_session optionnel dans RepairService | Compatibilité tests sans accès DB | 2026-02-28 | Active |
 
 ## Success Metrics
 
@@ -189,4 +192,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-28 after Phase 24 complete*
+*Last updated: 2026-02-28 after Phase 25 complete*

@@ -5,27 +5,27 @@
 See: .paul/PROJECT.md (updated 2026-02-28)
 
 **Core value:** Organiser et renommer automatiquement une vidéothèque personnelle à partir des téléchargements
-**Current focus:** v1.7 Fiabilité & Ergonomie Bibliothèque
+**Current focus:** v1.7 complete — prêt pour v1.8 Robustesse Workflow
 
 ## Current Position
 
-Milestone: v1.7 Fiabilité & Ergonomie Bibliothèque
-Phase: 25 of 2 (Réconciliation Symlinks/Storage)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-02-28 — Phase 24 complete, transitioned to Phase 25
+Milestone: v1.7 Fiabilité & Ergonomie Bibliothèque — Complete
+Phase: 25 of 2 (Réconciliation Symlinks/Storage) — Complete
+Plan: 25-01 complete
+Status: Milestone v1.7 complete, ready for v1.8
+Last activity: 2026-02-28 — Phase 25 complete, milestone v1.7 closed
 
 Progress:
-- v1.7: [█████░░░░░] 50%
+- v1.7: [██████████] 100% ✓
 - Phase 24: [██████████] 100% ✓
-- Phase 25: [░░░░░░░░░░] 0%
+- Phase 25: [██████████] 100% ✓
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ○        ○        ○     [Ready for Phase 25 PLAN]
+  ✓        ✓        ✓     [Loop complete — milestone v1.7 done]
 ```
 
 ## Accumulated Context
@@ -52,20 +52,25 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Flèches tri ↑↓ au lieu de select asc/desc : hidden input + dispatchEvent HTMX
 - Section technique dépliable : collapsed class + max-height transition, auto-open si filtre actif
 - Bouton suppression intégré dans barre filtres (rouge sombre discret)
+- Index rapide dict O(1) pour matching symlinks (remplace rglob linéaire)
+- Phase 0 DB↔storage : réconcilier file_path NULL avant réparation symlinks
+- db_session optionnel dans RepairService pour compatibilité tests
 
 ### Deferred Issues
-- Symlinks épisodes ne reflètent pas les nouveaux titres
 - Test lecteur distant sur machine Windows (stand-by)
 - ~10-12 films récupérables via normalisation de ponctuation (`:·?` → `-...`)
-- 197 films sans fichier physique correspondant — irrésoluble par matching
+- ~65 films sans fichier physique correspondant — irrésoluble par matching
 - Outil pour lister facilement les épisodes/séries avec données manquantes (correction manuelle)
 - 285 épisodes sans titre (limites TVDB : séries anciennes, numérotation spéciale)
 - 5 séries sans tvdb_id (Dahmer="Monstre" sur TVDB, Ed Gein/Playgame/Suspect pas sur TVDB, Punisher=homonyme)
 - Lecteur distant : aucun message d'erreur si le profil est mal configuré (lecture s'arrête après 1s sans feedback)
-- Recherche symlinks : algorithme ne retrouve pas les symlinks existants quand l'arborescence video/ a divergé de storage/ (ex: Wadjda, subdivision/année différentes)
+- ~100 symlinks cassés irréductibles (fichiers source supprimés du storage)
 - Test suppression depuis machine distante (vérifier bouton masqué + routes bloquées)
 - Test lectures simultanées sur profils différents (ordi Windows indisponible)
 - Logging serveur (uv run cineorg serve) : horodatage manquant dans les logs
+- Supprimer l'option "migré" de la liste des lecteurs (laisser juste Local + profils enregistrés)
+- Ajouter option de réinitialisation workflow depuis l'interface web
+- Popover sélection lecteur : parfois trop haut, cache les 2 premières lignes
 
 ### Planned for v1.8 (Robustesse Workflow)
 - Performance matching séries : cache résultat TVDB par série (The Bear, The Boys bloquent le traitement)
@@ -78,16 +83,15 @@ PLAN ──▶ APPLY ──▶ UNIFY
 None.
 
 ### Git State
-Last commit: 82be854 chore: milestone v1.6 complete — archive and version bump
+Last commit: ec07756 feat(24-refonte-filtres-bibliotheque): refonte UX filtres bibliothèque
 Branch: master
 Tag: v1.6.0
-Uncommitted: milestone v1.7 creation
 
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Phase 24 complete, ready to plan Phase 25
-Next action: /paul:plan for Phase 25
+Stopped at: Milestone v1.7 complete
+Next action: /paul:complete-milestone or /paul:discuss-milestone for v1.8
 Resume file: .paul/ROADMAP.md
 
 ---
