@@ -62,6 +62,8 @@ class SQLModelMovieRepository(IMovieRepository):
             imdb_votes=model.imdb_votes,
             director=model.director,
             cast=tuple(cast_list),
+            collection_id=model.collection_id,
+            collection_name=model.collection_name,
             file_path=model.file_path,
             codec_video=model.codec_video,
             codec_audio=model.codec_audio,
@@ -96,6 +98,8 @@ class SQLModelMovieRepository(IMovieRepository):
             imdb_votes=entity.imdb_votes,
             director=entity.director,
             cast_json=json.dumps(list(entity.cast)) if entity.cast else None,
+            collection_id=entity.collection_id,
+            collection_name=entity.collection_name,
             file_path=entity.file_path,
             codec_video=entity.codec_video,
             codec_audio=entity.codec_audio,
@@ -198,6 +202,10 @@ class SQLModelMovieRepository(IMovieRepository):
             existing.cast_json = (
                 json.dumps(list(movie.cast)) if movie.cast else None
             )
+            if movie.collection_id is not None:
+                existing.collection_id = movie.collection_id
+            if movie.collection_name is not None:
+                existing.collection_name = movie.collection_name
             if movie.file_path is not None:
                 existing.file_path = movie.file_path
             if movie.codec_video is not None:

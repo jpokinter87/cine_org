@@ -169,7 +169,9 @@ class TMDBClient(IMediaAPIClient):
 
         return results
 
-    async def get_details(self, media_id: str) -> Optional[MediaDetails]:
+    async def get_details(
+        self, media_id: str, *, skip_cache: bool = False
+    ) -> Optional[MediaDetails]:
         """
         Recupere les details complets d'un film.
 
@@ -178,6 +180,7 @@ class TMDBClient(IMediaAPIClient):
 
         Args:
             media_id: ID TMDB du film
+            skip_cache: Si True, ignore le cache et force un appel API
 
         Returns:
             MediaDetails avec toutes les informations, ou None si non trouve
@@ -186,9 +189,10 @@ class TMDBClient(IMediaAPIClient):
         cache_key = f"tmdb:details:{media_id}"
 
         # CACHE-FIRST: Check cache before API call
-        cached = await self._cache.get(cache_key)
-        if cached is not None:
-            return cached
+        if not skip_cache:
+            cached = await self._cache.get(cache_key)
+            if cached is not None:
+                return cached
 
         # Cache miss - make API request avec credits
         client = self._get_client()
@@ -243,6 +247,11 @@ class TMDBClient(IMediaAPIClient):
         vote_average = data.get("vote_average")
         vote_count = data.get("vote_count")
 
+        # Extract collection (saga)
+        collection = data.get("belongs_to_collection")
+        collection_id = collection["id"] if collection else None
+        collection_name = collection["name"] if collection else None
+
         details = MediaDetails(
             id=str(data["id"]),
             title=data.get("title", data.get("original_title", "")),
@@ -256,6 +265,8 @@ class TMDBClient(IMediaAPIClient):
             cast=cast,
             vote_average=vote_average,
             vote_count=vote_count,
+            collection_id=collection_id,
+            collection_name=collection_name,
         )
 
         # Cache results

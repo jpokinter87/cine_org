@@ -1,5 +1,5 @@
 """
-Commandes CLI d'enrichissement ratings, IMDB IDs, series et credits films.
+Commandes CLI d'enrichissement ratings, IMDB IDs, series, credits films et collections.
 """
 
 import asyncio
@@ -400,5 +400,113 @@ async def _enrich_movies_credits_async(container, limit: int) -> None:
             console.print(f"  [red]{stats.failed}[/red] echec(s) API")
         if stats.skipped > 0:
             console.print(f"  [dim]{stats.skipped}[/dim] ignore(s) (sans tmdb_id)")
+
+    await tmdb_client.close()
+
+
+def enrich_collections(
+    limit: Annotated[
+        int,
+        typer.Option(
+            "--limit", "-l",
+            help="Nombre maximum de films a enrichir",
+        ),
+    ] = 6000,
+) -> None:
+    """Enrichit les collections/sagas TMDB pour les films sans cette information."""
+    asyncio.run(_enrich_collections_async(limit))
+
+
+@with_container()
+async def _enrich_collections_async(container, limit: int) -> None:
+    """Implementation async de la commande enrich-collections."""
+    import asyncio as _asyncio
+
+    from src.infrastructure.persistence.database import get_session
+    from src.infrastructure.persistence.models import MovieModel
+
+    tmdb_client = container.tmdb_client()
+
+    # Recuperer les films sans collection_id (jamais verifies)
+    session = next(get_session())
+    try:
+        stmt = (
+            select(MovieModel)
+            .where(MovieModel.tmdb_id.isnot(None))
+            .where(MovieModel.collection_id.is_(None))
+            .limit(limit)
+        )
+        models = list(session.exec(stmt).all())
+    finally:
+        session.close()
+
+    if not models:
+        console.print("[yellow]Aucun film a enrichir.[/yellow]")
+        console.print("[dim]Tous les films ont deja ete verifies pour les collections.[/dim]")
+        return
+
+    total = len(models)
+    enriched = 0
+    no_collection = 0
+    failed = 0
+
+    console.print(
+        f"[bold cyan]Enrichissement collections TMDB[/bold cyan]: {total} film(s)\n"
+    )
+
+    with suppress_loguru():
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeRemainingColumn(),
+            console=console,
+            transient=False,
+        ) as progress:
+            task = progress.add_task("[cyan]Collections...", total=total)
+
+            for model in models:
+                year_str = f" ({model.year})" if model.year else ""
+                title = f"{model.title}{year_str}"
+
+                try:
+                    details = await tmdb_client.get_details(
+                        str(model.tmdb_id), skip_cache=True
+                    )
+
+                    session = next(get_session())
+                    try:
+                        db_model = session.get(MovieModel, model.id)
+                        if db_model and details and details.collection_id:
+                            db_model.collection_id = details.collection_id
+                            db_model.collection_name = details.collection_name
+                            session.add(db_model)
+                            session.commit()
+                            enriched += 1
+                            progress.console.print(
+                                f"  [green]✓[/green] {title} → {details.collection_name}"
+                            )
+                        elif db_model:
+                            # Sentinel : 0 = verifie, pas de collection
+                            db_model.collection_id = 0
+                            session.add(db_model)
+                            session.commit()
+                            no_collection += 1
+                    finally:
+                        session.close()
+
+                except Exception:
+                    failed += 1
+                    progress.console.print(f"  [red]✗[/red] {title} - echec API")
+
+                progress.update(task, advance=1)
+                await _asyncio.sleep(0.15)
+
+    console.print("\n[bold]Resume:[/bold]")
+    console.print(f"  [green]{enriched}[/green] avec collection")
+    console.print(f"  [dim]{no_collection}[/dim] sans collection")
+    if failed > 0:
+        console.print(f"  [red]{failed}[/red] echec(s) API")
 
     await tmdb_client.close()

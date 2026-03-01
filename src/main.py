@@ -14,6 +14,7 @@ from .adapters.cli.commands import (
     cleanup,
     consolidate,
     enrich,
+    enrich_collections,
     enrich_imdb_ids,
     enrich_movies_credits,
     enrich_ratings,
@@ -85,6 +86,7 @@ app.command(name="enrich-ratings")(enrich_ratings)
 app.command(name="enrich-imdb-ids")(enrich_imdb_ids)
 app.command(name="enrich-series")(enrich_series)
 app.command(name="enrich-movies-credits")(enrich_movies_credits)
+app.command(name="enrich-collections")(enrich_collections)
 app.command(name="repair-links")(repair_links)
 app.command()(consolidate)
 app.command()(check)

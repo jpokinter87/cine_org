@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Collections — CineOrg{% endblock %}
+{% block nav_library %}active{% endblock %}
+
+{% block content %}
+<div class="library-page">
+    <div class="hero">
+        <h1 class="hero-title">Collections</h1>
+        <p class="hero-subtitle" id="collections-count">{{ total_collections }} saga{{ 's' if total_collections != 1 else '' }}</p>
+    </div>
+
+    <div id="collections-content">
+        {% include "library/collections/_content.html" %}
+    </div>
+</div>
+{% endblock %}

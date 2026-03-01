@@ -1,0 +1,73 @@
+<div class="collections-toolbar">
+    <form class="collections-search"
+          hx-get="/library/collections"
+          hx-target="#collections-content"
+          hx-trigger="keyup changed delay:500ms from:#collections-q, change from:#collections-sort"
+          hx-push-url="true">
+        <div class="lib-search-wrap">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" id="collections-q" name="q" value="{{ current_q }}"
+                   placeholder="Rechercher une saga..." class="lib-search-input">
+        </div>
+        <select id="collections-sort" name="sort" class="lib-filter-select">
+            <option value="name" {% if current_sort == 'name' %}selected{% endif %}>Nom A-Z</option>
+            <option value="count" {% if current_sort == 'count' %}selected{% endif %}>Nombre de films</option>
+        </select>
+    </form>
+    <a href="/library/" class="action-btn action-secondary collections-back-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Bibliothèque
+    </a>
+</div>
+
+{% if collections %}
+<div class="collections-grid">
+    {% for col in collections %}
+    <a href="/library/collections/{{ col.id }}" class="collection-card">
+        <div class="collection-card-poster">
+            {% if col.poster_url %}
+            <img src="{{ col.poster_url }}" alt="{{ col.name }}" loading="lazy">
+            {% else %}
+            <div class="lib-card-no-poster">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+            </div>
+            {% endif %}
+            <div class="collection-card-count">{{ col.count }} film{{ 's' if col.count != 1 else '' }}</div>
+        </div>
+        <div class="collection-card-body">
+            <h3 class="collection-card-title">{{ col.name }}</h3>
+            {% if col.year_range %}
+            <span class="collection-card-years">{{ col.year_range }}</span>
+            {% endif %}
+        </div>
+    </a>
+    {% endfor %}
+</div>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="/library/collections?page={{ page - 1 }}&q={{ current_q | urlencode }}&sort={{ current_sort }}"
+       hx-get="/library/collections?page={{ page - 1 }}&q={{ current_q | urlencode }}&sort={{ current_sort }}"
+       hx-target="#collections-content" hx-push-url="true"
+       class="pagination-btn">&laquo; Précédent</a>
+    {% endif %}
+    <span class="pagination-info">Page {{ page }} / {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="/library/collections?page={{ page + 1 }}&q={{ current_q | urlencode }}&sort={{ current_sort }}"
+       hx-get="/library/collections?page={{ page + 1 }}&q={{ current_q | urlencode }}&sort={{ current_sort }}"
+       hx-target="#collections-content" hx-push-url="true"
+       class="pagination-btn">Suivant &raquo;</a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+    </div>
+    <h2 class="empty-title">Aucune collection trouvée</h2>
+    <p class="empty-text">{% if current_q %}Essayez un autre terme de recherche.{% else %}Lancez <code>enrich-collections</code> pour découvrir les sagas.{% endif %}</p>
+</div>
+{% endif %}

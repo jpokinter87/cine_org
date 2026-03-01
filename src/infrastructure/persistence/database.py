@@ -229,3 +229,22 @@ def _run_migrations() -> None:
                 text("ALTER TABLE series ADD COLUMN personal_rating INTEGER")
             )
             conn.commit()
+
+        # Migration 9: Ajouter collection_id et collection_name a movies si manquantes
+        result = conn.execute(text("PRAGMA table_info(movies)"))
+        movie_columns = [row[1] for row in result.fetchall()]
+
+        if "collection_id" not in movie_columns:
+            conn.execute(
+                text("ALTER TABLE movies ADD COLUMN collection_id INTEGER")
+            )
+            conn.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_movies_collection_id ON movies(collection_id)")
+            )
+            conn.commit()
+
+        if "collection_name" not in movie_columns:
+            conn.execute(
+                text("ALTER TABLE movies ADD COLUMN collection_name VARCHAR")
+            )
+            conn.commit()

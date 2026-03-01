@@ -71,6 +71,8 @@ class MediaDetails:
     cast: tuple[str, ...] = ()
     vote_average: Optional[float] = None
     vote_count: Optional[int] = None
+    collection_id: Optional[int] = None
+    collection_name: Optional[str] = None
 
 
 @dataclass

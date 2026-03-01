@@ -20,6 +20,7 @@ from src.adapters.api.tmdb_client import TMDBClient
 from src.core.ports.api_clients import IMediaAPIClient, MediaDetails, SearchResult
 from tests.fixtures.tmdb_responses import (
     TMDB_EXTERNAL_IDS_RESPONSE,
+    TMDB_MOVIE_DETAILS_INCEPTION,
     TMDB_MOVIE_DETAILS_RESPONSE,
     TMDB_SEARCH_EMPTY_RESPONSE,
     TMDB_SEARCH_RESPONSE,
@@ -344,6 +345,68 @@ class TestTMDBGetDetails:
         assert call_order[1][0] == "http", (
             f"Expected http second, got {call_order[1]}"
         )
+
+
+class TestTMDBGetDetailsCollection:
+    """Tests for collection extraction in get_details()."""
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_details_extracts_collection(
+        self, tmdb_client: TMDBClient, mock_cache: AsyncMock
+    ):
+        """get_details() doit extraire belongs_to_collection quand présent."""
+        respx.get("https://api.themoviedb.org/3/movie/19995").mock(
+            return_value=httpx.Response(200, json=TMDB_MOVIE_DETAILS_RESPONSE)
+        )
+
+        details = await tmdb_client.get_details("19995")
+
+        assert details is not None
+        assert details.collection_id == 87096
+        assert details.collection_name == "Avatar - Saga"
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_details_no_collection(
+        self, tmdb_client: TMDBClient, mock_cache: AsyncMock
+    ):
+        """get_details() doit retourner None pour collection quand absent."""
+        respx.get("https://api.themoviedb.org/3/movie/27205").mock(
+            return_value=httpx.Response(200, json=TMDB_MOVIE_DETAILS_INCEPTION)
+        )
+
+        details = await tmdb_client.get_details("27205")
+
+        assert details is not None
+        assert details.collection_id is None
+        assert details.collection_name is None
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_details_skip_cache_bypasses_cache(
+        self, tmdb_client: TMDBClient, mock_cache: AsyncMock
+    ):
+        """get_details(skip_cache=True) ne doit PAS consulter le cache."""
+        # Setup: cache has stale data without collection
+        stale_details = MediaDetails(
+            id="19995", title="Avatar", year=2009,
+            genres=("Action",), collection_id=None, collection_name=None,
+        )
+        mock_cache.get.return_value = stale_details
+
+        respx.get("https://api.themoviedb.org/3/movie/19995").mock(
+            return_value=httpx.Response(200, json=TMDB_MOVIE_DETAILS_RESPONSE)
+        )
+
+        # Execute with skip_cache
+        details = await tmdb_client.get_details("19995", skip_cache=True)
+
+        # Verify: cache.get was NOT called, fresh data returned with collection
+        mock_cache.get.assert_not_called()
+        assert details is not None
+        assert details.collection_id == 87096
+        assert details.collection_name == "Avatar - Saga"
 
 
 class TestTMDBGetExternalIds:

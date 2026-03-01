@@ -52,6 +52,8 @@ class Movie:
     imdb_votes: Optional[int] = None
     director: Optional[str] = None
     cast: tuple[str, ...] = ()
+    collection_id: Optional[int] = None
+    collection_name: Optional[str] = None
     file_path: Optional[str] = None
     codec_video: Optional[str] = None
     codec_audio: Optional[str] = None

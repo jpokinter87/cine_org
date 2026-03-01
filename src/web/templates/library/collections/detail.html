@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}{{ collection_name }} — CineOrg{% endblock %}
+{% block nav_library %}active{% endblock %}
+
+{% block content %}
+<div class="library-page">
+    <div class="back-links">
+        <a href="/library/collections" class="back-link">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+            Collections
+        </a>
+        <a href="/library" class="back-link back-link-home">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Bibliothèque
+        </a>
+    </div>
+
+    <div class="hero">
+        <h1 class="hero-title">{{ collection_name }}</h1>
+        <p class="hero-subtitle">{{ total_items }} film{{ 's' if total_items != 1 else '' }}</p>
+    </div>
+
+    {% include "library/_grid.html" %}
+</div>
+
+<!-- Lightbox zoom jaquette -->
+<div class="poster-lightbox" id="poster-lightbox" onclick="this.classList.remove('active')">
+    <img id="poster-lightbox-img" src="" alt="">
+</div>
+<script>
+function openPosterLightbox(src) {
+    var lb = document.getElementById('poster-lightbox');
+    document.getElementById('poster-lightbox-img').src = src.replace('/w300', '/w500');
+    lb.classList.add('active');
+}
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') document.getElementById('poster-lightbox').classList.remove('active');
+});
+</script>
+{% endblock %}

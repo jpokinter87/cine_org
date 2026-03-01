@@ -59,6 +59,8 @@ class MovieModel(SQLModel, table=True):
     imdb_votes: int | None = None  # Nombre de votes sur IMDb
     director: str | None = None  # Realisateur principal
     cast_json: str | None = None  # JSON: ["Acteur 1", "Acteur 2", ...]
+    collection_id: int | None = Field(default=None, index=True)  # ID collection TMDB
+    collection_name: str | None = None  # Nom de la saga/collection TMDB
     watched: bool = Field(default=False, index=True)  # Film deja vu
     personal_rating: Optional[int] = Field(default=None)  # Note personnelle 1-5
     created_at: datetime | None = Field(default_factory=datetime.utcnow)

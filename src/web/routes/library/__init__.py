@@ -6,11 +6,12 @@ Regroupe les sous-modules : browse, detail, player, reassociate.
 
 from fastapi import APIRouter
 
-from . import browse, delete, detail, player, reassociate, suggest, trash
+from . import browse, collections, delete, detail, player, reassociate, suggest, trash
 
 router = APIRouter(prefix="/library")
 
 router.include_router(browse.router)
+router.include_router(collections.router)
 router.include_router(suggest.router)
 router.include_router(detail.router)
 router.include_router(player.router)

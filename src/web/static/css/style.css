@@ -7533,3 +7533,159 @@ details[open] > .maint-issue-toggle::before {
         justify-content: flex-end;
     }
 }
+
+/* ═══════════════════════════════════════════
+   Collections / Sagas
+   ═══════════════════════════════════════════ */
+
+/* ── Toolbar recherche / tri ── */
+
+.collections-toolbar {
+    display: flex;
+    align-items: stretch;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.collections-search {
+    display: flex;
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 0;
+    align-items: stretch;
+}
+
+.collections-toolbar .lib-search-wrap {
+    flex: 1;
+}
+
+.collections-toolbar .collections-back-btn {
+    flex-shrink: 0;
+    padding: 0.6rem 1rem;
+    font-size: 0.875rem;
+}
+
+/* ── Grille de collections ── */
+
+.collections-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1.25rem;
+}
+
+.collection-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+    transition: transform 0.2s, box-shadow 0.2s;
+    text-decoration: none;
+    color: inherit;
+}
+
+.collection-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-card-hover);
+}
+
+.collection-card-poster {
+    position: relative;
+    aspect-ratio: 2 / 3;
+    background: var(--bg-surface);
+    overflow: hidden;
+}
+
+.collection-card-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.collection-card-count {
+    position: absolute;
+    bottom: 0.5rem;
+    right: 0.5rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 100px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background: rgba(91, 141, 239, 0.85);
+    color: #fff;
+    backdrop-filter: blur(4px);
+}
+
+.collection-card-body {
+    padding: 0.6rem 0.75rem 0.75rem;
+}
+
+.collection-card-title {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--text-primary);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.collection-card-years {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+/* ── Badge collection sur carte grille ── */
+
+.lib-card-collection {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent-blue);
+    color: var(--bg-deep);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+    flex-shrink: 0;
+}
+
+/* ── Badge collection sur fiche détail ── */
+
+.lib-collection-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: var(--accent-blue-dim);
+    color: var(--accent-blue);
+    text-decoration: none;
+    transition: opacity 0.2s;
+}
+
+.lib-collection-badge:hover {
+    opacity: 0.8;
+}
+
+/* ── Responsive collections ── */
+
+@media (max-width: 600px) {
+    .collections-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 0.75rem;
+    }
+    .collections-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .collections-search {
+        flex-direction: column;
+    }
+}

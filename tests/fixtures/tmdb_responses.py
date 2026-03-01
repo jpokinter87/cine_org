@@ -183,4 +183,12 @@ TMDB_MOVIE_DETAILS_INCEPTION = {
     "video": False,
     "vote_average": 8.4,
     "vote_count": 32000,
+    "credits": {
+        "cast": [
+            {"id": 6193, "name": "Leonardo DiCaprio", "character": "Cobb", "order": 0},
+        ],
+        "crew": [
+            {"id": 525, "name": "Christopher Nolan", "job": "Director", "department": "Directing"},
+        ],
+    },
 }

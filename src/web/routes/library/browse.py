@@ -157,6 +157,8 @@ async def library_index(
                         "codec_audio": m.codec_audio,
                         "watched": m.watched,
                         "created_at": m.created_at,
+                        "collection_name": m.collection_name,
+                        "collection_id": m.collection_id,
                     }
                 )
 
