@@ -10,21 +10,21 @@ See: .paul/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Milestone: v1.9 Normalisation & Intégration Jellyfin
-Phase: 30 of 33 (Normalisation Répertoires Séries) — Not started
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-03-01 — Phase 29 complete, transitioned to Phase 30
+Phase: 30 of 33 (Normalisation Répertoires Séries) — Planning
+Plan: 30-02 created, awaiting approval (migration physique)
+Status: PLAN created, ready for APPLY
+Last activity: 2026-03-01 — Created 30-02-PLAN.md (migration physique + reclassification)
 
 Progress:
 - v1.9: [██░░░░░░░░] 20% (1/5 phases)
-- Phase 30: [░░░░░░░░░░] 0%
+- Phase 30: [█████░░░░░] 50% (plan 01 complete, plan 02 planned)
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop complete — Phase 29 done, ready for Phase 30]
+  ✓        ○        ○     [Plan 30-02 created, awaiting approval]
 ```
 
 ## Accumulated Context
@@ -88,13 +88,13 @@ Branch: master
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Phase 29 complete, ready to plan Phase 30
-Next action: /paul:plan for Phase 30
-Resume file: .paul/ROADMAP.md
+Stopped at: Plan 30-02 created (migration physique + reclassification)
+Next action: Review and approve plan, then run /paul:apply
+Resume file: .paul/phases/30-normalisation-repertoires-series/30-02-PLAN.md
 Resume context:
-- Phase 30 = Normalisation Répertoires Séries (Séries → Series pour Jellyfin)
-- Impact : code source (53+ fichiers), DB file_path, fichiers physiques NAS + symlinks
-- Mapping prévu : Séries TV → Series/TV, Animation + Courts → Series/Animation + Series/Animation/Courts, Mangas → Series/Mangas, Séries documentaires → Documentaires/Séries documentaires
+- Plan 30-02 = Migration physique (renommage dirs, bulk update DB, rebuild symlinks) + reclassification animation/mangas/documentaires
+- Aussi : corriger les références "Séries" manquées par plan 01 (repair_service, maintenance.py, transfer.py, reconcile_command)
+- Checkpoint utilisateur pour exécuter la migration sur le NAS
 
 ---
 *STATE.md — Updated after every significant action*

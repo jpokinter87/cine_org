@@ -60,6 +60,12 @@ from src.adapters.cli.commands.fix_symlinks_command import (
 from src.adapters.cli.commands.reconcile_command import (
     reconcile,
 )
+from src.adapters.cli.commands.migrate_series_command import (
+    migrate_series,
+)
+from src.adapters.cli.commands.fix_series_symlinks_command import (
+    fix_series_symlinks,
+)
 
 __all__ = [
     # workflow
@@ -102,4 +108,6 @@ __all__ = [
     "enrich_episode_titles",
     "enrich_tvdb_ids",
     "reconcile",
+    "migrate_series",
+    "fix_series_symlinks",
 ]

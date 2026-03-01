@@ -13,7 +13,7 @@ Phases: 1 of 5 complete
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 29 | Films Multi-Parties | 1/1 | ✅ Complete | 2026-03-01 |
-| 30 | Normalisation Répertoires Séries | TBD | Not started | - |
+| 30 | Normalisation Répertoires Séries | 1/2 | Planning | - |
 | 31 | NFO & Artwork Sidecar Jellyfin | TBD | Not started | - |
 | 32 | Détection de Doublons | TBD | Not started | - |
 | 33 | Overlays Qualité Web UI | TBD | Not started | - |

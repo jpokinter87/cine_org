@@ -22,6 +22,8 @@ from .adapters.cli.commands import (
     fix_bad_links,
     fix_symlinks,
     imdb_app,
+    migrate_series,
+    fix_series_symlinks,
     clean_titles,
     enrich_episode_titles,
     enrich_tech,
@@ -99,6 +101,8 @@ app.command(name="enrich-tech")(enrich_tech)
 app.command(name="enrich-episode-titles")(enrich_episode_titles)
 app.command(name="enrich-tvdb-ids")(enrich_tvdb_ids)
 app.command()(reconcile)
+app.command(name="migrate-series")(migrate_series)
+app.command(name="fix-series-symlinks")(fix_series_symlinks)
 
 # Monter validate_app comme sous-commande
 app.add_typer(validate_app, name="validate")
