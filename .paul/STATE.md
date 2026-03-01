@@ -88,9 +88,13 @@ Tag: v1.8.0 (à créer)
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Milestone v1.8 complete
-Next action: /paul:discuss-milestone or /paul:milestone
-Resume file: .paul/MILESTONES.md
+Stopped at: Milestone v1.8 complete and archived
+Next action: /paul:discuss-milestone
+Resume file: .paul/HANDOFF-2026-03-01.md
+Resume context:
+- Milestone v1.8 complet (3 phases, tags v1.7.0 + v1.8.0 créés)
+- Deferred issue prioritaire : films multi-parties (renamer écrase Partie 2)
+- Prêt pour définir le scope v1.9
 
 ---
 *STATE.md — Updated after every significant action*
