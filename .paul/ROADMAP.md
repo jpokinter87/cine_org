@@ -8,12 +8,12 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 **v1.9 Normalisation & Intégration Jellyfin** (v1.9.0)
 Status: 🚧 In Progress
-Phases: 1 of 5 complete
+Phases: 2 of 5 complete
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 29 | Films Multi-Parties | 1/1 | ✅ Complete | 2026-03-01 |
-| 30 | Normalisation Répertoires Séries | 1/2 | Planning | - |
+| 30 | Normalisation Répertoires Séries | 2/2 | ✅ Complete | 2026-03-01 |
 | 31 | NFO & Artwork Sidecar Jellyfin | TBD | Not started | - |
 | 32 | Détection de Doublons | TBD | Not started | - |
 | 33 | Overlays Qualité Web UI | TBD | Not started | - |
@@ -147,4 +147,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-01 — Phase 29 complete*
+*Last updated: 2026-03-01 — Phase 30 complete*

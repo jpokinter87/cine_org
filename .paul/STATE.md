@@ -10,21 +10,21 @@ See: .paul/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Milestone: v1.9 Normalisation & Intégration Jellyfin
-Phase: 30 of 33 (Normalisation Répertoires Séries) — Planning
-Plan: 30-02 created, awaiting approval (migration physique)
-Status: PLAN created, ready for APPLY
-Last activity: 2026-03-01 — Created 30-02-PLAN.md (migration physique + reclassification)
+Phase: 30 of 33 (Normalisation Répertoires Séries) — Complete
+Plan: 30-02 complete (migration physique + fix-series-symlinks)
+Status: Phase 30 complete, ready for Phase 31
+Last activity: 2026-03-01 — Phase 30 complete (migrate-series + fix-series-symlinks)
 
 Progress:
-- v1.9: [██░░░░░░░░] 20% (1/5 phases)
-- Phase 30: [█████░░░░░] 50% (plan 01 complete, plan 02 planned)
+- v1.9: [████░░░░░░] 40% (2/5 phases)
+- Phase 30: [██████████] 100% (2/2 plans complete)
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ○        ○     [Plan 30-02 created, awaiting approval]
+  ✓        ✓        ✓     [Loop complete — Phase 30 done, ready for Phase 31]
 ```
 
 ## Accumulated Context
@@ -63,6 +63,10 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - skip_cache param sur TMDBClient.get_details() pour invalidation granulaire du cache
 - sentinel collection_id=0 pour "vérifié, pas de collection"
 - Filet doublons post-batch : détection/correction en fin de pipeline au lieu d'extraction en amont
+- mediainfo primaire, guessit fallback langue : pipeline identique au workflow normal
+- Normalisation ligatures Œ/Æ et slash/tiret pour comparaison de titres
+- SD reconnu comme résolution valide, MPEG-4/XviD/DivX comme codecs valides
+- Réutiliser le pipeline workflow existant plutôt que réinventer (règle CLAUDE.md)
 
 ### Deferred Issues
 - Test lecteur distant sur machine Windows (stand-by)
@@ -77,24 +81,27 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Test lectures simultanées sur profils différents (ordi Windows indisponible)
 - Vérification tooltips workflow click-to-toggle (pas de fichiers à traiter pour tester)
 - Skill gap /frontend-design : invoquer systématiquement pour les phases UI
+- 487 épisodes avec langue indétectable (fichiers anciens sans métadonnée langue)
+- Quelques tvdb_id potentiellement erronés (découvert avec BSG 1978 vs 2004)
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: a7b4f2d (feat(29-films-multi-parties))
+Last commit: 3efa031 (feat(30-normalisation-series))
 Branch: master
 
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Plan 30-02 created (migration physique + reclassification)
-Next action: Review and approve plan, then run /paul:apply
-Resume file: .paul/phases/30-normalisation-repertoires-series/30-02-PLAN.md
+Stopped at: Phase 30 complete
+Next action: /paul:plan for Phase 31 (NFO & Artwork Sidecar Jellyfin)
+Resume file: .paul/phases/30-normalisation-repertoires-series/30-02-SUMMARY.md
 Resume context:
-- Plan 30-02 = Migration physique (renommage dirs, bulk update DB, rebuild symlinks) + reclassification animation/mangas/documentaires
-- Aussi : corriger les références "Séries" manquées par plan 01 (repair_service, maintenance.py, transfer.py, reconcile_command)
-- Checkpoint utilisateur pour exécuter la migration sur le NAS
+- Phase 30 fully complete (2 plans)
+- Structure séries normalisée (Series/TV, Series/Animation, Series/Mangas, Documentaires/Series documentaires)
+- Symlinks reconstruits via pipeline complet mediainfo+guessit+TVDB
+- 487 épisodes irréductibles (langue manquante) — limite structurelle
 
 ---
 *STATE.md — Updated after every significant action*
