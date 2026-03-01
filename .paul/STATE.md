@@ -10,21 +10,21 @@ See: .paul/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Milestone: v1.9 Normalisation & Intégration Jellyfin
-Phase: 29 of 33 (Films Multi-Parties) — Planning
-Plan: 29-01 created, awaiting approval
-Status: PLAN created, ready for APPLY
-Last activity: 2026-03-01 — Created 29-01-PLAN.md
+Phase: 30 of 33 (Normalisation Répertoires Séries) — Not started
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-03-01 — Phase 29 complete, transitioned to Phase 30
 
 Progress:
-- v1.9: [░░░░░░░░░░] 0%
-- Phase 29: [░░░░░░░░░░] 0%
+- v1.9: [██░░░░░░░░] 20% (1/5 phases)
+- Phase 30: [░░░░░░░░░░] 0%
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ○        ○     [Plan created, awaiting approval]
+  ✓        ✓        ✓     [Loop complete — Phase 29 done, ready for Phase 30]
 ```
 
 ## Accumulated Context
@@ -62,6 +62,7 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - "mul" normalisé en "Multi" (pas "MUL") dans le parsing guessit
 - skip_cache param sur TMDBClient.get_details() pour invalidation granulaire du cache
 - sentinel collection_id=0 pour "vérifié, pas de collection"
+- Filet doublons post-batch : détection/correction en fin de pipeline au lieu d'extraction en amont
 
 ### Deferred Issues
 - Test lecteur distant sur machine Windows (stand-by)
@@ -81,20 +82,19 @@ PLAN ──▶ APPLY ──▶ UNIFY
 None.
 
 ### Git State
-Last commit: ec510a0 (session handoff v1.8)
+Last commit: a7b4f2d (feat(29-films-multi-parties))
 Branch: master
-Tag: v1.8.0
 
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Plan 29-01 created
-Next action: Review and approve plan, then run /paul:apply
-Resume file: .paul/phases/29-films-multi-parties/29-01-PLAN.md
+Stopped at: Phase 29 complete, ready to plan Phase 30
+Next action: /paul:plan for Phase 30
+Resume file: .paul/ROADMAP.md
 Resume context:
-- Plan TDD pour films multi-parties : 3 tasks (tests → parser → renamer+batch)
-- Guessit extrait `part` uniquement pour "Part X" anglais, pas "Partie"/"Vol"
-- Solution : extraction hybride (champ guessit + regex titre) dans le parser
+- Phase 30 = Normalisation Répertoires Séries (Séries → Series pour Jellyfin)
+- Impact : code source (53+ fichiers), DB file_path, fichiers physiques NAS + symlinks
+- Mapping prévu : Séries TV → Series/TV, Animation + Courts → Series/Animation + Series/Animation/Courts, Mangas → Series/Mangas, Séries documentaires → Documentaires/Séries documentaires
 
 ---
 *STATE.md — Updated after every significant action*

@@ -12,8 +12,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 1.8.0 (CLI + Web + Robustesse Workflow & Collections) |
-| Status | Production — v1.8.0 complete |
+| Version | 1.9.0-dev (Normalisation & Intégration Jellyfin) |
+| Status | Development — v1.9 in progress |
 | Last Updated | 2026-03-01 |
 
 ## Requirements
@@ -86,10 +86,15 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-(Aucun — prêt pour le prochain milestone)
+- [ ] Normalisation répertoires séries (Séries → Series) pour Jellyfin — Phase 30
+- [ ] NFO & artwork sidecar Jellyfin — Phase 31
+- [ ] Détection de doublons avec whitelist — Phase 32
+- [ ] Overlays qualité sur posters web — Phase 33
 
 ### Validated (Recently Shipped)
 
+- [x] Films multi-parties (v1.9)
+  - Filet de sécurité doublons : détection post-batch + correction automatique "Partie N" — Phase 29
 - [x] Robustesse Workflow & Corrections UX (v1.8)
   - [x] Corrections UX mineures (popover dynamique, profil Migré, reset workflow, logs serveur) — Phase 26
   - [x] Performance & Robustesse Matching (cache TVDB bulk, compteurs workflow, VOSTFR) — Phase 27
@@ -184,6 +189,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | "mul" normalisé en "Multi" | Guessit alpha2 "mul" → "Multi" au lieu de "MUL" | 2026-02-28 | Active |
 | skip_cache sur TMDBClient.get_details() | Invalidation cache granulaire sans détruire le cache global | 2026-03-01 | Active |
 | collection_id=0 sentinel | Films sans collection marqués pour éviter re-vérification | 2026-03-01 | Active |
+| Filet doublons post-batch | Détection/correction doublons en fin de pipeline au lieu d'extraction en amont | 2026-03-01 | Active |
 
 ## Success Metrics
 
@@ -207,4 +213,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-03-01 after v1.8 Robustesse Workflow & Corrections UX*
+*Last updated: 2026-03-01 after Phase 29 Films Multi-Parties*
