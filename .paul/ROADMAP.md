@@ -2,40 +2,32 @@
 
 ## Overview
 
-CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec données enrichies, un système de gestion des associations TMDB, des données nettoyées, un code refactoré, un workflow fluide, une suggestion de films, un lecteur distant, des corrections UX, une gestion avancée des données, et une réconciliation symlinks/storage robuste. L'application est stable en v1.7.
+CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec données enrichies, un système de gestion des associations TMDB, des données nettoyées, un code refactoré, un workflow fluide, une suggestion de films, un lecteur distant, des corrections UX, une gestion avancée des données, et une réconciliation symlinks/storage robuste. L'application est stable en v1.8.
 
 ## Current Milestone
 
 **v1.8 Robustesse Workflow & Corrections UX** (v1.8.0)
-Status: In Progress
-Phases: 2 of 3 complete
-
-| Phase | Name | Plans | Status | Completed |
-|-------|------|-------|--------|-----------|
-| 26 | Corrections UX Mineures | 1/1 | Complete | 2026-02-28 |
-| 27 | Performance & Robustesse Matching | 1/1 | Complete | 2026-02-28 |
-| 28 | Films Spéciaux | TBD | Not started | - |
-
-### Phase 26: Corrections UX Mineures ✓
-
-Popover dynamique dessous/dessus, profil Migré supprimé, reset workflow web, logs serveur horodatés.
-Completed: 2026-02-28
-
-### Phase 27: Performance & Robustesse Matching ✓
-
-Cache TVDB bulk par saison, compteurs workflow fiables, parsing/renommage VOSTFR.
-Completed: 2026-02-28
-
-### Phase 28: Films Spéciaux
-
-Focus: Films multi-parties (part1/part2), sagas de films (regroupement symlinks Die Hard, James Bond, etc.)
-Plans: TBD (defined during /paul:plan)
+Status: ✅ Complete
+Completed: 2026-03-01
 
 ## Next Milestone (planned)
 
-(À définir après v1.8)
+Run /paul:discuss-milestone or /paul:milestone to define.
 
 ## Completed Milestones
+
+<details>
+<summary>v1.8 Robustesse Workflow & Corrections UX — 2026-03-01 (3 phases)</summary>
+
+| Phase | Name | Plans | Completed |
+|-------|------|-------|-----------|
+| 26 | Corrections UX Mineures | 1/1 | 2026-02-28 |
+| 27 | Performance & Robustesse Matching | 1/1 | 2026-02-28 |
+| 28 | Films Spéciaux | 1/1 | 2026-03-01 |
+
+Archive: `.paul/milestones/v1.8-ROADMAP.md`
+
+</details>
 
 <details>
 <summary>v1.7 Fiabilité & Ergonomie Bibliothèque — 2026-02-28 (2 phases)</summary>
@@ -131,4 +123,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-02-28 — Phase 27 complete*
+*Last updated: 2026-03-01 — Milestone v1.8 complete and archived*

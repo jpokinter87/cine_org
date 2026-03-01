@@ -2,29 +2,28 @@
 
 ## Project Reference
 
-See: .paul/PROJECT.md (updated 2026-02-28)
+See: .paul/PROJECT.md (updated 2026-03-01)
 
 **Core value:** Organiser et renommer automatiquement une vidéothèque personnelle à partir des téléchargements
-**Current focus:** v1.8 Robustesse Workflow & Corrections UX
+**Current focus:** Awaiting next milestone
 
 ## Current Position
 
-Milestone: v1.8 Robustesse Workflow & Corrections UX
-Phase: 28 of 3 (Films Spéciaux) — Not started
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-02-28 — Phase 27 complete, transitioned to Phase 28
+Milestone: Awaiting next milestone
+Phase: None active
+Plan: None
+Status: Milestone v1.8 complete — ready for next
+Last activity: 2026-03-01 — Milestone completed
 
 Progress:
-- v1.8: [██████░░░░] 67%
-- Phase 28: [░░░░░░░░░░] 0%
+- v1.8: [██████████] 100% ✓
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Phase 27 loop complete — ready for next PLAN]
+  ○        ○        ○     [Milestone complete - ready for next]
 ```
 
 ## Accumulated Context
@@ -60,6 +59,8 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Compteurs workflow = réalité DB : scanned basé sur created_video_file_ids
 - VOSTFR conditionnel : subtitle_language FR + audio non-FR/non-Multi → suffixe VOSTFR
 - "mul" normalisé en "Multi" (pas "MUL") dans le parsing guessit
+- skip_cache param sur TMDBClient.get_details() pour invalidation granulaire du cache
+- sentinel collection_id=0 pour "vérifié, pas de collection"
 
 ### Deferred Issues
 - Test lecteur distant sur machine Windows (stand-by)
@@ -73,26 +74,23 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Test suppression depuis machine distante (vérifier bouton masqué + routes bloquées)
 - Test lectures simultanées sur profils différents (ordi Windows indisponible)
 - Vérification tooltips workflow click-to-toggle (pas de fichiers à traiter pour tester)
-
-### Planned for v1.8
-- ~~Phase 26 : Corrections UX mineures~~ ✓ (2026-02-28)
-- ~~Phase 27 : Performance & Robustesse Matching~~ ✓ (2026-02-28)
-- Phase 28 : Films spéciaux (multi-parties, sagas)
+- Skill gap /frontend-design : invoquer systématiquement pour les phases UI
+- Films multi-parties (ex. "Nos meilleures années" Partie 1/2) : le renamer génère le même nom pour les deux fichiers → écrasement au transfert. Guessit extrait le champ `part`, mais ParsedInfo et le renamer l'ignorent
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: (pending — phase 27 commit)
+Last commit: (pending milestone commit)
 Branch: master
-Tag: v1.6.0 (v1.7.0 à tagger via /paul:complete-milestone)
+Tag: v1.8.0 (à créer)
 
 ## Session Continuity
 
-Last session: 2026-02-28
-Stopped at: Phase 27 complete, ready to plan Phase 28
-Next action: /paul:plan for Phase 28
-Resume file: .paul/ROADMAP.md
+Last session: 2026-03-01
+Stopped at: Milestone v1.8 complete
+Next action: /paul:discuss-milestone or /paul:milestone
+Resume file: .paul/MILESTONES.md
 
 ---
 *STATE.md — Updated after every significant action*

@@ -12,9 +12,9 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 1.7.0 (CLI + Web + Fiabilité & Ergonomie) |
-| Status | Production — v1.7.0 complete |
-| Last Updated | 2026-02-28 |
+| Version | 1.8.0 (CLI + Web + Robustesse Workflow & Collections) |
+| Status | Production — v1.8.0 complete |
+| Last Updated | 2026-03-01 |
 
 ## Requirements
 
@@ -86,12 +86,14 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-- [ ] Robustesse Workflow & Corrections UX (v1.8)
-  - [x] Corrections UX mineures (popover dynamique, profil Migré, reset workflow, logs serveur) — Phase 26
-  - [x] Performance & Robustesse Matching (cache TVDB bulk, compteurs workflow, VOSTFR) — Phase 27
+(Aucun — prêt pour le prochain milestone)
 
 ### Validated (Recently Shipped)
 
+- [x] Robustesse Workflow & Corrections UX (v1.8)
+  - [x] Corrections UX mineures (popover dynamique, profil Migré, reset workflow, logs serveur) — Phase 26
+  - [x] Performance & Robustesse Matching (cache TVDB bulk, compteurs workflow, VOSTFR) — Phase 27
+  - [x] Collections TMDB (583 sagas, page web, badges, commande CLI enrich-collections) — Phase 28
 - [x] Fiabilité & Ergonomie Bibliothèque (v1.7)
   - [x] Refonte UX filtres bibliothèque (2 lignes compactes, flèches tri, section technique dépliable) — Phase 24
   - [x] Réconciliation symlinks/storage (commande reconcile 3 phases, index rapide, titres TVDB) — Phase 25
@@ -180,6 +182,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | Compteurs workflow = réalité DB | scanned basé sur created_video_file_ids, pas scan_results | 2026-02-28 | Active |
 | VOSTFR conditionnel dans renommage | subtitle_language FR + audio non-FR/non-Multi → suffixe VOSTFR | 2026-02-28 | Active |
 | "mul" normalisé en "Multi" | Guessit alpha2 "mul" → "Multi" au lieu de "MUL" | 2026-02-28 | Active |
+| skip_cache sur TMDBClient.get_details() | Invalidation cache granulaire sans détruire le cache global | 2026-03-01 | Active |
+| collection_id=0 sentinel | Films sans collection marqués pour éviter re-vérification | 2026-03-01 | Active |
 
 ## Success Metrics
 
@@ -203,4 +207,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-02-28 after Phase 27 complete*
+*Last updated: 2026-03-01 after v1.8 Robustesse Workflow & Corrections UX*

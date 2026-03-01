@@ -11,6 +11,85 @@ Completed milestone log for this project.
 | v1.4 Expérience Utilisateur | 2026-02-26 | ~1 day | 2 phases, 4 plans |
 | v1.5 Polish & Corrections UX | 2026-02-26 | ~1 day | 3 phases, 4 plans |
 | v1.6 Gestion & Qualité de Données | 2026-02-28 | ~2 days | 4 phases, 5 plans |
+| v1.7 Fiabilité & Ergonomie Bibliothèque | 2026-02-28 | ~1 day | 2 phases, 2 plans |
+| v1.8 Robustesse Workflow & Corrections UX | 2026-03-01 | ~1 day | 3 phases, 3 plans |
+
+---
+
+## ✅ v1.8 Robustesse Workflow & Corrections UX
+
+**Completed:** 2026-03-01
+**Duration:** ~1 day (2026-02-28 → 2026-03-01)
+
+### Stats
+
+| Metric | Value |
+|--------|-------|
+| Phases | 3 (26, 27, 28) |
+| Plans | 3 |
+| Files created | 4 |
+| Files modified | 31 |
+
+### Key Accomplishments
+
+- Popover lecteur avec placement dynamique JS (dessous/dessus) — corrige le bug des épisodes en bas de liste
+- Bouton réinitialisation workflow web avec dialogue de confirmation overlay
+- Logs serveur uvicorn horodatés via loguru (format unifié avec le reste de l'application)
+- Cache TVDB bulk par saison (1 requête API au lieu de N par épisode)
+- Compteurs workflow web cohérents avec l'état réel en DB
+- Parsing et renommage VOSTFR (subtitle_language dans ParsedFilename)
+- 583 collections/sagas TMDB identifiées (939 films dans des sagas)
+- Page web /library/collections avec recherche HTMX et tri
+- Badge collection sur cartes films et lien saga sur fiches détail
+- Pattern skip_cache sur TMDBClient.get_details() pour invalidation cache granulaire
+- 914 tests, couverture tvdb_client 91%, guessit_parser 97%
+
+### Key Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| overflow:hidden retiré de .lib-season-group | Cause racine du popover tronqué par le conteneur |
+| log_config dict pour uvicorn | log_config=None supprime tout logging |
+| Bulk fetch FR+EN séparé TVDB | Fallback titre EN quand FR vide |
+| scanned basé sur created_video_file_ids | Reflète la réalité DB, pas le scan brut |
+| VOSTFR exclu si audio Multi | Pas de redondance dans le nom de fichier |
+| skip_cache param vs cache clear | Granulaire, ne détruit pas le cache existant |
+| collection_id=0 sentinel | Évite re-vérification des films sans saga |
+| Nav Collections = lien standard | Cohérence avec les autres onglets navbar |
+
+---
+
+## ✅ v1.7 Fiabilité & Ergonomie Bibliothèque
+
+**Completed:** 2026-02-28
+**Duration:** ~1 day
+
+### Stats
+
+| Metric | Value |
+|--------|-------|
+| Phases | 2 (24, 25) |
+| Plans | 2 |
+| Files created | 1 |
+| Files modified | 6 |
+
+### Key Accomplishments
+
+- Filtres bibliothèque réorganisés en 2 lignes (recherche/filtres + tri/checkboxes/technique/suppression)
+- Flèches tri intégrées (hidden input + boutons ↑↓ + dispatchEvent HTMX)
+- Panneau technique dépliable (collapsed class + max-height transition, auto-open si filtre actif)
+- Commande CLI reconcile avec 3 phases de réconciliation DB↔storage↔symlinks
+- Index rapide dictionnaires O(1) pour matching symlinks (remplace rglob linéaire)
+- Phase 0 DB↔storage : réconciliation file_path NULL avant réparation symlinks
+
+### Key Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Layout filtres 2 lignes | Meilleure lisibilité que tout-en-un |
+| Index rapide dict O(1) | Performance pour 54K+ fichiers |
+| Phase 0 DB↔storage avant symlinks | Résout file_path NULL avant de chercher les symlinks cassés |
+| db_session optionnel dans RepairService | Compatibilité tests sans accès DB |
 
 ---
 
