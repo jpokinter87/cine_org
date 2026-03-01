@@ -8,14 +8,14 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 **v1.9 Normalisation & Intégration Jellyfin** (v1.9.0)
 Status: 🚧 In Progress
-Phases: 2 of 5 complete
+Phases: 3 of 5 complete
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 29 | Films Multi-Parties | 1/1 | ✅ Complete | 2026-03-01 |
 | 30 | Normalisation Répertoires Séries | 2/2 | ✅ Complete | 2026-03-01 |
-| 31 | NFO & Artwork Sidecar Jellyfin | TBD | Not started | - |
-| 32 | Détection de Doublons | TBD | Not started | - |
+| 31 | Détection de Doublons | 1/1 | ✅ Complete | 2026-03-01 |
+| 32 | NFO & Artwork Sidecar Jellyfin | TBD | Not started | - |
 | 33 | Overlays Qualité Web UI | TBD | Not started | - |
 
 ### Phase 29: Films Multi-Parties
@@ -26,13 +26,13 @@ Focus: Corriger le renamer qui génère le même nom pour Partie 1 et Partie 2 �
 
 Focus: Renommer `Séries` → `Series` (sans accents) sur NAS et symlinks pour compatibilité Jellyfin. Restructurer les sous-dossiers (TV, Animation avec Courts, Mangas). Migrer le code source (53+ fichiers), les file_path en DB, et les fichiers physiques.
 
-### Phase 31: NFO & Artwork Sidecar Jellyfin
-
-Focus: Générer movie.nfo/tvshow.nfo (XML Kodi/Jellyfin) + poster.jpg/fanart.jpg depuis TMDB. Jellyfin utilise directement les métadonnées CineOrg validées. CLI generate-nfo + intégration web.
-
-### Phase 32: Détection de Doublons
+### Phase 31: Détection de Doublons
 
 Focus: Commande check-duplicates groupant par TMDB ID, comparant qualité (résolution, codec, taille). Whitelist pour doublons volontaires. Vue web avec actions.
+
+### Phase 32: NFO & Artwork Sidecar Jellyfin
+
+Focus: Générer movie.nfo/tvshow.nfo (XML Kodi/Jellyfin) + poster.jpg/fanart.jpg depuis TMDB. Jellyfin utilise directement les métadonnées CineOrg validées. CLI generate-nfo + intégration web.
 
 ### Phase 33: Overlays Qualité Web UI
 
@@ -147,4 +147,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-01 — Phase 30 complete*
+*Last updated: 2026-03-01 — Phase 31 complete*

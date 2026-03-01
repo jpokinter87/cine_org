@@ -10,21 +10,21 @@ See: .paul/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Milestone: v1.9 Normalisation & Intégration Jellyfin
-Phase: 30 of 33 (Normalisation Répertoires Séries) — Complete
-Plan: 30-02 complete (migration physique + fix-series-symlinks)
-Status: Phase 30 complete, ready for Phase 31
-Last activity: 2026-03-01 — Phase 30 complete (migrate-series + fix-series-symlinks)
+Phase: 31 of 33 (Détection de Doublons) — Complete
+Plan: 31-01 complete (check-duplicates CLI)
+Status: Phase 31 complete, ready for Phase 32
+Last activity: 2026-03-01 — Phase 31 complete (check-duplicates)
 
 Progress:
-- v1.9: [████░░░░░░] 40% (2/5 phases)
-- Phase 30: [██████████] 100% (2/2 plans complete)
+- v1.9: [██████░░░░] 60% (3/5 phases)
+- Phase 31: [██████████] 100% (1/1 plan complete)
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop complete — Phase 30 done, ready for Phase 31]
+  ✓        ✓        ✓     [Loop complete — Phase 31 done, ready for Phase 32]
 ```
 
 ## Accumulated Context
@@ -94,14 +94,14 @@ Branch: master
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Phase 30 complete
-Next action: /paul:plan for Phase 31 (NFO & Artwork Sidecar Jellyfin)
-Resume file: .paul/phases/30-normalisation-repertoires-series/30-02-SUMMARY.md
+Stopped at: Phase 31 complete
+Next action: /paul:plan for Phase 32 (NFO & Artwork Sidecar Jellyfin)
+Resume file: .paul/phases/31-detection-doublons/31-01-SUMMARY.md
 Resume context:
-- Phase 30 fully complete (2 plans)
-- Structure séries normalisée (Series/TV, Series/Animation, Series/Mangas, Documentaires/Series documentaires)
-- Symlinks reconstruits via pipeline complet mediainfo+guessit+TVDB
-- 487 épisodes irréductibles (langue manquante) — limite structurelle
+- Phase 31 fully complete (1 plan)
+- Commande check-duplicates fonctionnelle (6 doublons détectés)
+- Whitelist JSON opérationnelle
+- 29 tests passent
 
 ---
 *STATE.md — Updated after every significant action*

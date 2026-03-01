@@ -66,6 +66,9 @@ from src.adapters.cli.commands.migrate_series_command import (
 from src.adapters.cli.commands.fix_series_symlinks_command import (
     fix_series_symlinks,
 )
+from src.adapters.cli.commands.duplicates_command import (
+    check_duplicates,
+)
 
 __all__ = [
     # workflow
@@ -110,4 +113,5 @@ __all__ = [
     "reconcile",
     "migrate_series",
     "fix_series_symlinks",
+    "check_duplicates",
 ]

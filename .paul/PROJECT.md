@@ -86,13 +86,15 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-- [ ] Normalisation répertoires séries (Séries → Series) pour Jellyfin — Phase 30
-- [ ] NFO & artwork sidecar Jellyfin — Phase 31
-- [ ] Détection de doublons avec whitelist — Phase 32
+- [ ] NFO & artwork sidecar Jellyfin — Phase 32
 - [ ] Overlays qualité sur posters web — Phase 33
 
 ### Validated (Recently Shipped)
 
+- [x] Détection de doublons (v1.9)
+  - Commande check-duplicates : détection par tmdb_id, scoring qualité, whitelist JSON — Phase 31
+- [x] Normalisation répertoires séries (v1.9)
+  - Migration Séries→Series, fix-series-symlinks, normalisation complète — Phase 30
 - [x] Films multi-parties (v1.9)
   - Filet de sécurité doublons : détection post-batch + correction automatique "Partie N" — Phase 29
 - [x] Robustesse Workflow & Corrections UX (v1.8)
@@ -213,4 +215,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-03-01 after Phase 29 Films Multi-Parties*
+*Last updated: 2026-03-01 after Phase 31 Détection de Doublons*
