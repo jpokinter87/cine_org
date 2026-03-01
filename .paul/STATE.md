@@ -10,21 +10,21 @@ See: .paul/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Milestone: v1.9 Normalisation & Intégration Jellyfin
-Phase: 31 of 33 (Détection de Doublons) — Complete
-Plan: 31-01 complete (check-duplicates CLI)
-Status: Phase 31 complete, ready for Phase 32
-Last activity: 2026-03-01 — Phase 31 complete (check-duplicates)
+Phase: 32 of 33 (NFO & Artwork Sidecar Jellyfin) — Not started
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-03-01 — Phase 31 complete, transitioned to Phase 32
 
 Progress:
 - v1.9: [██████░░░░] 60% (3/5 phases)
-- Phase 31: [██████████] 100% (1/1 plan complete)
+- Phase 32: [░░░░░░░░░░] 0%
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop complete — Phase 31 done, ready for Phase 32]
+  ○        ○        ○     [Ready for Phase 32 planning]
 ```
 
 ## Accumulated Context
@@ -67,8 +67,12 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Normalisation ligatures Œ/Æ et slash/tiret pour comparaison de titres
 - SD reconnu comme résolution valide, MPEG-4/XviD/DivX comme codecs valides
 - Réutiliser le pipeline workflow existant plutôt que réinventer (règle CLAUDE.md)
+- Distinction doublon DB (même file_path) vs fichiers physiques distincts — suppression conditionnelle
+- overflow:hidden retiré de .dup-group (même pattern que .lib-season-group)
+- Popover lecteur : vérification débordement horizontal (popover-right) ajoutée globalement
 
 ### Deferred Issues
+- README.md à réécrire de fond en comble : nouvelles commandes, structure répertoires attendue, architecture, configuration
 - Test lecteur distant sur machine Windows (stand-by)
 - ~10-12 films récupérables via normalisation de ponctuation (`:·?` → `-...`)
 - ~65 films sans fichier physique correspondant — irrésoluble par matching
@@ -83,25 +87,22 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Skill gap /frontend-design : invoquer systématiquement pour les phases UI
 - 487 épisodes avec langue indétectable (fichiers anciens sans métadonnée langue)
 - Quelques tvdb_id potentiellement erronés (découvert avec BSG 1978 vs 2004)
+- Page maintenance : ajouter la gestion de la corbeille (liste, restauration, vidage définitif)
+- 3 doublons DB (même file_path, 2 MovieModel) : Double mise, Compañeros, Plein la vue — purger l'entrée excédentaire
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: 3efa031 (feat(30-normalisation-series))
+Last commit: da29080 (feat(31-detection-doublons))
 Branch: master
 
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Phase 31 complete
-Next action: /paul:plan for Phase 32 (NFO & Artwork Sidecar Jellyfin)
-Resume file: .paul/phases/31-detection-doublons/31-01-SUMMARY.md
-Resume context:
-- Phase 31 fully complete (1 plan)
-- Commande check-duplicates fonctionnelle (6 doublons détectés)
-- Whitelist JSON opérationnelle
-- 29 tests passent
+Stopped at: Phase 31 complete, ready to plan Phase 32
+Next action: /paul:plan for Phase 32
+Resume file: .paul/ROADMAP.md
 
 ---
 *STATE.md — Updated after every significant action*

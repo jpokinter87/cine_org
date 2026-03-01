@@ -1,0 +1,222 @@
+<!-- Résumé -->
+<div class="dup-stats">
+    <div class="dup-stat-item">
+        <span class="dup-stat-value">{{ stats.total_groups }}</span>
+        <span class="dup-stat-label">groupe{{ 's' if stats.total_groups != 1 else '' }}</span>
+    </div>
+    <div class="dup-stat-sep"></div>
+    <div class="dup-stat-item">
+        <span class="dup-stat-value">{{ stats.total_files }}</span>
+        <span class="dup-stat-label">fichier{{ 's' if stats.total_files != 1 else '' }}</span>
+    </div>
+    {% if stats.total_recoverable %}
+    <div class="dup-stat-sep"></div>
+    <div class="dup-stat-item dup-stat-recoverable">
+        <span class="dup-stat-value">{{ stats.total_recoverable }}</span>
+        <span class="dup-stat-label">récupérable{{ 's' if stats.total_recoverable != '1' else '' }}</span>
+    </div>
+    {% endif %}
+    {% if stats.total_whitelisted > 0 %}
+    <div class="dup-stat-sep"></div>
+    <div class="dup-stat-item dup-stat-accepted">
+        <span class="dup-stat-value">{{ stats.total_whitelisted }}</span>
+        <span class="dup-stat-label">ignoré{{ 's' if stats.total_whitelisted != 1 else '' }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Groupes de doublons à traiter -->
+{% if duplicate_groups %}
+{% for group in duplicate_groups %}
+<div class="dup-group">
+    <div class="dup-group-header">
+        <div class="dup-group-poster">
+            {% if group.poster_path %}
+            <img src="https://image.tmdb.org/t/p/w154{{ group.poster_path }}" alt="{{ group.title }}" loading="lazy">
+            {% else %}
+            <div class="dup-no-poster">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3">
+                    <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
+                    <line x1="7" y1="2" x2="7" y2="22"/>
+                    <line x1="17" y1="2" x2="17" y2="22"/>
+                    <line x1="2" y1="12" x2="22" y2="12"/>
+                    <line x1="2" y1="7" x2="7" y2="7"/>
+                    <line x1="2" y1="17" x2="7" y2="17"/>
+                    <line x1="17" y1="7" x2="22" y2="7"/>
+                    <line x1="17" y1="17" x2="22" y2="17"/>
+                </svg>
+            </div>
+            {% endif %}
+        </div>
+        <div class="dup-group-info">
+            <h3 class="dup-group-title">
+                <a href="/library/movies/{{ group.movies[0].id }}" class="dup-title-link">{{ group.title }}</a>
+                {% if group.year %}<span class="dup-group-year">({{ group.year }})</span>{% endif %}
+            </h3>
+            <span class="dup-group-meta">
+                {{ group.count }} copies &middot; tmdb {{ group.tmdb_id }}
+                {% if group.same_file %}
+                &middot; <span class="dup-badge-dbonly" title="Même fichier physique, entrées DB en double">doublon DB</span>
+                {% endif %}
+            </span>
+        </div>
+        <div class="dup-group-actions">
+            <button class="dup-btn-ignore"
+                    hx-post="/duplicates/whitelist-add"
+                    hx-vals='{"tmdb_id": {{ group.tmdb_id }}}'
+                    hx-target="#duplicates-results"
+                    hx-swap="innerHTML"
+                    title="Ce doublon est voulu — ne plus l'afficher">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Ignorer
+            </button>
+        </div>
+    </div>
+    <div class="dup-copies">
+        <table class="dup-table">
+            <thead>
+                <tr>
+                    <th class="dup-th-file">Fichier</th>
+                    <th>Résolution</th>
+                    <th>Codec</th>
+                    <th>Audio</th>
+                    <th>Langues</th>
+                    <th>Taille</th>
+                    <th>Score</th>
+                    <th class="dup-th-actions"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for movie in group.movies %}
+                <tr class="{% if movie.is_best %}dup-row-best{% endif %}">
+                    <td class="dup-td-file" title="{{ movie.file_name }}">{{ movie.file_name }}</td>
+                    <td class="dup-td-center">{{ movie.resolution }}</td>
+                    <td class="dup-td-center">{{ movie.codec_video }}</td>
+                    <td class="dup-td-center">{{ movie.codec_audio }}</td>
+                    <td class="dup-td-center">{{ movie.languages }}</td>
+                    <td class="dup-td-right">{{ movie.size }}</td>
+                    <td class="dup-td-score {% if movie.is_best %}dup-score-best{% endif %}">{{ "%.1f"|format(movie.score) }}</td>
+                    <td class="dup-td-actions">
+                        <div class="dup-row-actions">
+                            {% with play_entity_type="movies", play_entity_id=movie.id, play_btn_class="dup-btn-play", play_show_label=false %}
+                                {% include "library/_play_btn.html" %}
+                            {% endwith %}
+                            <button class="dup-btn-reassoc"
+                                    hx-get="/library/movies/{{ movie.id }}/reassociate"
+                                    hx-target="body"
+                                    hx-swap="beforeend"
+                                    title="Corriger l'association TMDB — ce n'est pas le bon film">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21.5 2v6h-6"/>
+                                    <path d="M2.5 22v-6h6"/>
+                                    <path d="M2.5 11.5a10 10 0 0 1 18.4-4.5"/>
+                                    <path d="M21.5 12.5a10 10 0 0 1-18.4 4.5"/>
+                                </svg>
+                            </button>
+                            <button class="dup-btn-trash"
+                                    onclick="dupConfirmDelete(this, {{ movie.id }}, '{{ movie.file_name|e }}', {{ 'true' if group.same_file else 'false' }})"
+                                    title="Supprimer cette copie (vers la corbeille)">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="3 6 5 6 21 6"/>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="dup-empty">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3">
+        <polyline points="20 6 9 17 4 12"/>
+    </svg>
+    <p>Aucun doublon à traiter</p>
+</div>
+{% endif %}
+
+<!-- Dialogue de confirmation suppression doublon -->
+<div class="dup-delete-overlay" id="dup-delete-overlay">
+    <div class="dup-delete-dialog">
+        <div class="dup-delete-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+        </div>
+        <h3 class="dup-delete-title">Supprimer cette copie ?</h3>
+        <p class="dup-delete-file" id="dup-delete-filename"></p>
+        <p class="dup-delete-text" id="dup-delete-text"></p>
+        <div class="dup-delete-actions">
+            <button class="dup-delete-cancel" onclick="dupCloseDelete()">Annuler</button>
+            <form id="dup-delete-form"
+                  hx-post="/duplicates/delete"
+                  hx-target="#duplicates-results"
+                  hx-swap="innerHTML">
+                <input type="hidden" name="movie_id" id="dup-delete-movie-id" value="">
+                <button type="submit" class="dup-delete-confirm" onclick="dupCloseDelete()">Supprimer</button>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+function dupConfirmDelete(btn, movieId, fileName, sameFile) {
+    document.getElementById('dup-delete-movie-id').value = movieId;
+    document.getElementById('dup-delete-filename').textContent = fileName;
+    document.getElementById('dup-delete-text').textContent = sameFile
+        ? 'Doublon DB : seule l\u2019entrée en base sera supprimée. Le fichier physique et le symlink sont conservés.'
+        : 'Le fichier sera déplacé dans la corbeille. Le symlink vidéo sera supprimé mais le fichier physique sera conservé.';
+    document.getElementById('dup-delete-overlay').classList.add('visible');
+}
+function dupCloseDelete() {
+    document.getElementById('dup-delete-overlay').classList.remove('visible');
+}
+document.getElementById('dup-delete-overlay').addEventListener('click', function(e) {
+    if (e.target === this) dupCloseDelete();
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') dupCloseDelete();
+});
+</script>
+
+<!-- Groupes ignorés (whitelist) -->
+{% if whitelisted_groups %}
+<div class="dup-accepted-section">
+    <button class="dup-accepted-toggle" onclick="this.parentElement.classList.toggle('expanded')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="dup-chevron">
+            <polyline points="9 18 15 12 9 6"/>
+        </svg>
+        {{ whitelisted_groups|length }} doublon{{ 's' if whitelisted_groups|length != 1 else '' }} ignoré{{ 's' if whitelisted_groups|length != 1 else '' }}
+    </button>
+    <div class="dup-accepted-list">
+        {% for group in whitelisted_groups %}
+        <div class="dup-accepted-item">
+            <div class="dup-accepted-info">
+                <span class="dup-accepted-title">{{ group.title }} ({{ group.year or '?' }})</span>
+                <span class="dup-accepted-copies">
+                    {% for m in group.movies %}{{ m.resolution }} {{ m.codec_video }}{% if not loop.last %}, {% endif %}{% endfor %}
+                </span>
+                {% if group.note %}<span class="dup-accepted-note">{{ group.note }}</span>{% endif %}
+            </div>
+            <button class="dup-btn-remove"
+                    hx-post="/duplicates/whitelist-remove"
+                    hx-vals='{"tmdb_id": {{ group.tmdb_id }}}'
+                    hx-target="#duplicates-results"
+                    hx-swap="innerHTML"
+                    title="Réafficher ce doublon">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}

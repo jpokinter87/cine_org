@@ -92,7 +92,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 ### Validated (Recently Shipped)
 
 - [x] Détection de doublons (v1.9)
-  - Commande check-duplicates : détection par tmdb_id, scoring qualité, whitelist JSON — Phase 31
+  - CLI check-duplicates : détection par tmdb_id, scoring qualité, whitelist JSON — Phase 31 plan 01
+  - Vue web /duplicates : comparaison qualité, visionner, réassocier, suppression corbeille, distinction doublon DB — Phase 31 plan 02
 - [x] Normalisation répertoires séries (v1.9)
   - Migration Séries→Series, fix-series-symlinks, normalisation complète — Phase 30
 - [x] Films multi-parties (v1.9)
@@ -152,6 +153,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | CSS custom thème sombre | Instrument Serif + DM Sans, pas de framework CSS lourd | 2026-02-23 | Active |
 | Fragments HTMX + HX-Redirect | Actions POST retournent des fragments HTML, redirect via header | 2026-02-23 | Active |
 | Dialogue custom pour actions destructives | Overlay CSS avec explication plutôt que confirm() natif | 2026-02-23 | Active |
+| Distinction doublon DB vs fichiers distincts | Suppression conditionnelle selon que les copies partagent le même file_path | 2026-03-01 | Active |
 | Durée fichier via mediainfo + résolution symlink | La durée DB peut correspondre à une mauvaise association TMDB | 2026-02-24 | Active |
 | Indicateurs confiance associations | Durée (films) et saisons/épisodes (séries) pour guider la correction | 2026-02-24 | Active |
 | SSE pour progression workflow | EventSource + StreamingResponse, état partagé via WorkflowProgress | 2026-02-23 | Active |

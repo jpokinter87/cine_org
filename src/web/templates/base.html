@@ -46,11 +46,11 @@
         var isOpen = wrapper.classList.contains('popover-open');
         /* Fermer tous les popovers ouverts */
         document.querySelectorAll('.play-wrapper.popover-open').forEach(function(el) {
-            el.classList.remove('popover-open', 'popover-above');
+            el.classList.remove('popover-open', 'popover-above', 'popover-right');
         });
         if (isOpen) return;
         /* Ouvrir en dessous d'abord */
-        wrapper.classList.remove('popover-above');
+        wrapper.classList.remove('popover-above', 'popover-right');
         wrapper.classList.add('popover-open');
         /* Vérifier si le popover déborde du viewport — si oui, basculer au-dessus */
         var popover = wrapper.querySelector('.play-profile-popover');
@@ -58,6 +58,9 @@
             var rect = popover.getBoundingClientRect();
             if (rect.bottom > window.innerHeight) {
                 wrapper.classList.add('popover-above');
+            }
+            if (rect.right > window.innerWidth) {
+                wrapper.classList.add('popover-right');
             }
         }
     }
@@ -73,7 +76,7 @@
     document.addEventListener('click', function(e) {
         if (!e.target.closest('.play-wrapper')) {
             document.querySelectorAll('.play-wrapper.popover-open').forEach(function(el) {
-                el.classList.remove('popover-open', 'popover-above');
+                el.classList.remove('popover-open', 'popover-above', 'popover-right');
             });
         }
         if (!e.target.closest('.result-has-tooltip')) {

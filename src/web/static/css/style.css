@@ -5547,6 +5547,18 @@ details[open] > .maint-issue-toggle::before {
     position: relative;
 }
 
+/* Débordement horizontal : aligner à droite du bouton */
+.play-wrapper.popover-right .play-profile-popover {
+    left: auto;
+    right: 0;
+    transform: none;
+}
+.play-wrapper.popover-right .play-profile-popover::after {
+    left: auto;
+    right: 10px;
+    transform: none;
+}
+
 /* Episode wrapper : popover aligné à droite */
 .play-wrapper-episode .play-profile-popover {
     left: auto;
@@ -6327,6 +6339,17 @@ details[open] > .maint-issue-toggle::before {
 .qdash-card-icon-ok {
     background: var(--accent-emerald-dim);
     color: var(--accent-emerald);
+}
+
+.qdash-card-icon-dup {
+    background: var(--accent-amber-dim);
+    color: var(--accent-amber);
+}
+
+.qdash-card-desc {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
 }
 
 .qdash-card-title {
@@ -7687,5 +7710,632 @@ details[open] > .maint-issue-toggle::before {
     }
     .collections-search {
         flex-direction: column;
+    }
+}
+
+/* ═══════════════════════════════════════════
+   Doublons — Détection de copies multiples
+   ═══════════════════════════════════════════ */
+
+/* ── Page layout ── */
+
+.dup-page {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.dup-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.dup-title {
+    font-family: var(--font-display);
+    font-size: 2.5rem;
+    font-weight: 400;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.dup-title svg {
+    color: var(--accent-amber);
+    flex-shrink: 0;
+}
+
+.dup-subtitle {
+    margin-top: 0.4rem;
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    font-weight: 300;
+}
+
+/* ── Stats bar ── */
+
+.dup-stats {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    margin-bottom: 2rem;
+    padding: 1rem 1.5rem;
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+}
+
+.dup-stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+}
+
+.dup-stat-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+}
+
+.dup-stat-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.dup-stat-sep {
+    width: 1px;
+    height: 28px;
+    background: var(--border);
+}
+
+.dup-stat-recoverable .dup-stat-value {
+    color: var(--accent-emerald);
+}
+
+.dup-stat-accepted .dup-stat-value {
+    color: var(--text-muted);
+}
+
+/* ── Duplicate group card ── */
+
+.dup-group {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    margin-bottom: 1.25rem;
+    transition: border-color 0.2s;
+}
+
+.dup-group:hover {
+    border-color: var(--border);
+}
+
+.dup-group-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.dup-group-poster {
+    width: 48px;
+    height: 72px;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.dup-group-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.dup-no-poster {
+    width: 100%;
+    height: 100%;
+    background: var(--bg-card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+}
+
+.dup-group-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.dup-group-title {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    font-weight: 400;
+    line-height: 1.3;
+    color: var(--text-primary);
+}
+
+.dup-title-link {
+    transition: color 0.2s;
+}
+
+.dup-title-link:hover {
+    color: var(--accent-amber);
+}
+
+.dup-group-year {
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-left: 0.3rem;
+}
+
+.dup-group-meta {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+}
+
+.dup-badge-dbonly {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--accent-amber);
+    background: var(--accent-amber-dim);
+    padding: 0.1rem 0.45rem;
+    border-radius: 8px;
+    letter-spacing: 0.02em;
+}
+
+/* ── Ignore button (header) ── */
+
+.dup-group-actions {
+    flex-shrink: 0;
+}
+
+.dup-btn-ignore {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.9rem;
+    font-size: 0.78rem;
+    font-family: var(--font-body);
+    font-weight: 500;
+    color: var(--text-muted);
+    background: rgba(92, 90, 110, 0.1);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.dup-btn-ignore:hover {
+    color: var(--text-secondary);
+    background: rgba(92, 90, 110, 0.2);
+    border-color: var(--border);
+}
+
+/* ── Row action buttons (play + reassociate) ── */
+
+.dup-th-actions {
+    width: 70px;
+}
+
+.dup-td-actions {
+    text-align: center;
+}
+
+.dup-row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+}
+
+.dup-btn-play {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.2s;
+}
+
+.dup-btn-play:hover {
+    color: var(--accent-blue);
+    background: var(--accent-blue-dim);
+    border-color: rgba(91, 141, 239, 0.2);
+}
+
+.dup-btn-reassoc {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.2s;
+}
+
+.dup-btn-reassoc:hover {
+    color: var(--accent-amber);
+    background: var(--accent-amber-dim);
+    border-color: rgba(232, 168, 73, 0.2);
+}
+
+.dup-btn-trash {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.2s;
+}
+
+.dup-btn-trash:hover {
+    color: var(--accent-rose);
+    background: var(--accent-rose-dim);
+    border-color: rgba(232, 93, 117, 0.2);
+}
+
+/* ── Delete confirmation overlay ── */
+
+.dup-delete-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.65);
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+
+.dup-delete-overlay.visible {
+    display: flex;
+}
+
+.dup-delete-dialog {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 2rem;
+    max-width: 420px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+}
+
+.dup-delete-icon {
+    color: var(--accent-rose);
+    margin-bottom: 1rem;
+}
+
+.dup-delete-title {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 400;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.dup-delete-file {
+    font-family: 'DM Mono', 'Fira Code', monospace;
+    font-size: 0.78rem;
+    color: var(--accent-amber);
+    background: var(--accent-amber-dim);
+    padding: 0.4rem 0.8rem;
+    border-radius: var(--radius-sm);
+    margin-bottom: 0.75rem;
+    word-break: break-all;
+}
+
+.dup-delete-text {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+    line-height: 1.5;
+}
+
+.dup-delete-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+}
+
+.dup-delete-cancel {
+    padding: 0.55rem 1.2rem;
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.dup-delete-cancel:hover {
+    background: var(--bg-surface);
+    border-color: var(--text-muted);
+}
+
+.dup-delete-confirm {
+    padding: 0.55rem 1.2rem;
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #fff;
+    background: var(--accent-rose);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.dup-delete-confirm:hover {
+    background: #d14860;
+}
+
+/* ── Copies table ── */
+
+.dup-copies {
+    padding: 0;
+}
+
+.dup-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.dup-table thead {
+    background: var(--bg-surface);
+}
+
+.dup-table th {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    text-align: left;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.dup-table td {
+    padding: 0.55rem 0.75rem;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.dup-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.dup-table tbody tr:hover {
+    background: var(--bg-card-hover);
+}
+
+.dup-th-best {
+    width: 30px;
+}
+
+.dup-th-file {
+    width: 40%;
+}
+
+.dup-td-best {
+    text-align: center;
+}
+
+.dup-keep-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--accent-emerald);
+    background: var(--accent-emerald-dim);
+    padding: 0.15rem 0.45rem;
+    border-radius: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.dup-td-file {
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+    font-family: 'DM Mono', 'Fira Code', monospace;
+    font-size: 0.76rem;
+}
+
+.dup-td-center {
+    text-align: center;
+}
+
+.dup-td-right {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.dup-td-score {
+    text-align: center;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.dup-score-best {
+    color: var(--accent-emerald);
+}
+
+.dup-row-best {
+    background: rgba(78, 203, 141, 0.04);
+}
+
+.dup-row-best:hover {
+    background: rgba(78, 203, 141, 0.08) !important;
+}
+
+/* ── Empty state ── */
+
+.dup-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    color: var(--text-muted);
+    gap: 1rem;
+}
+
+.dup-empty p {
+    font-size: 1rem;
+    font-weight: 300;
+}
+
+/* ── Accepted (whitelisted) section ── */
+
+.dup-accepted-section {
+    margin-top: 2.5rem;
+    border-top: 1px solid var(--border-subtle);
+    padding-top: 1rem;
+}
+
+.dup-accepted-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.5rem 0;
+    transition: color 0.2s;
+}
+
+.dup-accepted-toggle:hover {
+    color: var(--text-secondary);
+}
+
+.dup-chevron {
+    transition: transform 0.25s ease;
+}
+
+.dup-accepted-section.expanded .dup-chevron {
+    transform: rotate(90deg);
+}
+
+.dup-accepted-list {
+    display: none;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.dup-accepted-section.expanded .dup-accepted-list {
+    display: flex;
+}
+
+.dup-accepted-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.6rem 1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+}
+
+.dup-accepted-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+}
+
+.dup-accepted-title {
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.dup-accepted-copies {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.dup-accepted-note {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.dup-btn-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.dup-btn-remove:hover {
+    color: var(--accent-rose);
+    background: var(--accent-rose-dim);
+    border-color: rgba(232, 93, 117, 0.2);
+}
+
+/* ── Doublons responsive ── */
+
+@media (max-width: 768px) {
+    .dup-title { font-size: 1.8rem; }
+    .dup-stats { flex-wrap: wrap; gap: 0.75rem; }
+    .dup-group-header { flex-wrap: wrap; }
+    .dup-group-poster { width: 40px; height: 60px; }
+    .dup-table { font-size: 0.75rem; }
+    .dup-td-file { max-width: 120px; }
+    .dup-table th:nth-child(5),
+    .dup-table td:nth-child(5),
+    .dup-table th:nth-child(6),
+    .dup-table td:nth-child(6) {
+        display: none;
     }
 }

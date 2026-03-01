@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Doublons — CineOrg{% endblock %}
+{% block nav_quality %}active{% endblock %}
+
+{% block content %}
+<div class="dup-page">
+    <div class="dup-header">
+        <h1 class="dup-title">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="8" y="2" width="13" height="13" rx="2"/>
+                <rect x="3" y="9" width="13" height="13" rx="2"/>
+            </svg>
+            Doublons
+        </h1>
+        <p class="dup-subtitle">Films présents en plusieurs copies dans la vidéothèque</p>
+    </div>
+
+    <div id="duplicates-results">
+        {% include "duplicates/_results.html" %}
+    </div>
+</div>
+{% endblock %}
