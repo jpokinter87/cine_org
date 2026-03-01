@@ -585,3 +585,82 @@ class TestVOSTFRRenaming:
         )
         assert "VOSTFR" in result
         assert "EN VOSTFR" in result
+
+
+# ====================
+# Tests films multi-parties (découpage rippeur)
+# ====================
+
+class TestMultiPartFilename:
+    """Tests pour le renommage des films découpés en parties par le rippeur."""
+
+    def test_movie_filename_with_part(self) -> None:
+        """Film avec part=2 → 'Partie 2' dans le nom."""
+        movie = Movie(
+            tmdb_id=10007,
+            title="Nos meilleures années",
+            year=2003,
+            genres=("Drame",),
+        )
+        result = generate_movie_filename(movie, None, ".mkv", part=2)
+        assert "Partie 2" in result
+        assert result == "Nos meilleures années (2003) Partie 2.mkv"
+
+    def test_movie_filename_without_part(self) -> None:
+        """Film sans part → pas de 'Partie' dans le nom."""
+        movie = Movie(
+            tmdb_id=27205,
+            title="Inception",
+            year=2010,
+            genres=("Science-Fiction",),
+        )
+        result = generate_movie_filename(movie, None, ".mkv")
+        assert "Partie" not in result
+        assert "Part" not in result
+
+    def test_movie_filename_part_position(self) -> None:
+        """'Partie N' est placé après titre/année, avant le suffixe technique."""
+        movie = Movie(
+            tmdb_id=10007,
+            title="Nos meilleures années",
+            year=2003,
+            genres=("Drame",),
+        )
+        media_info = MediaInfo(
+            resolution=Resolution(width=1920, height=1080),
+            video_codec=VideoCodec(name="H.264"),
+            audio_codecs=(),
+            audio_languages=(Language(code="fr", name="Français"),),
+        )
+        result = generate_movie_filename(movie, media_info, ".mkv", part=1)
+        # Format attendu : Titre (Année) Partie N Langue Codec Résolution.ext
+        assert result == "Nos meilleures années (2003) Partie 1 FR H.264 1080p.mkv"
+
+    def test_movie_filename_two_parts_different(self) -> None:
+        """Deux parties du même film → noms de fichiers distincts."""
+        movie = Movie(
+            tmdb_id=10007,
+            title="Nos meilleures années",
+            year=2003,
+            genres=("Drame",),
+        )
+        result_1 = generate_movie_filename(movie, None, ".mkv", part=1)
+        result_2 = generate_movie_filename(movie, None, ".mkv", part=2)
+        assert result_1 != result_2
+        assert "Partie 1" in result_1
+        assert "Partie 2" in result_2
+
+    def test_tmdb_title_has_part_indicator(self) -> None:
+        """Fonction utilitaire détectant si un titre TMDB contient déjà une indication de partie."""
+        from src.services.renamer import title_has_part_indicator
+
+        # Vrais films multi-parties TMDB (titre contient l'indication)
+        assert title_has_part_indicator("Kill Bill: Volume 2") is True
+        assert title_has_part_indicator("Nymphomaniac: Vol. II") is True
+        assert title_has_part_indicator("Dune : Deuxième Partie") is True
+        assert title_has_part_indicator("Harry Potter et les Reliques de la Mort : 2ème partie") is True
+
+        # Films découpés par le rippeur (titre TMDB nu)
+        assert title_has_part_indicator("Nos meilleures années") is False
+        assert title_has_part_indicator("Carlos") is False
+        assert title_has_part_indicator("Inception") is False

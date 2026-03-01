@@ -134,6 +134,47 @@ def _extract_language_from_filename(filename: str) -> Optional[str]:
     return parsed.language  # Deja en majuscules ou None
 
 
+def _extract_part_from_filename(filename: str) -> Optional[int]:
+    """
+    Extrait le numero de partie depuis le nom de fichier via guessit.
+
+    Detecte les patterns "Partie N", "Part N", "Vol N", "Vol II", etc.
+    Utilise pour les films decoupes par le rippeur.
+
+    Args:
+        filename: Nom du fichier video
+
+    Returns:
+        Numero de partie (1, 2, 3...) ou None si non trouve
+    """
+    from src.adapters.parsing.guessit_parser import GuessitFilenameParser
+
+    parser = GuessitFilenameParser()
+    parsed = parser.parse(filename)
+
+    return parsed.part
+
+
+def _extract_subtitle_language_from_filename(filename: str) -> Optional[str]:
+    """
+    Extrait la langue des sous-titres depuis le nom de fichier via guessit.
+
+    Detecte "VOSTFR" comme subtitle_language=FR.
+
+    Args:
+        filename: Nom du fichier video
+
+    Returns:
+        Code langue en majuscules (ex: "FR") ou None si non trouve
+    """
+    from src.adapters.parsing.guessit_parser import GuessitFilenameParser
+
+    parser = GuessitFilenameParser()
+    parsed = parser.parse(filename)
+
+    return parsed.subtitle_language
+
+
 def _get_series_folder(pend) -> Optional[Path]:
     """
     Retourne le repertoire parent d'un fichier en attente de validation.

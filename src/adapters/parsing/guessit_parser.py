@@ -5,6 +5,7 @@ Ce module fournit GuessitFilenameParser qui implemente IFilenameParser
 pour extraire les informations structurees des noms de fichiers video.
 """
 
+import re
 from typing import Any, Optional
 
 from guessit import guessit
@@ -107,6 +108,9 @@ class GuessitFilenameParser(IFilenameParser):
 
         subtitle_language = self._extract_subtitle_language(result)
 
+        # Extraire le numero de partie (films decoupes par le rippeur)
+        part, title = self._extract_part(result, title)
+
         return ParsedFilename(
             title=title,
             year=year,
@@ -122,6 +126,7 @@ class GuessitFilenameParser(IFilenameParser):
             release_group=release_group,
             language=language,
             subtitle_language=subtitle_language,
+            part=part,
         )
 
     def _extract_title(self, result: dict[str, Any]) -> str:
@@ -286,6 +291,77 @@ class GuessitFilenameParser(IFilenameParser):
             return "Multi"
 
         return code.upper()
+
+    # Mapping chiffres romains vers entiers
+    _ROMAN_MAP = {"I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7, "VIII": 8}
+
+    def _roman_to_int(self, roman: str) -> Optional[int]:
+        """
+        Convertit un chiffre romain simple en entier.
+
+        Args:
+            roman: Chiffre romain (I, II, III, IV, V, VI, VII, VIII).
+
+        Returns:
+            Entier correspondant, ou None si non reconnu.
+        """
+        return self._ROMAN_MAP.get(roman.upper())
+
+    def _extract_part(self, result: dict[str, Any], title: str) -> tuple[Optional[int], str]:
+        """
+        Extrait le numero de partie depuis le resultat guessit ou le titre.
+
+        Deux sources :
+        1. Champ natif guessit `part` (detecte pour "Part N" anglais)
+        2. Detection regex dans le titre parse (pour "Partie N", "Vol N", etc.)
+
+        Args:
+            result: Dictionnaire retourne par guessit.
+            title: Titre deja extrait par _extract_title.
+
+        Returns:
+            Tuple (numero_de_partie, titre_nettoye).
+            Si pas de partie detectee: (None, titre_inchange).
+        """
+        # Source 1 : champ natif guessit
+        native_part = result.get("part")
+        if native_part is not None:
+            try:
+                return (int(native_part), title)
+            except (ValueError, TypeError):
+                pass
+
+        # Source 2 : detection regex dans le titre
+        # Pattern "Partie N" (francais)
+        match = re.search(r"\bPartie\s+(\d+)\b", title, re.IGNORECASE)
+        if match:
+            part_num = int(match.group(1))
+            cleaned = title[: match.start()].rstrip() + title[match.end() :]
+            return (part_num, cleaned.strip())
+
+        # Pattern "Part N" (anglais, si guessit ne l'a pas extrait)
+        match = re.search(r"\bPart\s+(\d+)\b", title, re.IGNORECASE)
+        if match:
+            part_num = int(match.group(1))
+            cleaned = title[: match.start()].rstrip() + title[match.end() :]
+            return (part_num, cleaned.strip())
+
+        # Pattern "Vol N" / "Vol. N" / "Volume N" (chiffre arabe)
+        match = re.search(r"\bVol(?:ume)?\.?\s*(\d+)\b", title, re.IGNORECASE)
+        if match:
+            part_num = int(match.group(1))
+            cleaned = title[: match.start()].rstrip() + title[match.end() :]
+            return (part_num, cleaned.strip())
+
+        # Pattern "Vol I" / "Vol. II" / "Volume III" (chiffre romain)
+        match = re.search(r"\bVol(?:ume)?\.?\s*([IVX]+)\b", title, re.IGNORECASE)
+        if match:
+            roman_val = self._roman_to_int(match.group(1))
+            if roman_val is not None:
+                cleaned = title[: match.start()].rstrip() + title[match.end() :]
+                return (roman_val, cleaned.strip())
+
+        return (None, title)
 
     def _extract_subtitle_language(self, result: dict[str, Any]) -> Optional[str]:
         """

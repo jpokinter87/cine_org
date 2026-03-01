@@ -17,7 +17,9 @@ from rich.console import Console
 
 from src.adapters.cli.helpers import (
     _extract_language_from_filename,
+    _extract_part_from_filename,
     _extract_series_info,
+    _extract_subtitle_language_from_filename,
 )
 
 if TYPE_CHECKING:
@@ -559,5 +561,115 @@ async def build_transfers_batch(
                 "movie_id": saved_movie.id,
             }
             transfers.append(transfer_data)
+
+    # Filet de securite : detecter les fichiers avec le meme nom de destination
+    # (typiquement un film decoupe par le rippeur dont les parts n'ont pas ete detectees)
+    transfers = _fix_duplicate_filenames(transfers, renamer)
+
+    return transfers
+
+
+def _fix_duplicate_filenames(
+    transfers: list[dict],
+    renamer,
+) -> list[dict]:
+    """
+    Detecte et corrige les noms de fichiers en doublon dans le batch.
+
+    Quand deux fichiers obtiennent le meme nom de destination, c'est probablement
+    un film decoupe par le rippeur en plusieurs parties. Le filet re-parse les
+    noms originaux pour extraire le numero de partie et regenerer les noms.
+
+    Args:
+        transfers: Liste des transferts construits.
+        renamer: RenamerService pour regenerer les noms.
+
+    Returns:
+        Liste corrigee (les doublons recoivent un suffixe "Partie N").
+    """
+    from collections import defaultdict
+
+    # Grouper par nom de destination
+    by_destination: dict[str, list[int]] = defaultdict(list)
+    for idx, t in enumerate(transfers):
+        dest = str(t.get("destination", ""))
+        by_destination[dest].append(idx)
+
+    # Traiter les groupes avec des doublons
+    for dest, indices in by_destination.items():
+        if len(indices) < 2:
+            continue
+
+        console.print(
+            f"  [yellow]⚠[/yellow] {len(indices)} fichiers avec le meme nom de destination, "
+            f"correction automatique..."
+        )
+
+        # Extraire les numeros de partie depuis les noms originaux
+        parts_found: list[tuple[int, int | None]] = []  # (index, part_num)
+        for idx in indices:
+            t = transfers[idx]
+            original_filename = ""
+            pending = t.get("pending")
+            if pending and pending.video_file:
+                original_filename = pending.video_file.filename or ""
+            part_num = _extract_part_from_filename(original_filename)
+            parts_found.append((idx, part_num))
+
+        # Si aucune part n'a ete trouvee, numerotation sequentielle
+        if all(p is None for _, p in parts_found):
+            for seq, (idx, _) in enumerate(parts_found, start=1):
+                parts_found[seq - 1] = (idx, seq)
+
+        # Regenerer les noms avec le numero de partie
+        for idx, part_num in parts_found:
+            if part_num is None:
+                continue
+
+            t = transfers[idx]
+            pending = t.get("pending")
+            source_path = t.get("source")
+            extension = source_path.suffix if source_path else ".mkv"
+            media_info = pending.video_file.media_info if pending and pending.video_file else None
+            original_filename = ""
+            if pending and pending.video_file:
+                original_filename = pending.video_file.filename or ""
+            fallback_language = _extract_language_from_filename(original_filename)
+            fallback_subtitle_language = _extract_subtitle_language_from_filename(original_filename)
+
+            if t.get("is_series"):
+                # Reconstruire Series/Episode depuis les infos existantes
+                from src.core.entities.media import Series, Episode
+
+                season_num, episode_num = _extract_series_info(original_filename)
+                series = Series(title=t.get("title", ""), year=t.get("year"))
+                episode = Episode(season_number=season_num, episode_number=episode_num, title="")
+                new_filename = renamer.generate_series_filename(
+                    series=series, episode=episode, media_info=media_info,
+                    extension=extension, fallback_language=fallback_language,
+                    fallback_subtitle_language=fallback_subtitle_language, part=part_num,
+                )
+            else:
+                from src.core.entities.media import Movie
+
+                movie = Movie(title=t.get("title", ""), year=t.get("year"))
+                new_filename = renamer.generate_movie_filename(
+                    movie=movie, media_info=media_info, extension=extension,
+                    fallback_language=fallback_language,
+                    fallback_subtitle_language=fallback_subtitle_language, part=part_num,
+                )
+
+            # Mettre a jour le transfert
+            old_filename = t["new_filename"]
+            dest_dir = t["destination"].parent
+            t["new_filename"] = new_filename
+            t["destination"] = dest_dir / new_filename
+            if t.get("symlink_destination"):
+                symlink_dir = t["symlink_destination"].parent
+                t["symlink_destination"] = symlink_dir / new_filename
+
+            console.print(
+                f"    [green]✓[/green] {old_filename} → {new_filename}"
+            )
 
     return transfers

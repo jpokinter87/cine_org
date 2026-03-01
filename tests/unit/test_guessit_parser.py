@@ -330,3 +330,63 @@ class TestGuessitParserEdgeCases:
         """Liste de sous-titres prend le premier élément."""
         result = parser._extract_subtitle_language({"subtitle_language": ["en", "fr"]})
         assert result == "EN"
+
+
+class TestGuessitFilenameParserPart:
+    """Tests pour l'extraction du numéro de partie (films découpés par le rippeur)."""
+
+    @pytest.fixture
+    def parser(self) -> GuessitFilenameParser:
+        """Instance du parser pour les tests."""
+        return GuessitFilenameParser()
+
+    def test_parse_partie_french(self, parser: GuessitFilenameParser) -> None:
+        """Fichier avec 'Partie 1' français → part=1, titre nettoyé."""
+        result = parser.parse("Nos.Meilleures.Annees.Partie.1.2003.mkv", MediaType.MOVIE)
+        assert result.part == 1
+        assert "Partie" not in result.title
+        assert "1" not in result.title.split()[-1:]  # pas de "1" isolé en fin de titre
+
+    def test_parse_partie_french_2(self, parser: GuessitFilenameParser) -> None:
+        """Fichier avec 'Partie 3' français → part=3, titre nettoyé."""
+        result = parser.parse("Carlos.Partie.3.2010.MULTi.1080p.mkv", MediaType.MOVIE)
+        assert result.part == 3
+        assert "Partie" not in result.title
+
+    def test_parse_part_english_guessit_native(self, parser: GuessitFilenameParser) -> None:
+        """Fichier avec 'Part 2' anglais (champ guessit natif) → part=2."""
+        result = parser.parse("Best.Of.Youth.Part.2.2003.1080p.mkv", MediaType.MOVIE)
+        assert result.part == 2
+
+    def test_parse_part_number(self, parser: GuessitFilenameParser) -> None:
+        """Fichier avec 'Part 1' anglais → part=1."""
+        result = parser.parse("Some.Movie.Part.1.2015.mkv", MediaType.MOVIE)
+        assert result.part == 1
+
+    def test_parse_volume(self, parser: GuessitFilenameParser) -> None:
+        """Fichier avec 'Vol 2' → part=2 (toujours extrait par le parser)."""
+        result = parser.parse("Kill.Bill.Vol.2.2004.mkv", MediaType.MOVIE)
+        assert result.part == 2
+
+    def test_parse_volume_roman(self, parser: GuessitFilenameParser) -> None:
+        """Fichier avec 'Vol II' (chiffre romain) → part=2."""
+        result = parser.parse("Nymphomaniac.Vol.II.2013.mkv", MediaType.MOVIE)
+        assert result.part == 2
+
+    def test_parse_no_part(self, parser: GuessitFilenameParser) -> None:
+        """Fichier sans indication de partie → part=None."""
+        result = parser.parse("Inception.2010.1080p.mkv", MediaType.MOVIE)
+        assert result.part is None
+
+    def test_parse_partie_preserves_other_fields(
+        self, parser: GuessitFilenameParser
+    ) -> None:
+        """L'extraction de part ne casse pas les autres champs."""
+        result = parser.parse(
+            "Nos.Meilleures.Annees.Partie.1.2003.MULTi.1080p.BluRay.x264.mkv",
+            MediaType.MOVIE,
+        )
+        assert result.part == 1
+        assert result.year == 2003
+        assert result.resolution == "1080p"
+        assert result.media_type == MediaType.MOVIE

@@ -5,25 +5,26 @@
 See: .paul/PROJECT.md (updated 2026-03-01)
 
 **Core value:** Organiser et renommer automatiquement une vidéothèque personnelle à partir des téléchargements
-**Current focus:** Awaiting next milestone
+**Current focus:** v1.9 Normalisation & Intégration Jellyfin
 
 ## Current Position
 
-Milestone: Awaiting next milestone
-Phase: None active
-Plan: None
-Status: Milestone v1.8 complete — ready for next
-Last activity: 2026-03-01 — Milestone completed
+Milestone: v1.9 Normalisation & Intégration Jellyfin
+Phase: 29 of 33 (Films Multi-Parties) — Planning
+Plan: 29-01 created, awaiting approval
+Status: PLAN created, ready for APPLY
+Last activity: 2026-03-01 — Created 29-01-PLAN.md
 
 Progress:
-- v1.8: [██████████] 100% ✓
+- v1.9: [░░░░░░░░░░] 0%
+- Phase 29: [░░░░░░░░░░] 0%
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ○        ○        ○     [Milestone complete - ready for next]
+  ✓        ○        ○     [Plan created, awaiting approval]
 ```
 
 ## Accumulated Context
@@ -75,26 +76,25 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Test lectures simultanées sur profils différents (ordi Windows indisponible)
 - Vérification tooltips workflow click-to-toggle (pas de fichiers à traiter pour tester)
 - Skill gap /frontend-design : invoquer systématiquement pour les phases UI
-- Films multi-parties (ex. "Nos meilleures années" Partie 1/2) : le renamer génère le même nom pour les deux fichiers → écrasement au transfert. Guessit extrait le champ `part`, mais ParsedInfo et le renamer l'ignorent
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: (pending milestone commit)
+Last commit: ec510a0 (session handoff v1.8)
 Branch: master
-Tag: v1.8.0 (à créer)
+Tag: v1.8.0
 
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Milestone v1.8 complete and archived
-Next action: /paul:discuss-milestone
-Resume file: .paul/HANDOFF-2026-03-01.md
+Stopped at: Plan 29-01 created
+Next action: Review and approve plan, then run /paul:apply
+Resume file: .paul/phases/29-films-multi-parties/29-01-PLAN.md
 Resume context:
-- Milestone v1.8 complet (3 phases, tags v1.7.0 + v1.8.0 créés)
-- Deferred issue prioritaire : films multi-parties (renamer écrase Partie 2)
-- Prêt pour définir le scope v1.9
+- Plan TDD pour films multi-parties : 3 tasks (tests → parser → renamer+batch)
+- Guessit extrait `part` uniquement pour "Part X" anglais, pas "Partie"/"Vol"
+- Solution : extraction hybride (champ guessit + regex titre) dans le parser
 
 ---
 *STATE.md — Updated after every significant action*

@@ -2,17 +2,41 @@
 
 ## Overview
 
-CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec données enrichies, un système de gestion des associations TMDB, des données nettoyées, un code refactoré, un workflow fluide, une suggestion de films, un lecteur distant, des corrections UX, une gestion avancée des données, et une réconciliation symlinks/storage robuste. L'application est stable en v1.8.
+CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec données enrichies, un système de gestion des associations TMDB, des données nettoyées, un code refactoré, un workflow fluide, une suggestion de films, un lecteur distant, des corrections UX, une gestion avancée des données, et une réconciliation symlinks/storage robuste. L'application est stable en v1.8. Le prochain objectif est la normalisation structurelle et l'intégration Jellyfin.
 
 ## Current Milestone
 
-**v1.8 Robustesse Workflow & Corrections UX** (v1.8.0)
-Status: ✅ Complete
-Completed: 2026-03-01
+**v1.9 Normalisation & Intégration Jellyfin** (v1.9.0)
+Status: 🚧 In Progress
+Phases: 0 of 5 complete
 
-## Next Milestone (planned)
+| Phase | Name | Plans | Status | Completed |
+|-------|------|-------|--------|-----------|
+| 29 | Films Multi-Parties | 1 | Planning | - |
+| 30 | Normalisation Répertoires Séries | TBD | Not started | - |
+| 31 | NFO & Artwork Sidecar Jellyfin | TBD | Not started | - |
+| 32 | Détection de Doublons | TBD | Not started | - |
+| 33 | Overlays Qualité Web UI | TBD | Not started | - |
 
-Run /paul:discuss-milestone or /paul:milestone to define.
+### Phase 29: Films Multi-Parties
+
+Focus: Corriger le renamer qui génère le même nom pour Partie 1 et Partie 2 → écrasement au transfert. Ajouter `part` dans ParsedInfo/ParsedFilename, l'intégrer au renamer.
+
+### Phase 30: Normalisation Répertoires Séries
+
+Focus: Renommer `Séries` → `Series` (sans accents) sur NAS et symlinks pour compatibilité Jellyfin. Restructurer les sous-dossiers (TV, Animation avec Courts, Mangas). Migrer le code source (53+ fichiers), les file_path en DB, et les fichiers physiques.
+
+### Phase 31: NFO & Artwork Sidecar Jellyfin
+
+Focus: Générer movie.nfo/tvshow.nfo (XML Kodi/Jellyfin) + poster.jpg/fanart.jpg depuis TMDB. Jellyfin utilise directement les métadonnées CineOrg validées. CLI generate-nfo + intégration web.
+
+### Phase 32: Détection de Doublons
+
+Focus: Commande check-duplicates groupant par TMDB ID, comparant qualité (résolution, codec, taille). Whitelist pour doublons volontaires. Vue web avec actions.
+
+### Phase 33: Overlays Qualité Web UI
+
+Focus: Badges visuels CSS sur les posters (résolution, codec, langue). Données déjà en base, purement frontend.
 
 ## Completed Milestones
 
@@ -123,4 +147,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-01 — Milestone v1.8 complete and archived*
+*Last updated: 2026-03-01 — Milestone v1.9 created*

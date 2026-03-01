@@ -62,3 +62,4 @@ class ParsedFilename:
     release_group: Optional[str] = None
     language: Optional[str] = None
     subtitle_language: Optional[str] = None
+    part: Optional[int] = None

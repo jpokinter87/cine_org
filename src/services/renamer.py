@@ -183,17 +183,49 @@ def _build_tech_suffix(
     return " ".join(parts)
 
 
+def title_has_part_indicator(title: str) -> bool:
+    """
+    Detecte si un titre contient deja une indication de partie/volume.
+
+    Utilise pour distinguer les vrais films multi-parties TMDB
+    (Kill Bill: Volume 2, Nymphomaniac: Vol. II) des films decoupes
+    par le rippeur (titre TMDB nu, sans indication).
+
+    Args:
+        title: Titre du film (typiquement le titre TMDB).
+
+    Returns:
+        True si le titre contient une indication de partie.
+    """
+    if not title:
+        return False
+    import re
+
+    # Patterns detectes : Part/Partie/Volume/Vol suivi d'un chiffre ou romain
+    patterns = [
+        r"\bPart(?:ie)?\s+\d+",
+        r"\bPart(?:ie)?\b",  # "Deuxième Partie" sans chiffre
+        r"\bVol(?:ume)?\.?\s*(?:\d+|[IVX]+)\b",
+        r"\d+(?:ère|ème|e)\s+partie",  # "2ème partie"
+    ]
+    for pattern in patterns:
+        if re.search(pattern, title, re.IGNORECASE):
+            return True
+    return False
+
+
 def generate_movie_filename(
     movie: Movie,
     media_info: Optional[MediaInfo],
     extension: str,
     fallback_language: Optional[str] = None,
     fallback_subtitle_language: Optional[str] = None,
+    part: Optional[int] = None,
 ) -> str:
     """
     Génère le nom de fichier standardisé pour un film.
 
-    Format : Titre (Année) Langue [VOSTFR] Codec Résolution.ext
+    Format : Titre (Année) [Partie N] Langue [VOSTFR] Codec Résolution.ext
 
     Chaque élément est omis s'il est absent.
 
@@ -204,6 +236,7 @@ def generate_movie_filename(
         fallback_language: Code langue de fallback (depuis guessit)
                           si mediainfo ne détecte pas de langue.
         fallback_subtitle_language: Code langue des sous-titres (depuis guessit).
+        part: Numero de partie (pour films decoupes par le rippeur).
 
     Returns:
         Nom de fichier formaté et nettoyé.
@@ -217,6 +250,10 @@ def generate_movie_filename(
     # Année
     if movie.year:
         parts.append(f"({movie.year})")
+
+    # Partie (découpage rippeur)
+    if part is not None:
+        parts.append(f"Partie {part}")
 
     # Suffixe technique
     tech_suffix = _build_tech_suffix(media_info, fallback_language, fallback_subtitle_language)
@@ -237,6 +274,7 @@ def generate_series_filename(
     extension: str,
     fallback_language: Optional[str] = None,
     fallback_subtitle_language: Optional[str] = None,
+    part: Optional[int] = None,
 ) -> str:
     """
     Génère le nom de fichier standardisé pour un épisode de série.
@@ -253,6 +291,7 @@ def generate_series_filename(
         fallback_language: Code langue de fallback (depuis guessit)
                           si mediainfo ne détecte pas de langue.
         fallback_subtitle_language: Code langue des sous-titres (depuis guessit).
+        part: Numero de partie (pour fichiers decoupes par le rippeur).
 
     Returns:
         Nom de fichier formaté et nettoyé.
@@ -310,6 +349,7 @@ class RenamerService:
         extension: str,
         fallback_language: Optional[str] = None,
         fallback_subtitle_language: Optional[str] = None,
+        part: Optional[int] = None,
     ) -> str:
         """
         Génère le nom de fichier pour un film.
@@ -317,7 +357,7 @@ class RenamerService:
         Voir generate_movie_filename() pour les détails.
         """
         return generate_movie_filename(
-            movie, media_info, extension, fallback_language, fallback_subtitle_language
+            movie, media_info, extension, fallback_language, fallback_subtitle_language, part
         )
 
     def generate_series_filename(
@@ -328,6 +368,7 @@ class RenamerService:
         extension: str,
         fallback_language: Optional[str] = None,
         fallback_subtitle_language: Optional[str] = None,
+        part: Optional[int] = None,
     ) -> str:
         """
         Génère le nom de fichier pour un épisode de série.
@@ -335,5 +376,6 @@ class RenamerService:
         Voir generate_series_filename() pour les détails.
         """
         return generate_series_filename(
-            series, episode, media_info, extension, fallback_language, fallback_subtitle_language
+            series, episode, media_info, extension, fallback_language, fallback_subtitle_language,
+            part,
         )
