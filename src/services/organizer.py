@@ -9,7 +9,7 @@ pour trouver le répertoire approprié, plutôt que de construire un chemin
 théorique. Cela garantit la compatibilité avec la structure en place.
 
 Structure films : video/Films/Genre/[subdivisions lettres]/
-Structure séries : video/Séries/{Type}/[subdivision lettres]/Titre (Annee)/Saison XX/
+Structure séries : video/Series/{Type}/[subdivision lettres]/Titre (Annee)/Saison XX/
 """
 
 from dataclasses import dataclass
@@ -18,6 +18,7 @@ from typing import Optional
 
 from src.core.entities.media import Movie, Series
 from src.utils.constants import GENRE_HIERARCHY, GENRE_FOLDER_MAPPING
+from src.utils.helpers import normalize_accents as _normalize_accents
 from src.utils.helpers import strip_article as _strip_article  # noqa: F401
 from src.utils.helpers import strip_invisible_chars as _strip_invisible_chars_helper
 
@@ -86,7 +87,8 @@ def get_sort_letter(title: str) -> str:
 
     # Vérifier si c'est une lettre
     if first_char.isalpha():
-        return first_char.upper()
+        # Normaliser les accents (É → E, À → A, etc.)
+        return _normalize_accents(first_char.upper())
 
     # Chiffres et caractères spéciaux -> #
     return "#"
@@ -267,8 +269,9 @@ def _title_matches_range(title: str, range_name: str) -> bool:
     if not title_stripped:
         return False
 
-    title_upper = title_stripped.upper()
-    range_upper = range_name.upper()
+    # Normaliser les accents pour la comparaison (É → E, À → A, etc.)
+    title_upper = _normalize_accents(title_stripped.upper())
+    range_upper = _normalize_accents(range_name.upper())
 
     # Cas spécial : # pour les numériques/spéciaux
     if range_name == "#":
@@ -420,6 +423,20 @@ def get_movie_video_destination(movie: Movie, video_dir: Path) -> Path:
     # Point de départ : video/Films/Genre
     genre_dir = video_dir / "Films" / genre_folder
 
+    # Cas spécial Animation : sous-répertoire Enfant/Adultes selon le genre "Famille"
+    if genre_folder == "Animation" and genre_dir.exists():
+        genres_lower = {g.lower() for g in movie.genres}
+        # TMDB retourne "Familial" en fr-FR, notre mapping utilise "Famille"
+        is_family = genres_lower & {"famille", "familial", "family"}
+        if is_family:
+            sub = genre_dir / "Animation Enfant"
+        else:
+            sub = genre_dir / "Adultes"
+        if sub.exists():
+            return _navigate_to_leaf(sub, movie.title)
+        # Fallback si le sous-répertoire n'existe pas
+        return _navigate_to_leaf(genre_dir, movie.title)
+
     # Si le répertoire genre n'existe pas, le créer avec la lettre
     if not genre_dir.exists():
         letter = get_sort_letter(movie.title)
@@ -436,16 +453,17 @@ def get_series_type(genres: tuple[str, ...]) -> str:
     Classification:
     - "Anime" dans les genres -> "Mangas" (animation japonaise)
     - "Animation" dans les genres -> "Animation" (animation occidentale)
-    - Autre -> "Séries TV"
+    - "Documentaire" dans les genres -> "Series documentaires"
+    - Autre -> "TV"
 
     Args:
         genres: Tuple des genres de la serie.
 
     Returns:
-        Type de serie: "Mangas", "Animation" ou "Séries TV"
+        Type de serie: "Mangas", "Animation", "Series documentaires" ou "TV"
     """
     if not genres:
-        return "Séries TV"
+        return "TV"
 
     # Normaliser les genres en minuscules pour la comparaison
     genres_lower = [g.lower() for g in genres]
@@ -458,8 +476,12 @@ def get_series_type(genres: tuple[str, ...]) -> str:
     if "animation" in genres_lower:
         return "Animation"
 
-    # Tout le reste -> Séries TV
-    return "Séries TV"
+    # Documentaire -> Series documentaires (sous Documentaires/)
+    if "documentaire" in genres_lower:
+        return "Series documentaires"
+
+    # Tout le reste -> TV
+    return "TV"
 
 
 def get_series_destination(
@@ -475,7 +497,7 @@ def get_series_destination(
     On navigue dans video_dir pour trouver le chemin correct,
     puis on retourne l'équivalent dans storage_dir.
 
-    Structure : storage/Séries/{Type}/[subdivision lettres]/Titre (Annee)/Saison XX/
+    Structure : storage/Series/{Type}/[subdivision lettres]/Titre (Annee)/Saison XX/
 
     Args:
         series: Métadonnées de la série.
@@ -503,7 +525,7 @@ def get_series_video_destination(
     Calcule le chemin de symlink pour un épisode de série.
 
     Navigue dans la structure existante :
-    video/Séries/{Type}/[subdivision lettres]/Titre (Annee)/Saison XX/
+    video/Series/{Type}/[subdivision lettres]/Titre (Annee)/Saison XX/
 
     Args:
         series: Métadonnées de la série (avec genres).
@@ -525,8 +547,11 @@ def get_series_video_destination(
     # Dossier de la saison
     season_folder = f"Saison {season_number:02d}"
 
-    # Point de départ : video/Séries/Type
-    type_dir = video_dir / "Séries" / series_type
+    # Point de départ : video/Series/Type ou video/Documentaires/Type
+    if series_type == "Series documentaires":
+        type_dir = video_dir / "Documentaires" / series_type
+    else:
+        type_dir = video_dir / "Series" / series_type
 
     # Si le répertoire type n'existe pas, utiliser la lettre simple
     if not type_dir.exists():
@@ -550,7 +575,9 @@ class OrganizerService:
     Ce service est sans état et peut être utilisé comme singleton.
     """
 
-    def get_movie_destination(self, movie: Movie, storage_dir: Path, video_dir: Path) -> Path:
+    def get_movie_destination(
+        self, movie: Movie, storage_dir: Path, video_dir: Path
+    ) -> Path:
         """
         Calcule le chemin de destination pour un film dans storage.
 

@@ -243,6 +243,8 @@ async def validate_candidate(
     pending_id: str,
     candidate_id: str = Form(...),
     source: str = Form(...),
+    title: str = Form(""),
+    year: str = Form(""),
 ):
     """Valide un candidat sélectionné via HTMX."""
     container = request.app.state.container
@@ -264,9 +266,12 @@ async def validate_candidate(
             break
 
     # Si non trouvé dans les candidats existants (résultat de recherche manuelle),
-    # créer un SearchResult minimal
+    # créer un SearchResult avec le titre transmis par le formulaire
     if selected is None:
-        selected = SearchResult(id=candidate_id, title="", source=source, score=0.0)
+        year_int = int(year) if year and year.strip() else None
+        selected = SearchResult(
+            id=candidate_id, title=title, year=year_int, source=source, score=0.0,
+        )
 
     try:
         await service.validate_candidate(pending, selected)

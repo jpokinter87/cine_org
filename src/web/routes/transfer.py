@@ -29,6 +29,18 @@ router = APIRouter(prefix="/transfer")
 # ═══════════════════════════════════════
 
 
+class BatchPrepareProgress:
+    """État de progression partagé pour la préparation du batch."""
+
+    def __init__(self) -> None:
+        self.current: int = 0
+        self.total: int = 0
+        self.filename: str = ""
+        self.message: str = "Initialisation…"
+        self.complete: bool = False
+        self.error: Optional[str] = None
+
+
 class TransferProgress:
     """État de progression partagé entre le transfert et le SSE."""
 
@@ -121,7 +133,7 @@ def _build_tree_data(transfers: list[dict], storage_dir: Path, video_dir: Path) 
     movies_tree = _group_by_path(movies, key="symlink_rel", prefix="Films")
 
     # Organiser les séries par sous-répertoire
-    series_tree = _group_by_path(series, key="symlink_rel", prefix="Séries")
+    series_tree = _group_by_path(series, key="symlink_rel", prefix="Series")
 
     return {
         "movies": movies_tree,
@@ -416,7 +428,17 @@ async def _run_web_transfer(
 
 @router.get("/", response_class=HTMLResponse)
 async def transfer_index(request: Request):
-    """Page principale du transfert — résumé batch."""
+    """Page principale du transfert — shell immédiat avec chargement HTMX."""
+    return templates.TemplateResponse(
+        request,
+        "transfer/index.html",
+        {},
+    )
+
+
+@router.post("/prepare", response_class=HTMLResponse)
+async def transfer_prepare(request: Request):
+    """Lance la préparation du batch en arrière-plan avec suivi SSE."""
     container = request.app.state.container
     validation_service = container.validation_service()
 
@@ -426,21 +448,46 @@ async def transfer_index(request: Request):
     if not validated_list:
         return templates.TemplateResponse(
             request,
-            "transfer/index.html",
+            "transfer/_batch_content.html",
             {
                 "has_transfers": False,
                 "pending_count": pending_count,
                 "tree_data": None,
-                "transfers_json": "[]",
             },
         )
 
-    # Construire le batch de transferts
-    from src.adapters.cli.batch_builder import build_transfers_batch
+    # Créer l'état de progression
+    progress = BatchPrepareProgress()
+    progress.total = len(validated_list)
+    request.app.state.batch_prepare_progress = progress
+
+    # Lancer la préparation en arrière-plan
+    app_state = request.app.state
+    task = asyncio.create_task(
+        _prepare_batch_async(container, validated_list, progress, app_state)
+    )
+    app_state.batch_prepare_task = task
+
+    return templates.TemplateResponse(
+        request,
+        "transfer/_prepare_progress.html",
+        {"progress": progress},
+    )
+
+
+async def _prepare_batch_async(
+    container,
+    validated_list: list,
+    progress: BatchPrepareProgress,
+    app_state,
+) -> None:
+    """Prépare le batch en arrière-plan avec callback de progression."""
     from io import StringIO
+
     from rich.console import Console as RichConsole
 
-    # Utiliser un console silencieux pour supprimer les print Rich
+    from src.adapters.cli.batch_builder import build_transfers_batch
+
     silent_console = RichConsole(file=StringIO(), quiet=True)
     import src.adapters.cli.batch_builder as bb
 
@@ -452,28 +499,105 @@ async def transfer_index(request: Request):
         storage_dir = settings.storage_dir
         video_dir = settings.video_dir
 
+        def _on_progress(current: int, total: int, filename: str) -> None:
+            progress.current = current
+            progress.total = total
+            progress.filename = filename
+            progress.message = f"Préparation : {filename}"
+
         transfers = await build_transfers_batch(
-            validated_list, container, storage_dir, video_dir
+            validated_list, container, storage_dir, video_dir,
+            on_progress=_on_progress,
         )
+
+        # Stocker les résultats
+        app_state.transfer_batch = transfers
+        app_state.transfer_storage_dir = storage_dir
+        app_state.transfer_video_dir = video_dir
+
+        progress.message = "Préparation terminée"
+        progress.complete = True
+
+    except Exception as e:
+        logger.exception("Erreur préparation batch: %s", e)
+        progress.error = str(e)
+        progress.complete = True
     finally:
         bb.console = original_console
 
-    # Stocker le batch pour POST /transfer/start
-    request.app.state.transfer_batch = transfers
-    request.app.state.transfer_storage_dir = storage_dir
-    request.app.state.transfer_video_dir = video_dir
 
-    # Construire les données d'arborescence pour le template
+@router.get("/prepare-progress")
+async def transfer_prepare_progress(request: Request):
+    """SSE endpoint pour le suivi de la préparation du batch."""
+    progress = getattr(request.app.state, "batch_prepare_progress", None)
+
+    async def event_stream():
+        if progress is None:
+            yield 'event: error\ndata: {"message": "Aucune préparation en cours"}\n\n'
+            return
+
+        last_sent = ""
+        while not progress.complete:
+            data = json.dumps({
+                "current": progress.current,
+                "total": progress.total,
+                "filename": progress.filename,
+                "message": progress.message,
+            }, ensure_ascii=False)
+
+            if data != last_sent:
+                yield f"event: progress\ndata: {data}\n\n"
+                last_sent = data
+
+            await asyncio.sleep(0.4)
+
+        if progress.error:
+            error_data = json.dumps({"message": progress.error}, ensure_ascii=False)
+            yield f"event: error\ndata: {error_data}\n\n"
+        else:
+            yield 'event: complete\ndata: {}\n\n'
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/batch", response_class=HTMLResponse)
+async def transfer_batch(request: Request):
+    """Retourne le contenu du batch préparé (appelé après la fin du SSE)."""
+    container = request.app.state.container
+    validation_service = container.validation_service()
+    pending_count = len(validation_service.list_pending())
+
+    transfers = getattr(request.app.state, "transfer_batch", None)
+    if not transfers:
+        return templates.TemplateResponse(
+            request,
+            "transfer/_batch_content.html",
+            {
+                "has_transfers": False,
+                "pending_count": pending_count,
+                "tree_data": None,
+            },
+        )
+
+    storage_dir = request.app.state.transfer_storage_dir
+    video_dir = request.app.state.transfer_video_dir
     tree_data = _build_tree_data(transfers, storage_dir, video_dir)
 
     return templates.TemplateResponse(
         request,
-        "transfer/index.html",
+        "transfer/_batch_content.html",
         {
             "has_transfers": True,
             "pending_count": pending_count,
             "tree_data": tree_data,
-            "transfers_json": "[]",  # Pas besoin de JSON côté client
         },
     )
 

@@ -1,0 +1,87 @@
+{# Progression de la préparation du batch — mis à jour via SSE #}
+
+<div class="workflow-progress" id="prepare-progress">
+    <div class="progress-header">
+        <div class="progress-title-row">
+            <h2 class="progress-title">Préparation du batch</h2>
+            <div class="progress-spinner">
+                <div class="spinner"></div>
+            </div>
+        </div>
+        <p class="progress-message" id="prepare-message">Analyse des fichiers validés…</p>
+    </div>
+
+    {# Barre de progression #}
+    <div class="progress-bar-container">
+        <div class="progress-bar" id="prepare-bar" style="width: 0%"></div>
+    </div>
+
+    {# Compteurs live #}
+    <div class="progress-counters" id="prepare-counters">
+        <div class="progress-counter">
+            <span class="progress-counter-value" id="prepare-counter">0 / {{ progress.total }}</span>
+            <span class="progress-counter-label">fichier(s)</span>
+        </div>
+    </div>
+
+    {# Fichier en cours #}
+    <div class="progress-filename" id="prepare-filename"></div>
+</div>
+
+<script>
+(function() {
+    const es = new EventSource('/transfer/prepare-progress');
+    const bar = document.getElementById('prepare-bar');
+    const msg = document.getElementById('prepare-message');
+    const counter = document.getElementById('prepare-counter');
+    const filenameEl = document.getElementById('prepare-filename');
+    const progressEl = document.getElementById('prepare-progress');
+
+    es.addEventListener('progress', function(e) {
+        const d = JSON.parse(e.data);
+        msg.textContent = d.message;
+
+        let pct = d.total > 0 ? (d.current / d.total) * 100 : 0;
+        bar.style.width = Math.min(pct, 98) + '%';
+
+        if (d.total > 0) {
+            counter.textContent = d.current + ' / ' + d.total;
+        }
+
+        if (d.filename) {
+            filenameEl.textContent = d.filename;
+            filenameEl.style.display = 'block';
+        }
+    });
+
+    es.addEventListener('complete', function(e) {
+        es.close();
+        bar.style.width = '100%';
+        bar.classList.add('complete');
+        msg.textContent = 'Chargement du résultat…';
+
+        // Charger le contenu du batch préparé
+        fetch('/transfer/batch')
+            .then(function(r) { return r.text(); })
+            .then(function(html) {
+                document.getElementById('transfer-area').innerHTML = html;
+                // Réactiver HTMX sur le nouveau contenu
+                if (window.htmx) htmx.process(document.getElementById('transfer-area'));
+            });
+    });
+
+    es.addEventListener('error', function(e) {
+        es.close();
+        let errMsg = 'Erreur inconnue';
+        try {
+            const d = JSON.parse(e.data);
+            errMsg = d.message;
+        } catch(_) {}
+
+        bar.classList.add('error');
+        msg.textContent = 'Erreur : ' + errMsg;
+        msg.classList.add('error');
+        document.querySelector('.progress-spinner').style.display = 'none';
+    });
+})();
+</script>

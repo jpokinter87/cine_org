@@ -77,12 +77,18 @@ class ScannerService:
         self._media_info_extractor = media_info_extractor
         self._settings = settings
 
-    def scan_downloads(self) -> Iterator[ScanResult]:
+    def scan_downloads(
+        self, media_type: Optional[MediaType] = None
+    ) -> Iterator[ScanResult]:
         """
         Scanne les repertoires de telechargements (Films et Series).
 
         Parcourt downloads_dir/Films et downloads_dir/Series,
         et yield un ScanResult pour chaque fichier video trouve.
+
+        Args:
+            media_type: Si specifie, ne scanne que le repertoire correspondant
+                        (MOVIE → Films/, SERIES → Series/)
 
         Yields:
             ScanResult pour chaque fichier video valide trouve
@@ -94,6 +100,8 @@ class ScannerService:
         ]
 
         for subdir_variants, type_hint in subdirs_with_hints:
+            if media_type is not None and type_hint != media_type:
+                continue
             for subdir_name in subdir_variants:
                 source_dir = downloads / subdir_name
                 if source_dir.exists():
@@ -228,13 +236,18 @@ class ScannerService:
         # Verifier si le type detecte correspond au type attendu
         return detected_type != type_hint
 
-    def scan_undersized_files(self) -> Iterator[ScanResult]:
+    def scan_undersized_files(
+        self, media_type: Optional[MediaType] = None
+    ) -> Iterator[ScanResult]:
         """
         Scanne les fichiers video sous le seuil de taille minimum.
 
         Permet de detecter les fichiers qui seraient normalement ignores
         (ex: episodes de series Arte en 720p) pour proposer a l'utilisateur
         de les traiter quand meme.
+
+        Args:
+            media_type: Si specifie, ne scanne que le repertoire correspondant
 
         Yields:
             ScanResult pour chaque fichier video sous le seuil
@@ -246,6 +259,8 @@ class ScannerService:
         ]
 
         for subdir_variants, type_hint in subdirs_with_hints:
+            if media_type is not None and type_hint != media_type:
+                continue
             for subdir_name in subdir_variants:
                 source_dir = downloads / subdir_name
                 if source_dir.exists():

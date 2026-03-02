@@ -10,6 +10,7 @@ Responsabilites:
 - Enrichissement des metadonnees (genres, notes, etc.) depuis les API
 """
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -304,6 +305,7 @@ async def build_transfers_batch(
     container: "Container",
     storage_dir: Path,
     video_dir: Path,
+    on_progress: "Callable[[int, int, str], None] | None" = None,
 ) -> list[dict]:
     """
     Construit la liste des transferts pour les fichiers valides.
@@ -330,8 +332,9 @@ async def build_transfers_batch(
     episode_repo = container.episode_repository()
 
     transfers = []
+    total = len(validated_list)
 
-    for pending in validated_list:
+    for idx, pending in enumerate(validated_list):
         # Recuperer le candidat selectionne
         candidate = None
         for c in pending.candidates:
@@ -357,8 +360,28 @@ async def build_transfers_batch(
             candidate_source = candidate.source
             candidate_id = candidate.id
 
+        # Filet de sécurité : titre vide → fallback sur le nom de fichier parsé
+        if not candidate_title:
+            original_filename = pending.video_file.filename if pending.video_file else ""
+            if original_filename:
+                from src.adapters.parsing.guessit_parser import GuessitFilenameParser
+
+                _fallback_parser = GuessitFilenameParser()
+                parsed = _fallback_parser.parse(original_filename)
+                if parsed.title and parsed.title != "Unknown":
+                    candidate_title = parsed.title
+                    console.print(
+                        f"  [yellow]⚠[/yellow] Titre candidat vide pour {original_filename}, "
+                        f"fallback sur titre parsé : {candidate_title}"
+                    )
+
         # Determiner si c'est une serie
         is_series = candidate_source == "tvdb"
+
+        # Notifier la progression
+        if on_progress:
+            filename = pending.video_file.filename if pending.video_file else "?"
+            on_progress(idx + 1, total, filename)
 
         # Verifier le chemin source
         source_path = (

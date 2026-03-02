@@ -68,6 +68,13 @@ async def _run_web_workflow(
     par WorkflowService.execute() qui est couplé à Rich/Confirm.
     """
     try:
+        # Convertir le filtre textuel en MediaType pour le scanner
+        scan_media_type: Optional[MediaType] = None
+        if filter_type == "movies":
+            scan_media_type = MediaType.MOVIE
+        elif filter_type == "series":
+            scan_media_type = MediaType.SERIES
+
         # Initialiser les services
         scanner = container.scanner_service()
         validation_service = container.validation_service()
@@ -82,20 +89,15 @@ async def _run_web_workflow(
         progress.step_number = 1
         progress.message = "Suppression des traitements précédents…"
 
-        # Supprimer toutes les entrées (pending + validated + rejected)
-        all_entries = pending_repo._session.exec(
-            select(PendingValidationModel)
-        ).all()
-        previous_entries = [pending_repo._to_entity(m) for m in all_entries]
-        for pv in previous_entries:
-            if pv.id:
-                pending_repo.delete(pv.id)
-            if pv.video_file and pv.video_file.id:
-                video_file_repo.delete(pv.video_file.id)
-            progress.orphans_cleaned += 1
-
-        if progress.orphans_cleaned > 0:
-            progress.message = f"{progress.orphans_cleaned} enregistrement(s) précédent(s) supprimé(s)"
+        # Suppression batch (un seul commit au lieu d'un par entrée)
+        session = pending_repo._session
+        count = len(session.exec(select(PendingValidationModel)).all())
+        if count > 0:
+            session.exec(delete(PendingValidationModel))
+            session.exec(delete(VideoFileModel))
+            session.commit()
+            progress.orphans_cleaned = count
+            progress.message = f"{count} enregistrement(s) précédent(s) supprimé(s)"
         await asyncio.sleep(0.1)
 
         # ── Étape 2/4 : Scan des téléchargements ──
@@ -104,20 +106,24 @@ async def _run_web_workflow(
         progress.message = "Scan des téléchargements…"
         await asyncio.sleep(0.1)
 
-        scan_results = []
-        for result in scanner.scan_downloads():
-            if _should_filter(result, filter_type):
-                continue
-            scan_results.append(result)
-            progress.current = len(scan_results)
-            progress.filename = result.video_file.filename
-            progress.message = f"Scan : {result.video_file.filename}"
+        # Exécuter le scan dans un thread pour libérer l'event loop
+        # (mediainfo ouvre chaque fichier — lent sur NAS réseau)
+        def _collect_scan():
+            results = []
+            for result in scanner.scan_downloads(media_type=scan_media_type):
+                progress.filename = result.video_file.filename
+                progress.message = f"Scan : {result.video_file.filename}"
+                results.append(result)
+                progress.current = len(results)
+            return results
+
+        scan_results = await asyncio.to_thread(_collect_scan)
 
         # Compter les undersized ignorés (pas de Confirm en web)
-        undersized = list(scanner.scan_undersized_files())
-        undersized_filtered = [
-            r for r in undersized if not _should_filter(r, filter_type)
-        ]
+        def _collect_undersized():
+            return list(scanner.scan_undersized_files(media_type=scan_media_type))
+
+        undersized_filtered = await asyncio.to_thread(_collect_undersized)
         progress.undersized_ignored = len(undersized_filtered)
         progress.undersized_files = [r.video_file.filename for r in undersized_filtered]
 
@@ -220,17 +226,6 @@ async def _run_web_workflow(
         logger.exception("Erreur lors du workflow web: %s", e)
         progress.error = str(e)
         progress.complete = True
-
-
-def _should_filter(scan_result, filter_type: str) -> bool:
-    """Filtre les résultats selon le type sélectionné."""
-    if filter_type == "all":
-        return False
-    if filter_type == "movies":
-        return scan_result.detected_type != MediaType.MOVIE
-    if filter_type == "series":
-        return scan_result.detected_type != MediaType.SERIES
-    return False
 
 
 # ═══════════════════════════════════════
