@@ -98,7 +98,7 @@ class TestScanOversizedDirs:
     def test_scan_oversized_with_subdirs(self, cleanup_service, temp_dirs):
         """Detecte un repertoire avec trop de sous-repertoires."""
         video_dir = temp_dirs["video"]
-        letter_dir = video_dir / "Séries" / "A"
+        letter_dir = video_dir / "Series" / "A"
         letter_dir.mkdir(parents=True)
 
         # Creer 55 sous-repertoires (ex: titres de series)
@@ -114,7 +114,7 @@ class TestScanOversizedDirs:
     def test_scan_oversized_series_anime_not_flagged(self, cleanup_service, temp_dirs):
         """Serie anime avec 200 episodes (symlinks) sans saisons -> pas de subdivision."""
         video_dir = temp_dirs["video"]
-        anime_dir = video_dir / "Séries" / "N" / "Naruto (2002)"
+        anime_dir = video_dir / "Series" / "N" / "Naruto (2002)"
         anime_dir.mkdir(parents=True)
 
         for i in range(200):

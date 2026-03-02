@@ -191,7 +191,7 @@ class TestCalculateSubdivisionRanges:
         C est subdivise en Ca-Ch et Ci-Cz.
         El Chapo doit finir dans C/Ca-Ch/, pas a la racine de C/.
         """
-        grandparent = tmp_path / "Séries" / "Séries TV"
+        grandparent = tmp_path / "Series" / "TV"
         grandparent.mkdir(parents=True)
         (grandparent / "#").mkdir()
 
@@ -601,7 +601,7 @@ class TestSubdivisionAlgorithmBugs:
 
     def test_cb_strike_dots_stripped_in_range_c(self, cleanup_service, tmp_path):
         """C.B. Strike : les points sont ignores, cle 'CB' dans plage C (CA-CZ)."""
-        parent = tmp_path / "Séries" / "Séries TV" / "C"
+        parent = tmp_path / "Series" / "TV" / "C"
         parent.mkdir(parents=True)
 
         # Items dans la plage C
@@ -624,7 +624,7 @@ class TestSubdivisionAlgorithmBugs:
 
     def test_au_service_in_range_s(self, cleanup_service, tmp_path):
         """'Au service de la France' : article 'au' strip -> cle 'SE' dans S."""
-        parent = tmp_path / "Séries" / "Séries TV" / "S"
+        parent = tmp_path / "Series" / "TV" / "S"
         parent.mkdir(parents=True)
 
         # Items dans la plage S
@@ -678,7 +678,7 @@ class TestSubdivisionAlgorithmBugs:
         sibling teste -> il capture tout. Les items doivent aller vers le bon frere
         alphabetique.
         """
-        grandparent = tmp_path / "Séries" / "Séries TV"
+        grandparent = tmp_path / "Series" / "TV"
         grandparent.mkdir(parents=True)
 
         # Creer les repertoires freres incluant '#'
@@ -731,7 +731,7 @@ class TestSubdivisionAlgorithmBugs:
 
     def test_bug8b_hash_sibling_all_article_cases(self, cleanup_service, tmp_path):
         """Bug 8b : tous les cas d'articles avec # present comme frere."""
-        grandparent = tmp_path / "Séries" / "Séries TV"
+        grandparent = tmp_path / "Series" / "TV"
         grandparent.mkdir(parents=True)
 
         # Creer les repertoires freres incluant '#'

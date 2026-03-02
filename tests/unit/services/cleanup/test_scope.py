@@ -21,7 +21,7 @@ class TestScopeFilmsSeries:
         # Creer des sous-repertoires Films et hors-scope
         films_dir = video_dir / "Films" / "Action"
         films_dir.mkdir(parents=True)
-        other_dir = video_dir / "Documentaires"
+        other_dir = video_dir / "Autre"
         other_dir.mkdir(parents=True)
 
         # Creer un fichier cible
@@ -33,7 +33,7 @@ class TestScopeFilmsSeries:
         symlink_in = films_dir / "Film (2020).mkv"
         symlink_in.symlink_to(target)
 
-        # Symlink hors scope (Documentaires)
+        # Symlink hors scope (Autre)
         symlink_out = other_dir / "Doc (2020).mkv"
         symlink_out.symlink_to(target)
 
@@ -59,7 +59,7 @@ class TestScopeFilmsSeries:
             (genre_dir / f"Film {i:03d} (2020).mkv").symlink_to(f"/storage/f{i}.mkv")
 
         # Repertoire surcharge hors scope
-        docs_dir = video_dir / "Documentaires"
+        docs_dir = video_dir / "Autre"
         docs_dir.mkdir(parents=True)
         for i in range(55):
             (docs_dir / f"Doc {i:03d} (2020).mkv").symlink_to(f"/storage/d{i}.mkv")
@@ -80,13 +80,13 @@ class TestScopeFilmsSeries:
         (video_dir / "Films" / "Action").mkdir(parents=True)
 
         # Repertoire vide hors scope
-        (video_dir / "Documentaires" / "Nature").mkdir(parents=True)
+        (video_dir / "Autre" / "Nature").mkdir(parents=True)
 
         result = cleanup_service._scan_empty_dirs(video_dir)
 
         result_paths = {p for p in result}
         assert video_dir / "Films" / "Action" in result_paths
-        assert video_dir / "Documentaires" / "Nature" not in result_paths
+        assert video_dir / "Autre" / "Nature" not in result_paths
 
     def test_scan_broken_symlinks_ignores_outside_films_series(
         self, cleanup_service, mock_repair_service, temp_dirs,
@@ -97,7 +97,7 @@ class TestScopeFilmsSeries:
         # Symlink casse dans Films/ (dans le scope)
         broken_in = video_dir / "Films" / "Action" / "broken.mkv"
         # Symlink casse hors scope
-        broken_out = video_dir / "Documentaires" / "broken_doc.mkv"
+        broken_out = video_dir / "Autre" / "broken_doc.mkv"
 
         mock_repair_service.find_broken_symlinks.return_value = [
             broken_in, broken_out,
@@ -117,9 +117,9 @@ class TestScopeFilmsSeries:
         video_dir = temp_dirs["video"]
 
         # Repertoire vide dans Series/
-        (video_dir / "Séries" / "B" / "Breaking Bad (2008)" / "Saison 01").mkdir(parents=True)
+        (video_dir / "Series" / "B" / "Breaking Bad (2008)" / "Saison 01").mkdir(parents=True)
 
         result = cleanup_service._scan_empty_dirs(video_dir)
 
         result_paths = {p for p in result}
-        assert video_dir / "Séries" / "B" / "Breaking Bad (2008)" / "Saison 01" in result_paths
+        assert video_dir / "Series" / "B" / "Breaking Bad (2008)" / "Saison 01" in result_paths

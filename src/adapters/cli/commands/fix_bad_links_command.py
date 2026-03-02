@@ -35,7 +35,7 @@ def _find_duplicate_targets(
     """
     target_to_links: dict[str, list[Path]] = defaultdict(list)
 
-    for subdir_name in ("Films", "Séries"):
+    for subdir_name in ("Films", "Series", "Documentaires"):
         subdir = video_dir / subdir_name
         if not subdir.exists():
             continue

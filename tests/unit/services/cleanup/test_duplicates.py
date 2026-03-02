@@ -160,7 +160,7 @@ class TestScanDuplicateSymlinks:
         assert set(result[0].remove) == {short, medium}
 
     def test_scope_ignores_outside_films_series(self, cleanup_service, temp_dirs):
-        """Les doublons hors Films/ et Series/ sont ignores."""
+        """Les doublons hors Films/, Series/ et Documentaires/ sont ignores."""
         video_dir = temp_dirs["video"]
         storage_dir = temp_dirs["storage"]
 
@@ -168,11 +168,11 @@ class TestScanDuplicateSymlinks:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.touch()
 
-        # Doublons hors scope (Documentaires)
-        docs_dir = video_dir / "Documentaires"
-        docs_dir.mkdir(parents=True)
-        (docs_dir / "Doc (2020).mkv").symlink_to(target)
-        (docs_dir / "Doc (2020) FR.mkv").symlink_to(target)
+        # Doublons hors scope (Autre)
+        autre_dir = video_dir / "Autre"
+        autre_dir.mkdir(parents=True)
+        (autre_dir / "Doc (2020).mkv").symlink_to(target)
+        (autre_dir / "Doc (2020) FR.mkv").symlink_to(target)
 
         result = cleanup_service._scan_duplicate_symlinks(video_dir)
 
@@ -203,15 +203,15 @@ class TestScanDuplicateSymlinks:
         assert len(result) == 0
 
     def test_series_duplicate_symlinks(self, cleanup_service, temp_dirs):
-        """Doublons dans Séries/ sont aussi detectes."""
+        """Doublons dans Series/ sont aussi detectes."""
         video_dir = temp_dirs["video"]
         storage_dir = temp_dirs["storage"]
 
-        target = storage_dir / "Séries" / "episode.mkv"
+        target = storage_dir / "Series" / "episode.mkv"
         target.parent.mkdir(parents=True)
         target.touch()
 
-        season_dir = video_dir / "Séries" / "B" / "Breaking Bad (2008)" / "Saison 01"
+        season_dir = video_dir / "Series" / "B" / "Breaking Bad (2008)" / "Saison 01"
         season_dir.mkdir(parents=True)
 
         old_link = season_dir / "Breaking Bad (2008) - S01E01 - Pilot.mkv"

@@ -172,7 +172,7 @@ class TestSeriesHeuristics:
         series.tmdb_id = 1396
 
         episode = MagicMock()
-        episode.file_path = "/storage/Séries/B/Wrong Show/Saison 1/Something Completely Different S01E01.mkv"
+        episode.file_path = "/storage/Series/B/Wrong Show/Saison 1/Something Completely Different S01E01.mkv"
 
         with patch.object(checker, "_get_first_episode") as mock_ep:
             mock_ep.return_value = episode
@@ -195,7 +195,7 @@ class TestSeriesHeuristics:
         series.tmdb_id = 1396
 
         episode = MagicMock()
-        episode.file_path = "/storage/Séries/B/Breaking Bad/Breaking Bad (2008) - S01E01 - Pilot - EN AAC x264 720p.mkv"
+        episode.file_path = "/storage/Series/B/Breaking Bad/Breaking Bad (2008) - S01E01 - Pilot - EN AAC x264 720p.mkv"
 
         with patch.object(checker, "_get_first_episode") as mock_ep:
             mock_ep.return_value = episode

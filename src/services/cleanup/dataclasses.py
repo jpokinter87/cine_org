@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 
-MANAGED_SUBDIRS = ("Films", "Séries")
+MANAGED_SUBDIRS = ("Films", "Series", "Documentaires")
 
 
 class CleanupStepType(str, Enum):

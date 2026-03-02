@@ -10,21 +10,20 @@ See: .paul/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Milestone: v1.9 Normalisation & Intégration Jellyfin
-Phase: 32 of 33 (NFO & Artwork Sidecar Jellyfin) — Not started
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-03-01 — Phase 31 complete, transitioned to Phase 32
+Phase: 32 abandoned, next is 33 (Overlays Qualité Web UI)
+Plan: none
+Status: Between phases
+Last activity: 2026-03-01 — Phase 32 abandoned (NFO sidecar jugé inutile, Jellyfin scrape seul)
 
 Progress:
-- v1.9: [██████░░░░] 60% (3/5 phases)
-- Phase 32: [░░░░░░░░░░] 0%
+- v1.9: [██████░░░░] 60% (3/5 phases, 1 abandoned)
+- Phase 33: not started
 
 ## Loop Position
 
 Current loop state:
 ```
-PLAN ──▶ APPLY ──▶ UNIFY
-  ○        ○        ○     [Ready for Phase 32 planning]
+No active loop — ready for next phase
 ```
 
 ## Accumulated Context
@@ -63,6 +62,7 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - skip_cache param sur TMDBClient.get_details() pour invalidation granulaire du cache
 - sentinel collection_id=0 pour "vérifié, pas de collection"
 - Filet doublons post-batch : détection/correction en fin de pipeline au lieu d'extraction en amont
+- Phase 32 NFO abandonnée : Jellyfin scrape TMDB tout seul, les sidecar NFO/poster/fanart quadruplent les fichiers par répertoire pour un bénéfice marginal
 - mediainfo primaire, guessit fallback langue : pipeline identique au workflow normal
 - Normalisation ligatures Œ/Æ et slash/tiret pour comparaison de titres
 - SD reconnu comme résolution valide, MPEG-4/XviD/DivX comme codecs valides
@@ -89,20 +89,21 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Quelques tvdb_id potentiellement erronés (découvert avec BSG 1978 vs 2004)
 - Page maintenance : ajouter la gestion de la corbeille (liste, restauration, vidage définitif)
 - 3 doublons DB (même file_path, 2 MovieModel) : Double mise, Compañeros, Plein la vue — purger l'entrée excédentaire
+- Doublons physiques + symlinks orphelins cross-genre : des films existent en double dans storage (même taille, noms différents) avec des symlinks dans plusieurs genres (ex: Poupées russes dans Comédie dramatique + Comédie + Drame). check-duplicates ne détecte pas ces cas car il groupe par tmdb_id dans la DB, mais ces doublons ont un seul enregistrement DB. À investiguer : détection par taille de fichier identique + même tmdb_id implicite, ou scan des symlinks video/ pointant vers le même fichier physique
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: da29080 (feat(31-detection-doublons))
+Last commit: ac85547 (chore(29-films-multi-parties): phase complete)
 Branch: master
 
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Phase 31 complete, ready to plan Phase 32
-Next action: /paul:plan for Phase 32
-Resume file: .paul/ROADMAP.md
+Stopped at: Phase 32 abandoned, code reverté
+Next action: Décider du prochain sujet — Phase 33 (Overlays Qualité) ou traiter l'issue doublons physiques cross-genre
+Resume file: none
 
 ---
 *STATE.md — Updated after every significant action*

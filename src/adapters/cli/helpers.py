@@ -55,6 +55,7 @@ def with_container(requires_db: bool = True):
         async def my_command(container, ...):
             config = container.config()
     """
+
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -62,7 +63,9 @@ def with_container(requires_db: bool = True):
             if requires_db:
                 container.database.init()
             return await func(container, *args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -79,9 +82,11 @@ def async_command(func):
         async def my_command(container, ...):
             ...
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         asyncio.run(func(*args, **kwargs))
+
     # Preserver les annotations Typer
     wrapper.__signature__ = inspect.signature(func)
     wrapper.__annotations__ = func.__annotations__
@@ -254,7 +259,7 @@ def _display_transfer_tree(
         for s in series:
             # Utiliser symlink_destination pour extraire le type et la lettre
             symlink_dest = s.get("symlink_destination")
-            series_type = "Séries TV"
+            series_type = "TV"
             letter = "?"
             if symlink_dest:
                 try:
@@ -286,13 +291,23 @@ def _display_transfer_tree(
 
         # Afficher par type, lettre, serie
         for series_type in sorted(type_groups.keys()):
-            type_branch = tree.add(f"[bold magenta]Séries/{series_type}/[/bold magenta]")
+            # Les séries documentaires sont sous Documentaires/, les autres sous Series/
+            if series_type == "Series documentaires":
+                type_branch = tree.add(
+                    f"[bold magenta]Documentaires/{series_type}/[/bold magenta]"
+                )
+            else:
+                type_branch = tree.add(
+                    f"[bold magenta]Series/{series_type}/[/bold magenta]"
+                )
 
             for letter in sorted(type_groups[series_type].keys()):
                 letter_branch = type_branch.add(f"[magenta]{letter}/[/magenta]")
                 for series_name in sorted(type_groups[series_type][letter].keys()):
                     series_sub = letter_branch.add(f"[magenta]{series_name}/[/magenta]")
-                    for season in sorted(type_groups[series_type][letter][series_name].keys()):
+                    for season in sorted(
+                        type_groups[series_type][letter][series_name].keys()
+                    ):
                         season_sub = series_sub.add(f"[dim]{season}/[/dim]")
                         episodes = type_groups[series_type][letter][series_name][season]
                         # Trier par numero d'episode

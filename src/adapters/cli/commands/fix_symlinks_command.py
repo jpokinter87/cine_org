@@ -46,7 +46,7 @@ def _find_misplaced_symlinks(
     video_dir: Path,
 ) -> list[tuple[Path, Path]]:
     """
-    Trouve les symlinks mal-placés dans Films/ et Séries/.
+    Trouve les symlinks mal-placés dans Films/, Series/ et Documentaires/.
 
     Approche optimisée : au lieu de parser chaque fichier (~90k),
     on identifie les répertoires "mixtes" qui contiennent à la fois
@@ -62,10 +62,10 @@ def _find_misplaced_symlinks(
     misplaced = []
 
     # Déterminer les répertoires à scanner :
-    # - Si video_dir contient Films/ ou Séries/, scanner ces sous-répertoires
+    # - Si video_dir contient Films/, Series/ ou Documentaires/, scanner ces sous-répertoires
     # - Sinon, scanner video_dir directement (l'utilisateur a ciblé un sous-répertoire)
     scan_dirs = []
-    for subdir_name in ("Films", "Séries"):
+    for subdir_name in ("Films", "Series", "Documentaires"):
         subdir = video_dir / subdir_name
         if subdir.exists():
             scan_dirs.append(subdir)

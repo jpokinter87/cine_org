@@ -350,7 +350,7 @@ class RepairService:
                     continue
 
             # file_path inexistant → chercher dans storage
-            found = self._search_file_in_storage(episode.file_path, "Séries")
+            found = self._search_file_in_storage(episode.file_path, "Series")
             if found:
                 candidates.append((found, score))
 
@@ -606,7 +606,7 @@ class RepairService:
                     genre = parts[i + 1]
                 break
             elif part_lower in ("series", "séries"):
-                media_type = "Séries"
+                media_type = "Series"
                 if i + 1 < len(parts):
                     genre = parts[i + 1]
                 break
@@ -627,7 +627,7 @@ class RepairService:
             link: Chemin du symlink casse
             search_dir: Repertoire de recherche
             min_score: Score minimum
-            media_type_filter: Filtrer par type ("Films" ou "Séries")
+            media_type_filter: Filtrer par type ("Films" ou "Series")
 
         Returns:
             Liste de tuples (chemin, score) triee par score decroissant

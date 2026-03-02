@@ -24,12 +24,12 @@ class TestExtractSeriesName:
     """Tests pour l'extraction du nom de serie depuis un chemin."""
 
     def test_standard_series_path(self):
-        path = Path("/media/Serveur/test/Séries/Séries TV/A-M/Breaking Bad/Saison 01/ep.mkv")
+        path = Path("/media/Serveur/test/Series/TV/A-M/Breaking Bad/Saison 01/ep.mkv")
         assert extract_series_name(path) == "Breaking Bad"
 
     def test_animation_series_path(self):
         path = Path(
-            "/media/Serveur/test/Séries/Animation (Courts ou à épisodes)/T/"
+            "/media/Serveur/test/Series/Animation (Courts ou à épisodes)/T/"
             "The Amazing World of Gumball (2011)/Saison 5/ep.mkv"
         )
         assert extract_series_name(path) == "The Amazing World of Gumball (2011)"
@@ -37,7 +37,7 @@ class TestExtractSeriesName:
     def test_documentary_series_path(self):
         """Les sous-categories documentaires sont bien ignorees."""
         path = Path(
-            "/media/Serveur/test/Séries/Séries documentaires/Science/"
+            "/media/Serveur/test/Documentaires/Series documentaires/Science/"
             "Strip The City/Dessous/ep.mkv"
         )
         assert extract_series_name(path) == "Strip The City"
@@ -45,7 +45,7 @@ class TestExtractSeriesName:
     def test_documentary_with_geography(self):
         """Documentaire avec sous-genre Geographie."""
         path = Path(
-            "/media/Serveur/test/Séries/Séries documentaires/Science/Géographie/"
+            "/media/Serveur/test/Documentaires/Series documentaires/Science/Géographie/"
             "Planet Earth II - VOSTFR/Planète/ep.mkv"
         )
         assert extract_series_name(path) == "Planet Earth II - VOSTFR"
@@ -71,49 +71,49 @@ class TestSeriesAutoRepair:
     def test_get_nas_series_dir_with_saison(self):
         """Extrait le repertoire serie NAS depuis un chemin avec Saison."""
         target = Path(
-            "/media/NAS64/Séries/Animation/M/"
+            "/media/NAS64/Series/Animation/M/"
             "Le monde incroyable de Gumball/Saison 5/"
             "Le Monde Incroyable de Gumball - S05E31.mkv"
         )
         result = self.ir._get_nas_series_dir(target)
         assert result == Path(
-            "/media/NAS64/Séries/Animation/M/"
+            "/media/NAS64/Series/Animation/M/"
             "Le monde incroyable de Gumball"
         )
 
     def test_get_nas_series_dir_without_saison_fallback_parent(self):
         """Retourne target.parent si pas de composant 'Saison' (fichiers directs)."""
         target = Path(
-            "/media/NAS64/Séries/Séries documentaires/Science/Géographie/"
+            "/media/NAS64/Documentaires/Series documentaires/Science/Géographie/"
             "Planet Earth II - VOSTFR/"
             "Planet.Earth.II.S01E05.720p.BluRay.x264-ROVERS.mkv"
         )
         result = self.ir._get_nas_series_dir(target)
         assert result == Path(
-            "/media/NAS64/Séries/Séries documentaires/Science/Géographie/"
+            "/media/NAS64/Documentaires/Series documentaires/Science/Géographie/"
             "Planet Earth II - VOSTFR"
         )
 
     def test_get_nas_series_dir_saison_at_different_depth(self):
         """Fonctionne meme si Saison est a une profondeur differente."""
         target = Path(
-            "/media/NAS64/Séries/Mangas/N/"
+            "/media/NAS64/Series/Mangas/N/"
             "Naruto/Saison 01/Naruto - S01E01.mkv"
         )
         result = self.ir._get_nas_series_dir(target)
-        assert result == Path("/media/NAS64/Séries/Mangas/N/Naruto")
+        assert result == Path("/media/NAS64/Series/Mangas/N/Naruto")
 
     # ---- _register_confirmed_series ----
 
     def test_register_confirmed_series_with_saison(self):
         """Enregistre avec link.parent comme cle et NAS series dir comme valeur."""
         link = Path(
-            "/media/Serveur/test/Séries/Animation (Courts ou à épisodes)/T/"
+            "/media/Serveur/test/Series/Animation (Courts ou à épisodes)/T/"
             "The Amazing World of Gumball (2011)/Saison 5/"
             "The Amazing World of Gumball (2011) - S05E31.mkv"
         )
         target = Path(
-            "/media/NAS64/Séries/Animation/M/"
+            "/media/NAS64/Series/Animation/M/"
             "Le monde incroyable de Gumball/Saison 5/"
             "Le Monde Incroyable de Gumball - S05E31.mkv"
         )
@@ -122,18 +122,18 @@ class TestSeriesAutoRepair:
         key = str(link.parent)
         assert key in self.ir.confirmed_series
         assert self.ir.confirmed_series[key] == Path(
-            "/media/NAS64/Séries/Animation/M/Le monde incroyable de Gumball"
+            "/media/NAS64/Series/Animation/M/Le monde incroyable de Gumball"
         )
 
     def test_register_confirmed_series_without_saison(self):
         """Enregistre meme sans composant Saison (fallback sur target.parent)."""
         link = Path(
-            "/media/Serveur/test/Séries/Séries documentaires/Science/Géographie/"
+            "/media/Serveur/test/Documentaires/Series documentaires/Science/Géographie/"
             "Planet Earth II - VOSTFR/Planète/"
             "Planète Terre II - S01E05 - Les Prairies.mkv"
         )
         target = Path(
-            "/media/NAS64/Séries/Séries documentaires/Science/Géographie/"
+            "/media/NAS64/Documentaires/Series documentaires/Science/Géographie/"
             "Planet Earth II - VOSTFR/"
             "Planet.Earth.II.S01E05.720p.BluRay.x264-ROVERS.mkv"
         )
@@ -142,7 +142,7 @@ class TestSeriesAutoRepair:
         key = str(link.parent)
         assert key in self.ir.confirmed_series
         assert self.ir.confirmed_series[key] == Path(
-            "/media/NAS64/Séries/Séries documentaires/Science/Géographie/"
+            "/media/NAS64/Documentaires/Series documentaires/Science/Géographie/"
             "Planet Earth II - VOSTFR"
         )
 
@@ -151,17 +151,17 @@ class TestSeriesAutoRepair:
     def test_auto_repair_when_series_confirmed(self):
         """Auto-repare si le repertoire parent est confirme et le candidat correspond."""
         link = Path(
-            "/media/Serveur/test/Séries/Animation/T/"
+            "/media/Serveur/test/Series/Animation/T/"
             "The Amazing World of Gumball (2011)/Saison 5/"
             "The Amazing World of Gumball (2011) - S05E33.mkv"
         )
         # Simuler la confirmation d'un episode precedent (meme parent)
         self.ir.confirmed_series[str(link.parent)] = Path(
-            "/media/NAS64/Séries/Animation/M/Le monde incroyable de Gumball"
+            "/media/NAS64/Series/Animation/M/Le monde incroyable de Gumball"
         )
 
         candidate = Path(
-            "/media/NAS64/Séries/Animation/M/"
+            "/media/NAS64/Series/Animation/M/"
             "Le monde incroyable de Gumball/Saison 5/"
             "Le Monde Incroyable de Gumball - S05E33.mkv"
         )
@@ -175,11 +175,11 @@ class TestSeriesAutoRepair:
     def test_no_auto_repair_when_not_confirmed(self):
         """Pas d'auto-reparation si le repertoire parent n'est pas confirme."""
         link = Path(
-            "/media/Serveur/test/Séries/Animation/T/"
+            "/media/Serveur/test/Series/Animation/T/"
             "The Amazing World of Gumball (2011)/Saison 5/ep.mkv"
         )
         candidate = Path(
-            "/media/NAS64/Séries/Animation/M/"
+            "/media/NAS64/Series/Animation/M/"
             "Le monde incroyable de Gumball/Saison 5/ep.mkv"
         )
         targets = [(candidate, 82.0)]
@@ -192,15 +192,15 @@ class TestSeriesAutoRepair:
     def test_no_auto_repair_when_candidate_from_different_dir(self):
         """Pas d'auto-reparation si le candidat est dans un autre repertoire NAS."""
         link = Path(
-            "/media/Serveur/test/Séries/Animation/T/"
+            "/media/Serveur/test/Series/Animation/T/"
             "The Amazing World of Gumball (2011)/Saison 5/ep.mkv"
         )
         self.ir.confirmed_series[str(link.parent)] = Path(
-            "/media/NAS64/Séries/Animation/M/Le monde incroyable de Gumball"
+            "/media/NAS64/Series/Animation/M/Le monde incroyable de Gumball"
         )
 
         candidate = Path(
-            "/media/NAS64/Séries/Séries TV/A-M/"
+            "/media/NAS64/Series/TV/A-M/"
             "Autre Serie/Saison 1/ep.mkv"
         )
         targets = [(candidate, 60.0)]
@@ -213,11 +213,11 @@ class TestSeriesAutoRepair:
     def test_no_auto_repair_when_no_candidates(self):
         """Pas d'auto-reparation si pas de candidats."""
         link = Path(
-            "/media/Serveur/test/Séries/Animation/T/"
+            "/media/Serveur/test/Series/Animation/T/"
             "The Amazing World of Gumball (2011)/Saison 5/ep.mkv"
         )
         self.ir.confirmed_series[str(link.parent)] = Path(
-            "/media/NAS64/Séries/Animation/M/Le monde incroyable de Gumball"
+            "/media/NAS64/Series/Animation/M/Le monde incroyable de Gumball"
         )
 
         result = self.ir._check_series_auto_repair(
@@ -237,18 +237,18 @@ class TestSeriesAutoRepair:
     def test_auto_repair_multi_season(self):
         """Auto-repare meme si l'episode est dans une saison differente."""
         link = Path(
-            "/media/Serveur/test/Séries/Animation/T/"
+            "/media/Serveur/test/Series/Animation/T/"
             "The Amazing World of Gumball (2011)/Saison 5/"
             "The Amazing World of Gumball - S04E01.mkv"
         )
         # Le symlink est dans Saison 5 mais le fichier est S04E01
         # On teste qu'un candidat dans Saison 4 sur le NAS est aussi accepte
         self.ir.confirmed_series[str(link.parent)] = Path(
-            "/media/NAS64/Séries/Animation/M/Le monde incroyable de Gumball"
+            "/media/NAS64/Series/Animation/M/Le monde incroyable de Gumball"
         )
 
         candidate = Path(
-            "/media/NAS64/Séries/Animation/M/"
+            "/media/NAS64/Series/Animation/M/"
             "Le monde incroyable de Gumball/Saison 4/"
             "Le Monde Incroyable de Gumball - S04E01.mkv"
         )
@@ -262,19 +262,19 @@ class TestSeriesAutoRepair:
     def test_auto_repair_picks_best_candidate_in_confirmed_dir(self):
         """Si plusieurs candidats, prend le meilleur score dans le repertoire confirme."""
         link = Path(
-            "/media/Serveur/test/Séries/Animation/T/"
+            "/media/Serveur/test/Series/Animation/T/"
             "The Amazing World of Gumball (2011)/Saison 5/"
             "The Amazing World of Gumball - S05E03.mkv"
         )
         self.ir.confirmed_series[str(link.parent)] = Path(
-            "/media/NAS64/Séries/Animation/M/Le monde incroyable de Gumball"
+            "/media/NAS64/Series/Animation/M/Le monde incroyable de Gumball"
         )
 
         candidate_wrong = Path(
-            "/media/NAS64/Séries/Autre/Autre Serie - S05E03.mkv"
+            "/media/NAS64/Series/Autre/Autre Serie - S05E03.mkv"
         )
         candidate_good = Path(
-            "/media/NAS64/Séries/Animation/M/"
+            "/media/NAS64/Series/Animation/M/"
             "Le monde incroyable de Gumball/Saison 5/"
             "Le Monde Incroyable de Gumball - S05E03.mkv"
         )
@@ -290,12 +290,12 @@ class TestSeriesAutoRepair:
         """Auto-repare les documentaires sans structure Saison sur le NAS."""
         # Premier episode confirme
         link1 = Path(
-            "/media/Serveur/test/Séries/Séries documentaires/Science/Géographie/"
+            "/media/Serveur/test/Documentaires/Series documentaires/Science/Géographie/"
             "Planet Earth II - VOSTFR/Planète/"
             "Planète Terre II - S01E05 - Les Prairies.mkv"
         )
         target1 = Path(
-            "/media/NAS64/Séries/Séries documentaires/Science/Géographie/"
+            "/media/NAS64/Documentaires/Series documentaires/Science/Géographie/"
             "Planet Earth II - VOSTFR/"
             "Planet.Earth.II.S01E05.720p.BluRay.x264-ROVERS.mkv"
         )
@@ -303,12 +303,12 @@ class TestSeriesAutoRepair:
 
         # Deuxieme episode - meme parent
         link2 = Path(
-            "/media/Serveur/test/Séries/Séries documentaires/Science/Géographie/"
+            "/media/Serveur/test/Documentaires/Series documentaires/Science/Géographie/"
             "Planet Earth II - VOSTFR/Planète/"
             "Planète Terre II - S01E04 - Les Déserts.mkv"
         )
         candidate = Path(
-            "/media/NAS64/Séries/Séries documentaires/Science/Géographie/"
+            "/media/NAS64/Documentaires/Series documentaires/Science/Géographie/"
             "Planet Earth II - VOSTFR/"
             "Planet.Earth.II.S01E04.720p.BluRay.x264-ROVERS.mkv"
         )
@@ -329,7 +329,7 @@ class TestSeriesAutoRepair:
         ep1.touch()
         ep7.touch()
 
-        link = Path("/media/Serveur/test/Séries/Séries TV/G-H/He-Hz/"
+        link = Path("/media/Serveur/test/Series/TV/G-H/He-Hz/"
                      "HPI, Haut Potentiel Intellectuel (2021)/Saison 03/HPI/"
                      "HPI - S03E07 - Tonnerre ! - FR HEVC 1080p.mkv")
 
@@ -343,7 +343,7 @@ class TestSeriesAutoRepair:
         ep = nas_dir / "Saison 3" / "Breaking.Bad.S03E05.720p.mkv"
         ep.touch()
 
-        link = Path("/media/Serveur/test/Séries/Séries TV/A-M/"
+        link = Path("/media/Serveur/test/Series/TV/A-M/"
                      "Breaking Bad/Saison 03/ep/Breaking Bad - S03E05 - Mas.mkv")
 
         result = self.ir._find_episode_in_nas_dir(link, nas_dir)
@@ -382,15 +382,15 @@ class TestSeriesAutoRepair:
         expected = nas_dir / "HPI - S03E07 - FR HEVC 1080p.mkv"
         expected.touch()
 
-        link = Path("/media/Serveur/test/Séries/Séries TV/G-H/"
+        link = Path("/media/Serveur/test/Series/TV/G-H/"
                      "HPI (2021)/Saison 03/HPI/"
                      "HPI - S03E07 - Tonnerre.mkv")
         self.ir.confirmed_series[str(link.parent)] = nas_dir
 
         # Candidats de la recherche standard : aucun dans le bon repertoire
         wrong_candidates = [
-            (Path("/media/NAS64/Séries/El Chapo - S03E07.mkv"), 66.0),
-            (Path("/media/NAS64/Séries/The Wire - S03E07.mkv"), 66.0),
+            (Path("/media/NAS64/Series/El Chapo - S03E07.mkv"), 66.0),
+            (Path("/media/NAS64/Series/The Wire - S03E07.mkv"), 66.0),
         ]
 
         result = self.ir._check_series_auto_repair("HPI", link, wrong_candidates)
@@ -403,7 +403,7 @@ class TestSeriesAutoRepair:
         expected = nas_dir / "Serie - S01E03.mkv"
         expected.touch()
 
-        link = Path("/media/Serveur/test/Séries/Serie/Saison 01/ep/"
+        link = Path("/media/Serveur/test/Series/Serie/Saison 01/ep/"
                      "Serie - S01E03 - Titre.mkv")
         self.ir.confirmed_series[str(link.parent)] = nas_dir
 
@@ -414,22 +414,22 @@ class TestSeriesAutoRepair:
         """Deux series dans la meme categorie ne se confondent pas."""
         # Confirmer Planet Earth II
         link_pe = Path(
-            "/media/Serveur/test/Séries/Séries documentaires/Science/Géographie/"
+            "/media/Serveur/test/Documentaires/Series documentaires/Science/Géographie/"
             "Planet Earth II - VOSTFR/Planète/ep.mkv"
         )
         target_pe = Path(
-            "/media/NAS64/Séries/Séries documentaires/Science/Géographie/"
+            "/media/NAS64/Documentaires/Series documentaires/Science/Géographie/"
             "Planet Earth II - VOSTFR/ep_nas.mkv"
         )
         self.ir._register_confirmed_series(link_pe, target_pe)
 
         # Blue Planet - parent DIFFERENT
         link_bp = Path(
-            "/media/Serveur/test/Séries/Séries documentaires/Science/Géographie/"
+            "/media/Serveur/test/Documentaires/Series documentaires/Science/Géographie/"
             "Blue Planet/Planète/ep.mkv"
         )
         candidate = Path(
-            "/media/NAS64/Séries/Séries documentaires/Science/Géographie/"
+            "/media/NAS64/Documentaires/Series documentaires/Science/Géographie/"
             "Blue Planet/ep_nas.mkv"
         )
         targets = [(candidate, 70.0)]

@@ -71,8 +71,13 @@ async def _reconcile_async(container, dry_run: bool, update_titles: bool) -> Non
         # --- Phase 0 : Réconciliation DB ↔ fichiers storage ---
         console.print("[bold]Phase 0 : Réconciliation DB ↔ fichiers storage[/bold]\n")
         _reconcile_db_file_paths(
-            session, select, storage_dir, dry_run,
-            MovieModel, EpisodeModel, SeriesModel,
+            session,
+            select,
+            storage_dir,
+            dry_run,
+            MovieModel,
+            EpisodeModel,
+            SeriesModel,
         )
 
         # --- Phase 1 : Réconciliation des symlinks cassés ---
@@ -106,9 +111,7 @@ async def _reconcile_async(container, dry_run: bool, update_titles: bool) -> Non
                 TaskProgressColumn(),
                 transient=True,
             ) as progress:
-                task = progress.add_task(
-                    "Métadonnées DB...", total=len(broken_links)
-                )
+                task = progress.add_task("Métadonnées DB...", total=len(broken_links))
 
                 for link in broken_links:
                     progress.advance(task)
@@ -117,12 +120,14 @@ async def _reconcile_async(container, dry_run: bool, update_titles: bool) -> Non
                     if candidates and candidates[0][1] >= 85:
                         best_target, best_score = candidates[0]
                         reconciled_metadata += 1
-                        actions.append({
-                            "link": link,
-                            "target": best_target,
-                            "score": best_score,
-                            "method": "metadata",
-                        })
+                        actions.append(
+                            {
+                                "link": link,
+                                "target": best_target,
+                                "score": best_score,
+                                "method": "metadata",
+                            }
+                        )
                     else:
                         remaining.append(link)
 
@@ -135,7 +140,9 @@ async def _reconcile_async(container, dry_run: bool, update_titles: bool) -> Non
             if remaining:
                 console.print("  Passe 2 : recherche par index rapide...")
                 reconciled_search, still_remaining = _fast_index_search(
-                    remaining, storage_dir, actions,
+                    remaining,
+                    storage_dir,
+                    actions,
                 )
                 unresolved = len(still_remaining)
                 console.print(
@@ -147,8 +154,13 @@ async def _reconcile_async(container, dry_run: bool, update_titles: bool) -> Non
             if actions and not dry_run:
                 for a in actions:
                     _update_db_file_path(
-                        session, select, a["link"], a["target"],
-                        MovieModel, EpisodeModel, SeriesModel,
+                        session,
+                        select,
+                        a["link"],
+                        a["target"],
+                        MovieModel,
+                        EpisodeModel,
+                        SeriesModel,
                     )
                     repair_service.repair_symlink(a["link"], a["target"])
 
@@ -190,8 +202,12 @@ async def _reconcile_async(container, dry_run: bool, update_titles: bool) -> Non
                 "\n[bold]Phase 2 : Mise à jour symlinks épisodes (titres TVDB)[/bold]\n"
             )
             _update_episode_titles(
-                session, select, video_dir, dry_run,
-                SeriesModel, EpisodeModel,
+                session,
+                select,
+                video_dir,
+                dry_run,
+                SeriesModel,
+                EpisodeModel,
             )
 
         if not dry_run:
@@ -201,8 +217,13 @@ async def _reconcile_async(container, dry_run: bool, update_titles: bool) -> Non
 
 
 def _reconcile_db_file_paths(
-    session, select, storage_dir: Path, dry_run: bool,
-    MovieModel, EpisodeModel, SeriesModel,
+    session,
+    select,
+    storage_dir: Path,
+    dry_run: bool,
+    MovieModel,
+    EpisodeModel,
+    SeriesModel,
 ) -> None:
     """
     Réconcilie les file_path en DB avec les fichiers physiques dans storage.
@@ -252,7 +273,8 @@ def _reconcile_db_file_paths(
         select(MovieModel).where(MovieModel.file_path.is_(None))
     ).all()
     movies_stale = [
-        m for m in session.exec(
+        m
+        for m in session.exec(
             select(MovieModel).where(MovieModel.file_path.isnot(None))
         ).all()
         if not Path(m.file_path).exists()
@@ -276,7 +298,8 @@ def _reconcile_db_file_paths(
         if not candidates and movie.original_title:
             clean_original = extract_clean_title(
                 f"{movie.original_title} ({movie.year})"
-                if movie.year else movie.original_title
+                if movie.year
+                else movie.original_title
             )
             candidates = films_by_name.get(clean_original, [])
 
@@ -319,7 +342,8 @@ def _reconcile_db_file_paths(
         select(EpisodeModel).where(EpisodeModel.file_path.is_(None))
     ).all()
     episodes_stale = [
-        e for e in session.exec(
+        e
+        for e in session.exec(
             select(EpisodeModel).where(EpisodeModel.file_path.isnot(None))
         ).all()
         if not Path(e.file_path).exists()
@@ -350,8 +374,10 @@ def _reconcile_db_file_paths(
         # Filtrer les candidats par saison/épisode
         for cand in candidates:
             _, cand_season, cand_ep, _ = extract_series_info(cand.name)
-            if (cand_season == episode.season_number
-                    and cand_ep == episode.episode_number):
+            if (
+                cand_season == episode.season_number
+                and cand_ep == episode.episode_number
+            ):
                 if dry_run:
                     if ep_matched < 10:
                         console.print(
@@ -442,12 +468,14 @@ def _fast_index_search(
         found = index_by_name.get(link_name) or index_by_name.get(original_name)
         if found:
             resolved += 1
-            actions.append({
-                "link": link,
-                "target": found,
-                "score": 100.0,
-                "method": "index-exact",
-            })
+            actions.append(
+                {
+                    "link": link,
+                    "target": found,
+                    "score": 100.0,
+                    "method": "index-exact",
+                }
+            )
             continue
 
         # 2. Match par titre normalisé
@@ -457,12 +485,14 @@ def _fast_index_search(
         if candidates:
             # Prendre le premier candidat (le plus probable)
             resolved += 1
-            actions.append({
-                "link": link,
-                "target": candidates[0],
-                "score": 95.0,
-                "method": "index-title",
-            })
+            actions.append(
+                {
+                    "link": link,
+                    "target": candidates[0],
+                    "score": 95.0,
+                    "method": "index-title",
+                }
+            )
             continue
 
         # 3. Match fuzzy parmi les titres proches (limité)
@@ -476,12 +506,14 @@ def _fast_index_search(
 
         if best_score >= 0.85 and best_path:
             resolved += 1
-            actions.append({
-                "link": link,
-                "target": best_path,
-                "score": best_score * 100,
-                "method": "index-fuzzy",
-            })
+            actions.append(
+                {
+                    "link": link,
+                    "target": best_path,
+                    "score": best_score * 100,
+                    "method": "index-fuzzy",
+                }
+            )
             continue
 
         still_remaining.append(link)
@@ -490,8 +522,13 @@ def _fast_index_search(
 
 
 def _update_db_file_path(
-    session, select, link: Path, new_target: Path,
-    MovieModel, EpisodeModel, SeriesModel,
+    session,
+    select,
+    link: Path,
+    new_target: Path,
+    MovieModel,
+    EpisodeModel,
+    SeriesModel,
 ) -> None:
     """Met à jour le file_path dans la DB quand un fichier est retrouvé."""
     from src.services.repair.filename_analyzer import extract_series_info
@@ -519,8 +556,7 @@ def _update_db_file_path(
         # Chercher le film correspondant et mettre à jour
         movies = session.exec(
             select(MovieModel).where(
-                MovieModel.file_path.is_(None)
-                | ~MovieModel.file_path.contains("/")
+                MovieModel.file_path.is_(None) | ~MovieModel.file_path.contains("/")
             )
         ).all()
         # Cibler le film dont l'ancien file_path correspond le mieux
@@ -532,6 +568,7 @@ def _update_db_file_path(
             elif not movie.file_path:
                 # Comparer par titre
                 from src.services.repair.filename_analyzer import extract_clean_title
+
                 clean_link = extract_clean_title(link_name)
                 if movie.title and movie.title.lower().strip() in clean_link:
                     movie.file_path = new_path_str
@@ -540,25 +577,29 @@ def _update_db_file_path(
 
 
 def _update_episode_titles(
-    session, select, video_dir: Path, dry_run: bool,
-    SeriesModel, EpisodeModel,
+    session,
+    select,
+    video_dir: Path,
+    dry_run: bool,
+    SeriesModel,
+    EpisodeModel,
 ) -> None:
     """Renomme les symlinks épisodes avec les titres TVDB enrichis."""
     from src.services.repair.filename_analyzer import extract_series_info
 
-    series_dir = video_dir / "Séries"
+    # Supporter les deux variantes (avant et après migration)
+    series_dir = video_dir / "Series"
     if not series_dir.exists():
-        console.print("  [yellow]Répertoire Séries/ introuvable[/yellow]")
+        series_dir = video_dir / "Séries"
+    if not series_dir.exists():
+        console.print("  [yellow]Répertoire Series/ introuvable[/yellow]")
         return
 
     renamed_count = 0
     skipped_count = 0
 
-    # Scanner tous les symlinks dans Séries/
-    symlinks = [
-        f for f in series_dir.rglob("*")
-        if f.is_symlink() and f.is_file()
-    ]
+    # Scanner tous les symlinks dans Series/
+    symlinks = [f for f in series_dir.rglob("*") if f.is_symlink() and f.is_file()]
 
     console.print(f"  Symlinks épisodes trouvés : {len(symlinks)}")
 
@@ -589,6 +630,7 @@ def _update_episode_titles(
 
             # Vérifier si le titre TVDB est déjà dans le nom du symlink
             from src.services.renamer import sanitize_for_filesystem
+
             expected_title = sanitize_for_filesystem(episode.title)
 
             if expected_title.lower() in symlink.stem.lower():
@@ -597,7 +639,10 @@ def _update_episode_titles(
 
             # Construire le nouveau nom avec le titre TVDB
             # Format : {Série} ({Année}) - SxxExx - {Titre TVDB} - {specs}.{ext}
-            from src.core.entities.media import Episode as EpisodeEntity, Series as SeriesEntity
+            from src.core.entities.media import (
+                Episode as EpisodeEntity,
+                Series as SeriesEntity,
+            )
 
             series_entity = SeriesEntity(
                 title=series.title,
@@ -613,8 +658,12 @@ def _update_episode_titles(
             media_info = _extract_media_info_from_filename(symlink.name)
 
             from src.services.renamer import generate_series_filename
+
             new_name = generate_series_filename(
-                series_entity, episode_entity, media_info, symlink.suffix,
+                series_entity,
+                episode_entity,
+                media_info,
+                symlink.suffix,
             )
 
             if new_name == symlink.name:
@@ -650,6 +699,7 @@ def _extract_media_info_from_filename(filename: str):
 
     try:
         from guessit import guessit
+
         result = guessit(filename)
 
         # Résolution
@@ -685,7 +735,10 @@ def _extract_media_info_from_filename(filename: str):
                 audio_languages = (Language(code=language.alpha2, name=""),)
             elif isinstance(language, list) and language:
                 audio_languages = tuple(
-                    Language(code=lang.alpha2 if hasattr(lang, "alpha2") else str(lang), name="")
+                    Language(
+                        code=lang.alpha2 if hasattr(lang, "alpha2") else str(lang),
+                        name="",
+                    )
                     for lang in language
                 )
 

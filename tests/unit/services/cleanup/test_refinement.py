@@ -21,7 +21,7 @@ class TestRefinePlansDestinations:
 
         La destination doit etre affinee vers C/Ca-Ch/El Chapo (2017).
         """
-        grandparent = tmp_path / "Séries TV"
+        grandparent = tmp_path / "TV"
         parent_c = grandparent / "C"
         parent_ef = grandparent / "E-F"
 
@@ -56,7 +56,7 @@ class TestRefinePlansDestinations:
 
         'La Servante' -> strip article -> 'Servante' -> cle 'SE' -> Sa-So.
         """
-        grandparent = tmp_path / "Séries TV"
+        grandparent = tmp_path / "TV"
         parent_s = grandparent / "S"
         parent_gh = grandparent / "G-H"
 
@@ -86,7 +86,7 @@ class TestRefinePlansDestinations:
 
     def test_refine_plans_no_subdivision_unchanged(self, tmp_path):
         """Si la destination n'a pas de plan de subdivision, la destination reste inchangee."""
-        grandparent = tmp_path / "Séries TV"
+        grandparent = tmp_path / "TV"
         parent_b = grandparent / "B"
         parent_ef = grandparent / "E-F"
 
@@ -109,7 +109,7 @@ class TestRefinePlansDestinations:
 
     def test_refine_plans_no_matching_range(self, tmp_path):
         """Si aucune plage du plan cible ne correspond a la cle, destination inchangee."""
-        grandparent = tmp_path / "Séries TV"
+        grandparent = tmp_path / "TV"
         parent_c = grandparent / "C"
         parent_ef = grandparent / "E-F"
 
@@ -145,9 +145,9 @@ class TestRefinePlansDestinations:
         """Verifier que _scan_oversized_dirs retourne des plans avec destinations deja affinees."""
         video_dir = tmp_path / "video"
         video_dir.mkdir()
-        series_dir = video_dir / "Séries"
+        series_dir = video_dir / "Series"
         series_dir.mkdir()
-        grandparent = series_dir / "Séries TV"
+        grandparent = series_dir / "TV"
         grandparent.mkdir()
 
         # Creer C/ avec >3 items couvrant Ca-Ch et Ci-Cz (on utilise max_per_dir=3)

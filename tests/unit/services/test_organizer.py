@@ -400,42 +400,48 @@ class TestGetSeriesDestination:
     """Tests pour le calcul du chemin de destination des séries.
 
     Note: Le storage utilise la même structure que video (symlinks).
-    Structure: Séries/{Type}/{Lettre}/{Titre}/Saison XX/
+    Structure: Series/{Type}/{Lettre}/{Titre}/Saison XX/
     """
 
     def test_series_destination_basic(
         self, series_fixture: Series, storage_dir: Path, video_dir: Path
     ) -> None:
-        """Structure de base: stockage/Séries/Type/Lettre/Titre (Annee)/Saison XX."""
+        """Structure de base: stockage/Series/Type/Lettre/Titre (Annee)/Saison XX."""
         path = get_series_destination(series_fixture, season_number=1, storage_dir=storage_dir, video_dir=video_dir)
-        # Drame -> Séries TV
-        assert path == Path("/storage/Séries/Séries TV/B/Breaking Bad (2008)/Saison 01")
+        # Drame -> TV
+        assert path == Path("/storage/Series/TV/B/Breaking Bad (2008)/Saison 01")
 
     def test_series_destination_season_double_digit(
         self, series_fixture: Series, storage_dir: Path, video_dir: Path
     ) -> None:
         """Numéro de saison à deux chiffres."""
         path = get_series_destination(series_fixture, season_number=12, storage_dir=storage_dir, video_dir=video_dir)
-        assert path == Path("/storage/Séries/Séries TV/B/Breaking Bad (2008)/Saison 12")
+        assert path == Path("/storage/Series/TV/B/Breaking Bad (2008)/Saison 12")
 
     def test_series_destination_with_article(
         self, series_with_article: Series, storage_dir: Path, video_dir: Path
     ) -> None:
         """The est ignoré pour la lettre."""
         path = get_series_destination(series_with_article, season_number=3, storage_dir=storage_dir, video_dir=video_dir)
-        assert path == Path("/storage/Séries/Séries TV/W/The Wire (2002)/Saison 03")
+        assert path == Path("/storage/Series/TV/W/The Wire (2002)/Saison 03")
 
     def test_series_destination_no_year(self, storage_dir: Path, video_dir: Path) -> None:
         """Série sans année n'a pas de parenthèses."""
         series = Series(title="Friends", year=None)
         path = get_series_destination(series, season_number=5, storage_dir=storage_dir, video_dir=video_dir)
-        assert path == Path("/storage/Séries/Séries TV/F/Friends/Saison 05")
+        assert path == Path("/storage/Series/TV/F/Friends/Saison 05")
 
     def test_series_destination_numeric_title(self, storage_dir: Path, video_dir: Path) -> None:
         """Titre numérique va sous #."""
         series = Series(title="24", year=2001)
         path = get_series_destination(series, season_number=1, storage_dir=storage_dir, video_dir=video_dir)
-        assert path == Path("/storage/Séries/Séries TV/#/24 (2001)/Saison 01")
+        assert path == Path("/storage/Series/TV/#/24 (2001)/Saison 01")
+
+    def test_series_destination_documentary(self, storage_dir: Path, video_dir: Path) -> None:
+        """Les séries documentaires vont sous Documentaires/Series documentaires/."""
+        series = Series(title="Planet Earth", year=2006, genres=("Documentaire",))
+        path = get_series_destination(series, season_number=1, storage_dir=storage_dir, video_dir=video_dir)
+        assert path == Path("/storage/Documentaires/Series documentaires/P/Planet Earth (2006)/Saison 01")
 
 
 # ====================
@@ -474,7 +480,7 @@ class TestSeriesSubdivisionNavigation:
         from src.services.organizer import get_series_video_destination
 
         # Créer la structure : Séries TV/D/Di-Dz/
-        series_type_dir = tmp_path / "Séries" / "Séries TV"
+        series_type_dir = tmp_path / "Series" / "TV"
         d_dir = series_type_dir / "D"
         di_dz_dir = d_dir / "Di-Dz"
         di_dz_dir.mkdir(parents=True)
@@ -485,14 +491,14 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Vérifier que le chemin utilise Di-Dz (feuille) et non D (parent)
-        assert path == tmp_path / "Séries" / "Séries TV" / "D" / "Di-Dz" / "Downtown Cemetery (2025)" / "Saison 01"
+        assert path == tmp_path / "Series" / "TV" / "D" / "Di-Dz" / "Downtown Cemetery (2025)" / "Saison 01"
 
     def test_series_navigues_pa_to_po_leaf(self, tmp_path: Path) -> None:
         """Une série P-Q navigue jusqu'à Pa-Po et non P-Q."""
         from src.services.organizer import get_series_video_destination
 
         # Créer la structure : Séries TV/P-Q/Pa-Po/
-        series_type_dir = tmp_path / "Séries" / "Séries TV"
+        series_type_dir = tmp_path / "Series" / "TV"
         pq_dir = series_type_dir / "P-Q"
         pa_po_dir = pq_dir / "Pa-Po"
         pa_po_dir.mkdir(parents=True)
@@ -503,14 +509,14 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Vérifier que le chemin utilise Pa-Po (feuille)
-        assert path == tmp_path / "Séries" / "Séries TV" / "P-Q" / "Pa-Po" / "Polar Park (2025)" / "Saison 01"
+        assert path == tmp_path / "Series" / "TV" / "P-Q" / "Pa-Po" / "Polar Park (2025)" / "Saison 01"
 
     def test_series_navigues_sa_to_so_leaf(self, tmp_path: Path) -> None:
         """Une série S avec préfixe Sa-So navigue jusqu'à Sa-So et non S."""
         from src.services.organizer import get_series_video_destination
 
         # Créer la structure : Séries TV/S/Sa-So/
-        series_type_dir = tmp_path / "Séries" / "Séries TV"
+        series_type_dir = tmp_path / "Series" / "TV"
         s_dir = series_type_dir / "S"
         sa_so_dir = s_dir / "Sa-So"
         sa_so_dir.mkdir(parents=True)
@@ -521,14 +527,14 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Vérifier que le chemin utilise Sa-So (feuille)
-        assert path == tmp_path / "Séries" / "Séries TV" / "S" / "Sa-So" / "Sanctuary (2025)" / "Saison 01"
+        assert path == tmp_path / "Series" / "TV" / "S" / "Sa-So" / "Sanctuary (2025)" / "Saison 01"
 
     def test_series_navigues_sp_to_sz_leaf(self, tmp_path: Path) -> None:
         """Une série S avec préfixe St navigue jusqu'à Sp-Sz."""
         from src.services.organizer import get_series_video_destination
 
         # Créer la structure : Séries TV/S/Sp-Sz/
-        series_type_dir = tmp_path / "Séries" / "Séries TV"
+        series_type_dir = tmp_path / "Series" / "TV"
         s_dir = series_type_dir / "S"
         sp_sz_dir = s_dir / "Sp-Sz"
         sp_sz_dir.mkdir(parents=True)
@@ -539,14 +545,14 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Vérifier que le chemin utilise Sp-Sz (feuille)
-        assert path == tmp_path / "Séries" / "Séries TV" / "S" / "Sp-Sz" / "Station Eleven (2025)" / "Saison 01"
+        assert path == tmp_path / "Series" / "TV" / "S" / "Sp-Sz" / "Station Eleven (2025)" / "Saison 01"
 
     def test_series_three_level_subdivision_navigation(self, tmp_path: Path) -> None:
         """Navigation à travers 3 niveaux de subdivisions."""
         from src.services.organizer import get_series_video_destination
 
         # Créer une structure profonde : D/Da-Di/Di-Dz/
-        series_type_dir = tmp_path / "Séries" / "Séries TV"
+        series_type_dir = tmp_path / "Series" / "TV"
         d_dir = series_type_dir / "D"
         da_di_dir = d_dir / "Da-Di"
         di_dz_dir = da_di_dir / "Di-Dz"
@@ -558,14 +564,14 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Vérifier qu'on descend jusqu'au niveau le plus profond (Di-Dz)
-        assert path == tmp_path / "Séries" / "Séries TV" / "D" / "Da-Di" / "Di-Dz" / "Downtown Abbey (2025)" / "Saison 01"
+        assert path == tmp_path / "Series" / "TV" / "D" / "Da-Di" / "Di-Dz" / "Downtown Abbey (2025)" / "Saison 01"
 
     def test_series_fallback_to_letter_when_no_subdivision(self, tmp_path: Path) -> None:
         """Sans subdivisions existantes, place directement dans le type_dir."""
         from src.services.organizer import get_series_video_destination
 
         # Créer seulement le répertoire type sans subdivisions
-        series_type_dir = tmp_path / "Séries" / "Séries TV"
+        series_type_dir = tmp_path / "Series" / "TV"
         series_type_dir.mkdir(parents=True)
 
         # Série "Alpha" -> lettre A
@@ -574,14 +580,14 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Fallback : place directement dans le répertoire type (pas de lettre)
-        assert path == tmp_path / "Séries" / "Séries TV" / "Alpha (2025)" / "Saison 01"
+        assert path == tmp_path / "Series" / "TV" / "Alpha (2025)" / "Saison 01"
 
     def test_series_type_manga(self, tmp_path: Path) -> None:
         """Les mangas utilisent le type Mangas."""
         from src.services.organizer import get_series_video_destination
 
         # Créer la structure : Mangas/D/Di-Dz/
-        manga_dir = tmp_path / "Séries" / "Mangas" / "D" / "Di-Dz"
+        manga_dir = tmp_path / "Series" / "Mangas" / "D" / "Di-Dz"
         manga_dir.mkdir(parents=True)
 
         # Série "Death Note" -> Anime -> Mangas
@@ -590,14 +596,14 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Vérifier l'utilisation du type Mangas
-        assert path == tmp_path / "Séries" / "Mangas" / "D" / "Di-Dz" / "Death Note (2005)" / "Saison 01"
+        assert path == tmp_path / "Series" / "Mangas" / "D" / "Di-Dz" / "Death Note (2005)" / "Saison 01"
 
     def test_series_type_animation(self, tmp_path: Path) -> None:
         """Les séries d'animation utilisent le type Animation."""
         from src.services.organizer import get_series_video_destination
 
         # Créer la structure : Animation/S/Sa-Sm/
-        animation_dir = tmp_path / "Séries" / "Animation" / "S" / "Sa-Sm"
+        animation_dir = tmp_path / "Series" / "Animation" / "S" / "Sa-Sm"
         animation_dir.mkdir(parents=True)
 
         # Série "Spider-Man" -> Animation (pas Anime)
@@ -606,14 +612,14 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Vérifier l'utilisation du type Animation
-        assert path == tmp_path / "Séries" / "Animation" / "S" / "Sa-Sm" / "Spider-Man (2025)" / "Saison 01"
+        assert path == tmp_path / "Series" / "Animation" / "S" / "Sa-Sm" / "Spider-Man (2025)" / "Saison 01"
 
     def test_series_chooses_correct_subdivision_when_multiple_exist(self, tmp_path: Path) -> None:
         """Quand plusieurs subdivisions existent, choisit la bonne (Sp-Sz et non Sa-So)."""
         from src.services.organizer import get_series_video_destination
 
         # Créer la structure avec les deux subdivisions : S/Sa-So/ et S/Sp-Sz/
-        series_type_dir = tmp_path / "Séries" / "Séries TV" / "S"
+        series_type_dir = tmp_path / "Series" / "TV" / "S"
         sa_so_dir = series_type_dir / "Sa-So"
         sp_sz_dir = series_type_dir / "Sp-Sz"
         sp_sz_dir.mkdir(parents=True)
@@ -625,7 +631,7 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Vérifier que le chemin utilise Sp-Sz (le bon choix)
-        assert path == tmp_path / "Séries" / "Séries TV" / "S" / "Sp-Sz" / "Station Eleven (2025)" / "Saison 01"
+        assert path == tmp_path / "Series" / "TV" / "S" / "Sp-Sz" / "Station Eleven (2025)" / "Saison 01"
 
 
 # ====================

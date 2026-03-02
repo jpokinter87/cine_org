@@ -65,12 +65,14 @@ def display_similar_content_conflict(
     console.print(f"[dim]{similar_info.similarity_reason}[/dim]\n")
 
     # Tableau comparatif
-    table = Table(
-        title="Comparaison", show_header=True, header_style="bold cyan"
-    )
+    table = Table(title="Comparaison", show_header=True, header_style="bold cyan")
     table.add_column("", style="dim")
-    table.add_column(f"[red]Existant[/red]\n{similar_info.existing_title}", justify="center")
-    table.add_column(f"[green]Nouveau[/green]\n{similar_info.new_title}", justify="center")
+    table.add_column(
+        f"[red]Existant[/red]\n{similar_info.existing_title}", justify="center"
+    )
+    table.add_column(
+        f"[green]Nouveau[/green]\n{similar_info.new_title}", justify="center"
+    )
 
     # Collecter les infos existantes
     existing_files = similar_info.existing_files
@@ -125,9 +127,15 @@ def prompt_conflict_resolution() -> str:
     from . import console
 
     console.print("\n[bold]Options:[/bold]")
-    console.print("  [cyan]1[/cyan] Garder l'[red]ancien[/red] (deplacer le nouveau vers la zone d'attente)")
-    console.print("  [cyan]2[/cyan] Garder le [green]nouveau[/green] (deplacer l'ancien vers la zone d'attente)")
-    console.print("  [cyan]3[/cyan] Garder les [yellow]deux[/yellow] (creer un sous-dossier pour le nouveau)")
+    console.print(
+        "  [cyan]1[/cyan] Garder l'[red]ancien[/red] (deplacer le nouveau vers la zone d'attente)"
+    )
+    console.print(
+        "  [cyan]2[/cyan] Garder le [green]nouveau[/green] (deplacer l'ancien vers la zone d'attente)"
+    )
+    console.print(
+        "  [cyan]3[/cyan] Garder les [yellow]deux[/yellow] (creer un sous-dossier pour le nouveau)"
+    )
     console.print("  [cyan]s[/cyan] Passer (ne rien faire pour ce fichier)")
 
     choice = Prompt.ask(
@@ -173,16 +181,16 @@ def display_batch_summary(transfers: list[dict]) -> None:
     video_dir = None
     storage_dir = None
     if first_symlink:
-        # Remonter pour trouver la racine video (avant Films/ ou Séries/)
+        # Remonter pour trouver la racine video (avant Films/, Series/ ou Documentaires/)
         parts = first_symlink.parts
         for i, part in enumerate(parts):
-            if part in ("Films", "Séries"):
+            if part in ("Films", "Series", "Documentaires"):
                 video_dir = first_symlink.parents[len(parts) - i - 1]
                 break
     if first_storage:
         parts = first_storage.parts
         for i, part in enumerate(parts):
-            if part in ("Films", "Séries"):
+            if part in ("Films", "Series", "Documentaires"):
                 storage_dir = first_storage.parents[len(parts) - i - 1]
                 break
 
@@ -239,14 +247,14 @@ def display_batch_summary(transfers: list[dict]) -> None:
 
         for s in series:
             symlink_dest = s.get("symlink_destination")
-            series_type = "Séries TV"
+            series_type = "TV"
             letter = "?"
 
             if symlink_dest and video_dir:
                 try:
                     rel_path = symlink_dest.relative_to(video_dir)
                     parts = rel_path.parts
-                    # Structure: Séries/{Type}/{Lettre}/{Titre}/{Saison}/fichier
+                    # Structure: Series/{Type}/{Lettre}/{Titre}/{Saison}/fichier
                     if len(parts) >= 5:
                         series_type = parts[1]
                         letter = parts[2]
@@ -270,15 +278,27 @@ def display_batch_summary(transfers: list[dict]) -> None:
 
         # Afficher l'arbre des series
         for series_type in sorted(type_groups.keys()):
-            type_branch = tree.add(f"[bold magenta]Séries/{series_type}/[/bold magenta]")
+            # Les séries documentaires sont sous Documentaires/, les autres sous Series/
+            if series_type == "Series documentaires":
+                type_branch = tree.add(
+                    f"[bold magenta]Documentaires/{series_type}/[/bold magenta]"
+                )
+            else:
+                type_branch = tree.add(
+                    f"[bold magenta]Series/{series_type}/[/bold magenta]"
+                )
 
             for letter in sorted(type_groups[series_type].keys()):
                 letter_branch = type_branch.add(f"[magenta]{letter}/[/magenta]")
 
                 for series_name in sorted(type_groups[series_type][letter].keys()):
-                    series_branch = letter_branch.add(f"[magenta]{series_name}/[/magenta]")
+                    series_branch = letter_branch.add(
+                        f"[magenta]{series_name}/[/magenta]"
+                    )
 
-                    for season in sorted(type_groups[series_type][letter][series_name].keys()):
+                    for season in sorted(
+                        type_groups[series_type][letter][series_name].keys()
+                    ):
                         season_branch = series_branch.add(f"[dim]{season}/[/dim]")
                         episodes = type_groups[series_type][letter][series_name][season]
                         episodes.sort(key=lambda e: e["new_filename"])
@@ -299,9 +319,7 @@ def display_batch_summary(transfers: list[dict]) -> None:
     console.print(tree)
 
 
-async def execute_batch_transfer(
-    transfers: list[dict], transferer
-) -> list[dict]:
+async def execute_batch_transfer(transfers: list[dict], transferer) -> list[dict]:
     """
     Execute les transferts avec barre de progression.
 
@@ -350,7 +368,9 @@ async def execute_batch_transfer(
                 error_msg = result.error or (
                     str(result.conflict) if result.conflict else "Erreur inconnue"
                 )
-                results.append({"success": False, "filename": filename, "error": error_msg})
+                results.append(
+                    {"success": False, "filename": filename, "error": error_msg}
+                )
 
             progress.advance(task)
 

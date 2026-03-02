@@ -20,7 +20,7 @@ from ..deps import templates
 router = APIRouter()
 
 # Sous-dossiers du storage à analyser (films et séries uniquement)
-_SCOPED_SUBDIRS = ("Films", "Séries")
+_SCOPED_SUBDIRS = ("Films", "Series", "Documentaires")
 
 
 def _truncate_path(path: Path | str, segments: int = 3) -> str:

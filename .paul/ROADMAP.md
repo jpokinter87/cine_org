@@ -15,7 +15,7 @@ Phases: 3 of 5 complete
 | 29 | Films Multi-Parties | 1/1 | ✅ Complete | 2026-03-01 |
 | 30 | Normalisation Répertoires Séries | 2/2 | ✅ Complete | 2026-03-01 |
 | 31 | Détection de Doublons | 2/2 | ✅ Complete | 2026-03-01 |
-| 32 | NFO & Artwork Sidecar Jellyfin | TBD | Not started | - |
+| 32 | ~~NFO & Artwork Sidecar Jellyfin~~ | - | ❌ Abandoned | 2026-03-01 |
 | 33 | Overlays Qualité Web UI | TBD | Not started | - |
 
 ### Phase 29: Films Multi-Parties
@@ -30,9 +30,9 @@ Focus: Renommer `Séries` → `Series` (sans accents) sur NAS et symlinks pour c
 
 Focus: Commande check-duplicates groupant par TMDB ID, comparant qualité (résolution, codec, taille). Whitelist pour doublons volontaires. Vue web avec actions.
 
-### Phase 32: NFO & Artwork Sidecar Jellyfin
+### Phase 32: ~~NFO & Artwork Sidecar Jellyfin~~ (Abandonné)
 
-Focus: Générer movie.nfo/tvshow.nfo (XML Kodi/Jellyfin) + poster.jpg/fanart.jpg depuis TMDB. Jellyfin utilise directement les métadonnées CineOrg validées. CLI generate-nfo + intégration web.
+Abandonné après prototype : Jellyfin scrape très bien TMDB tout seul. Les fichiers sidecar (NFO + poster + fanart) quadruplent le nombre d'entrées par répertoire pour un bénéfice marginal. Code reverté.
 
 ### Phase 33: Overlays Qualité Web UI
 
@@ -147,4 +147,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-01 — Phase 31 complete*
+*Last updated: 2026-03-01 — Phase 32 abandoned*

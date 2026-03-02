@@ -27,18 +27,18 @@ def extract_series_name(path: Path) -> Optional[str]:
     """
     parts = path.parts
     for i, part in enumerate(parts):
-        if part.lower() in ("séries", "series"):
+        if part.lower() in ("séries", "series", "documentaires"):
             # Le nom de la serie est generalement 2-3 niveaux apres
-            # Ex: Séries/Séries TV/A-M/Breaking Bad/Saison 01/...
+            # Ex: Series/TV/A-M/Breaking Bad/Saison 01/...
             is_documentary = False
             for j in range(i + 1, min(i + 7, len(parts))):
                 # Ignorer les subdivisions alphabetiques et types connus
-                if parts[j] in ("Séries TV", "Animation", "Mangas"):
+                if parts[j] in ("TV", "Animation", "Mangas"):
                     continue
                 if parts[j].startswith(("Animation ", "Mangas ")):
                     continue
                 # Categorie documentaire : activer le filtrage des sous-genres
-                if parts[j].startswith("Séries "):
+                if parts[j].startswith("Series "):
                     is_documentary = True
                     continue
                 if len(parts[j]) <= 3 and ("-" in parts[j] or len(parts[j]) == 1):
@@ -46,7 +46,11 @@ def extract_series_name(path: Path) -> Optional[str]:
                 if parts[j].startswith("Saison"):
                     break
                 # Sous-genres documentaires : mots simples sans espace ni chiffre
-                if is_documentary and " " not in parts[j] and not any(c.isdigit() for c in parts[j]):
+                if (
+                    is_documentary
+                    and " " not in parts[j]
+                    and not any(c.isdigit() for c in parts[j])
+                ):
                     continue
                 return parts[j]
     return None

@@ -24,7 +24,10 @@ from .dataclasses import (
     MisplacedSymlink,
     SubdivisionPlan,
 )
-from .subdivision_algorithm import _refine_plans_destinations, calculate_subdivision_ranges
+from .subdivision_algorithm import (
+    _refine_plans_destinations,
+    calculate_subdivision_ranges,
+)
 
 
 def iter_managed_paths(video_dir: Path) -> Iterator[Path]:
@@ -144,8 +147,12 @@ def scan_misplaced_symlinks(
 
         # Determiner le type : film ou episode
         expected_dir = _find_expected_dir(
-            video_file, video_dir,
-            movie_repo, series_repo, episode_repo, organizer_service,
+            video_file,
+            video_dir,
+            movie_repo,
+            series_repo,
+            episode_repo,
+            organizer_service,
         )
         if expected_dir is None:
             continue
@@ -191,7 +198,9 @@ def _find_expected_dir(
         ).first()
 
         if movie_model:
-            genres_list = json.loads(movie_model.genres_json) if movie_model.genres_json else []
+            genres_list = (
+                json.loads(movie_model.genres_json) if movie_model.genres_json else []
+            )
             movie = Movie(
                 id=str(movie_model.id) if movie_model.id else None,
                 tmdb_id=movie_model.tmdb_id,
@@ -216,7 +225,11 @@ def _find_expected_dir(
             ).first()
 
             if series_model:
-                genres_list = json.loads(series_model.genres_json) if series_model.genres_json else []
+                genres_list = (
+                    json.loads(series_model.genres_json)
+                    if series_model.genres_json
+                    else []
+                )
                 series = Series(
                     id=str(series_model.id) if series_model.id else None,
                     tvdb_id=series_model.tvdb_id,
@@ -226,7 +239,9 @@ def _find_expected_dir(
                     genres=tuple(genres_list),
                 )
                 return organizer_service.get_series_video_destination(
-                    series, episode_model.season_number, video_dir,
+                    series,
+                    episode_model.season_number,
+                    video_dir,
                 )
     except Exception:
         logger.debug(f"Erreur lors de la recherche de l'episode pour {file_path_str}")
@@ -307,8 +322,7 @@ def scan_oversized_dirs(
 
         # Compter tous les elements directs (symlinks et repertoires)
         items = [
-            item for item in dirpath.iterdir()
-            if item.is_symlink() or item.is_dir()
+            item for item in dirpath.iterdir() if item.is_symlink() or item.is_dir()
         ]
 
         if not items:
@@ -334,7 +348,7 @@ def _is_under_series(path: Path, video_dir: Path) -> bool:
     except ValueError:
         return False
     parts = relative.parts
-    return len(parts) > 0 and parts[0] == "Séries"
+    return len(parts) > 0 and parts[0] in ("Series", "Documentaires")
 
 
 def scan_empty_dirs(video_dir: Path) -> list[Path]:

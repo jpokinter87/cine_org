@@ -247,7 +247,7 @@ class TestCleanupEdgeCases:
         mock_series_repo._session.exec.return_value.first.return_value = mock_series_model
 
         # Mock: destination attendue
-        expected_dir = Path("/video/Séries/B/Breaking Bad (2008)/Saison 02")
+        expected_dir = Path("/video/Series/B/Breaking Bad (2008)/Saison 02")
         mock_organizer_service.get_series_video_destination.return_value = expected_dir
 
         result = cleanup_service._find_expected_dir(video_file, video_dir)
@@ -315,7 +315,7 @@ class TestCleanupEdgeCases:
         )
         mock_series_repo._session.exec.return_value.first.return_value = mock_series_model
 
-        expected_dir = Path("/video/Séries/T/Test Show (2020)/Saison 01")
+        expected_dir = Path("/video/Series/T/Test Show (2020)/Saison 01")
         mock_organizer_service.get_series_video_destination.return_value = expected_dir
 
         result = cleanup_service._find_expected_dir(video_file, video_dir)
