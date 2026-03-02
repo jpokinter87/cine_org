@@ -39,7 +39,7 @@ class MatchingStepMixin:
         for result in state.scan_results:
             if result.detected_type == MediaType.SERIES:
                 pi = result.parsed_info
-                if pi.title and pi.season and pi.episode:
+                if pi.title and pi.season is not None and pi.episode is not None:
                     key = (pi.title.lower(), pi.season)
                     max_ep_map[key] = max(max_ep_map.get(key, 0), pi.episode)
 

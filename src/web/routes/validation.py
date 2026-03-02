@@ -138,10 +138,9 @@ async def validation_list(request: Request):
         )
 
     # Vérifier s'il y a des fichiers validés prêts au transfert
-    has_validated = False
-    if not items:
-        validated_list = service.list_validated()
-        has_validated = len(validated_list) > 0
+    # (affiché quand il ne reste plus de pending manuels)
+    validated_list = service.list_validated() if not items else []
+    has_validated = len(validated_list) > 0
 
     return templates.TemplateResponse(
         request,
@@ -307,15 +306,29 @@ async def validate_candidate(
     return response
 
 
+def _get_filename(pending) -> str:
+    """Retourne le nom de fichier depuis filename ou path.name."""
+    vf = pending.video_file
+    if not vf:
+        return ""
+    return vf.filename or (vf.path.name if vf.path else "")
+
+
 async def _auto_validate_series_episodes(service, pending, candidate) -> int:
     """Auto-valide les autres épisodes de la même série.
 
     Parcourt les pending restants et valide ceux qui ont le même
     candidat TVDB (même ID) dans leur liste de candidats.
 
+    Fallback : si un épisode n'a aucun candidat (recherche initiale sans
+    résultat), compare le titre guessit — même série ⇒ auto-validation
+    avec le candidat choisi manuellement.
+
     Returns:
         Nombre d'épisodes auto-validés.
     """
+    from guessit import guessit
+
     from ...core.entities.video import ValidationStatus
 
     candidate_id = candidate.id
@@ -329,14 +342,27 @@ async def _auto_validate_series_episodes(service, pending, candidate) -> int:
         and p.id != pending.id
     ]
 
+    # Titre guessit de l'épisode validé (pour le fallback par nom de fichier)
+    ref_filename = _get_filename(pending)
+    ref_title = guessit(ref_filename).get("title", "").lower().strip() if ref_filename else ""
+
     for other in remaining:
         other_candidates = parse_candidates(other.candidates)
         matching = [c for c in other_candidates if c.id == candidate_id]
         if matching:
+            # Cas normal : même candidat dans la liste
             await service.validate_candidate(other, matching[0])
             auto_count += 1
-            fname = other.video_file.filename if other.video_file else "?"
+            fname = _get_filename(other) or "?"
             logger.info("Auto-validé (cascade série): %s", fname)
+        elif not other_candidates and ref_title:
+            # Fallback : aucun candidat, comparer le titre guessit
+            other_filename = _get_filename(other)
+            other_title = guessit(other_filename).get("title", "").lower().strip() if other_filename else ""
+            if other_title and other_title == ref_title:
+                await service.validate_candidate(other, candidate)
+                auto_count += 1
+                logger.info("Auto-validé (cascade titre): %s", other_filename)
 
     return auto_count
 

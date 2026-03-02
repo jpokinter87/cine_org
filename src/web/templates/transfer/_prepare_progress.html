@@ -64,9 +64,16 @@
         fetch('/transfer/batch')
             .then(function(r) { return r.text(); })
             .then(function(html) {
-                document.getElementById('transfer-area').innerHTML = html;
+                var area = document.getElementById('transfer-area');
+                area.innerHTML = html;
+                // innerHTML n'exécute pas les <script> — les évaluer manuellement
+                area.querySelectorAll('script').forEach(function(oldScript) {
+                    var newScript = document.createElement('script');
+                    newScript.textContent = oldScript.textContent;
+                    oldScript.parentNode.replaceChild(newScript, oldScript);
+                });
                 // Réactiver HTMX sur le nouveau contenu
-                if (window.htmx) htmx.process(document.getElementById('transfer-area'));
+                if (window.htmx) htmx.process(area);
             });
     });
 

@@ -58,7 +58,7 @@ async def create_pending_validation(
         # Filtrer les candidats incompatibles par nombre d'épisodes
         season = scan_result.parsed_info.season
         episode = scan_result.parsed_info.episode
-        if candidates and season and episode:
+        if candidates and season is not None and episode is not None:
             filtered = await filter_by_episode_count(
                 tvdb_client, candidates, season, episode
             )

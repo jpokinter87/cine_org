@@ -277,6 +277,16 @@ class TestTitleMatchesRange:
         assert _title_matches_range("\u200eZoe, mon amie morte", "R-Z") is True
         assert _title_matches_range("\u200eZoe, mon amie morte", "Z") is True
 
+    def test_hyphenated_title_not_treated_as_range(self) -> None:
+        """Un répertoire de série avec tiret ne doit pas être interprété comme plage."""
+        from src.services.organizer import _title_matches_range
+        # "Extra-Lucide (2025)" ne doit pas matcher des titres dans E-L
+        assert _title_matches_range("La Fabuleuse Mme Maisel", "Extra-Lucide (2025)") is False
+        assert _title_matches_range("Fallout", "Extra-Lucide (2025)") is False
+        # Vérifier que les vraies plages fonctionnent toujours
+        assert _title_matches_range("Extra-Lucide", "Ea-Fa") is True
+        assert _title_matches_range("La Fabuleuse Mme Maisel", "Ea-Fa") is True
+
     def test_asymmetric_range_a_ami(self) -> None:
         """Plage asymétrique A-Ami : bornes correctes."""
         from src.services.organizer import _title_matches_range

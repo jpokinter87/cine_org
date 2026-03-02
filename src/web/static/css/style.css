@@ -1950,6 +1950,17 @@ a.pagination-btn:hover {
     animation: shimmer 1.5s infinite;
 }
 
+.progress-bar.indeterminate {
+    width: 30% !important;
+    animation: indeterminate 1.5s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+    0% { margin-left: 0; }
+    50% { margin-left: 70%; }
+    100% { margin-left: 0; }
+}
+
 .progress-bar.complete {
     background: linear-gradient(90deg, var(--accent-emerald), #5dd99a);
 }
@@ -2499,6 +2510,13 @@ a.pagination-btn:hover {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+}
+
+.transfer-cta {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-subtle);
+    text-align: center;
 }
 
 .autovalidated-card {

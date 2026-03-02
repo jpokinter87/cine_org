@@ -112,8 +112,8 @@ def _extract_series_info(filename: str) -> tuple[int, int]:
     parser = GuessitFilenameParser()
     parsed = parser.parse(filename, MediaType.SERIES)
 
-    season = parsed.season if parsed.season else 1
-    episode = parsed.episode if parsed.episode else 1
+    season = parsed.season if parsed.season is not None else 1
+    episode = parsed.episode if parsed.episode is not None else 1
 
     return season, episode
 

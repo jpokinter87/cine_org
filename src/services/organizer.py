@@ -279,7 +279,8 @@ def _title_matches_range(title: str, range_name: str) -> bool:
         return not first_char.isalpha()
 
     # Plage de préfixes (Ba-Bi, Me-My, Sh-Sy)
-    if "-" in range_name and len(range_name) > 3:
+    # Exclure les noms composés (Extra-Lucide, Au-delà) via _is_range_dir
+    if "-" in range_name and len(range_name) > 3 and _is_range_dir(range_name):
         parts = range_upper.split("-")
         if len(parts) == 2:
             start_prefix = parts[0]

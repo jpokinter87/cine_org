@@ -63,21 +63,33 @@
     const progressEl = document.getElementById('workflow-progress');
     const resultsEl = document.getElementById('workflow-results');
 
+    var lastStep = 0;
+
     es.addEventListener('progress', function(e) {
         const d = JSON.parse(e.data);
         msg.textContent = d.message;
 
-        // Mettre à jour la barre
-        let pct = 0;
-        if (d.total > 0) {
-            // Progression pondérée par étape
-            const stepWeight = (d.step_number - 1) / d.total_steps;
-            const inStepPct = d.current / d.total;
-            pct = (stepWeight + inStepPct / d.total_steps) * 100;
-        } else {
-            pct = ((d.step_number - 1) / d.total_steps) * 100;
+        // Réinitialiser la barre à chaque changement de phase
+        if (d.step_number !== lastStep) {
+            bar.style.transition = 'none';
+            bar.style.width = '0%';
+            // Forcer le reflow pour que le reset soit visible
+            bar.offsetWidth;
+            bar.style.transition = '';
+            lastStep = d.step_number;
         }
-        bar.style.width = Math.min(pct, 98) + '%';
+
+        // Barre 0-100% pour la phase courante
+        if (d.total > 0) {
+            bar.classList.remove('indeterminate');
+            let pct = (d.current / d.total) * 100;
+            bar.style.width = Math.min(pct, 98) + '%';
+        } else if (d.current > 0) {
+            // Total inconnu (scan) : animation indéterminée
+            bar.classList.add('indeterminate');
+        } else {
+            bar.classList.remove('indeterminate');
+        }
 
         // Marquer les étapes complétées
         steps.querySelectorAll('.progress-step').forEach(function(s) {
@@ -90,6 +102,9 @@
         if (d.total > 0) {
             counterVal.textContent = d.current + ' / ' + d.total;
             counterLabel.textContent = 'fichier(s)';
+        } else if (d.current > 0) {
+            counterVal.textContent = d.current;
+            counterLabel.textContent = 'fichier(s) trouvé(s)';
         }
 
         // Nom du fichier en cours
@@ -102,6 +117,8 @@
     es.addEventListener('complete', function(e) {
         es.close();
         const d = JSON.parse(e.data);
+        bar.classList.remove('indeterminate');
+        bar.style.transition = '';
         bar.style.width = '100%';
         bar.classList.add('complete');
 
