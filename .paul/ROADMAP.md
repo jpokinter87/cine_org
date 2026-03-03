@@ -8,7 +8,7 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 **v1.9 Normalisation & Intégration Jellyfin** (v1.9.0)
 Status: 🚧 In Progress
-Phases: 3 of 5 complete
+Phases: 3 of 6 complete
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
@@ -17,6 +17,7 @@ Phases: 3 of 5 complete
 | 31 | Détection de Doublons | 2/2 | ✅ Complete | 2026-03-01 |
 | 32 | ~~NFO & Artwork Sidecar Jellyfin~~ | - | ❌ Abandoned | 2026-03-01 |
 | 33 | Overlays Qualité Web UI | TBD | Not started | - |
+| 34 | Détection Doublons au Transfert | TBD | Not started | - |
 
 ### Phase 29: Films Multi-Parties
 
@@ -37,6 +38,10 @@ Abandonné après prototype : Jellyfin scrape très bien TMDB tout seul. Les fic
 ### Phase 33: Overlays Qualité Web UI
 
 Focus: Badges visuels CSS sur les posters (résolution, codec, langue). Données déjà en base, purement frontend.
+
+### Phase 34: Détection Doublons au Transfert
+
+Focus: Détecter les titres similaires existants avant le transfert (séries et films). Dialogue de comparaison avec métadonnées techniques, présélection qualité, choix utilisateur (garder ancien/nouveau/les deux avec sandbox). Parité CLI/Web. Remplace le mécanisme CLI existant insatisfaisant.
 
 ## Completed Milestones
 

@@ -10,14 +10,14 @@ See: .paul/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Milestone: v1.9 Normalisation & Intégration Jellyfin
-Phase: 32 abandoned, next is 33 (Overlays Qualité Web UI)
+Phase: 34 discussed (Détection Doublons au Transfert), not yet planned
 Plan: none
-Status: Between phases
-Last activity: 2026-03-01 — Phase 32 abandoned (NFO sidecar jugé inutile, Jellyfin scrape seul)
+Status: Between phases — Phase 34 CONTEXT.md written, ready for /paul:plan
+Last activity: 2026-03-03 — Bugfix session + /paul:discuss Phase 34
 
 Progress:
-- v1.9: [██████░░░░] 60% (3/5 phases, 1 abandoned)
-- Phase 33: not started
+- v1.9: [██████░░░░] 50% (3/6 phases, 1 abandoned)
+- Phase 34: discussed, not planned
 
 ## Loop Position
 
@@ -70,6 +70,11 @@ No active loop — ready for next phase
 - Distinction doublon DB (même file_path) vs fichiers physiques distincts — suppression conditionnelle
 - overflow:hidden retiré de .dup-group (même pattern que .lib-season-group)
 - Popover lecteur : vérification débordement horizontal (popover-right) ajoutée globalement
+- innerHTML n'exécute pas les scripts : replaceChild pour évaluer les scripts injectés dynamiquement
+- Cascade série validation : fallback par titre guessit quand candidats vides
+- _is_range_dir() garde-fou pour _title_matches_range : noms composés (Extra-Lucide) exclus
+- Épisode 0 (E00) : `is not None` au lieu de truthiness pour season/episode
+- Barre progression workflow : 0-100% par phase, animation indéterminée pour le scan
 
 ### Deferred Issues
 - README.md à réécrire de fond en comble : nouvelles commandes, structure répertoires attendue, architecture, configuration
@@ -95,15 +100,20 @@ No active loop — ready for next phase
 None.
 
 ### Git State
-Last commit: ac85547 (chore(29-films-multi-parties): phase complete)
+Last commit: 8737540 (fix(web): UX send-back → validation + dialogue confirmation transfert)
 Branch: master
 
 ## Session Continuity
 
-Last session: 2026-03-01
-Stopped at: Phase 32 abandoned, code reverté
-Next action: Décider du prochain sujet — Phase 33 (Overlays Qualité) ou traiter l'issue doublons physiques cross-genre
-Resume file: none
+Last session: 2026-03-03
+Stopped at: Phase 34 discuss complété, CONTEXT.md écrit, prêt pour planning
+Next action: /paul:plan pour Phase 34 — Détection Doublons au Transfert
+Resume file: .paul/HANDOFF-2026-03-03.md
+Resume context:
+- Bug Red Eye = titre FR TVDB (pas un bug code)
+- Fix UX send-back + dialogue confirmation transfert (commit 8737540)
+- Bug Gomorra identifié mais non fixé → sera résolu par Phase 34
+- Phase 34 CONTEXT.md prêt dans .paul/phases/34-detection-doublons-transfert/
 
 ---
 *STATE.md — Updated after every significant action*
