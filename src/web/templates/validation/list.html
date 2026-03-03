@@ -46,6 +46,28 @@
 </section>
 {% endif %}
 
+{% if all_done and has_validated %}
+<div class="reject-overlay active" id="transfer-overlay" onclick="if(event.target===this)hideTransferDialog()">
+    <div class="reject-dialog">
+        <h3 class="reject-dialog-title">Validations terminées</h3>
+        <p class="reject-dialog-text">
+            Tous les fichiers ont été validés. Passer au transfert ?
+        </p>
+        <div class="reject-dialog-actions">
+            <button class="reject-dialog-cancel" onclick="hideTransferDialog()">Rester ici</button>
+            <a href="/transfer" class="reject-dialog-confirm" style="text-decoration:none;text-align:center;">
+                Passer au transfert
+            </a>
+        </div>
+    </div>
+</div>
+<script>
+function hideTransferDialog() {
+    document.getElementById('transfer-overlay').classList.remove('active');
+}
+</script>
+{% endif %}
+
 {% if auto_validated_items %}
 <section class="autovalidated-section">
     <div class="autovalidated-header">

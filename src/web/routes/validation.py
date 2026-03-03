@@ -142,6 +142,9 @@ async def validation_list(request: Request):
     validated_list = service.list_validated() if not items else []
     has_validated = len(validated_list) > 0
 
+    # Détection du paramètre all_done (dernière validation terminée)
+    all_done = request.query_params.get("all_done") == "1"
+
     return templates.TemplateResponse(
         request,
         "validation/list.html",
@@ -150,6 +153,7 @@ async def validation_list(request: Request):
             "total": len(items),
             "has_validated": has_validated,
             "auto_validated_items": auto_validated_items,
+            "all_done": all_done,
         },
     )
 
@@ -302,7 +306,12 @@ async def validate_candidate(
         f"</div>"
     )
     response = HTMLResponse(html)
-    response.headers["HX-Redirect"] = "/validation"
+
+    # Vérifier s'il reste des fichiers en attente de validation manuelle
+    remaining = service.list_pending()
+    remaining_manual = [p for p in remaining if not p.auto_validated]
+    redirect_url = "/validation?all_done=1" if not remaining_manual else "/validation"
+    response.headers["HX-Redirect"] = redirect_url
     return response
 
 

@@ -773,7 +773,7 @@ async def send_back(request: Request, pending_id: str):
         f"{msg}"
         "</div>"
     )
-    response.headers["HX-Redirect"] = "/transfer"
+    response.headers["HX-Redirect"] = "/validation"
     return response
 
 
