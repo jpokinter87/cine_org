@@ -19,6 +19,7 @@ from rich.table import Table
 from rich.tree import Tree
 
 if TYPE_CHECKING:
+    from src.services.duplicate_detector import QualityComparison
     from src.services.transferer import (
         ExistingFileInfo,
         SimilarContentInfo,
@@ -50,6 +51,7 @@ def display_similar_content_conflict(
     similar_info: "SimilarContentInfo",
     new_file_info: "ExistingFileInfo | None",
     new_file_count: int = 1,
+    quality_comparison: "QualityComparison | None" = None,
 ) -> None:
     """
     Affiche un conflit de contenu similaire pour decision utilisateur.
@@ -58,21 +60,26 @@ def display_similar_content_conflict(
         similar_info: Information sur le contenu similaire existant
         new_file_info: Information sur le nouveau fichier (si disponible)
         new_file_count: Nombre de nouveaux fichiers (pour les series)
+        quality_comparison: Comparaison de qualité (scores et recommandation)
     """
     from . import console
 
     console.print("\n[bold yellow]⚠ Contenu similaire detecte[/bold yellow]\n")
     console.print(f"[dim]{similar_info.similarity_reason}[/dim]\n")
 
+    # Labels avec recommandation
+    existing_label = f"[red]Existant[/red]\n{similar_info.existing_title}"
+    new_label = f"[green]Nouveau[/green]\n{similar_info.new_title}"
+    if quality_comparison and quality_comparison.recommended == "old":
+        existing_label += "\n[bold yellow]★ Recommande[/bold yellow]"
+    elif quality_comparison and quality_comparison.recommended == "new":
+        new_label += "\n[bold yellow]★ Recommande[/bold yellow]"
+
     # Tableau comparatif
     table = Table(title="Comparaison", show_header=True, header_style="bold cyan")
     table.add_column("", style="dim")
-    table.add_column(
-        f"[red]Existant[/red]\n{similar_info.existing_title}", justify="center"
-    )
-    table.add_column(
-        f"[green]Nouveau[/green]\n{similar_info.new_title}", justify="center"
-    )
+    table.add_column(existing_label, justify="center")
+    table.add_column(new_label, justify="center")
 
     # Collecter les infos existantes
     existing_files = similar_info.existing_files
@@ -86,6 +93,14 @@ def display_similar_content_conflict(
     new_resolution = new_file_info.resolution if new_file_info else "?"
     new_video_codec = new_file_info.video_codec if new_file_info else "?"
     new_audio_codec = new_file_info.audio_codec if new_file_info else "?"
+
+    # Score qualité (si disponible)
+    if quality_comparison:
+        table.add_row(
+            "[bold]Score qualite[/bold]",
+            f"[bold]{quality_comparison.existing_score:.1f}[/bold] / 100",
+            f"[bold]{quality_comparison.new_score:.1f}[/bold] / 100",
+        )
 
     # Ajouter les lignes
     table.add_row(

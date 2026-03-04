@@ -10,20 +10,21 @@ See: .paul/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Milestone: v1.9 Normalisation & Intégration Jellyfin
-Phase: 34 discussed (Détection Doublons au Transfert), not yet planned
-Plan: none
-Status: Between phases — Phase 34 CONTEXT.md written, ready for /paul:plan
-Last activity: 2026-03-03 — Bugfix session + /paul:discuss Phase 34
+Phase: 34 of 6 (Détection Doublons au Transfert) — APPLY complete
+Plan: 34-01 applied
+Status: APPLY complete, ready for UNIFY
+Last activity: 2026-03-04 — Phase 34 fully implemented and committed
 
 Progress:
-- v1.9: [██████░░░░] 50% (3/6 phases, 1 abandoned)
-- Phase 34: discussed, not planned
+- v1.9: [████████░░] 80% (4/6 phases, 1 abandoned)
+- Phase 34: [█████████░] 90% (APPLY done, UNIFY pending)
 
 ## Loop Position
 
 Current loop state:
 ```
-No active loop — ready for next phase
+PLAN ──▶ APPLY ──▶ UNIFY
+  ✓        ✓        ○     [APPLY complete, UNIFY pending]
 ```
 
 ## Accumulated Context
@@ -75,6 +76,13 @@ No active loop — ready for next phase
 - _is_range_dir() garde-fou pour _title_matches_range : noms composés (Extra-Lucide) exclus
 - Épisode 0 (E00) : `is not None` au lieu de truthiness pour season/episode
 - Barre progression workflow : 0-100% par phase, animation indéterminée pour le scan
+- Résolution doublons pré-transfert : dialog dans le résumé batch, cascade série par title+year
+- Scoring qualité : resolution 25%, video codec 20%, audio codec 15%, video bitrate 25%, audio bitrate 15%
+- Codec efficiency normalization : AV1 ×3.0, HEVC ×2.0, VP9 ×1.8, x264 ×1.0 pour bitrate équitable
+- pymediainfo fallback codecs : extraction video/audio codec quand filename ne les contient pas
+- _is_content_dir() : empêche organizer de descendre dans les répertoires séries (Saison XX = contenu)
+- Bouton transfert grisé tant que doublons non résolus
+- keep_old = skip le nouveau (reste dans temp), ne touche pas l'existant
 
 ### Deferred Issues
 - README.md à réécrire de fond en comble : nouvelles commandes, structure répertoires attendue, architecture, configuration
@@ -95,25 +103,27 @@ No active loop — ready for next phase
 - Page maintenance : ajouter la gestion de la corbeille (liste, restauration, vidage définitif)
 - 3 doublons DB (même file_path, 2 MovieModel) : Double mise, Compañeros, Plein la vue — purger l'entrée excédentaire
 - Doublons physiques + symlinks orphelins cross-genre : des films existent en double dans storage (même taille, noms différents) avec des symlinks dans plusieurs genres (ex: Poupées russes dans Comédie dramatique + Comédie + Drame). check-duplicates ne détecte pas ces cas car il groupe par tmdb_id dans la DB, mais ces doublons ont un seul enregistrement DB. À investiguer : détection par taille de fichier identique + même tmdb_id implicite, ou scan des symlinks video/ pointant vers le même fichier physique
+- Sandbox management : ajouter `sandbox_dir` dans Settings config + page web gestion (liste/suppression fichiers sandboxés). Place : page maintenance
+- Vérifier détection doublons avec un film (testé uniquement avec séries jusqu'ici)
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: 8737540 (fix(web): UX send-back → validation + dialogue confirmation transfert)
+Last commit: 845d4db (feat(web): résolution doublons pré-transfert dans le résumé batch)
 Branch: master
 
 ## Session Continuity
 
-Last session: 2026-03-03
-Stopped at: Phase 34 discuss complété, CONTEXT.md écrit, prêt pour planning
-Next action: /paul:plan pour Phase 34 — Détection Doublons au Transfert
-Resume file: .paul/HANDOFF-2026-03-03.md
+Last session: 2026-03-04
+Stopped at: Phase 34 APPLY complete, UNIFY pending
+Next action: Run /paul:unify for Phase 34
+Resume file: .paul/HANDOFF-2026-03-04.md
 Resume context:
-- Bug Red Eye = titre FR TVDB (pas un bug code)
-- Fix UX send-back + dialogue confirmation transfert (commit 8737540)
-- Bug Gomorra identifié mais non fixé → sera résolu par Phase 34
-- Phase 34 CONTEXT.md prêt dans .paul/phases/34-detection-doublons-transfert/
+- Phase 34 entièrement implémentée et commitée (845d4db)
+- Premier transfert réel effectué : 955 fichiers, scoring qualité avec codec efficiency
+- Prochaine étape : UNIFY puis vérifier doublons avec un film
+- Sandbox management noté pour phase maintenance future
 
 ---
 *STATE.md — Updated after every significant action*

@@ -174,7 +174,7 @@
             <strong>{{ tree_data.total if tree_data else 0 }} fichier(s)</strong> seront déplacés vers la vidéothèque
             et les symlinks créés dans le répertoire de lecture.
         </p>
-        <p class="reject-dialog-note">
+        <p class="reject-dialog-note" id="transfer-dialog-dup-note">
             {% if tree_data and tree_data.unresolved_duplicate_count > 0 %}
             Attention : {{ tree_data.unresolved_duplicate_count }} doublon(s) non résolu(s) — le transfert demandera votre choix au fur et à mesure.
             {% else %}
@@ -229,6 +229,17 @@ function _updateTransferButton() {
             if (spans[i].nodeType === 3) { // Text node
                 spans[i].textContent = spans[i].textContent.replace(/\d+ doublons? à résoudre/, 'Lancer le transfert');
             }
+        }
+        // Mettre à jour le texte de la boîte de confirmation
+        var note = document.getElementById('transfer-dialog-dup-note');
+        if (note) {
+            note.textContent = 'Tous les doublons ont été résolus. Le transfert se déroulera sans interruption.';
+        }
+    } else {
+        // Mettre à jour le compteur dans la confirmation
+        var note = document.getElementById('transfer-dialog-dup-note');
+        if (note) {
+            note.textContent = 'Attention : ' + remaining + ' doublon(s) non résolu(s) — le transfert demandera votre choix au fur et à mesure.';
         }
     }
 }

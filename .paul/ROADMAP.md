@@ -17,7 +17,7 @@ Phases: 3 of 6 complete
 | 31 | Détection de Doublons | 2/2 | ✅ Complete | 2026-03-01 |
 | 32 | ~~NFO & Artwork Sidecar Jellyfin~~ | - | ❌ Abandoned | 2026-03-01 |
 | 33 | Overlays Qualité Web UI | TBD | Not started | - |
-| 34 | Détection Doublons au Transfert | TBD | Not started | - |
+| 34 | Détection Doublons au Transfert | 1/1 | Planning | - |
 
 ### Phase 29: Films Multi-Parties
 

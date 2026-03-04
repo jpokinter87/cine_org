@@ -146,16 +146,26 @@
         <div class="tree-branches">
             {% for group in tree_data.series %}
             {% if group.path %}
-            <div class="tree-group">
-                <div class="tree-group-label">
+            {% set all_resolved = group.files | selectattr('duplicate_resolution') | list | length == group.files | selectattr('duplicate') | list | length and group.files | selectattr('duplicate') | list | length > 0 %}
+            <div class="tree-group{% if all_resolved %} tree-group-collapsed{% endif %}">
+                <div class="tree-group-label" onclick="this.parentElement.classList.toggle('tree-group-collapsed')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
                         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                     </svg>
                     {{ group.path }}
+                    {% if all_resolved %}
+                    <span class="tree-group-resolved-badge">{{ resolution_labels.get(group.files[0].duplicate_resolution, '') }}</span>
+                    <span class="tree-group-count">{{ group.files | length }} fichier(s)</span>
+                    {% endif %}
+                    <svg class="tree-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
                 </div>
+                <div class="tree-group-items">
                 {% for item in group.files %}
                 {{ tree_leaf(item) }}
                 {% endfor %}
+                </div>
             </div>
             {% else %}
             {% for item in group.files %}

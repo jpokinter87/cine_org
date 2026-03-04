@@ -8,7 +8,7 @@ et gère la résolution interactive des conflits.
 
 import asyncio
 import json
-import logging
+import shutil
 from collections import defaultdict
 from pathlib import Path
 from typing import Optional
@@ -17,9 +17,9 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 from starlette.responses import StreamingResponse
 
-from ..deps import templates
+from loguru import logger
 
-logger = logging.getLogger(__name__)
+from ..deps import templates
 
 router = APIRouter(prefix="/transfer")
 
@@ -88,11 +88,81 @@ def _get_sandbox_dir(settings) -> Path:
     sandbox = getattr(settings, "sandbox_dir", None)
     if sandbox:
         return Path(sandbox)
-    # Fallback : sous-dossier .sandbox à côté du storage_dir
+    # Fallback : .sandbox dans la zone de stockage
     storage = getattr(settings, "storage_dir", None)
     if storage:
-        return Path(storage).parent / ".sandbox"
+        return Path(storage) / ".sandbox"
     return Path("/tmp/cineorg_sandbox")
+
+
+def _resolve_storage_path(existing_dir: Path, storage_dir: Path) -> Path | None:
+    """
+    Trouve le vrai chemin storage en suivant les symlinks dans existing_dir.
+
+    existing_dir est dans video_dir et contient des symlinks vers storage.
+    On suit un symlink pour retrouver le répertoire storage réel,
+    ce qui évite les problèmes de casse ou de noms différents.
+    """
+    # Chercher un symlink dans le dossier (récursivement pour les séries)
+    try:
+        for item in existing_dir.rglob("*"):
+            if item.is_symlink():
+                target = item.resolve()
+                if target.exists():
+                    # Remonter jusqu'au dossier correspondant à existing_dir
+                    # Compter la profondeur relative du symlink par rapport à existing_dir
+                    rel_depth = len(item.relative_to(existing_dir).parts) - 1
+                    storage_path = target.parent
+                    for _ in range(rel_depth):
+                        storage_path = storage_path.parent
+                    # Vérifier que c'est bien dans storage_dir
+                    try:
+                        storage_path.relative_to(storage_dir)
+                        return storage_path
+                    except ValueError:
+                        continue
+    except (PermissionError, OSError) as e:
+        logger.warning("Erreur parcours symlinks dans %s: %s", existing_dir, e)
+
+    return None
+
+
+def _sandbox_existing(
+    existing_dir: Path,
+    sandbox_dir: Path,
+    storage_dir: Path,
+    video_dir: Path,
+) -> None:
+    """
+    Déplace les fichiers existants (storage + symlinks video) vers le sandbox.
+
+    existing_dir est dans video_dir (symlinks). On suit les symlinks pour
+    trouver le vrai chemin storage, puis on déplace et supprime les symlinks.
+    """
+    sandbox_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Trouver le vrai chemin storage via les symlinks
+    storage_path = _resolve_storage_path(existing_dir, storage_dir)
+
+    if storage_path and storage_path.exists() and storage_path.is_dir():
+        try:
+            relative = storage_path.relative_to(storage_dir)
+        except ValueError:
+            relative = Path(storage_path.name)
+        dest = sandbox_dir / relative
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(storage_path), str(dest))
+        logger.info("Sandbox (storage) : {} → {}", storage_path, dest)
+    else:
+        logger.warning(
+            "Sandbox: impossible de résoudre le chemin storage pour {}",
+            existing_dir,
+        )
+
+    # 2. Supprimer le répertoire de symlinks dans video_dir
+    if existing_dir.exists() and existing_dir.is_dir():
+        shutil.rmtree(str(existing_dir))
+        logger.info("Symlinks supprimés : {}", existing_dir)
 
 
 def _build_tree_data(transfers: list[dict], storage_dir: Path, video_dir: Path) -> dict:
@@ -348,6 +418,9 @@ async def _run_web_transfer(
                 }
             )
 
+        # Suivi des répertoires déjà déplacés vers sandbox (éviter de move N fois)
+        _moved_to_sandbox: set[str] = set()
+
         for i, transfer in enumerate(transfers):
             source = transfer["source"]
             destination = transfer["destination"]
@@ -382,11 +455,27 @@ async def _run_web_transfer(
                             f"[Simulation] Remplacement (pré) : {display_name}"
                         )
                     else:
+                        # Sandbox : ne déplacer qu'une fois par répertoire existant
+                        existing_dir_key = str(duplicate_match.existing_dir)
+                        if existing_dir_key not in _moved_to_sandbox:
+                            try:
+                                sandbox_dir = _get_sandbox_dir(settings)
+                                _sandbox_existing(
+                                    duplicate_match.existing_dir,
+                                    sandbox_dir,
+                                    storage_dir,
+                                    video_dir,
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    "Échec sandbox %s: %s — transfert quand même",
+                                    duplicate_match.existing_dir,
+                                    e,
+                                )
+                            _moved_to_sandbox.add(existing_dir_key)
+
+                        # Transférer le nouveau fichier (même si sandbox a échoué)
                         try:
-                            sandbox_dir = _get_sandbox_dir(settings)
-                            transferer.move_to_staging(
-                                duplicate_match.existing_dir, sandbox_dir
-                            )
                             result = transferer.transfer_file(
                                 source,
                                 destination,
@@ -422,17 +511,23 @@ async def _run_web_transfer(
 
                 elif pre_resolution == "keep_both":
                     if not dry_run:
-                        try:
-                            sandbox_dir = _get_sandbox_dir(settings)
-                            transferer.move_to_staging(
-                                duplicate_match.existing_dir, sandbox_dir
-                            )
-                        except Exception as e:
-                            logger.warning(
-                                "Erreur sandbox %s: %s",
-                                duplicate_match.existing_dir,
-                                e,
-                            )
+                        existing_dir_key = str(duplicate_match.existing_dir)
+                        if existing_dir_key not in _moved_to_sandbox:
+                            try:
+                                sandbox_dir = _get_sandbox_dir(settings)
+                                _sandbox_existing(
+                                    duplicate_match.existing_dir,
+                                    sandbox_dir,
+                                    storage_dir,
+                                    video_dir,
+                                )
+                                _moved_to_sandbox.add(existing_dir_key)
+                            except Exception as e:
+                                logger.warning(
+                                    "Erreur sandbox %s: %s",
+                                    duplicate_match.existing_dir,
+                                    e,
+                                )
                     progress.conflicts_resolved += 1
                     # Le nouveau sera transféré normalement ci-dessous
 
@@ -553,13 +648,26 @@ async def _run_web_transfer(
                         _record_transfer(display_name, destination, symlink_dest)
                         progress.message = f"[Simulation] Remplacement : {display_name}"
                     else:
+                        # Sandbox : déplacer l'ancien (une seule fois par répertoire)
+                        existing_dir_key = str(duplicate_match.existing_dir)
+                        if existing_dir_key not in _moved_to_sandbox:
+                            try:
+                                sandbox_dir = _get_sandbox_dir(settings)
+                                _sandbox_existing(
+                                    duplicate_match.existing_dir,
+                                    sandbox_dir,
+                                    storage_dir,
+                                    video_dir,
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    "Échec sandbox %s: %s — transfert quand même",
+                                    duplicate_match.existing_dir,
+                                    e,
+                                )
+                            _moved_to_sandbox.add(existing_dir_key)
+                        # Transférer le nouveau normalement
                         try:
-                            # Sandbox : déplacer l'ancien vers la sandbox
-                            sandbox_dir = _get_sandbox_dir(settings)
-                            transferer.move_to_staging(
-                                duplicate_match.existing_dir, sandbox_dir
-                            )
-                            # Transférer le nouveau normalement
                             result = transferer.transfer_file(
                                 source,
                                 destination,
@@ -583,18 +691,24 @@ async def _run_web_transfer(
 
                 elif choice == "keep_both":
                     if not dry_run:
-                        try:
-                            # Sandbox : déplacer l'ancien vers la sandbox
-                            sandbox_dir = _get_sandbox_dir(settings)
-                            transferer.move_to_staging(
-                                duplicate_match.existing_dir, sandbox_dir
-                            )
-                        except Exception as e:
-                            logger.warning(
-                                "Erreur sandbox %s: %s",
-                                duplicate_match.existing_dir,
-                                e,
-                            )
+                        existing_dir_key = str(duplicate_match.existing_dir)
+                        if existing_dir_key not in _moved_to_sandbox:
+                            try:
+                                # Sandbox : déplacer l'ancien (une seule fois par répertoire)
+                                sandbox_dir = _get_sandbox_dir(settings)
+                                _sandbox_existing(
+                                    duplicate_match.existing_dir,
+                                    sandbox_dir,
+                                    storage_dir,
+                                    video_dir,
+                                )
+                                _moved_to_sandbox.add(existing_dir_key)
+                            except Exception as e:
+                                logger.warning(
+                                    "Erreur sandbox %s: %s",
+                                    duplicate_match.existing_dir,
+                                    e,
+                                )
                     # Le nouveau sera transféré normalement ci-dessous
                     progress.conflicts_resolved += 1
 
