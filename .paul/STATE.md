@@ -2,7 +2,7 @@
 
 ## Project Reference
 
-See: .paul/PROJECT.md (updated 2026-03-01)
+See: .paul/PROJECT.md (updated 2026-03-04)
 
 **Core value:** Organiser et renommer automatiquement une vidéothèque personnelle à partir des téléchargements
 **Current focus:** v1.9 Normalisation & Intégration Jellyfin
@@ -10,21 +10,21 @@ See: .paul/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Milestone: v1.9 Normalisation & Intégration Jellyfin
-Phase: 34 of 6 (Détection Doublons au Transfert) — APPLY complete
-Plan: 34-01 applied
-Status: APPLY complete, ready for UNIFY
-Last activity: 2026-03-04 — Phase 34 fully implemented and committed
+Phase: 33 of 6 (Overlays Qualité Web UI) — Not started
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-03-04 — Phase 34 complete, transitioned to Phase 33
 
 Progress:
-- v1.9: [████████░░] 80% (4/6 phases, 1 abandoned)
-- Phase 34: [█████████░] 90% (APPLY done, UNIFY pending)
+- v1.9: [████████░░] 83% (5/6 phases, 1 abandoned)
+- Phase 33: Not started
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ○     [APPLY complete, UNIFY pending]
+  ○        ○        ○     [Ready for new PLAN]
 ```
 
 ## Accumulated Context
@@ -83,6 +83,8 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - _is_content_dir() : empêche organizer de descendre dans les répertoires séries (Saison XX = contenu)
 - Bouton transfert grisé tant que doublons non résolus
 - keep_old = skip le nouveau (reste dans temp), ne touche pas l'existant
+- _resolve_storage_path : suit les symlinks video pour trouver le vrai chemin storage (évite erreurs de casse)
+- Loguru dans transfer.py au lieu de logging standard (messages visibles)
 
 ### Deferred Issues
 - README.md à réécrire de fond en comble : nouvelles commandes, structure répertoires attendue, architecture, configuration
@@ -110,20 +112,19 @@ PLAN ──▶ APPLY ──▶ UNIFY
 None.
 
 ### Git State
-Last commit: 845d4db (feat(web): résolution doublons pré-transfert dans le résumé batch)
+Last commit: 9e43cff (fix(web): sandbox résout le vrai chemin storage via symlinks)
 Branch: master
 
 ## Session Continuity
 
 Last session: 2026-03-04
-Stopped at: Phase 34 APPLY complete, UNIFY pending
-Next action: Run /paul:unify for Phase 34
-Resume file: .paul/HANDOFF-2026-03-04.md
+Stopped at: Phase 34 complete, ready to plan Phase 33
+Next action: /paul:plan for Phase 33 (Overlays Qualité Web UI)
+Resume file: .paul/ROADMAP.md
 Resume context:
-- Phase 34 entièrement implémentée et commitée (845d4db)
-- Premier transfert réel effectué : 955 fichiers, scoring qualité avec codec efficiency
-- Prochaine étape : UNIFY puis vérifier doublons avec un film
-- Sandbox management noté pour phase maintenance future
+- Phase 34 terminée : détection doublons pré-transfert, sandbox via symlinks, repli séries
+- Phase 33 restante : badges qualité CSS sur posters (données déjà en base)
+- Après Phase 33 : v1.9 sera terminée
 
 ---
 *STATE.md — Updated after every significant action*

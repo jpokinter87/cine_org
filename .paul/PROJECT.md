@@ -86,11 +86,14 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-- [ ] NFO & artwork sidecar Jellyfin — Phase 32
 - [ ] Overlays qualité sur posters web — Phase 33
 
 ### Validated (Recently Shipped)
 
+- [x] Détection doublons au transfert (v1.9)
+  - DuplicateDetector avec scoring qualité multi-critères (résolution, codecs, bitrate normalisé) — Phase 34
+  - Résolution pré-transfert dans le résumé batch web (dialog comparatif, cascade série) — Phase 34
+  - Sandbox des anciennes versions via résolution symlinks (video→storage) — Phase 34
 - [x] Détection de doublons (v1.9)
   - CLI check-duplicates : détection par tmdb_id, scoring qualité, whitelist JSON — Phase 31 plan 01
   - Vue web /duplicates : comparaison qualité, visionner, réassocier, suppression corbeille, distinction doublon DB — Phase 31 plan 02
@@ -217,4 +220,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-03-01 after Phase 31 Détection de Doublons*
+*Last updated: 2026-03-04 after Phase 34 Détection Doublons au Transfert*
