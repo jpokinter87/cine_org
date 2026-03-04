@@ -83,15 +83,49 @@
         const d = JSON.parse(e.data);
         msg.textContent = 'Conflit détecté — résolution requise';
 
+        // Déterminer si c'est un doublon avec scores qualité
+        const hasDuplicate = d.type === 'similar_content' && d.quality_existing !== undefined;
+        const recommended = d.recommended || null;
+
         // Construire le dialogue de conflit
         let html = '<div class="conflict-overlay active">';
         html += '<div class="conflict-card">';
         html += '<h3 class="conflict-title">Conflit détecté</h3>';
         html += '<p class="conflict-subtitle">' + d.filename + '</p>';
 
-        // Type de conflit
+        // Type de conflit + raison de similarité
         let typeLabel = d.type === 'name_collision' ? 'Collision de nom' : 'Contenu similaire';
         html += '<div class="conflict-type-badge">' + typeLabel + '</div>';
+        if (d.similarity_reason) {
+            html += '<p class="conflict-reason">' + d.similarity_reason + '</p>';
+        }
+
+        // Scores qualité (si disponibles)
+        if (hasDuplicate) {
+            html += '<div class="conflict-quality-scores">';
+
+            // Score existant
+            let existingPct = Math.round(d.quality_existing);
+            let existingColor = existingPct >= 70 ? '#4caf50' : existingPct >= 40 ? '#ff9800' : '#f44336';
+            html += '<div class="conflict-quality-col' + (recommended === 'old' ? ' conflict-recommended' : '') + '">';
+            if (recommended === 'old') html += '<span class="conflict-badge-recommended">Recommandé</span>';
+            html += '<div class="conflict-quality-label">Existant</div>';
+            html += '<div class="conflict-quality-bar"><div class="conflict-quality-fill" style="width:' + existingPct + '%;background:' + existingColor + '"></div></div>';
+            html += '<div class="conflict-quality-value">' + d.quality_existing.toFixed(1) + ' / 100</div>';
+            html += '</div>';
+
+            // Score nouveau
+            let newPct = Math.round(d.quality_new);
+            let newColor = newPct >= 70 ? '#4caf50' : newPct >= 40 ? '#ff9800' : '#f44336';
+            html += '<div class="conflict-quality-col' + (recommended === 'new' ? ' conflict-recommended' : '') + '">';
+            if (recommended === 'new') html += '<span class="conflict-badge-recommended">Recommandé</span>';
+            html += '<div class="conflict-quality-label">Nouveau</div>';
+            html += '<div class="conflict-quality-bar"><div class="conflict-quality-fill" style="width:' + newPct + '%;background:' + newColor + '"></div></div>';
+            html += '<div class="conflict-quality-value">' + d.quality_new.toFixed(1) + ' / 100</div>';
+            html += '</div>';
+
+            html += '</div>';
+        }
 
         // Tableau comparatif
         html += '<div class="conflict-compare">';
@@ -99,6 +133,9 @@
         html += '<div class="conflict-compare-header conflict-existing">Existant</div>';
         html += '<div class="conflict-compare-row"><span class="conflict-label">Fichier</span><span class="conflict-value">' + d.existing_name + '</span></div>';
         html += '<div class="conflict-compare-row"><span class="conflict-label">Taille</span><span class="conflict-value">' + d.existing_size + '</span></div>';
+        if (d.existing_file_count > 1) {
+            html += '<div class="conflict-compare-row"><span class="conflict-label">Fichiers</span><span class="conflict-value">' + d.existing_file_count + '</span></div>';
+        }
         html += '<div class="conflict-compare-row"><span class="conflict-label">Résolution</span><span class="conflict-value">' + (d.existing_resolution || '?') + '</span></div>';
         html += '<div class="conflict-compare-row"><span class="conflict-label">Vidéo</span><span class="conflict-value">' + (d.existing_video_codec || '?') + '</span></div>';
         html += '<div class="conflict-compare-row"><span class="conflict-label">Audio</span><span class="conflict-value">' + (d.existing_audio_codec || '?') + '</span></div>';
@@ -116,10 +153,14 @@
         html += '</div>';
         html += '</div>';
 
-        // Boutons de résolution
+        // Boutons de résolution — mettre en avant le recommandé
         html += '<div class="conflict-actions">';
-        html += '<button class="conflict-btn conflict-btn-old" onclick="resolveConflict(\'keep_old\')">Garder l\'ancien</button>';
-        html += '<button class="conflict-btn conflict-btn-new" onclick="resolveConflict(\'keep_new\')">Garder le nouveau</button>';
+        let oldBtnClass = 'conflict-btn conflict-btn-old' + (recommended === 'old' ? ' conflict-btn-recommended' : '');
+        let newBtnClass = 'conflict-btn conflict-btn-new' + (recommended === 'new' ? ' conflict-btn-recommended' : '');
+        let oldLabel = "Garder l'ancien" + (recommended === 'old' ? ' ★' : '');
+        let newLabel = 'Garder le nouveau' + (recommended === 'new' ? ' ★' : '');
+        html += '<button class="' + oldBtnClass + '" onclick="resolveConflict(\'keep_old\')">' + oldLabel + '</button>';
+        html += '<button class="' + newBtnClass + '" onclick="resolveConflict(\'keep_new\')">' + newLabel + '</button>';
         html += '<button class="conflict-btn conflict-btn-both" onclick="resolveConflict(\'keep_both\')">Garder les deux</button>';
         html += '<button class="conflict-btn conflict-btn-skip" onclick="resolveConflict(\'skip\')">Passer</button>';
         html += '</div>';
@@ -156,13 +197,13 @@
         html += '<h2 class="results-title">' + (isDryRun ? 'Résultats de la simulation' : 'Résultats du transfert') + '</h2>';
         html += '<div class="results-grid">';
 
-        html += '<div class="result-item result-success result-has-tooltip">' +
+        html += '<div class="result-item result-success result-has-tooltip" onclick="toggleResultTooltip(this)">' +
             '<span class="result-value">' + d.transferred + '</span>' +
             '<span class="result-label">Transféré(s)</span>' +
             tooltipHtml(d.transferred_files) + '</div>';
 
         if (d.duplicates_ignored > 0) {
-            html += '<div class="result-item result-muted result-has-tooltip">' +
+            html += '<div class="result-item result-muted result-has-tooltip" onclick="toggleResultTooltip(this)">' +
                 '<span class="result-value">' + d.duplicates_ignored + '</span>' +
                 '<span class="result-label">Doublon(s) ignoré(s)</span>' +
                 tooltipHtml(d.duplicate_files) + '</div>';
@@ -175,7 +216,7 @@
         }
 
         if (d.errors > 0) {
-            html += '<div class="result-item result-pending result-has-tooltip">' +
+            html += '<div class="result-item result-pending result-has-tooltip" onclick="toggleResultTooltip(this)">' +
                 '<span class="result-value">' + d.errors + '</span>' +
                 '<span class="result-label">Erreur(s)</span>' +
                 tooltipHtml(d.error_files) + '</div>';

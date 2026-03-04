@@ -296,6 +296,23 @@ def _title_matches_range(title: str, range_name: str) -> bool:
     return _letter_matches_range(first_letter, range_name)
 
 
+def _is_content_dir(directory: Path) -> bool:
+    """
+    Vérifie si un répertoire est un dossier de contenu (série ou film).
+
+    Un dossier de contenu contient des sous-dossiers 'Saison XX'
+    ou des fichiers vidéo directement — ce n'est pas une subdivision
+    de navigation.
+    """
+    try:
+        for item in directory.iterdir():
+            if item.is_dir() and item.name.startswith("Saison"):
+                return True
+    except PermissionError:
+        pass
+    return False
+
+
 def _find_matching_subdir(parent: Path, title: str) -> Optional[Path]:
     """
     Trouve le sous-répertoire correspondant à un titre.
@@ -327,11 +344,15 @@ def _find_matching_subdir(parent: Path, title: str) -> Optional[Path]:
             return subdir
 
     # Deuxième passage : chercher les répertoires de préfixe de titre
+    # Exclure les dossiers de contenu (séries avec Saison XX, films avec fichiers vidéo)
     for subdir in sorted(parent.iterdir()):
         if not subdir.is_dir():
             continue
 
         if _title_matches_prefix_dir(title, subdir.name):
+            # Vérifier que ce n'est pas un dossier de contenu (série ou film)
+            if _is_content_dir(subdir):
+                continue
             return subdir
 
     # Troisième passage : chercher les lettres simples (fallback)

@@ -48,8 +48,10 @@
     </div>
 </div>
 
-{# Arborescence #}
-{% include "transfer/_batch_tree.html" %}
+{# Bandeau doublons + arborescence (zone swappable par HTMX) #}
+<div id="duplicate-tree-zone">
+{% include "transfer/_batch_tree_and_alert.html" %}
+</div>
 
 {# Actions #}
 <div class="transfer-actions">
@@ -64,14 +66,82 @@
         Simuler le transfert
     </button>
     <button class="action-btn action-primary transfer-start-btn"
-            onclick="showTransferDialog()">
+            id="transfer-start-btn"
+            onclick="showTransferDialog()"
+            {% if tree_data.unresolved_duplicate_count > 0 %}disabled{% endif %}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
         </svg>
+        {% if tree_data.unresolved_duplicate_count > 0 %}
+        {{ tree_data.unresolved_duplicate_count }} doublon{{ 's' if tree_data.unresolved_duplicate_count > 1 }} à résoudre
+        {% else %}
         Lancer le transfert
+        {% endif %}
     </button>
+</div>
+
+<!-- Dialogue de résolution doublon pré-transfert -->
+<div class="reject-overlay" id="duplicate-resolve-overlay" onclick="if(event.target===this)hideDuplicateDialog()">
+    <div class="conflict-card">
+        <h3 class="conflict-title">Doublon détecté</h3>
+        <p class="conflict-subtitle" id="dup-dialog-filename"></p>
+
+        <div class="conflict-type-badge">Contenu similaire</div>
+        <p class="conflict-reason" id="dup-dialog-reason"></p>
+
+        <!-- Scores qualité (masqué si pas de données) -->
+        <div class="conflict-quality-scores" id="dup-dialog-quality" style="display:none">
+            <div class="conflict-quality-col" id="dup-quality-old-col">
+                <span class="conflict-badge-recommended" id="dup-badge-old" style="display:none">Recommandé</span>
+                <div class="conflict-quality-label">Existant</div>
+                <div class="conflict-quality-bar"><div class="conflict-quality-fill" id="dup-quality-old-bar"></div></div>
+                <div class="conflict-quality-value" id="dup-quality-old-val"></div>
+            </div>
+            <div class="conflict-quality-col" id="dup-quality-new-col">
+                <span class="conflict-badge-recommended" id="dup-badge-new" style="display:none">Recommandé</span>
+                <div class="conflict-quality-label">Nouveau</div>
+                <div class="conflict-quality-bar"><div class="conflict-quality-fill" id="dup-quality-new-bar"></div></div>
+                <div class="conflict-quality-value" id="dup-quality-new-val"></div>
+            </div>
+        </div>
+
+        <!-- Tableau comparatif -->
+        <div class="conflict-compare">
+            <div class="conflict-compare-col">
+                <div class="conflict-compare-header conflict-existing">Existant</div>
+                <div class="conflict-compare-row"><span class="conflict-label">Titre</span><span class="conflict-value" id="dup-existing-title"></span></div>
+                <div class="conflict-compare-row"><span class="conflict-label">Fichiers</span><span class="conflict-value" id="dup-existing-count"></span></div>
+                <div class="conflict-compare-row"><span class="conflict-label" id="dup-existing-size-label">Taille / Moy.</span><span class="conflict-value" id="dup-existing-size"></span></div>
+                <div class="conflict-compare-row"><span class="conflict-label">Résolution</span><span class="conflict-value" id="dup-existing-res"></span></div>
+                <div class="conflict-compare-row"><span class="conflict-label">Vidéo</span><span class="conflict-value" id="dup-existing-vcodec"></span></div>
+                <div class="conflict-compare-row"><span class="conflict-label">Audio</span><span class="conflict-value" id="dup-existing-acodec"></span></div>
+                <div class="conflict-compare-row"><span class="conflict-label">Débit vidéo</span><span class="conflict-value" id="dup-existing-vbitrate"></span></div>
+                <div class="conflict-compare-row"><span class="conflict-label">Débit audio</span><span class="conflict-value" id="dup-existing-abitrate"></span></div>
+            </div>
+            <div class="conflict-compare-vs">VS</div>
+            <div class="conflict-compare-col">
+                <div class="conflict-compare-header conflict-new">Nouveau</div>
+                <div class="conflict-compare-row"><span class="conflict-label">Fichier</span><span class="conflict-value" id="dup-new-name"></span></div>
+                <div class="conflict-compare-row"><span class="conflict-label">Fichiers</span><span class="conflict-value" id="dup-new-count"></span></div>
+                <div class="conflict-compare-row"><span class="conflict-label" id="dup-new-size-label">Taille / Moy.</span><span class="conflict-value" id="dup-new-size"></span></div>
+                <div class="conflict-compare-row"><span class="conflict-label">Résolution</span><span class="conflict-value" id="dup-new-res"></span></div>
+                <div class="conflict-compare-row"><span class="conflict-label">Vidéo</span><span class="conflict-value" id="dup-new-vcodec"></span></div>
+                <div class="conflict-compare-row"><span class="conflict-label">Audio</span><span class="conflict-value" id="dup-new-acodec"></span></div>
+                <div class="conflict-compare-row"><span class="conflict-label">Débit vidéo</span><span class="conflict-value" id="dup-new-vbitrate"></span></div>
+                <div class="conflict-compare-row"><span class="conflict-label">Débit audio</span><span class="conflict-value" id="dup-new-abitrate"></span></div>
+            </div>
+        </div>
+
+        <!-- Boutons de résolution -->
+        <div class="conflict-actions">
+            <button class="conflict-btn conflict-btn-old" id="dup-btn-old" onclick="resolveDuplicate('keep_old')">Garder l'ancien</button>
+            <button class="conflict-btn conflict-btn-new" id="dup-btn-new" onclick="resolveDuplicate('keep_new')">Garder le nouveau</button>
+            <button class="conflict-btn conflict-btn-both" onclick="resolveDuplicate('keep_both')">Garder les deux</button>
+            <button class="conflict-btn conflict-btn-skip" onclick="resolveDuplicate('skip')">Passer</button>
+        </div>
+    </div>
 </div>
 
 <!-- Dialogue custom de renvoi en validation -->
@@ -105,7 +175,11 @@
             et les symlinks créés dans le répertoire de lecture.
         </p>
         <p class="reject-dialog-note">
-            Les conflits éventuels (doublons, collisions de noms) seront signalés au fur et à mesure.
+            {% if tree_data and tree_data.unresolved_duplicate_count > 0 %}
+            Attention : {{ tree_data.unresolved_duplicate_count }} doublon(s) non résolu(s) — le transfert demandera votre choix au fur et à mesure.
+            {% else %}
+            Tous les doublons ont été résolus. Le transfert se déroulera sans interruption.
+            {% endif %}
         </p>
         <div class="reject-dialog-actions">
             <button class="reject-dialog-cancel" onclick="hideTransferDialog()">Annuler</button>
@@ -122,6 +196,7 @@
 </div>
 
 <script>
+/* ── Sendback dialog ── */
 function showSendbackDialog(pendingId, filename) {
     document.getElementById('sendback-filename').textContent = filename;
     var btn = document.getElementById('sendback-confirm-btn');
@@ -132,11 +207,157 @@ function showSendbackDialog(pendingId, filename) {
 function hideSendbackDialog() {
     document.getElementById('sendback-overlay').classList.remove('active');
 }
+
+/* ── Transfer confirm dialog ── */
 function showTransferDialog() {
     document.getElementById('transfer-overlay').classList.add('active');
 }
 function hideTransferDialog() {
     document.getElementById('transfer-overlay').classList.remove('active');
+}
+
+/* ── Duplicate resolution ── */
+function _updateTransferButton() {
+    var remaining = document.querySelectorAll('.tree-leaf-resolve-btn').length;
+    var btn = document.getElementById('transfer-start-btn');
+    if (!btn) return;
+    if (remaining === 0) {
+        btn.disabled = false;
+        // Remplacer le texte du bouton en gardant le SVG
+        var spans = btn.childNodes;
+        for (var i = spans.length - 1; i >= 0; i--) {
+            if (spans[i].nodeType === 3) { // Text node
+                spans[i].textContent = spans[i].textContent.replace(/\d+ doublons? à résoudre/, 'Lancer le transfert');
+            }
+        }
+    }
+}
+
+var _dupCurrentTitle = '';
+var _dupCurrentYear = '';
+
+function showDuplicateDialog(btn) {
+    var d = btn.dataset;
+    _dupCurrentTitle = d.title;
+    _dupCurrentYear = d.year || '';
+
+    document.getElementById('dup-dialog-filename').textContent = d.newName;
+    document.getElementById('dup-dialog-reason').textContent = d.similarity;
+    document.getElementById('dup-existing-title').textContent = d.existingTitle;
+    document.getElementById('dup-new-name').textContent = d.newName;
+
+    // Compteurs fichiers et tailles moyennes
+    var existingCount = parseInt(d.existingCount) || 1;
+    var newCount = parseInt(d.newCount) || 1;
+    document.getElementById('dup-existing-count').textContent = existingCount;
+    document.getElementById('dup-new-count').textContent = newCount;
+
+    // Taille : "total / moy." si plusieurs fichiers, juste la taille sinon
+    if (existingCount > 1) {
+        document.getElementById('dup-existing-size-label').textContent = 'Taille / Moy.';
+        document.getElementById('dup-existing-size').textContent =
+            (d.existingTotalSize || '?') + ' / ' + (d.existingAvgSize || '?');
+    } else {
+        document.getElementById('dup-existing-size-label').textContent = 'Taille';
+        document.getElementById('dup-existing-size').textContent = d.existingTotalSize || '?';
+    }
+    if (newCount > 1) {
+        document.getElementById('dup-new-size-label').textContent = 'Taille / Moy.';
+        document.getElementById('dup-new-size').textContent =
+            (d.newTotalSize || '?') + ' / ' + (d.newAvgSize || '?');
+    } else {
+        document.getElementById('dup-new-size-label').textContent = 'Taille';
+        document.getElementById('dup-new-size').textContent = d.newTotalSize || '?';
+    }
+
+    // Scores qualité
+    var qualityZone = document.getElementById('dup-dialog-quality');
+    var oldCol = document.getElementById('dup-quality-old-col');
+    var newCol = document.getElementById('dup-quality-new-col');
+    var recommended = d.recommended || '';
+
+    if (d.qualityExisting) {
+        qualityZone.style.display = '';
+        var qOld = parseFloat(d.qualityExisting);
+        var qNew = parseFloat(d.qualityNew);
+        var oldPct = Math.round(qOld);
+        var newPct = Math.round(qNew);
+
+        function qColor(pct) { return pct >= 70 ? '#4caf50' : pct >= 40 ? '#ff9800' : '#f44336'; }
+
+        document.getElementById('dup-quality-old-bar').style.width = oldPct + '%';
+        document.getElementById('dup-quality-old-bar').style.background = qColor(oldPct);
+        document.getElementById('dup-quality-old-val').textContent = qOld.toFixed(1) + ' / 100';
+
+        document.getElementById('dup-quality-new-bar').style.width = newPct + '%';
+        document.getElementById('dup-quality-new-bar').style.background = qColor(newPct);
+        document.getElementById('dup-quality-new-val').textContent = qNew.toFixed(1) + ' / 100';
+
+        // Badges recommandé
+        oldCol.className = 'conflict-quality-col' + (recommended === 'old' ? ' conflict-recommended' : '');
+        newCol.className = 'conflict-quality-col' + (recommended === 'new' ? ' conflict-recommended' : '');
+        document.getElementById('dup-badge-old').style.display = recommended === 'old' ? '' : 'none';
+        document.getElementById('dup-badge-new').style.display = recommended === 'new' ? '' : 'none';
+
+        // Infos techniques
+        document.getElementById('dup-existing-res').textContent = d.existingResolution || '?';
+        document.getElementById('dup-existing-vcodec').textContent = d.existingVideoCodec || '?';
+        document.getElementById('dup-existing-acodec').textContent = d.existingAudioCodec || '?';
+        document.getElementById('dup-new-res').textContent = d.newResolution || '?';
+        document.getElementById('dup-new-vcodec').textContent = d.newVideoCodec || '?';
+        document.getElementById('dup-new-acodec').textContent = d.newAudioCodec || '?';
+        document.getElementById('dup-existing-vbitrate').textContent = d.existingVideoBitrate || '?';
+        document.getElementById('dup-existing-abitrate').textContent = d.existingAudioBitrate || '?';
+        document.getElementById('dup-new-vbitrate').textContent = d.newVideoBitrate || '?';
+        document.getElementById('dup-new-abitrate').textContent = d.newAudioBitrate || '?';
+
+        // Boutons recommandés
+        var btnOld = document.getElementById('dup-btn-old');
+        var btnNew = document.getElementById('dup-btn-new');
+        btnOld.className = 'conflict-btn conflict-btn-old' + (recommended === 'old' ? ' conflict-btn-recommended' : '');
+        btnNew.className = 'conflict-btn conflict-btn-new' + (recommended === 'new' ? ' conflict-btn-recommended' : '');
+        btnOld.textContent = "Garder l'ancien" + (recommended === 'old' ? ' ★' : '');
+        btnNew.textContent = 'Garder le nouveau' + (recommended === 'new' ? ' ★' : '');
+    } else {
+        qualityZone.style.display = 'none';
+        document.getElementById('dup-existing-res').textContent = '?';
+        document.getElementById('dup-existing-vcodec').textContent = '?';
+        document.getElementById('dup-existing-acodec').textContent = '?';
+        document.getElementById('dup-new-res').textContent = '?';
+        document.getElementById('dup-new-vcodec').textContent = '?';
+        document.getElementById('dup-new-acodec').textContent = '?';
+        document.getElementById('dup-existing-vbitrate').textContent = '?';
+        document.getElementById('dup-existing-abitrate').textContent = '?';
+        document.getElementById('dup-new-vbitrate').textContent = '?';
+        document.getElementById('dup-new-abitrate').textContent = '?';
+    }
+
+    document.getElementById('duplicate-resolve-overlay').classList.add('active');
+}
+
+function hideDuplicateDialog() {
+    document.getElementById('duplicate-resolve-overlay').classList.remove('active');
+}
+
+function resolveDuplicate(choice) {
+    hideDuplicateDialog();
+
+    var body = 'title=' + encodeURIComponent(_dupCurrentTitle) +
+               '&year=' + encodeURIComponent(_dupCurrentYear) +
+               '&choice=' + encodeURIComponent(choice);
+
+    fetch('/transfer/resolve-duplicate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: body
+    })
+    .then(function(resp) { return resp.text(); })
+    .then(function(html) {
+        document.getElementById('duplicate-tree-zone').innerHTML = html;
+        htmx.process(document.getElementById('duplicate-tree-zone'));
+        // Mettre à jour le bouton de transfert
+        _updateTransferButton();
+    });
 }
 </script>
 {% endif %}

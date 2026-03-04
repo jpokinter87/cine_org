@@ -64,6 +64,7 @@ class ExistingFileInfo:
         video_codec: Codec video (ex: "HEVC", "H.264")
         audio_codec: Codec audio principal (ex: "DTS-HD", "AAC")
         duration_seconds: Duree en secondes
+        video_bitrate_kbps: Debit video en Kb/s (depuis mediainfo)
     """
 
     path: Path
@@ -72,6 +73,8 @@ class ExistingFileInfo:
     video_codec: Optional[str] = None
     audio_codec: Optional[str] = None
     duration_seconds: Optional[int] = None
+    video_bitrate_kbps: Optional[int] = None
+    audio_bitrate_kbps: Optional[int] = None
 
 
 @dataclass
@@ -172,9 +175,7 @@ class TransfererService:
         self._storage_dir = Path(storage_dir)
         self._video_dir = Path(video_dir)
 
-    def check_conflict(
-        self, source: Path, destination: Path
-    ) -> Optional[ConflictInfo]:
+    def check_conflict(self, source: Path, destination: Path) -> Optional[ConflictInfo]:
         """
         Verifie s'il y a un conflit avec un fichier existant.
 
@@ -245,9 +246,7 @@ class TransfererService:
 
         # Etape 2: Deplacement atomique
         if not self._fs.atomic_move(source, destination):
-            return TransferResult(
-                success=False, error="Deplacement atomique echoue"
-            )
+            return TransferResult(success=False, error="Deplacement atomique echoue")
 
         # Etape 3: Creation du symlink (avec rollback si erreur)
         symlink_path = None
@@ -303,9 +302,7 @@ class TransfererService:
 
         return self._create_symlink_at(storage_path, symlink_path)
 
-    def _create_custom_symlink(
-        self, storage_path: Path, symlink_path: Path
-    ) -> Path:
+    def _create_custom_symlink(self, storage_path: Path, symlink_path: Path) -> Path:
         """
         Cree un symlink a un emplacement personnalise pointant vers storage.
 
@@ -557,6 +554,7 @@ class TransfererService:
 
         if path.is_dir():
             import shutil
+
             shutil.move(str(path), str(dest))
         else:
             self._fs.atomic_move(path, dest)

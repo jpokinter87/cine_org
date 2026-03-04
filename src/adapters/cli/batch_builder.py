@@ -10,6 +10,7 @@ Responsabilites:
 - Enrichissement des metadonnees (genres, notes, etc.) depuis les API
 """
 
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -47,9 +48,7 @@ def _extract_tech_from_media_info(
         return None, None, None, (), video_file.size_bytes if video_file else None
 
     codec_video = media_info.video_codec.name if media_info.video_codec else None
-    codec_audio = (
-        media_info.audio_codecs[0].name if media_info.audio_codecs else None
-    )
+    codec_audio = media_info.audio_codecs[0].name if media_info.audio_codecs else None
     resolution = (
         f"{media_info.resolution.width}x{media_info.resolution.height}"
         if media_info.resolution
@@ -121,7 +120,9 @@ async def _enrich_movie_metadata(
     movie_id: str,
     tmdb_client,
     container: "Container",
-) -> tuple[tuple[str, ...], "MediaDetails | None", str | None, float | None, int | None]:
+) -> tuple[
+    tuple[str, ...], "MediaDetails | None", str | None, float | None, int | None
+]:
     """
     Enrichit les metadonnees d'un film depuis TMDB.
 
@@ -192,7 +193,9 @@ def _build_movie_transfer_data(
         TransferData complet
     """
     source_path = (
-        pending.video_file.path if pending.video_file and pending.video_file.path else None
+        pending.video_file.path
+        if pending.video_file and pending.video_file.path
+        else None
     )
 
     return TransferData(
@@ -243,7 +246,9 @@ async def _build_series_transfer_data(
 
     # Extraire l'extension et langue
     source_path = (
-        pending.video_file.path if pending.video_file and pending.video_file.path else None
+        pending.video_file.path
+        if pending.video_file and pending.video_file.path
+        else None
     )
     extension = source_path.suffix if source_path and source_path.suffix else ".mkv"
     media_info = pending.video_file.media_info if pending.video_file else None
@@ -362,7 +367,9 @@ async def build_transfers_batch(
 
         # Filet de sécurité : titre vide → fallback sur le nom de fichier parsé
         if not candidate_title:
-            original_filename = pending.video_file.filename if pending.video_file else ""
+            original_filename = (
+                pending.video_file.filename if pending.video_file else ""
+            )
             if original_filename:
                 from src.adapters.parsing.guessit_parser import GuessitFilenameParser
 
@@ -385,7 +392,9 @@ async def build_transfers_batch(
 
         # Verifier le chemin source
         source_path = (
-            pending.video_file.path if pending.video_file and pending.video_file.path else None
+            pending.video_file.path
+            if pending.video_file and pending.video_file.path
+            else None
         )
         if source_path is None:
             filename = pending.video_file.filename if pending.video_file else "?"
@@ -527,7 +536,9 @@ async def build_transfers_batch(
                 original_title=movie_details.original_title if movie_details else None,
                 year=candidate_year,
                 genres=movie_genres,
-                duration_seconds=movie_details.duration_seconds if movie_details else None,
+                duration_seconds=movie_details.duration_seconds
+                if movie_details
+                else None,
                 overview=movie_details.overview if movie_details else None,
                 poster_path=movie_details.poster_url if movie_details else None,
                 vote_average=movie_details.vote_average if movie_details else None,
@@ -548,8 +559,14 @@ async def build_transfers_batch(
 
             # Afficher le feedback de sauvegarde avec les notes
             year_str = f" ({movie.year})" if movie.year else ""
-            tmdb_str = f"TMDB: {movie.vote_average:.1f}/10" if movie.vote_average else "TMDB: -"
-            imdb_str = f"IMDb: {movie.imdb_rating:.1f}/10" if movie.imdb_rating else "IMDb: -"
+            tmdb_str = (
+                f"TMDB: {movie.vote_average:.1f}/10"
+                if movie.vote_average
+                else "TMDB: -"
+            )
+            imdb_str = (
+                f"IMDb: {movie.imdb_rating:.1f}/10" if movie.imdb_rating else "IMDb: -"
+            )
             console.print(
                 f"  [green]✓[/green] [bold]{movie.title}[/bold]{year_str} "
                 f"sauvegardé - {tmdb_str}, {imdb_str}"
@@ -588,6 +605,9 @@ async def build_transfers_batch(
     # Filet de securite : detecter les fichiers avec le meme nom de destination
     # (typiquement un film decoupe par le rippeur dont les parts n'ont pas ete detectees)
     transfers = _fix_duplicate_filenames(transfers, renamer)
+
+    # Detection de doublons pre-transfert : titres similaires existants dans video_dir
+    transfers = _detect_duplicates(transfers, video_dir)
 
     return transfers
 
@@ -653,12 +673,18 @@ def _fix_duplicate_filenames(
             pending = t.get("pending")
             source_path = t.get("source")
             extension = source_path.suffix if source_path else ".mkv"
-            media_info = pending.video_file.media_info if pending and pending.video_file else None
+            media_info = (
+                pending.video_file.media_info
+                if pending and pending.video_file
+                else None
+            )
             original_filename = ""
             if pending and pending.video_file:
                 original_filename = pending.video_file.filename or ""
             fallback_language = _extract_language_from_filename(original_filename)
-            fallback_subtitle_language = _extract_subtitle_language_from_filename(original_filename)
+            fallback_subtitle_language = _extract_subtitle_language_from_filename(
+                original_filename
+            )
 
             if t.get("is_series"):
                 # Reconstruire Series/Episode depuis les infos existantes
@@ -666,20 +692,29 @@ def _fix_duplicate_filenames(
 
                 season_num, episode_num = _extract_series_info(original_filename)
                 series = Series(title=t.get("title", ""), year=t.get("year"))
-                episode = Episode(season_number=season_num, episode_number=episode_num, title="")
+                episode = Episode(
+                    season_number=season_num, episode_number=episode_num, title=""
+                )
                 new_filename = renamer.generate_series_filename(
-                    series=series, episode=episode, media_info=media_info,
-                    extension=extension, fallback_language=fallback_language,
-                    fallback_subtitle_language=fallback_subtitle_language, part=part_num,
+                    series=series,
+                    episode=episode,
+                    media_info=media_info,
+                    extension=extension,
+                    fallback_language=fallback_language,
+                    fallback_subtitle_language=fallback_subtitle_language,
+                    part=part_num,
                 )
             else:
                 from src.core.entities.media import Movie
 
                 movie = Movie(title=t.get("title", ""), year=t.get("year"))
                 new_filename = renamer.generate_movie_filename(
-                    movie=movie, media_info=media_info, extension=extension,
+                    movie=movie,
+                    media_info=media_info,
+                    extension=extension,
                     fallback_language=fallback_language,
-                    fallback_subtitle_language=fallback_subtitle_language, part=part_num,
+                    fallback_subtitle_language=fallback_subtitle_language,
+                    part=part_num,
                 )
 
             # Mettre a jour le transfert
@@ -691,8 +726,115 @@ def _fix_duplicate_filenames(
                 symlink_dir = t["symlink_destination"].parent
                 t["symlink_destination"] = symlink_dir / new_filename
 
-            console.print(
-                f"    [green]✓[/green] {old_filename} → {new_filename}"
+            console.print(f"    [green]✓[/green] {old_filename} → {new_filename}")
+
+    return transfers
+
+
+def _detect_duplicates(
+    transfers: list[dict],
+    video_dir: Path,
+) -> list[dict]:
+    """
+    Détecte les doublons pré-transfert pour chaque fichier du batch.
+
+    Pour chaque transfert, vérifie si un titre similaire existe déjà
+    dans video_dir. Si oui, enrichit le dict avec les données du doublon
+    et le score de qualité comparatif.
+
+    Args:
+        transfers: Liste des transferts construits.
+        video_dir: Répertoire racine des symlinks.
+
+    Returns:
+        Liste enrichie avec les clés 'has_duplicate' et 'duplicate_match'.
+    """
+    from src.services.duplicate_detector import DuplicateDetector
+    from src.services.transferer import ExistingFileInfo
+
+    detector = DuplicateDetector()
+
+    # Détecter par titre unique (éviter de scanner N fois pour N épisodes d'une même série)
+    seen_titles: dict[str, object] = {}
+
+    for t in transfers:
+        title = t.get("title", "")
+        year = t.get("year")
+        is_series = t.get("is_series", False)
+        cache_key = f"{title}|{year}|{is_series}"
+
+        if cache_key in seen_titles:
+            match = seen_titles[cache_key]
+        else:
+            match = detector.detect_duplicate(
+                title=title,
+                year=year,
+                video_dir=video_dir,
+                is_series=is_series,
             )
+            seen_titles[cache_key] = match
+
+        if match is not None:
+            # Saisons partielles : si la série existante n'a pas cette saison,
+            # l'épisode n'est pas un doublon (nouvelles saisons)
+            if is_series and match.existing_seasons:
+                new_fn = t.get("new_filename", "")
+                season_m = re.search(r"S(\d+)E\d+", new_fn, re.IGNORECASE)
+                if season_m:
+                    new_season = int(season_m.group(1))
+                    if new_season not in match.existing_seasons:
+                        t["has_duplicate"] = False
+                        t["duplicate_match"] = None
+                        continue
+
+            # Calculer le score de qualité comparatif
+            source = t.get("source")
+            new_info = None
+            if source and source.exists():
+                new_info = ExistingFileInfo(
+                    path=source,
+                    size_bytes=source.stat().st_size,
+                )
+                # Enrichir avec les métadonnées techniques si disponible
+                pending = t.get("pending")
+                if pending and pending.video_file and pending.video_file.media_info:
+                    mi = pending.video_file.media_info
+                    # Extraire débits vidéo et audio réels via pymediainfo
+                    v_bitrate = None
+                    a_bitrate = None
+                    try:
+                        from pymediainfo import MediaInfo as PyMediaInfo
+
+                        parsed = PyMediaInfo.parse(str(source))
+                        for track in parsed.tracks:
+                            if track.track_type == "Video" and v_bitrate is None:
+                                if track.bit_rate is not None:
+                                    v_bitrate = int(float(track.bit_rate) / 1000)
+                            elif track.track_type == "Audio" and a_bitrate is None:
+                                if track.bit_rate is not None:
+                                    a_bitrate = int(float(track.bit_rate) / 1000)
+                    except Exception:
+                        pass
+                    new_info = ExistingFileInfo(
+                        path=source,
+                        size_bytes=source.stat().st_size,
+                        resolution=mi.resolution.label if mi.resolution else None,
+                        video_codec=mi.video_codec.name if mi.video_codec else None,
+                        audio_codec=(
+                            mi.audio_codecs[0].name if mi.audio_codecs else None
+                        ),
+                        duration_seconds=mi.duration_seconds,
+                        video_bitrate_kbps=v_bitrate,
+                        audio_bitrate_kbps=a_bitrate,
+                    )
+
+            if new_info:
+                match.quality = detector.compare_quality(match.existing_files, new_info)
+
+            t["has_duplicate"] = True
+            t["duplicate_match"] = match
+        else:
+            t["has_duplicate"] = False
+            t["duplicate_match"] = None
 
     return transfers

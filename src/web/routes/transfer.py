@@ -83,6 +83,18 @@ def _format_size(size_bytes: int) -> str:
     return f"{size_bytes / 1024:.0f} Ko"
 
 
+def _get_sandbox_dir(settings) -> Path:
+    """Retourne le répertoire sandbox pour les anciennes versions remplacées."""
+    sandbox = getattr(settings, "sandbox_dir", None)
+    if sandbox:
+        return Path(sandbox)
+    # Fallback : sous-dossier .sandbox à côté du storage_dir
+    storage = getattr(settings, "storage_dir", None)
+    if storage:
+        return Path(storage).parent / ".sandbox"
+    return Path("/tmp/cineorg_sandbox")
+
+
 def _build_tree_data(transfers: list[dict], storage_dir: Path, video_dir: Path) -> dict:
     """
     Organise les transferts en arborescence pour le template.
@@ -90,6 +102,18 @@ def _build_tree_data(transfers: list[dict], storage_dir: Path, video_dir: Path) 
     Returns:
         Dict avec 'movies' et 'series', chacun organisé hiérarchiquement.
     """
+    # Pré-calcul : nombre et taille totale des nouveaux fichiers par groupe doublon
+    _new_group_stats: dict[str, dict] = {}  # group_key → {count, total_size}
+    for t in transfers:
+        if t.get("has_duplicate"):
+            gk = f"{t.get('title', '')}|{t.get('year')}"
+            source = t.get("source")
+            size = source.stat().st_size if source and source.exists() else 0
+            if gk not in _new_group_stats:
+                _new_group_stats[gk] = {"count": 0, "total_size": 0}
+            _new_group_stats[gk]["count"] += 1
+            _new_group_stats[gk]["total_size"] += size
+
     movies = []
     series = []
 
@@ -98,15 +122,85 @@ def _build_tree_data(transfers: list[dict], storage_dir: Path, video_dir: Path) 
         source_size = source.stat().st_size if source and source.exists() else 0
 
         pending = t.get("pending")
+        # Infos doublon pour affichage dans le résumé
+        duplicate_match = t.get("duplicate_match")
+        duplicate_info = None
+        if t.get("has_duplicate") and duplicate_match:
+            quality = duplicate_match.quality
+            existing_count = len(duplicate_match.existing_files)
+            existing_total = sum(f.size_bytes for f in duplicate_match.existing_files)
+            existing_avg = existing_total // existing_count if existing_count else 0
+
+            gk = f"{t.get('title', '')}|{t.get('year')}"
+            new_stats = _new_group_stats.get(gk, {"count": 1, "total_size": 0})
+            new_count = new_stats["count"]
+            new_avg = new_stats["total_size"] // new_count if new_count else 0
+
+            duplicate_info = {
+                "existing_title": duplicate_match.existing_title,
+                "existing_dir": str(duplicate_match.existing_dir),
+                "similarity_reason": duplicate_match.similarity_reason,
+                "existing_file_count": existing_count,
+                "existing_total_size": _format_size(existing_total),
+                "existing_avg_size": _format_size(existing_avg),
+                "new_file_count": new_count,
+                "new_total_size": _format_size(new_stats["total_size"]),
+                "new_avg_size": _format_size(new_avg),
+            }
+            if quality:
+                duplicate_info.update(
+                    {
+                        "quality_existing": quality.existing_score,
+                        "quality_new": quality.new_score,
+                        "recommended": quality.recommended,
+                        "existing_resolution": quality.existing_breakdown.get(
+                            "resolution", "?"
+                        ),
+                        "existing_video_codec": quality.existing_breakdown.get(
+                            "video_codec", "?"
+                        ),
+                        "existing_audio_codec": quality.existing_breakdown.get(
+                            "audio_codec", "?"
+                        ),
+                        "existing_video_bitrate": quality.existing_breakdown.get(
+                            "video_bitrate", "?"
+                        ),
+                        "existing_audio_bitrate": quality.existing_breakdown.get(
+                            "audio_bitrate", "?"
+                        ),
+                        "new_resolution": quality.new_breakdown.get("resolution", "?"),
+                        "new_video_codec": quality.new_breakdown.get(
+                            "video_codec", "?"
+                        ),
+                        "new_audio_codec": quality.new_breakdown.get(
+                            "audio_codec", "?"
+                        ),
+                        "new_video_bitrate": quality.new_breakdown.get(
+                            "video_bitrate", "?"
+                        ),
+                        "new_audio_bitrate": quality.new_breakdown.get(
+                            "audio_bitrate", "?"
+                        ),
+                    }
+                )
+
+        # Clé de groupe pour cascade série
+        title = t.get("title", "")
+        year = t.get("year")
+        duplicate_group_key = f"{title}|{year}" if duplicate_info else None
+
         entry = {
             "new_filename": t["new_filename"],
             "source_name": source.name if source else "?",
             "source_size": _format_size(source_size) if source_size else "?",
             "storage_rel": "",
             "symlink_rel": "",
-            "title": t.get("title", ""),
-            "year": t.get("year"),
+            "title": title,
+            "year": year,
             "pending_id": pending.id if pending else None,
+            "duplicate": duplicate_info,
+            "duplicate_group_key": duplicate_group_key,
+            "duplicate_resolution": t.get("duplicate_resolution"),
         }
 
         # Calculer les chemins relatifs pour l'affichage
@@ -135,12 +229,37 @@ def _build_tree_data(transfers: list[dict], storage_dir: Path, video_dir: Path) 
     # Organiser les séries par sous-répertoire
     series_tree = _group_by_path(series, key="symlink_rel", prefix="Series")
 
+    duplicate_count = sum(1 for t in transfers if t.get("has_duplicate"))
+    unresolved_count = sum(
+        1
+        for t in transfers
+        if t.get("has_duplicate") and not t.get("duplicate_resolution")
+    )
+
+    # Saisons partielles : épisodes de nouvelles saisons pour des séries
+    # qui ont aussi des doublons (même title+year, is_series, sans has_duplicate)
+    dup_series_keys = {
+        f"{t.get('title', '')}|{t.get('year')}"
+        for t in transfers
+        if t.get("has_duplicate") and t.get("is_series", False)
+    }
+    new_season_count = sum(
+        1
+        for t in transfers
+        if t.get("is_series", False)
+        and not t.get("has_duplicate")
+        and f"{t.get('title', '')}|{t.get('year')}" in dup_series_keys
+    )
+
     return {
         "movies": movies_tree,
         "series": series_tree,
         "total": len(transfers),
         "movie_count": len(movies),
         "series_count": len(series),
+        "duplicate_count": duplicate_count,
+        "unresolved_duplicate_count": unresolved_count,
+        "new_season_episode_count": new_season_count,
     }
 
 
@@ -241,7 +360,251 @@ async def _run_web_transfer(
             progress.filename = source_name
             progress.message = f"{mode_label} : {source_name}"
 
-            # Vérifier les conflits
+            # Vérifier les doublons pré-transfert (titres similaires existants)
+            duplicate_match = transfer.get("duplicate_match")
+            pre_resolution = transfer.get("duplicate_resolution")
+
+            # Résolution pré-faite au résumé batch → exécuter sans SSE pause
+            if transfer.get("has_duplicate") and duplicate_match and pre_resolution:
+                if pre_resolution == "keep_old":
+                    progress.conflicts_resolved += 1
+                    progress.message = (
+                        f"Doublon résolu (pré) : ancien conservé pour {display_name}"
+                    )
+                    await asyncio.sleep(0.1)
+                    continue
+
+                elif pre_resolution == "keep_new":
+                    if dry_run:
+                        progress.transferred += 1
+                        _record_transfer(display_name, destination, symlink_dest)
+                        progress.message = (
+                            f"[Simulation] Remplacement (pré) : {display_name}"
+                        )
+                    else:
+                        try:
+                            sandbox_dir = _get_sandbox_dir(settings)
+                            transferer.move_to_staging(
+                                duplicate_match.existing_dir, sandbox_dir
+                            )
+                            result = transferer.transfer_file(
+                                source,
+                                destination,
+                                create_symlink=True,
+                                symlink_destination=symlink_dest,
+                            )
+                            if result.success:
+                                progress.transferred += 1
+                                _record_transfer(
+                                    display_name, destination, symlink_dest
+                                )
+                            else:
+                                if result.conflict:
+                                    err = (
+                                        f"Conflit {result.conflict.conflict_type.value} "
+                                        f"avec {result.conflict.existing_path}"
+                                    )
+                                else:
+                                    err = result.error or "Erreur inconnue"
+                                logger.warning(
+                                    "Échec transfert (pré-résolu) %s: %s",
+                                    source_name,
+                                    err,
+                                )
+                                progress.errors += 1
+                                progress.error_files.append(f"{display_name} ({err})")
+                        except Exception as e:
+                            logger.warning("Erreur transfert %s: %s", source_name, e)
+                            progress.errors += 1
+                            progress.error_files.append(f"{display_name} ({e})")
+                    progress.conflicts_resolved += 1
+                    continue
+
+                elif pre_resolution == "keep_both":
+                    if not dry_run:
+                        try:
+                            sandbox_dir = _get_sandbox_dir(settings)
+                            transferer.move_to_staging(
+                                duplicate_match.existing_dir, sandbox_dir
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "Erreur sandbox %s: %s",
+                                duplicate_match.existing_dir,
+                                e,
+                            )
+                    progress.conflicts_resolved += 1
+                    # Le nouveau sera transféré normalement ci-dessous
+
+                else:
+                    # skip
+                    progress.conflicts_resolved += 1
+                    progress.message = f"Doublon passé (pré) : {display_name}"
+                    await asyncio.sleep(0.1)
+                    continue
+
+            # Doublon non résolu au résumé → dialogue SSE interactif (comportement existant)
+            elif transfer.get("has_duplicate") and duplicate_match:
+                quality = duplicate_match.quality
+
+                progress.conflict_pending = True
+                progress.conflict_data = {
+                    "type": "similar_content",
+                    "filename": display_name,
+                    "existing_path": str(duplicate_match.existing_dir),
+                    "existing_name": duplicate_match.existing_title,
+                    "existing_size": _format_size(
+                        sum(f.size_bytes for f in duplicate_match.existing_files)
+                    ),
+                    "new_name": display_name,
+                    "new_size": _format_size(
+                        source.stat().st_size if source.exists() else 0
+                    ),
+                    "similarity_reason": duplicate_match.similarity_reason,
+                    "existing_file_count": len(duplicate_match.existing_files),
+                    "transfer_index": i,
+                }
+
+                # Ajouter les scores de qualité si disponibles
+                if quality:
+                    progress.conflict_data.update(
+                        {
+                            "quality_existing": quality.existing_score,
+                            "quality_new": quality.new_score,
+                            "recommended": quality.recommended,
+                            "existing_resolution": quality.existing_breakdown.get(
+                                "resolution", "?"
+                            ),
+                            "existing_video_codec": quality.existing_breakdown.get(
+                                "video_codec", "?"
+                            ),
+                            "existing_audio_codec": quality.existing_breakdown.get(
+                                "audio_codec", "?"
+                            ),
+                            "new_resolution": quality.new_breakdown.get(
+                                "resolution", "?"
+                            ),
+                            "new_video_codec": quality.new_breakdown.get(
+                                "video_codec", "?"
+                            ),
+                            "new_audio_codec": quality.new_breakdown.get(
+                                "audio_codec", "?"
+                            ),
+                        }
+                    )
+                else:
+                    # Fallback : extraire les infos via mediainfo
+                    try:
+                        best_existing = (
+                            max(
+                                duplicate_match.existing_files,
+                                key=lambda f: f.size_bytes,
+                            )
+                            if duplicate_match.existing_files
+                            else None
+                        )
+                        if best_existing:
+                            existing_info = transferer._get_file_info(
+                                best_existing.path
+                            )
+                            progress.conflict_data.update(
+                                {
+                                    "existing_resolution": existing_info.resolution
+                                    or "?",
+                                    "existing_video_codec": existing_info.video_codec
+                                    or "?",
+                                    "existing_audio_codec": existing_info.audio_codec
+                                    or "?",
+                                }
+                            )
+                        new_info = transferer._get_file_info(source)
+                        progress.conflict_data.update(
+                            {
+                                "new_resolution": new_info.resolution or "?",
+                                "new_video_codec": new_info.video_codec or "?",
+                                "new_audio_codec": new_info.audio_codec or "?",
+                            }
+                        )
+                    except Exception:
+                        pass
+
+                progress.conflict_event.clear()
+                progress.message = (
+                    f"Doublon détecté : {display_name} — en attente de résolution"
+                )
+                await progress.conflict_event.wait()
+
+                choice = progress.conflict_choice
+                progress.conflict_pending = False
+                progress.conflict_data = None
+                progress.conflict_choice = None
+
+                if choice == "keep_old":
+                    progress.conflicts_resolved += 1
+                    progress.message = (
+                        f"Doublon résolu : ancien conservé pour {display_name}"
+                    )
+                    await asyncio.sleep(0.1)
+                    continue
+
+                elif choice == "keep_new":
+                    if dry_run:
+                        progress.transferred += 1
+                        _record_transfer(display_name, destination, symlink_dest)
+                        progress.message = f"[Simulation] Remplacement : {display_name}"
+                    else:
+                        try:
+                            # Sandbox : déplacer l'ancien vers la sandbox
+                            sandbox_dir = _get_sandbox_dir(settings)
+                            transferer.move_to_staging(
+                                duplicate_match.existing_dir, sandbox_dir
+                            )
+                            # Transférer le nouveau normalement
+                            result = transferer.transfer_file(
+                                source,
+                                destination,
+                                create_symlink=True,
+                                symlink_destination=symlink_dest,
+                            )
+                            if result.success:
+                                progress.transferred += 1
+                                _record_transfer(
+                                    display_name, destination, symlink_dest
+                                )
+                            else:
+                                progress.errors += 1
+                                progress.error_files.append(display_name)
+                        except Exception as e:
+                            logger.warning("Erreur transfert %s: %s", source_name, e)
+                            progress.errors += 1
+                            progress.error_files.append(display_name)
+                    progress.conflicts_resolved += 1
+                    continue
+
+                elif choice == "keep_both":
+                    if not dry_run:
+                        try:
+                            # Sandbox : déplacer l'ancien vers la sandbox
+                            sandbox_dir = _get_sandbox_dir(settings)
+                            transferer.move_to_staging(
+                                duplicate_match.existing_dir, sandbox_dir
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "Erreur sandbox %s: %s",
+                                duplicate_match.existing_dir,
+                                e,
+                            )
+                    # Le nouveau sera transféré normalement ci-dessous
+                    progress.conflicts_resolved += 1
+
+                else:
+                    progress.conflicts_resolved += 1
+                    progress.message = f"Doublon passé : {display_name}"
+                    await asyncio.sleep(0.1)
+                    continue
+
+            # Vérifier les conflits de fichier (hash)
             conflict = transferer.check_conflict(source, destination)
 
             if conflict:
@@ -351,14 +714,28 @@ async def _run_web_transfer(
                                         display_name, destination, symlink_dest
                                     )
                                 else:
+                                    if result.conflict:
+                                        err = (
+                                            f"Conflit {result.conflict.conflict_type.value} "
+                                            f"avec {result.conflict.existing_path}"
+                                        )
+                                    else:
+                                        err = result.error or "Erreur inconnue"
+                                    logger.warning(
+                                        "Échec transfert (SSE) %s: %s",
+                                        source_name,
+                                        err,
+                                    )
                                     progress.errors += 1
-                                    progress.error_files.append(display_name)
+                                    progress.error_files.append(
+                                        f"{display_name} ({err})"
+                                    )
                             except Exception as e:
                                 logger.warning(
                                     "Erreur transfert %s: %s", source_name, e
                                 )
                                 progress.errors += 1
-                                progress.error_files.append(display_name)
+                                progress.error_files.append(f"{display_name} ({e})")
                         progress.conflicts_resolved += 1
                         continue
 
@@ -399,10 +776,16 @@ async def _run_web_transfer(
                         _record_transfer(display_name, destination, symlink_dest)
                         progress.message = f"Transféré : {display_name}"
                     else:
-                        error_msg = result.error or "Erreur inconnue"
+                        if result.conflict:
+                            error_msg = (
+                                f"Conflit {result.conflict.conflict_type.value} "
+                                f"avec {result.conflict.existing_path}"
+                            )
+                        else:
+                            error_msg = result.error or "Erreur inconnue"
                         logger.warning("Échec transfert %s: %s", source_name, error_msg)
                         progress.errors += 1
-                        progress.error_files.append(display_name)
+                        progress.error_files.append(f"{display_name} ({error_msg})")
                 except Exception as e:
                     logger.exception("Erreur transfert %s: %s", source_name, e)
                     progress.errors += 1
@@ -506,7 +889,10 @@ async def _prepare_batch_async(
             progress.message = f"Préparation : {filename}"
 
         transfers = await build_transfers_batch(
-            validated_list, container, storage_dir, video_dir,
+            validated_list,
+            container,
+            storage_dir,
+            video_dir,
             on_progress=_on_progress,
         )
 
@@ -538,12 +924,15 @@ async def transfer_prepare_progress(request: Request):
 
         last_sent = ""
         while not progress.complete:
-            data = json.dumps({
-                "current": progress.current,
-                "total": progress.total,
-                "filename": progress.filename,
-                "message": progress.message,
-            }, ensure_ascii=False)
+            data = json.dumps(
+                {
+                    "current": progress.current,
+                    "total": progress.total,
+                    "filename": progress.filename,
+                    "message": progress.message,
+                },
+                ensure_ascii=False,
+            )
 
             if data != last_sent:
                 yield f"event: progress\ndata: {data}\n\n"
@@ -555,7 +944,7 @@ async def transfer_prepare_progress(request: Request):
             error_data = json.dumps({"message": progress.error}, ensure_ascii=False)
             yield f"event: error\ndata: {error_data}\n\n"
         else:
-            yield 'event: complete\ndata: {}\n\n'
+            yield "event: complete\ndata: {}\n\n"
 
     return StreamingResponse(
         event_stream(),
@@ -775,6 +1164,49 @@ async def send_back(request: Request, pending_id: str):
     )
     response.headers["HX-Redirect"] = "/validation"
     return response
+
+
+@router.post("/resolve-duplicate", response_class=HTMLResponse)
+async def resolve_duplicate(
+    request: Request,
+    title: str = Form(...),
+    year: str = Form(""),
+    choice: str = Form(...),
+):
+    """Résout un doublon pré-transfert avec cascade série (même title+year)."""
+    transfers = getattr(request.app.state, "transfer_batch", None)
+    if not transfers:
+        return HTMLResponse(
+            '<div class="action-msg action-error">Aucun batch en cours.</div>',
+            status_code=400,
+        )
+
+    year_val = year if year else None
+    resolved_count = 0
+    for t in transfers:
+        if (
+            t.get("has_duplicate")
+            and t.get("title", "") == title
+            and str(t.get("year", "") or "") == str(year_val or "")
+        ):
+            t["duplicate_resolution"] = choice
+            resolved_count += 1
+
+    if resolved_count == 0:
+        return HTMLResponse(
+            '<div class="action-msg action-warning">Aucun doublon trouvé.</div>'
+        )
+
+    # Retourner l'arborescence mise à jour
+    storage_dir = request.app.state.transfer_storage_dir
+    video_dir = request.app.state.transfer_video_dir
+    tree_data = _build_tree_data(transfers, storage_dir, video_dir)
+
+    return templates.TemplateResponse(
+        request,
+        "transfer/_batch_tree_and_alert.html",
+        {"tree_data": tree_data},
+    )
 
 
 @router.post("/resolve-conflict", response_class=HTMLResponse)

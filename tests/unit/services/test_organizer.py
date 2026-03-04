@@ -844,3 +844,35 @@ class TestNavigateToLeafWithPrefix:
 
         result = get_movie_video_destination(movie, tmp_path)
         assert result == american_dir
+
+
+class TestSeriesContentDirNotSubdivision:
+    """Vérifie que les dossiers de séries ne sont pas traités comme des subdivisions."""
+
+    def test_series_same_title_no_year_existing(self, tmp_path: Path) -> None:
+        """Un dossier existant 'Gomorra' (sans année) ne doit pas englober 'Gomorra (2014)'.
+
+        Le chemin doit pointer vers le dossier existant 'Gomorra', pas créer
+        un sous-dossier 'Gomorra/Gomorra (2014)'.
+        """
+        from src.services.organizer import get_series_video_destination
+
+        # Structure existante : Series/TV/G-H/Ga-Ha/Gomorra/Saison 01/
+        tv_dir = tmp_path / "Series" / "TV"
+        ga_ha = tv_dir / "G-H" / "Ga-Ha"
+        gomorra_dir = ga_ha / "Gomorra"
+        (gomorra_dir / "Saison 01").mkdir(parents=True)
+        # Ajouter un épisode pour que ce soit un vrai dossier de série
+        (gomorra_dir / "Saison 01" / "ep01.mkv").touch()
+
+        series = Series(
+            title="Gomorra",
+            year=2014,
+            genres=("Drame",),
+        )
+
+        result = get_series_video_destination(series, 1, tmp_path)
+        # Le résultat ne doit PAS contenir Gomorra/Gomorra (2014)
+        assert "Gomorra/Gomorra" not in str(result)
+        # La saison doit être dans Ga-Ha/Gomorra (2014)/Saison 01
+        assert result == ga_ha / "Gomorra (2014)" / "Saison 01"

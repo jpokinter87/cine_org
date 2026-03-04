@@ -2457,6 +2457,169 @@ a.pagination-btn:hover {
     border-color: var(--accent-rose);
 }
 
+/* ── Doublons pré-transfert ── */
+
+.duplicate-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    background: rgba(255, 152, 0, 0.08);
+    border: 1px solid rgba(255, 152, 0, 0.3);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+.duplicate-alert-icon {
+    color: #ff9800;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.duplicate-alert-content strong {
+    color: #ff9800;
+}
+
+.duplicate-alert-text {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.tree-leaf-duplicate {
+    border-left: 3px solid #ff9800;
+    padding-left: 0.5rem;
+}
+
+.tree-leaf-dup-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    background: rgba(255, 152, 0, 0.15);
+    color: #ff9800;
+    cursor: help;
+}
+
+.tree-leaf-dup-info {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    padding-left: 1.75rem;
+    margin-top: 0.15rem;
+}
+
+.tree-leaf-dup-reason {
+    font-style: italic;
+}
+
+.tree-leaf-dup-existing {
+    color: var(--text-muted);
+}
+
+.tree-leaf-dup-reco {
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    margin-left: 0.35rem;
+}
+
+.tree-leaf-dup-reco-new {
+    background: rgba(76, 175, 80, 0.15);
+    color: #4caf50;
+}
+
+.tree-leaf-dup-reco-old {
+    background: rgba(244, 67, 54, 0.15);
+    color: #f44336;
+}
+
+/* ── Bouton résoudre doublon (pré-transfert) ── */
+
+.tree-leaf-resolve-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    background: rgba(255, 152, 0, 0.15);
+    color: #ff9800;
+    border: 1px solid rgba(255, 152, 0, 0.3);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.tree-leaf-resolve-btn:hover {
+    background: rgba(255, 152, 0, 0.25);
+    border-color: rgba(255, 152, 0, 0.5);
+}
+
+/* Badge résolu après choix */
+
+.tree-leaf-resolved-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+}
+
+.tree-leaf-resolved-badge.tree-leaf-resolved-keep_old {
+    background: rgba(244, 67, 54, 0.12);
+    color: #f44336;
+}
+
+.tree-leaf-resolved-badge.tree-leaf-resolved-keep_new {
+    background: rgba(76, 175, 80, 0.12);
+    color: #4caf50;
+}
+
+.tree-leaf-resolved-badge.tree-leaf-resolved-keep_both {
+    background: rgba(33, 150, 243, 0.12);
+    color: #2196f3;
+}
+
+.tree-leaf-resolved-badge.tree-leaf-resolved-skip {
+    background: rgba(158, 158, 158, 0.12);
+    color: #9e9e9e;
+}
+
+.tree-leaf-resolved {
+    border-left-color: #4caf50;
+}
+
+/* Bandeau doublons résolu (vert) */
+
+.duplicate-alert-resolved {
+    background: rgba(76, 175, 80, 0.08);
+    border-color: rgba(76, 175, 80, 0.3);
+}
+
+.duplicate-alert-resolved .duplicate-alert-icon {
+    color: #4caf50;
+}
+
+.duplicate-alert-resolved .duplicate-alert-content strong {
+    color: #4caf50;
+}
+
+.duplicate-alert-newseasons {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.4rem;
+    font-size: 0.8rem;
+    color: #4caf50;
+}
+
 /* ── Section Auto-validés (page validation) ── */
 
 .autovalidated-section {
@@ -2706,6 +2869,13 @@ a.pagination-btn:hover {
     padding: 0.85rem 2rem;
 }
 
+.transfer-start-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #666;
+    border-color: #666;
+}
+
 /* ── Conflict Overlay ── */
 
 .conflict-overlay {
@@ -2908,6 +3078,78 @@ a.pagination-btn:hover {
 .conflict-btn-skip:hover {
     background: var(--bg-card);
     color: var(--text-secondary);
+}
+
+.conflict-btn-recommended {
+    box-shadow: 0 0 0 2px var(--accent-primary);
+    font-weight: 600;
+}
+
+.conflict-reason {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin: 0.25rem 0 0.75rem;
+    font-style: italic;
+}
+
+.conflict-quality-scores {
+    display: flex;
+    gap: 1.5rem;
+    margin: 0.75rem 0;
+    padding: 0.75rem;
+    background: var(--bg-main);
+    border-radius: 8px;
+}
+
+.conflict-quality-col {
+    flex: 1;
+    position: relative;
+    padding: 0.5rem;
+    border-radius: 6px;
+}
+
+.conflict-quality-col.conflict-recommended {
+    background: rgba(var(--accent-primary-rgb, 99, 102, 241), 0.08);
+    border: 1px solid rgba(var(--accent-primary-rgb, 99, 102, 241), 0.25);
+}
+
+.conflict-badge-recommended {
+    display: inline-block;
+    background: var(--accent-primary);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.conflict-quality-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.35rem;
+}
+
+.conflict-quality-bar {
+    height: 8px;
+    background: var(--bg-card);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.25rem;
+}
+
+.conflict-quality-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.6s ease;
+}
+
+.conflict-quality-value {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
 }
 
 /* ── Transfer Responsive ── */

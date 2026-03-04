@@ -1,8 +1,17 @@
 {# Arborescence des transferts prévus #}
 
+{# Labels des choix de résolution #}
+{% set resolution_labels = {
+    'keep_old': "Garder l'ancien",
+    'keep_new': 'Garder le nouveau',
+    'keep_both': 'Garder les deux',
+    'skip': 'Passer'
+} %}
+
 {# Macro pour un fichier dans l'arborescence #}
 {% macro tree_leaf(item) %}
-<div class="tree-leaf">
+<div class="tree-leaf{% if item.duplicate %} tree-leaf-duplicate{% endif %}{% if item.duplicate_resolution %} tree-leaf-resolved{% endif %}"
+     {% if item.duplicate %}data-dup-group="{{ item.duplicate_group_key }}"{% endif %}>
     <div class="tree-leaf-main">
         <svg class="tree-leaf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -10,6 +19,49 @@
         </svg>
         <span class="tree-leaf-name">{{ item.new_filename }}</span>
         <span class="tree-leaf-size">{{ item.source_size }}</span>
+        {% if item.duplicate and not item.duplicate_resolution %}
+        <button class="tree-leaf-resolve-btn"
+                onclick="showDuplicateDialog(this)"
+                data-title="{{ item.title|e }}"
+                data-year="{{ item.year or '' }}"
+                data-group-key="{{ item.duplicate_group_key }}"
+                data-existing-title="{{ item.duplicate.existing_title|e }}"
+                data-existing-total-size="{{ item.duplicate.existing_total_size|default('?') }}"
+                data-existing-avg-size="{{ item.duplicate.existing_avg_size|default('?') }}"
+                data-existing-count="{{ item.duplicate.existing_file_count }}"
+                data-new-count="{{ item.duplicate.new_file_count|default(1) }}"
+                data-new-total-size="{{ item.duplicate.new_total_size|default(item.source_size) }}"
+                data-new-avg-size="{{ item.duplicate.new_avg_size|default(item.source_size) }}"
+                data-similarity="{{ item.duplicate.similarity_reason|e }}"
+                data-new-name="{{ item.new_filename|e }}"
+                {% if item.duplicate.quality_existing is defined %}
+                data-quality-existing="{{ item.duplicate.quality_existing }}"
+                data-quality-new="{{ item.duplicate.quality_new }}"
+                data-recommended="{{ item.duplicate.recommended or '' }}"
+                data-existing-resolution="{{ item.duplicate.existing_resolution|default('?') }}"
+                data-existing-video-codec="{{ item.duplicate.existing_video_codec|default('?') }}"
+                data-existing-audio-codec="{{ item.duplicate.existing_audio_codec|default('?') }}"
+                data-new-resolution="{{ item.duplicate.new_resolution|default('?') }}"
+                data-new-video-codec="{{ item.duplicate.new_video_codec|default('?') }}"
+                data-new-audio-codec="{{ item.duplicate.new_audio_codec|default('?') }}"
+                data-existing-video-bitrate="{{ item.duplicate.existing_video_bitrate|default('?') }}"
+                data-existing-audio-bitrate="{{ item.duplicate.existing_audio_bitrate|default('?') }}"
+                data-new-video-bitrate="{{ item.duplicate.new_video_bitrate|default('?') }}"
+                data-new-audio-bitrate="{{ item.duplicate.new_audio_bitrate|default('?') }}"
+                {% endif %}
+                title="Résoudre ce doublon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            Résoudre
+        </button>
+        {% elif item.duplicate and item.duplicate_resolution %}
+        <span class="tree-leaf-resolved-badge tree-leaf-resolved-{{ item.duplicate_resolution }}">
+            {{ resolution_labels.get(item.duplicate_resolution, item.duplicate_resolution) }}
+        </span>
+        {% endif %}
         {% if item.pending_id %}
         <button class="tree-leaf-sendback"
                 onclick="showSendbackDialog('{{ item.pending_id }}', '{{ item.new_filename|e }}')"
@@ -22,6 +74,17 @@
         {% endif %}
     </div>
     <div class="tree-leaf-dest">→ {{ item.storage_rel }}</div>
+    {% if item.duplicate %}
+    <div class="tree-leaf-dup-info">
+        <span class="tree-leaf-dup-reason">{{ item.duplicate.similarity_reason }}</span>
+        <span class="tree-leaf-dup-existing">— « {{ item.duplicate.existing_title }} » ({{ item.duplicate.existing_file_count }} fichier{{ 's' if item.duplicate.existing_file_count > 1 }})</span>
+        {% if item.duplicate.recommended and not item.duplicate_resolution %}
+        <span class="tree-leaf-dup-reco tree-leaf-dup-reco-{{ item.duplicate.recommended }}">
+            {% if item.duplicate.recommended == 'new' %}nouveau recommandé{% else %}ancien recommandé{% endif %}
+        </span>
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
 {% endmacro %}
 
