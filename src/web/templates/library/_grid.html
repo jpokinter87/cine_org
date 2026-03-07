@@ -35,6 +35,13 @@
                 <span class="lib-card-rating-source">{{ item.rating_source }}</span>
             </span>
             {% endif %}
+            {% if item.type == 'movie' and (item.resolution_label or item.codec_video or item.language_label) %}
+            <div class="lib-card-quality">
+                {% if item.resolution_label %}<span class="quality-res quality-{{ item.resolution_label|lower }}">{{ item.resolution_label }}</span>{% endif %}
+                {% if item.codec_video %}<span class="quality-codec">{{ item.codec_video }}</span>{% endif %}
+                {% if item.language_label %}<span class="quality-lang">{{ item.language_label }}</span>{% endif %}
+            </div>
+            {% endif %}
         </div>
         <div class="lib-card-body">
             <h3 class="lib-card-title">{{ item.title }}</h3>

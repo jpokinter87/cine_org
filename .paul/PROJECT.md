@@ -86,10 +86,12 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-- [ ] Overlays qualité sur posters web — Phase 33
+(none — v1.9 phases complete)
 
 ### Validated (Recently Shipped)
 
+- [x] Overlays qualité sur posters web (v1.9)
+  - Badges résolution (4K/1080p/720p/SD), codec vidéo, langue (Multi/FR/VO) sur posters grille — Phase 33
 - [x] Détection doublons au transfert (v1.9)
   - DuplicateDetector avec scoring qualité multi-critères (résolution, codecs, bitrate normalisé) — Phase 34
   - Résolution pré-transfert dans le résumé batch web (dialog comparatif, cascade série) — Phase 34
@@ -220,4 +222,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-03-04 after Phase 34 Détection Doublons au Transfert*
+*Last updated: 2026-03-07 after Phase 33 Overlays Qualité Web UI*

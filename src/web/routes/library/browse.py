@@ -139,6 +139,14 @@ async def library_index(
 
             for m in movies:
                 rating = _best_rating(m.vote_average, m.imdb_rating)
+                # Label langue compact pour badge grille
+                langs = _parse_genres(m.languages_json)  # réutilise le parser JSON
+                if len(langs) > 1:
+                    lang_label = "Multi"
+                elif langs:
+                    lang_label = langs[0].upper()
+                else:
+                    lang_label = ""
                 items.append(
                     {
                         "id": m.id,
@@ -155,6 +163,7 @@ async def library_index(
                         "resolution_label": _resolution_label(m.resolution),
                         "codec_video": m.codec_video,
                         "codec_audio": m.codec_audio,
+                        "language_label": lang_label,
                         "watched": m.watched,
                         "created_at": m.created_at,
                         "collection_name": m.collection_name,

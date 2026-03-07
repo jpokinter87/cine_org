@@ -3577,6 +3577,60 @@ a.pagination-btn:hover {
     color: #fff;
 }
 
+/* ── Card Quality Badges (bottom-left overlay) ── */
+
+.lib-card-quality {
+    position: absolute;
+    bottom: 0.4rem;
+    left: 0.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    z-index: 2;
+}
+
+.lib-card-quality span {
+    padding: 0.1rem 0.35rem;
+    border-radius: 100px;
+    font-size: 0.55rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.3;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.quality-res {
+    color: #fff;
+}
+
+.quality-4k {
+    background: rgba(218, 165, 32, 0.88);
+}
+
+.quality-1080p {
+    background: rgba(56, 161, 105, 0.85);
+}
+
+.quality-720p {
+    background: rgba(66, 133, 200, 0.82);
+}
+
+.quality-sd {
+    background: rgba(130, 130, 140, 0.75);
+}
+
+.quality-codec {
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.82);
+}
+
+.quality-lang {
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.82);
+}
+
 /* ── Card Zoom Button ── */
 
 .lib-card-zoom {
