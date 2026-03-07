@@ -186,7 +186,7 @@ def display_duplicate_symlinks_tree(report: "CleanupReport", video_dir: Path) ->
 
     for dir_path in sorted(groups.keys()):
         dir_branch = tree.add(f"[cyan]{dir_path}/[/cyan]")
-        for d in sorted(groups[dir_path], key=lambda x: x.symlink_path.name):
+        for d in sorted(groups[dir_path], key=lambda x: x.keep.name):
             keep_name = d.keep.name
             remove_names = ", ".join(s.name for s in d.remove)
             dir_branch.add(
@@ -212,13 +212,13 @@ def display_oversized_dirs_tree(report: "CleanupReport", video_dir: Path) -> Non
         except ValueError:
             rel_dir = str(p.parent_dir)
 
-        label = f"{rel_dir}/  [dim]({p.current_count} fichiers, max={p.max_files})[/dim]"
+        label = f"{rel_dir}/  [dim]({p.current_count} fichiers, max={p.max_allowed})[/dim]"
         dir_branch = tree.add(label)
 
-        # Afficher les subdivisions creees
-        if p.subdirs_created:
-            for subdir in sorted(p.subdirs_created):
-                dir_branch.add(f"[green]+ {subdir}/[/green]")
+        # Afficher les subdivisions prevues
+        if p.ranges:
+            for start, end in p.ranges:
+                dir_branch.add(f"[green]+ {start}-{end}/[/green]")
 
     console.print(tree)
 
