@@ -5,26 +5,25 @@
 See: .paul/PROJECT.md (updated 2026-03-04)
 
 **Core value:** Organiser et renommer automatiquement une vidéothèque personnelle à partir des téléchargements
-**Current focus:** v1.9 Normalisation & Intégration Jellyfin
+**Current focus:** Awaiting next milestone
 
 ## Current Position
 
-Milestone: v1.9 Normalisation & Intégration Jellyfin
-Phase: 33 of 6 (Overlays Qualité Web UI) — Complete
-Plan: 33-01 complete
-Status: Phase 33 complete, milestone v1.9 all phases done
-Last activity: 2026-03-07 — Phase 33 complete, transition done
+Milestone: Awaiting next milestone
+Phase: None active
+Plan: None
+Status: Milestone v1.9 complete — ready for next
+Last activity: 2026-03-07 — Milestone v1.9 completed
 
 Progress:
-- v1.9: [██████████] 100% (5/6 phases complete, 1 abandoned)
-- Phase 33: [██████████] 100%
+- v1.9: [██████████] 100% ✓
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop complete — Phase 33 done]
+  ○        ○        ○     [Milestone complete - ready for next]
 ```
 
 ## Accumulated Context
@@ -112,18 +111,19 @@ PLAN ──▶ APPLY ──▶ UNIFY
 None.
 
 ### Git State
-Last commit: 9e43cff (fix(web): sandbox résout le vrai chemin storage via symlinks)
+Last commit: 9f2e0a3 (feat(web): badges qualité sur posters grille)
 Branch: master
 
 ## Session Continuity
 
 Last session: 2026-03-07
-Stopped at: Phase 33 complete, milestone v1.9 all phases done
-Next action: /paul:complete-milestone (v1.9 toutes phases terminées)
-Resume file: .paul/ROADMAP.md
+Stopped at: Milestone v1.9 complete
+Next action: /paul:discuss-milestone or /paul:milestone
+Resume file: .paul/MILESTONES.md
 Resume context:
-- Phase 33 : badges qualité sur posters grille (résolution, codec, langue)
-- v1.9 : 5/6 phases complete (1 abandoned), prêt pour complete-milestone
+- v1.9 complete : normalisation séries, doublons, badges qualité
+- 10 milestones complétés (v1.0 → v1.9)
+- Prêt pour définir v2.0 ou v1.10
 
 ---
 *STATE.md — Updated after every significant action*

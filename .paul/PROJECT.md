@@ -12,9 +12,9 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 1.9.0-dev (Normalisation & Intégration Jellyfin) |
-| Status | Development — v1.9 in progress |
-| Last Updated | 2026-03-01 |
+| Version | 1.9.0 (Normalisation & Intégration Jellyfin) |
+| Status | Stable — v1.9 complete |
+| Last Updated | 2026-03-07 |
 
 ## Requirements
 

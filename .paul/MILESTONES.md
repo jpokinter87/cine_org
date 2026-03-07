@@ -13,6 +13,48 @@ Completed milestone log for this project.
 | v1.6 Gestion & Qualité de Données | 2026-02-28 | ~2 days | 4 phases, 5 plans |
 | v1.7 Fiabilité & Ergonomie Bibliothèque | 2026-02-28 | ~1 day | 2 phases, 2 plans |
 | v1.8 Robustesse Workflow & Corrections UX | 2026-03-01 | ~1 day | 3 phases, 3 plans |
+| v1.9 Normalisation & Intégration Jellyfin | 2026-03-07 | ~7 days | 5 phases, 7 plans |
+
+---
+
+## ✅ v1.9 Normalisation & Intégration Jellyfin
+
+**Completed:** 2026-03-07
+**Duration:** ~7 days (2026-03-01 → 2026-03-07)
+
+### Stats
+
+| Metric | Value |
+|--------|-------|
+| Phases | 5 complete + 1 abandoned (29, 30, 31, 33, 34) |
+| Plans | 7 |
+| Files created | 13 |
+| Files modified | 36 |
+
+### Key Accomplishments
+
+- Filet de sécurité films multi-parties : détection et correction automatique des doublons de nommage
+- Normalisation répertoires séries : Séries→Series, Séries TV→TV, routage documentaires, migration complète (code + DB + fichiers)
+- Commande fix-series-symlinks : mediainfo + guessit + enrichissement TVDB en un seul pass
+- DuplicateDetector : scoring qualité multi-critères (résolution, codecs, bitrate normalisé par efficacité codec)
+- Résolution doublons pré-transfert : dialog comparatif dans le résumé batch, cascade série, sandbox
+- Page web /duplicates : comparaison qualité, whitelist, suppression corbeille
+- Badges qualité sur posters grille : résolution (4K doré/1080p vert/720p bleu/SD gris), codec, langue
+- Commande check-duplicates CLI : détection par tmdb_id, scoring, whitelist JSON
+- Phase 32 NFO abandonnée : Jellyfin scrape TMDB seul, sidecar NFO sans bénéfice
+
+### Key Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Filet doublons post-batch | Plus robuste qu'une extraction en amont |
+| Répertoires sans accents (Series/TV) | Compatibilité cross-platform Jellyfin |
+| mediainfo primaire, guessit fallback | Pipeline identique au workflow normal |
+| SD reconnu comme résolution valide | Fichiers legacy, évite ~666 faux positifs |
+| Normalisation ligatures Œ/Æ | Comparaison TVDB vs filename |
+| Scoring qualité codec-normalized | AV1 ×3.0, HEVC ×2.0, VP9 ×1.8 pour bitrate équitable |
+| Résolution dans résumé batch (pas SSE) | Meilleure UX, pas d'interruption mid-transfert |
+| Phase 32 NFO abandonnée | Jellyfin scrape TMDB seul, sidecar inutile |
 
 ---
 
