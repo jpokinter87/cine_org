@@ -12,8 +12,8 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 1.9.0 (Normalisation & Intégration Jellyfin) |
-| Status | Stable — v1.9 complete |
+| Version | 2.0.0-dev (Production & Maintenance Complète) |
+| Status | Development — v2.0 in progress |
 | Last Updated | 2026-03-07 |
 
 ## Requirements
@@ -86,7 +86,10 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-(none — v1.9 phases complete)
+- [ ] Maintenance web complète : opérations CLI depuis le web, résultats détaillés, gestion sandbox — Phase 35
+- [ ] Doublons symlinks cross-genre : détection et nettoyage symlinks même fichier dans genres différents — Phase 36
+- [ ] Déploiement production : service systemd, workflow git dev→serveur — Phase 37
+- [ ] Intégration Jellyfin : volumes Docker, montage symlinks+cibles — Phase 38
 
 ### Validated (Recently Shipped)
 

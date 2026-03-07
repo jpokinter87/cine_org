@@ -5,25 +5,25 @@
 See: .paul/PROJECT.md (updated 2026-03-04)
 
 **Core value:** Organiser et renommer automatiquement une vidéothèque personnelle à partir des téléchargements
-**Current focus:** Awaiting next milestone
+**Current focus:** v2.0 Production & Maintenance Complète
 
 ## Current Position
 
-Milestone: Awaiting next milestone
-Phase: None active
-Plan: None
-Status: Milestone v1.9 complete — ready for next
-Last activity: 2026-03-07 — Milestone v1.9 completed
+Milestone: v2.0 Production & Maintenance Complète
+Phase: 35 of 4 (Maintenance Web Complète)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-03-07 — Milestone v2.0 created
 
 Progress:
-- v1.9: [██████████] 100% ✓
+- v2.0: [░░░░░░░░░░] 0%
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ○        ○        ○     [Milestone complete - ready for next]
+  ○        ○        ○     [Ready for first PLAN]
 ```
 
 ## Accumulated Context
@@ -117,13 +117,13 @@ Branch: master
 ## Session Continuity
 
 Last session: 2026-03-07
-Stopped at: Milestone v1.9 complete
-Next action: /paul:discuss-milestone or /paul:milestone
-Resume file: .paul/MILESTONES.md
+Stopped at: Milestone v2.0 created, ready to plan
+Next action: /paul:plan for Phase 35
+Resume file: .paul/ROADMAP.md
 Resume context:
-- v1.9 complete : normalisation séries, doublons, badges qualité
-- 10 milestones complétés (v1.0 → v1.9)
-- Prêt pour définir v2.0 ou v1.10
+- v2.0 créé : maintenance web, doublons cross-genre, déploiement, Jellyfin
+- 4 phases (35-38), aucune commencée
+- Commencer par Phase 35 Maintenance Web Complète
 
 ---
 *STATE.md — Updated after every significant action*

@@ -6,7 +6,32 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 ## Current Milestone
 
-Run `/paul:discuss-milestone` or `/paul:milestone` to define the next milestone.
+**v2.0 Production & Maintenance Complète** (v2.0.0)
+Status: 🚧 In Progress
+Phases: 0 of 4 complete
+
+| Phase | Name | Plans | Status | Completed |
+|-------|------|-------|--------|-----------|
+| 35 | Maintenance Web Complète | TBD | Not started | - |
+| 36 | Doublons Symlinks Cross-Genre | TBD | Not started | - |
+| 37 | Déploiement Production | TBD | Not started | - |
+| 38 | Intégration Jellyfin | TBD | Not started | - |
+
+### Phase 35: Maintenance Web Complète
+
+Focus: Opérations maintenance depuis le web (cleanup, repair, etc.), résultats détaillés fichier par fichier, gestion sandbox (liste, suppression définitive). La sortie détaillée est web-only.
+
+### Phase 36: Doublons Symlinks Cross-Genre
+
+Focus: Détection des symlinks dans video/ pointant vers le même fichier physique mais classés dans des genres différents (ex: Comédie dramatique dans Comédie ET Drame). Nettoyage selon le genre prioritaire (GENRE_HIERARCHY). Fonction générale.
+
+### Phase 37: Déploiement Production
+
+Focus: Service systemd pour uvicorn, workflow git dev→serveur (push/pull), configuration paths/ports/logs. Documentation déploiement. Permettre de continuer le développement sur la machine de dev.
+
+### Phase 38: Intégration Jellyfin
+
+Focus: Corriger les volumes Docker pour que Jellyfin accède aux symlinks dans /media/Serveur/Collection. Montage symlinks + cibles (storage) avec les mêmes chemins absolus dans le container. Vérification scan bibliothèque.
 
 ## Completed Milestones
 
@@ -133,4 +158,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-07 — Milestone v1.9 complete*
+*Last updated: 2026-03-07 — Milestone v2.0 created*
