@@ -1,32 +1,28 @@
 {% if not has_issues %}
 <div class="maint-summary maint-summary-ok">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-    <span>Aucun problème détecté</span>
+    <span>Aucun probleme detecte</span>
 </div>
 {% else %}
 <div class="maint-summary maint-summary-warn">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-    <span>{{ total_issues }} problème{{ 's' if total_issues != 1 else '' }} détecté{{ 's' if total_issues != 1 else '' }}</span>
+    <span>{{ total_issues }} probleme{{ 's' if total_issues != 1 else '' }} detecte{{ 's' if total_issues != 1 else '' }}</span>
 </div>
 
 <div class="maint-categories">
-    <!-- Entrées fantômes -->
+    <!-- Entrees fantomes -->
     <div class="maint-category">
         <div class="maint-cat-header">
             <span class="maint-cat-badge {% if ghost_entries %}badge-warn{% else %}badge-ok{% endif %}">{{ ghost_total }}</span>
-            <span class="maint-cat-title">Entrées fantômes</span>
-            <span class="maint-cat-hint">Entrées en base sans fichier sur le disque</span>
+            <span class="maint-cat-title">Entrees fantomes</span>
+            <span class="maint-cat-hint">Entrees en base sans fichier sur le disque</span>
         </div>
         {% if ghost_entries %}
         <details class="maint-issue-details">
             <summary class="maint-issue-toggle">
-                {% if ghost_total > ghost_entries|length %}
-                    Voir les {{ ghost_entries|length }} premières sur {{ ghost_total }}
-                {% else %}
-                    Voir les {{ ghost_total }} entrée{{ 's' if ghost_total != 1 else '' }}
-                {% endif %}
+                Voir les {{ ghost_total }} entree{{ 's' if ghost_total != 1 else '' }}
             </summary>
-            <ul class="maint-issue-list">
+            <ul class="maint-issue-list maint-issue-list-full">
                 {% for item in ghost_entries %}
                 <li class="maint-issue-item" title="{{ item.full_path }}">
                     <code class="maint-issue-path">{{ item.path }}</code>
@@ -34,60 +30,76 @@
                 </li>
                 {% endfor %}
             </ul>
-            {% if ghost_total > ghost_entries|length %}
-            <p class="maint-truncated">… et {{ ghost_total - ghost_entries|length }} autre{{ 's' if (ghost_total - ghost_entries|length) != 1 else '' }}</p>
-            {% endif %}
         </details>
+        {% if is_local %}
+        <div class="maint-fix-actions maint-fix-inline">
+            <button class="maint-fix-btn maint-fix-btn-sm" id="btn-ghost-fix" onclick="startFix('ghost')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                Purger de la base
+            </button>
+            <span class="maint-fix-hint">Supprime les {{ ghost_total }} entree{{ 's' if ghost_total != 1 else '' }} de la base de donnees</span>
+        </div>
+        <div class="maint-progress" id="ghost-fix-progress" style="display: none;">
+            <div class="maint-progress-bar-track">
+                <div class="maint-progress-bar-fill" id="ghost-fix-bar"></div>
+            </div>
+            <div class="maint-progress-phase" id="ghost-fix-phase"></div>
+        </div>
+        <div id="ghost-fix-results"></div>
+        {% endif %}
         {% endif %}
     </div>
 
     <!-- Fichiers orphelins -->
     <div class="maint-category">
         <div class="maint-cat-header">
-            <span class="maint-cat-badge {% if orphan_files %}badge-warn{% else %}badge-ok{% endif %}">{{ orphan_total }}</span>
+            <span class="maint-cat-badge {% if orphan_branches %}badge-warn{% else %}badge-ok{% endif %}">{{ orphan_total }}</span>
             <span class="maint-cat-title">Fichiers orphelins</span>
-            <span class="maint-cat-hint">Fichiers sur le disque absents de la base</span>
+            <span class="maint-cat-hint">Fichiers dans storage/ non cibles par un symlink dans video/</span>
         </div>
-        {% if orphan_files %}
+        {% if orphan_branches %}
         <details class="maint-issue-details">
             <summary class="maint-issue-toggle">
-                {% if orphan_total > orphan_files|length %}
-                    Voir les {{ orphan_files|length }} premiers sur {{ orphan_total }}
-                {% else %}
-                    Voir les {{ orphan_total }} fichier{{ 's' if orphan_total != 1 else '' }}
-                {% endif %}
+                Voir les {{ orphan_total }} fichier{{ 's' if orphan_total != 1 else '' }} dans {{ orphan_branches|length }} branche{{ 's' if orphan_branches|length != 1 else '' }}
             </summary>
-            <ul class="maint-issue-list">
-                {% for item in orphan_files %}
-                <li class="maint-issue-item" title="{{ item.full_path }}">
-                    <code class="maint-issue-path">{{ item.path }}</code>
-                </li>
+            <div class="maint-orphan-branches">
+                {% for branch_name, files in orphan_branches %}
+                <details class="maint-orphan-branch">
+                    <summary class="maint-orphan-branch-header">
+                        <span class="maint-cat-badge badge-warn">{{ files|length }}</span>
+                        <code class="maint-issue-path">{{ branch_name }}</code>
+                    </summary>
+                    <ul class="maint-issue-list maint-issue-list-full">
+                        {% for item in files %}
+                        <li class="maint-issue-item" title="{{ item.full_path }}">
+                            <code class="maint-issue-path">{{ item.path }}</code>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </details>
                 {% endfor %}
-            </ul>
-            {% if orphan_total > orphan_files|length %}
-            <p class="maint-truncated">… et {{ orphan_total - orphan_files|length }} autre{{ 's' if (orphan_total - orphan_files|length) != 1 else '' }}</p>
-            {% endif %}
+            </div>
         </details>
+        <div class="maint-cli-hint maint-cli-hint-compact">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span>Fichiers dans storage/ sans symlink correspondant dans video/. Branches entieres hors scope = repertoires a deplacer hors de Films/Series dans le storage.</span>
+        </div>
         {% endif %}
     </div>
 
-    <!-- Symlinks cassés -->
+    <!-- Symlinks casses -->
     <div class="maint-category">
         <div class="maint-cat-header">
             <span class="maint-cat-badge {% if broken_symlinks %}badge-error{% else %}badge-ok{% endif %}">{{ broken_total }}</span>
-            <span class="maint-cat-title">Symlinks cassés</span>
+            <span class="maint-cat-title">Symlinks casses</span>
             <span class="maint-cat-hint">Liens symboliques pointant vers des cibles inexistantes</span>
         </div>
         {% if broken_symlinks %}
         <details class="maint-issue-details">
             <summary class="maint-issue-toggle">
-                {% if broken_total > broken_symlinks|length %}
-                    Voir les {{ broken_symlinks|length }} premiers sur {{ broken_total }}
-                {% else %}
-                    Voir les {{ broken_total }} symlink{{ 's' if broken_total != 1 else '' }}
-                {% endif %}
+                Voir les {{ broken_total }} symlink{{ 's' if broken_total != 1 else '' }}
             </summary>
-            <ul class="maint-issue-list">
+            <ul class="maint-issue-list maint-issue-list-full">
                 {% for item in broken_symlinks %}
                 <li class="maint-issue-item" title="{{ item.full_path }}">
                     <code class="maint-issue-path">{{ item.path }}</code>
@@ -95,15 +107,41 @@
                 </li>
                 {% endfor %}
             </ul>
-            {% if broken_total > broken_symlinks|length %}
-            <p class="maint-truncated">… et {{ broken_total - broken_symlinks|length }} autre{{ 's' if (broken_total - broken_symlinks|length) != 1 else '' }}</p>
-            {% endif %}
         </details>
         {% endif %}
     </div>
 </div>
 
-{% if suggestions %}
+{% if is_local %}
+<div class="maint-fix-actions">
+    {% if broken_total > 0 %}
+    <button class="maint-fix-btn" id="btn-check-fix" onclick="startFix('check')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        Reparer les symlinks
+    </button>
+    <span class="maint-fix-hint">Repare automatiquement les symlinks avec candidat >= 90%</span>
+    {% endif %}
+    <button class="maint-fix-btn" id="btn-reconcile-fix" onclick="startFix('reconcile')" style="margin-left: 0.5rem;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+        Reconcilier la base
+    </button>
+    <span class="maint-fix-hint">Enrichit les films/episodes avec le chemin de leur symlink (dry-run)</span>
+</div>
+<div class="maint-progress" id="check-fix-progress" style="display: none;">
+    <div class="maint-progress-bar-track">
+        <div class="maint-progress-bar-fill" id="check-fix-bar"></div>
+    </div>
+    <div class="maint-progress-phase" id="check-fix-phase"></div>
+</div>
+<div id="check-fix-results"></div>
+<div class="maint-progress" id="reconcile-fix-progress" style="display: none;">
+    <div class="maint-progress-bar-track">
+        <div class="maint-progress-bar-fill" id="reconcile-fix-bar"></div>
+    </div>
+    <div class="maint-progress-phase" id="reconcile-fix-phase"></div>
+</div>
+<div id="reconcile-fix-results"></div>
+{% elif suggestions %}
 <div class="maint-cli-hint">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
     <div>

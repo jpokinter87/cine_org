@@ -10,20 +10,21 @@ See: .paul/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Milestone: v2.0 Production & Maintenance Complète
-Phase: 35 of 4 (Maintenance Web Complète)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-03-07 — Milestone v2.0 created
+Phase: 35 of 4 (Maintenance Web Complète) — Planning
+Plan: 35-01 created, awaiting approval
+Status: PLAN created, ready for APPLY
+Last activity: 2026-03-07 — Created .paul/phases/35-maintenance-web-complete/35-01-PLAN.md
 
 Progress:
 - v2.0: [░░░░░░░░░░] 0%
+- Phase 35: [░░░░░░░░░░] 0%
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ○        ○        ○     [Ready for first PLAN]
+  ✓        ○        ○     [Plan created, awaiting approval]
 ```
 
 ## Accumulated Context
@@ -117,13 +118,13 @@ Branch: master
 ## Session Continuity
 
 Last session: 2026-03-07
-Stopped at: Milestone v2.0 created, ready to plan
-Next action: /paul:plan for Phase 35
-Resume file: .paul/ROADMAP.md
+Stopped at: Plan 35-01 created
+Next action: Review and approve plan, then run /paul:apply .paul/phases/35-maintenance-web-complete/35-01-PLAN.md
+Resume file: .paul/phases/35-maintenance-web-complete/35-01-PLAN.md
 Resume context:
-- v2.0 créé : maintenance web, doublons cross-genre, déploiement, Jellyfin
-- 4 phases (35-38), aucune commencée
-- Commencer par Phase 35 Maintenance Web Complète
+- Plan 35-01 : Corrections cleanup + integrite depuis le web (boutons Corriger, SSE, resultats detailles)
+- Plan 35-02 prevu : Gestion sandbox (config + page web)
+- Skill /frontend-design required avant APPLY
 
 ---
 *STATE.md — Updated after every significant action*

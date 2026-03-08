@@ -1,0 +1,27 @@
+{% if count == 0 %}
+<div class="maint-summary maint-summary-ok">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <span>Aucune correction effectuee</span>
+</div>
+{% else %}
+<div class="maint-summary maint-summary-ok">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <span>{{ count }} {{ action }}</span>
+</div>
+{% if details %}
+<div class="maint-categories">
+    <div class="maint-category">
+        <details class="maint-issue-details">
+            <summary class="maint-issue-toggle">Voir les details</summary>
+            <ul class="maint-issue-list">
+                {% for item in details %}
+                <li class="maint-issue-item">
+                    <code class="maint-issue-path maint-fix-deleted">{{ item }}</code>
+                </li>
+                {% endfor %}
+            </ul>
+        </details>
+    </div>
+</div>
+{% endif %}
+{% endif %}

@@ -1,0 +1,60 @@
+{% if error %}
+<div class="maint-summary maint-summary-warn">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <span>{{ error }}</span>
+</div>
+{% elif movies_count == 0 and episodes_count == 0 %}
+<div class="maint-summary maint-summary-ok">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <span>{% if dry_run %}Aucune association symlink a mettre a jour{% else %}Aucune mise a jour effectuee{% endif %}</span>
+</div>
+{% else %}
+<div class="maint-summary {% if dry_run %}maint-summary-warn{% else %}maint-summary-ok{% endif %}">
+    {% if dry_run %}
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+    <span>Dry-run : {{ movies_count }} film{{ 's' if movies_count != 1 else '' }} et {{ episodes_count }} episode{{ 's' if episodes_count != 1 else '' }} a enrichir avec leur chemin symlink</span>
+    {% else %}
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <span>{{ movies_count }} film{{ 's' if movies_count != 1 else '' }} et {{ episodes_count }} episode{{ 's' if episodes_count != 1 else '' }} mis a jour</span>
+    {% endif %}
+</div>
+
+{% if details %}
+<div class="maint-categories">
+    <div class="maint-category">
+        <details class="maint-issue-details">
+            <summary class="maint-issue-toggle">
+                Voir les {{ details|length }} association{{ 's' if details|length != 1 else '' }}
+            </summary>
+            <ul class="maint-issue-list maint-issue-list-full">
+                {% for item in details %}
+                <li class="maint-issue-item">
+                    <span class="maint-cat-badge {% if item.type == 'film' %}badge-ok{% else %}badge-warn{% endif %}" style="font-size: 0.6rem; padding: 0.1rem 0.4rem;">{{ item.type }}</span>
+                    <code class="maint-issue-path">{{ item.file }}</code>
+                    <span class="maint-fix-arrow">→</span>
+                    <code class="maint-issue-path maint-fix-target">{{ item.symlink }}</code>
+                </li>
+                {% endfor %}
+            </ul>
+        </details>
+    </div>
+</div>
+{% endif %}
+
+{% if dry_run %}
+<div class="maint-fix-actions" style="margin-top: 0.5rem;">
+    <button class="maint-fix-btn" id="btn-reconcile-apply-fix" onclick="startFix('reconcile-apply')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        Appliquer la reconciliation
+    </button>
+    <span class="maint-fix-hint">Ecrit les chemins symlink dans la base de donnees</span>
+</div>
+<div class="maint-progress" id="reconcile-apply-fix-progress" style="display: none;">
+    <div class="maint-progress-bar-track">
+        <div class="maint-progress-bar-fill" id="reconcile-apply-fix-bar"></div>
+    </div>
+    <div class="maint-progress-phase" id="reconcile-apply-fix-phase"></div>
+</div>
+<div id="reconcile-apply-fix-results"></div>
+{% endif %}
+{% endif %}

@@ -5380,6 +5380,187 @@ details[open] > .maint-issue-toggle::before {
     color: var(--accent-amber);
 }
 
+/* Fix actions — boutons de correction maintenance */
+.maint-fix-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.maint-fix-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 1.2rem;
+    background: rgba(232, 168, 73, 0.1);
+    color: var(--accent-amber);
+    border: 1px solid rgba(232, 168, 73, 0.3);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.maint-fix-btn:hover {
+    background: rgba(232, 168, 73, 0.18);
+    border-color: var(--accent-amber);
+    box-shadow: 0 0 12px rgba(232, 168, 73, 0.15);
+}
+
+.maint-fix-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+/* Fix results — compteurs et details */
+.maint-fix-counters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.maint-fix-counter {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.78rem;
+}
+
+.maint-fix-counter.fix-success {
+    background: rgba(78, 203, 141, 0.08);
+    color: var(--accent-emerald);
+    border: 1px solid rgba(78, 203, 141, 0.15);
+}
+
+.maint-fix-counter.fix-warn {
+    background: rgba(232, 168, 73, 0.08);
+    color: var(--accent-amber);
+    border: 1px solid rgba(232, 168, 73, 0.15);
+}
+
+.fix-counter-value {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.fix-counter-label {
+    opacity: 0.85;
+}
+
+.maint-fix-arrow {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    flex-shrink: 0;
+}
+
+.maint-fix-target {
+    color: var(--accent-emerald) !important;
+}
+
+.maint-fix-deleted {
+    color: var(--accent-rose) !important;
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
+.maint-fix-move-item {
+    flex-direction: column;
+    gap: 0.15rem !important;
+}
+
+.maint-fix-move-detail {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    padding-left: 0.4rem;
+}
+
+.maint-fix-errors {
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(232, 93, 117, 0.06);
+    border: 1px solid rgba(232, 93, 117, 0.15);
+    border-radius: var(--radius-sm);
+}
+
+.maint-fix-error-msg {
+    font-size: 0.75rem;
+    color: var(--accent-rose);
+    word-break: break-all;
+}
+
+/* Liste complete sans limite de 200px */
+.maint-issue-list-full {
+    max-height: 400px;
+}
+
+/* Bouton fix inline (a cote d'une categorie) */
+.maint-fix-inline {
+    margin-top: 0.4rem;
+    padding-top: 0.4rem;
+    border-top: none;
+}
+
+.maint-fix-btn-sm {
+    padding: 0.35rem 0.8rem;
+    font-size: 0.75rem;
+}
+
+/* CLI hint compact (pour orphelins) */
+.maint-cli-hint-compact {
+    display: inline-flex;
+    gap: 0.4rem;
+    padding: 0.4rem 0.6rem;
+    margin-top: 0.4rem;
+    margin-left: 2rem;
+    font-size: 0.72rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+}
+
+.maint-cli-hint-compact code {
+    font-family: 'DM Sans', monospace;
+    font-size: 0.7rem;
+    background: var(--bg-card);
+    padding: 0.05rem 0.3rem;
+    border-radius: 3px;
+    color: var(--accent-amber);
+}
+
+.maint-orphan-branches {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin-top: 0.3rem;
+}
+
+.maint-orphan-branch > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    padding: 0.3rem 0.5rem;
+    border-radius: 6px;
+    transition: background 0.15s;
+}
+
+.maint-orphan-branch > summary:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.maint-orphan-branch[open] > summary {
+    margin-bottom: 0.2rem;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    Re-association TMDB — Overlay de correction manuelle
    ═══════════════════════════════════════════════════════════════ */

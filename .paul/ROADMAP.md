@@ -12,7 +12,7 @@ Phases: 0 of 4 complete
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
-| 35 | Maintenance Web Complète | TBD | Not started | - |
+| 35 | Maintenance Web Complète | 2 | Planning | - |
 | 36 | Doublons Symlinks Cross-Genre | TBD | Not started | - |
 | 37 | Déploiement Production | TBD | Not started | - |
 | 38 | Intégration Jellyfin | TBD | Not started | - |

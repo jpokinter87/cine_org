@@ -114,5 +114,63 @@ function startAnalysis(type) {
         }, 2000);
     });
 }
+
+function startFix(type) {
+    var urlMap = {
+        'cleanup': '/maintenance/cleanup/fix',
+        'check': '/maintenance/check/fix-symlinks',
+        'ghost': '/maintenance/check/purge-ghosts',
+        'reconcile': '/maintenance/check/reconcile-db',
+        'reconcile-apply': '/maintenance/check/reconcile-db-apply'
+    };
+    var url = urlMap[type];
+    var btn = document.getElementById('btn-' + type + '-fix');
+    var progress = document.getElementById(type + '-fix-progress');
+    var bar = document.getElementById(type + '-fix-bar');
+    var phase = document.getElementById(type + '-fix-phase');
+    var results = document.getElementById(type + '-fix-results');
+
+    if (!btn || !progress) return;
+
+    btn.style.display = 'none';
+    progress.style.display = 'block';
+    results.innerHTML = '';
+    bar.style.width = '0%';
+    phase.textContent = 'Demarrage des corrections...';
+
+    var es = new EventSource(url);
+
+    es.addEventListener('progress', function(e) {
+        var d = JSON.parse(e.data);
+        var pct = ((d.phase - 1) / d.total) * 100;
+        bar.style.width = Math.max(pct, 5) + '%';
+        phase.innerHTML = '<span class="maint-phase-counter">Etape ' + d.phase + '/' + d.total + '</span> ' + d.label;
+    });
+
+    es.addEventListener('complete', function(e) {
+        es.close();
+        bar.style.width = '100%';
+        bar.classList.add('complete');
+        phase.textContent = 'Corrections terminees';
+
+        setTimeout(function() {
+            var d = JSON.parse(e.data);
+            results.innerHTML = d.html;
+            progress.style.display = 'none';
+            bar.classList.remove('complete');
+        }, 400);
+    });
+
+    es.addEventListener('error', function(e) {
+        es.close();
+        bar.classList.add('error');
+        phase.textContent = 'Erreur lors des corrections';
+        setTimeout(function() {
+            progress.style.display = 'none';
+            bar.classList.remove('error');
+            btn.style.display = '';
+        }, 2000);
+    });
+}
 </script>
 {% endblock %}

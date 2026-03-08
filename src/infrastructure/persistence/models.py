@@ -47,6 +47,7 @@ class MovieModel(SQLModel, table=True):
     overview: str | None = None
     poster_path: str | None = None
     file_path: str | None = Field(default=None, index=True)
+    symlink_path: str | None = Field(default=None, index=True)
     file_hash: str | None = Field(default=None, index=True)
     codec_video: str | None = None
     codec_audio: str | None = None
@@ -179,6 +180,7 @@ class EpisodeModel(SQLModel, table=True):
     duration_seconds: int | None = None
     overview: str | None = None
     file_path: str | None = Field(default=None, index=True)
+    symlink_path: str | None = Field(default=None, index=True)
     file_hash: str | None = Field(default=None, index=True)
     codec_video: str | None = None
     codec_audio: str | None = None
