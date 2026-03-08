@@ -10,21 +10,21 @@ See: .paul/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Milestone: v2.0 Production & Maintenance Complète
-Phase: 35 of 4 (Maintenance Web Complète) — Planning
-Plan: 35-01 created, awaiting approval
-Status: PLAN created, ready for APPLY
-Last activity: 2026-03-07 — Created .paul/phases/35-maintenance-web-complete/35-01-PLAN.md
+Phase: 35 of 4 (Maintenance Web Complète) — Complete
+Plan: 35-01 complete (1/1)
+Status: Phase 35 complete, ready for next phase
+Last activity: 2026-03-08 — Phase 35 complete, SUMMARY created
 
 Progress:
-- v2.0: [░░░░░░░░░░] 0%
-- Phase 35: [░░░░░░░░░░] 0%
+- v2.0: [██░░░░░░░░] 25% (1/4 phases)
+- Phase 35: [██████████] 100%
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ○        ○     [Plan created, awaiting approval]
+  ✓        ✓        ✓     [Loop complete - ready for next PLAN]
 ```
 
 ## Accumulated Context
@@ -85,6 +85,10 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - keep_old = skip le nouveau (reste dans temp), ne touche pas l'existant
 - _resolve_storage_path : suit les symlinks video pour trouver le vrai chemin storage (évite erreurs de casse)
 - Loguru dans transfer.py au lieu de logging standard (messages visibles)
+- Orphelins par symlinks : fichier orphelin = pas ciblé par un symlink (remplace comparaison DB)
+- Cache analyse _analysis_cache module-level pour partage analyse → fix
+- Réconciliation DB dry-run avant apply pour actions sur fichiers réels
+- Sandbox des orphelins différé à une phase dédiée (périmètre trop large)
 
 ### Deferred Issues
 - README.md à réécrire de fond en comble : nouvelles commandes, structure répertoires attendue, architecture, configuration
@@ -104,27 +108,30 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Quelques tvdb_id potentiellement erronés (découvert avec BSG 1978 vs 2004)
 - Page maintenance : ajouter la gestion de la corbeille (liste, restauration, vidage définitif)
 - 3 doublons DB (même file_path, 2 MovieModel) : Double mise, Compañeros, Plein la vue — purger l'entrée excédentaire
-- Doublons physiques + symlinks orphelins cross-genre : des films existent en double dans storage (même taille, noms différents) avec des symlinks dans plusieurs genres (ex: Poupées russes dans Comédie dramatique + Comédie + Drame). check-duplicates ne détecte pas ces cas car il groupe par tmdb_id dans la DB, mais ces doublons ont un seul enregistrement DB. À investiguer : détection par taille de fichier identique + même tmdb_id implicite, ou scan des symlinks video/ pointant vers le même fichier physique
-- Sandbox management : ajouter `sandbox_dir` dans Settings config + page web gestion (liste/suppression fichiers sandboxés). Place : page maintenance
+- Doublons physiques + symlinks orphelins cross-genre : des films existent en double dans storage (même taille, noms différents) avec des symlinks dans plusieurs genres
+- Sandbox management complet : sandboxer orphelins vers .sandbox/orphans/, interface gestion (liste/suppression/réinjection workflow)
 - Vérifier détection doublons avec un film (testé uniquement avec séries jusqu'ici)
+- Bouton "Visionner" dans validation manuelle (confirmer visuellement une association)
+- Bug TMDB "Tout le bleu du ciel" (tt35562998) : recherche IMDb ID échoue à récupérer les détails
+- Trous dans subdivisions alphabétiques : étendre la borne la plus proche au lieu de laisser à la racine
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: 9f2e0a3 (feat(web): badges qualité sur posters grille)
+Last commit: 70471b7 (feat(web): maintenance complète — corrections web, réconciliation DB, orphelins par symlinks)
 Branch: master
 
 ## Session Continuity
 
-Last session: 2026-03-07
-Stopped at: Plan 35-01 created
-Next action: Review and approve plan, then run /paul:apply .paul/phases/35-maintenance-web-complete/35-01-PLAN.md
-Resume file: .paul/phases/35-maintenance-web-complete/35-01-PLAN.md
+Last session: 2026-03-08
+Stopped at: Phase 35 complete, UNIFY done
+Next action: Start next phase (36: Doublons Symlinks Cross-Genre) or plan sandbox phase
+Resume file: .paul/phases/35-maintenance-web-complete/35-01-SUMMARY.md
 Resume context:
-- Plan 35-01 : Corrections cleanup + integrite depuis le web (boutons Corriger, SSE, resultats detailles)
-- Plan 35-02 prevu : Gestion sandbox (config + page web)
-- Skill /frontend-design required avant APPLY
+- Phase 35 complete : corrections web, reconciliation DB, orphelins par symlinks
+- Sandbox des orphelins à planifier comme phase dédiée
+- Prochaine phase planifiée : 36 (Doublons Symlinks Cross-Genre)
 
 ---
 *STATE.md — Updated after every significant action*
