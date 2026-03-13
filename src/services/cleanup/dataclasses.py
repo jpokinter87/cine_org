@@ -56,6 +56,17 @@ class DuplicateSymlink:
 
 
 @dataclass
+class CrossGenreDuplicate:
+    """Symlinks cross-genre : plusieurs liens dans des genres differents pointant vers le meme fichier."""
+
+    target_path: Path
+    keep: Path
+    keep_genre: str
+    remove: list[Path]
+    remove_genres: list[str]
+
+
+@dataclass
 class SubdivisionPlan:
     """Plan de subdivision d'un repertoire surcharge."""
 
@@ -77,6 +88,7 @@ class CleanupReport:
     oversized_dirs: list[SubdivisionPlan]
     empty_dirs: list[Path]
     duplicate_symlinks: list[DuplicateSymlink] = field(default_factory=list)
+    cross_genre_duplicates: list[CrossGenreDuplicate] = field(default_factory=list)
     not_in_db_count: int = 0
 
     @property
@@ -91,6 +103,7 @@ class CleanupReport:
             len(self.broken_symlinks)
             + len(self.misplaced_symlinks)
             + len(self.duplicate_symlinks)
+            + len(self.cross_genre_duplicates)
             + len(self.oversized_dirs)
             + len(self.empty_dirs)
         )
@@ -105,6 +118,7 @@ class CleanupResult:
     broken_symlinks_deleted: int = 0
     moved_symlinks: int = 0
     duplicate_symlinks_removed: int = 0
+    cross_genre_removed: int = 0
     subdivisions_created: int = 0
     symlinks_redistributed: int = 0
     empty_dirs_removed: int = 0

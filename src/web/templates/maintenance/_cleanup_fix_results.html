@@ -1,4 +1,4 @@
-{% set total_actions = result.repaired_symlinks + result.broken_symlinks_deleted + result.moved_symlinks + result.duplicate_symlinks_removed + result.subdivisions_created + result.empty_dirs_removed %}
+{% set total_actions = result.repaired_symlinks + result.broken_symlinks_deleted + result.moved_symlinks + result.duplicate_symlinks_removed + result.cross_genre_removed + result.subdivisions_created + result.empty_dirs_removed %}
 {% set has_errors = result.errors|length > 0 %}
 
 {% if total_actions == 0 and not has_errors %}
@@ -44,6 +44,13 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
         <span class="fix-counter-value">{{ result.duplicate_symlinks_removed }}</span>
         <span class="fix-counter-label">doublon{{ 's' if result.duplicate_symlinks_removed != 1 else '' }} supprime{{ 's' if result.duplicate_symlinks_removed != 1 else '' }}</span>
+    </div>
+    {% endif %}
+    {% if result.cross_genre_removed > 0 %}
+    <div class="maint-fix-counter fix-warn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+        <span class="fix-counter-value">{{ result.cross_genre_removed }}</span>
+        <span class="fix-counter-label">doublon{{ 's' if result.cross_genre_removed != 1 else '' }} cross-genre supprime{{ 's' if result.cross_genre_removed != 1 else '' }}</span>
     </div>
     {% endif %}
     {% if result.subdivisions_created > 0 %}
@@ -137,6 +144,26 @@
                 <li class="maint-issue-item">
                     <code class="maint-issue-path maint-fix-deleted">{{ item.path }}</code>
                     <span class="maint-issue-detail">conserve : {{ item.kept }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </details>
+    </div>
+    {% endif %}
+
+    {% if details.get('cross_genre_removed') %}
+    <div class="maint-category">
+        <div class="maint-cat-header">
+            <span class="maint-cat-badge badge-warn">{{ details.cross_genre_removed|length }}</span>
+            <span class="maint-cat-title">Doublons cross-genre supprimes</span>
+        </div>
+        <details class="maint-issue-details">
+            <summary class="maint-issue-toggle">Voir les details</summary>
+            <ul class="maint-issue-list">
+                {% for item in details.cross_genre_removed %}
+                <li class="maint-issue-item">
+                    <code class="maint-issue-path maint-fix-deleted">{{ item.path }}</code>
+                    <span class="maint-issue-detail">({{ item.genre }}) — conserve : {{ item.kept }} ({{ item.kept_genre }})</span>
                 </li>
                 {% endfor %}
             </ul>

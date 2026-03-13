@@ -39,7 +39,8 @@ def display_cleanup_report(report: "CleanupReport", video_dir: Path) -> None:
         "Symlinks casses",
         str(len(report.broken_symlinks)),
         f"{sum(1 for b in report.broken_symlinks if b.best_candidate)} reparables"
-        if report.broken_symlinks else "",
+        if report.broken_symlinks
+        else "",
     )
     table.add_row(
         "Symlinks mal places",
@@ -49,15 +50,26 @@ def display_cleanup_report(report: "CleanupReport", video_dir: Path) -> None:
     table.add_row(
         "Symlinks dupliques",
         str(len(report.duplicate_symlinks)),
-        ", ".join(
-            f"{d.keep.name}" for d in report.duplicate_symlinks[:3]
-        ) if report.duplicate_symlinks else "",
+        ", ".join(f"{d.keep.name}" for d in report.duplicate_symlinks[:3])
+        if report.duplicate_symlinks
+        else "",
+    )
+    table.add_row(
+        "Doublons cross-genre",
+        str(len(report.cross_genre_duplicates)),
+        f"{sum(len(d.remove) for d in report.cross_genre_duplicates)} symlinks a supprimer"
+        if report.cross_genre_duplicates
+        else "",
     )
     table.add_row(
         "Repertoires surcharges",
         str(len(report.oversized_dirs)),
-        ", ".join(f"{p.parent_dir.name} ({p.current_count})" for p in report.oversized_dirs[:3])
-        if report.oversized_dirs else "",
+        ", ".join(
+            f"{p.parent_dir.name} ({p.current_count})"
+            for p in report.oversized_dirs[:3]
+        )
+        if report.oversized_dirs
+        else "",
     )
     table.add_row(
         "Repertoires vides",
@@ -81,6 +93,8 @@ def display_cleanup_report(report: "CleanupReport", video_dir: Path) -> None:
         display_misplaced_symlinks_tree(report, video_dir)
     if report.duplicate_symlinks:
         display_duplicate_symlinks_tree(report, video_dir)
+    if report.cross_genre_duplicates:
+        display_cross_genre_tree(report, video_dir)
     if report.oversized_dirs:
         display_oversized_dirs_tree(report, video_dir)
     if report.empty_dirs:
@@ -112,7 +126,9 @@ def display_broken_symlinks_tree(report: "CleanupReport", video_dir: Path) -> No
         dir_branch = tree.add(f"[cyan]{dir_path}/[/cyan]")
         for b in sorted(groups[dir_path], key=lambda x: x.symlink_path.name):
             name = b.symlink_path.name
-            target_name = b.original_target.name if b.original_target != Path("") else "?"
+            target_name = (
+                b.original_target.name if b.original_target != Path("") else "?"
+            )
 
             if b.best_candidate and b.candidate_score >= 90.0:
                 label = (
@@ -196,6 +212,28 @@ def display_duplicate_symlinks_tree(report: "CleanupReport", video_dir: Path) ->
     console.print(tree)
 
 
+def display_cross_genre_tree(report: "CleanupReport", video_dir: Path) -> None:
+    """Affiche l'arbre des doublons cross-genre avec genre conserve/supprime."""
+    from src.adapters.cli.helpers import console
+
+    console.print()
+
+    tree = Tree(
+        f"[bold magenta]Doublons cross-genre ({len(report.cross_genre_duplicates)})[/bold magenta]"
+    )
+
+    for d in sorted(report.cross_genre_duplicates, key=lambda x: x.keep.name):
+        branch = tree.add(
+            f"[green]{d.keep.name}[/green]  [dim]conserve dans[/dim] [cyan]{d.keep_genre}[/cyan]"
+        )
+        for link, genre in zip(d.remove, d.remove_genres):
+            branch.add(
+                f"[red]{link.name}[/red] [dim]dans[/dim] [yellow]{genre}[/yellow] [dim]→ supprimer[/dim]"
+            )
+
+    console.print(tree)
+
+
 def display_oversized_dirs_tree(report: "CleanupReport", video_dir: Path) -> None:
     """Affiche l'arbre des repertoires surcharges avec subdivision prevue."""
     from src.adapters.cli.helpers import console
@@ -212,7 +250,9 @@ def display_oversized_dirs_tree(report: "CleanupReport", video_dir: Path) -> Non
         except ValueError:
             rel_dir = str(p.parent_dir)
 
-        label = f"{rel_dir}/  [dim]({p.current_count} fichiers, max={p.max_allowed})[/dim]"
+        label = (
+            f"{rel_dir}/  [dim]({p.current_count} fichiers, max={p.max_allowed})[/dim]"
+        )
         dir_branch = tree.add(label)
 
         # Afficher les subdivisions prevues
@@ -229,9 +269,7 @@ def display_empty_dirs_tree(report: "CleanupReport", video_dir: Path) -> None:
 
     console.print()
 
-    tree = Tree(
-        f"[dim]Repertoires vides ({len(report.empty_dirs)})[/dim]"
-    )
+    tree = Tree(f"[dim]Repertoires vides ({len(report.empty_dirs)})[/dim]")
 
     for empty_dir in sorted(report.empty_dirs):
         try:

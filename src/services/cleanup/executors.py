@@ -11,6 +11,7 @@ from typing import Any
 from .dataclasses import (
     BrokenSymlinkInfo,
     CleanupResult,
+    CrossGenreDuplicate,
     DuplicateSymlink,
     MisplacedSymlink,
     SubdivisionPlan,
@@ -129,6 +130,33 @@ def fix_duplicate_symlinks(
             try:
                 link.unlink()
                 result.duplicate_symlinks_removed += 1
+            except FileNotFoundError:
+                result.errors.append(f"Symlink deja absent {link}")
+            except Exception as e:
+                result.errors.append(f"Suppression echouee {link}: {e}")
+
+    return result
+
+
+def fix_cross_genre_duplicates(
+    duplicates: list[CrossGenreDuplicate],
+) -> CleanupResult:
+    """
+    Supprime les symlinks cross-genre redondants en gardant le genre prioritaire.
+
+    Args:
+        duplicates: Liste des groupes de symlinks cross-genre.
+
+    Returns:
+        CleanupResult avec le nombre de symlinks supprimes.
+    """
+    result = CleanupResult()
+
+    for dup in duplicates:
+        for link in dup.remove:
+            try:
+                link.unlink()
+                result.cross_genre_removed += 1
             except FileNotFoundError:
                 result.errors.append(f"Symlink deja absent {link}")
             except Exception as e:

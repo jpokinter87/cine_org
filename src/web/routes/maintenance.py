@@ -338,6 +338,7 @@ async def run_cleanup_sse(request: Request):
         "Détection des symlinks cassés",
         "Recherche des symlinks mal placés",
         "Détection des doublons",
+        "Détection des doublons cross-genre",
         "Vérification des répertoires surdimensionnés",
         "Recherche des répertoires vides",
     ]
@@ -379,14 +380,20 @@ async def run_cleanup_sse(request: Request):
             cleanup_svc._scan_duplicate_symlinks, video_dir
         )
 
-        # Phase 5 : surdimensionnés
+        # Phase 5 : doublons cross-genre
         yield _sse_progress(5, len(phases_info), phases_info[4])
+        cross_genre_raw = await asyncio.to_thread(
+            cleanup_svc._scan_cross_genre_duplicates, video_dir
+        )
+
+        # Phase 6 : surdimensionnés
+        yield _sse_progress(6, len(phases_info), phases_info[5])
         oversized_raw = await asyncio.to_thread(
             cleanup_svc._scan_oversized_dirs, video_dir, max_per_dir
         )
 
-        # Phase 6 : vides
-        yield _sse_progress(6, len(phases_info), phases_info[5])
+        # Phase 7 : vides
+        yield _sse_progress(7, len(phases_info), phases_info[6])
         empty_raw = await asyncio.to_thread(cleanup_svc._scan_empty_dirs, video_dir)
 
         # Cacher le rapport pour reutilisation par le fix
@@ -394,6 +401,7 @@ async def run_cleanup_sse(request: Request):
             "broken": broken_raw,
             "misplaced": misplaced_raw,
             "duplicates": duplicates_raw,
+            "cross_genre": cross_genre_raw,
             "oversized": oversized_raw,
             "empty": empty_raw,
             "repair_svc": repair_svc,
@@ -402,12 +410,18 @@ async def run_cleanup_sse(request: Request):
 
         # Construire les données template
         has_issues = bool(
-            broken_raw or misplaced_raw or duplicates_raw or oversized_raw or empty_raw
+            broken_raw
+            or misplaced_raw
+            or duplicates_raw
+            or cross_genre_raw
+            or oversized_raw
+            or empty_raw
         )
         total_issues = (
             len(broken_raw)
             + len(misplaced_raw)
             + len(duplicates_raw)
+            + len(cross_genre_raw)
             + len(oversized_raw)
             + len(empty_raw)
         )
@@ -441,6 +455,18 @@ async def run_cleanup_sse(request: Request):
             }
             for d in duplicates_raw
         ]
+        cross_genre = [
+            {
+                "keep": _relative_from_root(cg.keep),
+                "keep_genre": cg.keep_genre,
+                "remove": [
+                    {"path": _relative_from_root(r), "genre": g}
+                    for r, g in zip(cg.remove, cg.remove_genres)
+                ],
+                "remove_count": len(cg.remove),
+            }
+            for cg in cross_genre_raw
+        ]
         oversized = [
             {
                 "path": _relative_from_root(o.parent_dir),
@@ -457,11 +483,13 @@ async def run_cleanup_sse(request: Request):
             broken=broken,
             misplaced=misplaced,
             duplicates=duplicates,
+            cross_genre=cross_genre,
             oversized=oversized,
             empty=empty,
             broken_total=len(broken_raw),
             misplaced_total=len(misplaced_raw),
             duplicates_total=len(duplicates_raw),
+            cross_genre_total=len(cross_genre_raw),
             oversized_total=len(oversized_raw),
             empty_total=len(empty_raw),
             is_local=is_local,
@@ -498,6 +526,7 @@ def _run_cleanup_fix(container, settings):
             broken_symlinks=cached["broken"],
             misplaced_symlinks=cached["misplaced"],
             duplicate_symlinks=cached["duplicates"],
+            cross_genre_duplicates=cached.get("cross_genre", []),
             oversized_dirs=cached["oversized"],
             empty_dirs=cached["empty"],
         )
@@ -519,11 +548,13 @@ def _run_cleanup_fix(container, settings):
     # Phase 1 : Reparer symlinks casses (score >= 90%)
     if report.broken_symlinks:
         repairable = [
-            b for b in report.broken_symlinks
+            b
+            for b in report.broken_symlinks
             if b.best_candidate and b.candidate_score >= 90.0
         ]
         unrepairable = [
-            b for b in report.broken_symlinks
+            b
+            for b in report.broken_symlinks
             if b.best_candidate is None or b.candidate_score < 90.0
         ]
 
@@ -547,8 +578,7 @@ def _run_cleanup_fix(container, settings):
             total_result.broken_symlinks_deleted += r.broken_symlinks_deleted
             total_result.errors.extend(r.errors)
             results["deleted_broken"] = [
-                {"path": _relative_from_root(b.symlink_path)}
-                for b in unrepairable
+                {"path": _relative_from_root(b.symlink_path)} for b in unrepairable
             ]
 
     # Phase 3 : Deplacer symlinks mal places
@@ -573,13 +603,33 @@ def _run_cleanup_fix(container, settings):
         dup_details = []
         for d in report.duplicate_symlinks:
             for link in d.remove:
-                dup_details.append({
-                    "path": _relative_from_root(link),
-                    "kept": _relative_from_root(d.keep),
-                })
+                dup_details.append(
+                    {
+                        "path": _relative_from_root(link),
+                        "kept": _relative_from_root(d.keep),
+                    }
+                )
         results["duplicates_removed"] = dup_details
 
-    # Phase 5 : Subdiviser repertoires surdimensionnes
+    # Phase 5 : Supprimer doublons cross-genre
+    if report.cross_genre_duplicates:
+        r = cleanup_svc.fix_cross_genre_duplicates(report.cross_genre_duplicates)
+        total_result.cross_genre_removed += r.cross_genre_removed
+        total_result.errors.extend(r.errors)
+        cg_details = []
+        for cg in report.cross_genre_duplicates:
+            for link, genre in zip(cg.remove, cg.remove_genres):
+                cg_details.append(
+                    {
+                        "path": _relative_from_root(link),
+                        "genre": genre,
+                        "kept": _relative_from_root(cg.keep),
+                        "kept_genre": cg.keep_genre,
+                    }
+                )
+        results["cross_genre_removed"] = cg_details
+
+    # Phase 6 : Subdiviser repertoires surdimensionnes
     if report.oversized_dirs:
         r = cleanup_svc.subdivide_oversized_dirs(report.oversized_dirs)
         total_result.subdivisions_created += r.subdivisions_created
@@ -593,7 +643,7 @@ def _run_cleanup_fix(container, settings):
             for p in report.oversized_dirs
         ]
 
-    # Phase 6 : Nettoyer repertoires vides
+    # Phase 7 : Nettoyer repertoires vides
     if report.empty_dirs:
         r = cleanup_svc.clean_empty_dirs(report.empty_dirs)
         total_result.empty_dirs_removed += r.empty_dirs_removed
@@ -686,8 +736,12 @@ def _run_check_fix_symlinks(container, settings):
     else:
         all_broken = repair_svc.find_broken_symlinks()
         scoped_broken = [
-            link for link in all_broken
-            if any(f"/{sd}/" in str(link) or str(link).endswith(f"/{sd}") for sd in _SCOPED_SUBDIRS)
+            link
+            for link in all_broken
+            if any(
+                f"/{sd}/" in str(link) or str(link).endswith(f"/{sd}")
+                for sd in _SCOPED_SUBDIRS
+            )
         ]
 
     result = CleanupResult()
@@ -704,11 +758,13 @@ def _run_check_fix_symlinks(container, settings):
             success = repair_svc.repair_symlink(link, best_target)
             if success:
                 result.repaired_symlinks += 1
-                repaired_details.append({
-                    "path": _relative_from_root(link),
-                    "target": _relative_from_root(best_target),
-                    "score": f"{best_score:.0f}",
-                })
+                repaired_details.append(
+                    {
+                        "path": _relative_from_root(link),
+                        "target": _relative_from_root(best_target),
+                        "score": f"{best_score:.0f}",
+                    }
+                )
             else:
                 result.failed_repairs += 1
         except Exception as e:
@@ -738,9 +794,7 @@ async def run_check_fix_symlinks_sse(request: Request):
         )
         yield _sse_progress(2, 2, "Reparation terminee")
 
-        html = templates.env.get_template(
-            "maintenance/_check_fix_results.html"
-        ).render(
+        html = templates.env.get_template("maintenance/_check_fix_results.html").render(
             result=result,
             details=details,
             skipped=skipped,
@@ -827,9 +881,7 @@ async def purge_ghosts_sse(request: Request):
         yield _sse_progress(1, 1, "Suppression des entrees fantomes")
         count, details = await asyncio.to_thread(_run_purge_ghosts, container)
 
-        html = templates.env.get_template(
-            "maintenance/_purge_results.html"
-        ).render(
+        html = templates.env.get_template("maintenance/_purge_results.html").render(
             action="entrees fantomes supprimees de la base",
             count=count,
             details=details,
@@ -911,7 +963,12 @@ def _run_reconcile_db(dry_run: bool = True):
 
     cached_index = _analysis_cache.get("check_symlink_index")
     if not cached_index:
-        return 0, 0, [], "Lancez d'abord l'analyse d'integrite pour indexer les symlinks."
+        return (
+            0,
+            0,
+            [],
+            "Lancez d'abord l'analyse d'integrite pour indexer les symlinks.",
+        )
 
     if not dry_run:
         _ensure_symlink_path_columns()
@@ -944,11 +1001,13 @@ def _run_reconcile_db(dry_run: bool = True):
 
             if target_str in movie_paths:
                 if dry_run:
-                    details.append({
-                        "type": "film",
-                        "file": _relative_from_root(target_str),
-                        "symlink": _relative_from_root(symlink_path),
-                    })
+                    details.append(
+                        {
+                            "type": "film",
+                            "file": _relative_from_root(target_str),
+                            "symlink": _relative_from_root(symlink_path),
+                        }
+                    )
                     movies_updated += 1
                 else:
                     model = session.get(MovieModel, movie_paths[target_str])
@@ -956,19 +1015,23 @@ def _run_reconcile_db(dry_run: bool = True):
                         model.symlink_path = symlink_str
                         session.add(model)
                         movies_updated += 1
-                        details.append({
-                            "type": "film",
-                            "file": _relative_from_root(target_str),
-                            "symlink": _relative_from_root(symlink_path),
-                        })
+                        details.append(
+                            {
+                                "type": "film",
+                                "file": _relative_from_root(target_str),
+                                "symlink": _relative_from_root(symlink_path),
+                            }
+                        )
 
             elif target_str in episode_paths:
                 if dry_run:
-                    details.append({
-                        "type": "episode",
-                        "file": _relative_from_root(target_str),
-                        "symlink": _relative_from_root(symlink_path),
-                    })
+                    details.append(
+                        {
+                            "type": "episode",
+                            "file": _relative_from_root(target_str),
+                            "symlink": _relative_from_root(symlink_path),
+                        }
+                    )
                     episodes_updated += 1
                 else:
                     model = session.get(EpisodeModel, episode_paths[target_str])
@@ -976,11 +1039,13 @@ def _run_reconcile_db(dry_run: bool = True):
                         model.symlink_path = symlink_str
                         session.add(model)
                         episodes_updated += 1
-                        details.append({
-                            "type": "episode",
-                            "file": _relative_from_root(target_str),
-                            "symlink": _relative_from_root(symlink_path),
-                        })
+                        details.append(
+                            {
+                                "type": "episode",
+                                "file": _relative_from_root(target_str),
+                                "symlink": _relative_from_root(symlink_path),
+                            }
+                        )
 
         if not dry_run:
             session.commit()
@@ -1006,9 +1071,7 @@ async def reconcile_db_sse(request: Request):
             _run_reconcile_db, True
         )
 
-        html = templates.env.get_template(
-            "maintenance/_reconcile_results.html"
-        ).render(
+        html = templates.env.get_template("maintenance/_reconcile_results.html").render(
             dry_run=True,
             movies_count=movies,
             episodes_count=episodes,
@@ -1044,9 +1107,7 @@ async def reconcile_db_apply_sse(request: Request):
             _run_reconcile_db, False
         )
 
-        html = templates.env.get_template(
-            "maintenance/_reconcile_results.html"
-        ).render(
+        html = templates.env.get_template("maintenance/_reconcile_results.html").render(
             dry_run=False,
             movies_count=movies,
             episodes_count=episodes,

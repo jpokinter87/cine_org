@@ -13,6 +13,7 @@ from .analyzers import (
     is_in_managed_scope,
     iter_managed_paths,
     scan_broken_symlinks,
+    scan_cross_genre_duplicates,
     scan_duplicate_symlinks,
     scan_empty_dirs,
     scan_misplaced_symlinks,
@@ -22,6 +23,7 @@ from .dataclasses import (
     BrokenSymlinkInfo,
     CleanupReport,
     CleanupResult,
+    CrossGenreDuplicate,
     DuplicateSymlink,
     MisplacedSymlink,
     SubdivisionPlan,
@@ -29,6 +31,7 @@ from .dataclasses import (
 from .executors import (
     clean_empty_dirs,
     delete_broken_symlinks,
+    fix_cross_genre_duplicates,
     fix_duplicate_symlinks,
     fix_misplaced_symlinks,
     repair_broken_symlinks,
@@ -93,6 +96,7 @@ class CleanupService:
             not_in_db = 0
 
         duplicates = self._scan_duplicate_symlinks(video_dir)
+        cross_genre = self._scan_cross_genre_duplicates(video_dir)
         oversized = self._scan_oversized_dirs(video_dir, max_per_dir)
         empty = self._scan_empty_dirs(video_dir)
 
@@ -101,6 +105,7 @@ class CleanupService:
             broken_symlinks=broken,
             misplaced_symlinks=misplaced,
             duplicate_symlinks=duplicates,
+            cross_genre_duplicates=cross_genre,
             oversized_dirs=oversized,
             empty_dirs=empty,
             not_in_db_count=not_in_db,
@@ -118,10 +123,14 @@ class CleanupService:
 
     def _find_expected_dir(self, video_file, video_dir: Path):
         from .analyzers import _find_expected_dir
+
         return _find_expected_dir(
-            video_file, video_dir,
-            self._movie_repo, self._series_repo,
-            self._episode_repo, self._organizer_service,
+            video_file,
+            video_dir,
+            self._movie_repo,
+            self._series_repo,
+            self._episode_repo,
+            self._organizer_service,
         )
 
     # --- Delegation des methodes d'analyse (compatibilite) ---
@@ -142,11 +151,15 @@ class CleanupService:
     def _scan_duplicate_symlinks(self, video_dir: Path):
         return scan_duplicate_symlinks(video_dir)
 
+    def _scan_cross_genre_duplicates(self, video_dir: Path):
+        return scan_cross_genre_duplicates(video_dir)
+
     def _scan_oversized_dirs(self, video_dir: Path, max_per_dir: int = 50):
         return scan_oversized_dirs(video_dir, max_per_dir)
 
     def _is_under_series(self, path: Path, video_dir: Path) -> bool:
         from .analyzers import _is_under_series
+
         return _is_under_series(path, video_dir)
 
     def _scan_empty_dirs(self, video_dir: Path):
@@ -159,9 +172,7 @@ class CleanupService:
     ) -> CleanupResult:
         return repair_broken_symlinks(broken, self._repair_service, min_score)
 
-    def delete_broken_symlinks(
-        self, broken: list[BrokenSymlinkInfo]
-    ) -> CleanupResult:
+    def delete_broken_symlinks(self, broken: list[BrokenSymlinkInfo]) -> CleanupResult:
         return delete_broken_symlinks(broken)
 
     def fix_misplaced_symlinks(
@@ -174,9 +185,12 @@ class CleanupService:
     ) -> CleanupResult:
         return fix_duplicate_symlinks(duplicates)
 
-    def subdivide_oversized_dirs(
-        self, plans: list[SubdivisionPlan]
+    def fix_cross_genre_duplicates(
+        self, duplicates: list[CrossGenreDuplicate]
     ) -> CleanupResult:
+        return fix_cross_genre_duplicates(duplicates)
+
+    def subdivide_oversized_dirs(self, plans: list[SubdivisionPlan]) -> CleanupResult:
         return subdivide_oversized_dirs(plans, self._video_file_repo)
 
     def clean_empty_dirs(self, empty_dirs: list[Path]) -> CleanupResult:
@@ -188,4 +202,5 @@ class CleanupService:
         self, parent_dir: Path, max_per_subdir: int
     ) -> SubdivisionPlan:
         from .subdivision_algorithm import calculate_subdivision_ranges
+
         return calculate_subdivision_ranges(parent_dir, max_per_subdir)

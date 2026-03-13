@@ -22,9 +22,7 @@ _DEFAULT_CACHE_DIR = Path.home() / ".cineorg"
 _CACHE_FILENAME = "cleanup_report.json"
 
 
-def save_report_cache(
-    report: CleanupReport, cache_dir: Optional[Path] = None
-) -> None:
+def save_report_cache(report: CleanupReport, cache_dir: Optional[Path] = None) -> None:
     """
     Sauvegarde le rapport d'analyse en JSON pour reutilisation ulterieure.
 
@@ -64,9 +62,7 @@ def save_report_cache(
                 "current_count": o.current_count,
                 "max_allowed": o.max_allowed,
                 "ranges": o.ranges,
-                "items_to_move": [
-                    [str(src), str(dst)] for src, dst in o.items_to_move
-                ],
+                "items_to_move": [[str(src), str(dst)] for src, dst in o.items_to_move],
                 "out_of_range_items": [
                     [str(src), str(dst)] for src, dst in o.out_of_range_items
                 ],

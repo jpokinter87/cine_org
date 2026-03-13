@@ -17,9 +17,12 @@ from src.core.entities.media import Movie, Series
 from src.core.entities.video import VideoFile
 from src.infrastructure.persistence.models import MovieModel, EpisodeModel, SeriesModel
 
+from src.utils.constants import GENRE_FOLDER_MAPPING, GENRE_HIERARCHY
+
 from .dataclasses import (
     MANAGED_SUBDIRS,
     BrokenSymlinkInfo,
+    CrossGenreDuplicate,
     DuplicateSymlink,
     MisplacedSymlink,
     SubdivisionPlan,
@@ -292,6 +295,131 @@ def scan_duplicate_symlinks(video_dir: Path) -> list[DuplicateSymlink]:
                 target_path=target,
                 keep=keep,
                 remove=remove,
+            )
+        )
+
+    return result
+
+
+def _get_genre_folder_priority(folder_name: str) -> int:
+    """Retourne la priorite d'un dossier genre (plus petit = plus prioritaire)."""
+    # Construire le mapping inverse : dossier genre → meilleur rang GENRE_HIERARCHY
+    # Un dossier peut correspondre a plusieurs genres TMDB (ex: "Thriller" ← mystere, thriller)
+    # On prend le rang le plus prioritaire (le plus petit)
+    best_rank = len(GENRE_HIERARCHY) + 1
+    folder_lower = folder_name.lower()
+    for genre_key, mapped_folder in GENRE_FOLDER_MAPPING.items():
+        if mapped_folder.lower() == folder_lower:
+            # Trouver le rang de ce genre dans GENRE_HIERARCHY
+            for i, hierarchy_genre in enumerate(GENRE_HIERARCHY):
+                if hierarchy_genre.lower() == genre_key:
+                    best_rank = min(best_rank, i)
+                    break
+    return best_rank
+
+
+def _extract_genre_folder(symlink_path: Path, video_dir: Path) -> str | None:
+    """Extrait le nom du dossier genre depuis le chemin d'un symlink sous Films/."""
+    try:
+        relative = symlink_path.relative_to(video_dir / "Films")
+    except ValueError:
+        return None
+    parts = relative.parts
+    if len(parts) < 2:
+        return None
+    return parts[0]
+
+
+def scan_cross_genre_duplicates(video_dir: Path) -> list[CrossGenreDuplicate]:
+    """
+    Detecte les symlinks pointant vers le meme fichier physique dans des genres differents.
+
+    Groupe les symlinks sous video/Films/ par cible resolue, puis identifie
+    les groupes ou les symlinks apparaissent dans des dossiers genre differents.
+    Le symlink dans le genre le plus prioritaire (GENRE_HIERARCHY) est conserve.
+
+    Args:
+        video_dir: Repertoire video a scanner.
+
+    Returns:
+        Liste de CrossGenreDuplicate pour chaque groupe cross-genre.
+    """
+    films_dir = video_dir / "Films"
+    if not films_dir.exists():
+        return []
+
+    # Grouper les symlinks par cible (readlink rapide, sans resolution complete)
+    # Premiere passe : grouper par cible brute (readlink) — O(1) par symlink
+    raw_groups: dict[Path, list[Path]] = defaultdict(list)
+
+    for genre_dir in films_dir.iterdir():
+        if not genre_dir.is_dir():
+            continue
+        for path in genre_dir.rglob("*"):
+            if not path.is_symlink():
+                continue
+            try:
+                target = path.readlink()
+                raw_groups[target].append(path)
+            except OSError:
+                continue
+
+    # Deuxieme passe : ne resoudre que les groupes >= 2 (candidats doublons)
+    groups: dict[Path, list[Path]] = defaultdict(list)
+    for target, symlinks in raw_groups.items():
+        if len(symlinks) < 2:
+            continue
+        for sl in symlinks:
+            try:
+                resolved = sl.resolve()
+                if resolved.exists():
+                    groups[resolved].append(sl)
+            except OSError:
+                continue
+
+    result = []
+    for target, symlinks in groups.items():
+        if len(symlinks) < 2:
+            continue
+
+        # Extraire le genre de chaque symlink
+        genre_map: dict[str, list[Path]] = defaultdict(list)
+        for sl in symlinks:
+            genre = _extract_genre_folder(sl, video_dir)
+            if genre:
+                genre_map[genre].append(sl)
+
+        # Ignorer si tous dans le meme genre (traite par scan_duplicate_symlinks)
+        if len(genre_map) < 2:
+            continue
+
+        # Determiner le genre prioritaire
+        genres_sorted = sorted(genre_map.keys(), key=_get_genre_folder_priority)
+        keep_genre = genres_sorted[0]
+        # Parmi les symlinks du genre prioritaire, garder le nom le plus long
+        keep_symlinks = genre_map[keep_genre]
+        keep_symlinks.sort(key=lambda p: len(p.name), reverse=True)
+        keep = keep_symlinks[0]
+
+        remove = []
+        remove_genres = []
+        # Ajouter les symlinks redondants du meme genre prioritaire (sauf keep)
+        for sl in keep_symlinks[1:]:
+            remove.append(sl)
+            remove_genres.append(keep_genre)
+        # Ajouter tous les symlinks des autres genres
+        for genre in genres_sorted[1:]:
+            for sl in genre_map[genre]:
+                remove.append(sl)
+                remove_genres.append(genre)
+
+        result.append(
+            CrossGenreDuplicate(
+                target_path=target,
+                keep=keep,
+                keep_genre=keep_genre,
+                remove=remove,
+                remove_genres=remove_genres,
             )
         )
 

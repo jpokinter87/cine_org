@@ -39,7 +39,11 @@ def _parse_parent_range(dir_name: str) -> tuple[str, str]:
     if match:
         start_part = match.group(1).upper()
         end_part = match.group(2).upper()
-        start = (start_part[0] + "A") if len(start_part) == 1 else (start_part[0] + start_part[1])
+        start = (
+            (start_part[0] + "A")
+            if len(start_part) == 1
+            else (start_part[0] + start_part[1])
+        )
         end = (end_part[0] + "Z") if len(end_part) == 1 else (end_part[0] + end_part[1])
         return start, end
 
@@ -109,8 +113,10 @@ def _refine_out_of_range_dest(planned_dest: Path) -> Path:
     # Chercher des sous-repertoires de subdivision (format "Xx-Yy" uniquement)
     # Ignore les repertoires de contenu (series, films) qui ne sont pas des subdivisions
     subdirs = [
-        d for d in sorted(target_dir.iterdir())
-        if d.is_dir() and not d.is_symlink()
+        d
+        for d in sorted(target_dir.iterdir())
+        if d.is_dir()
+        and not d.is_symlink()
         and _parse_parent_range(d.name) != ("AA", "ZZ")
     ]
     if not subdirs:
@@ -159,7 +165,11 @@ def _refine_plans_destinations(plans: list[SubdivisionPlan]) -> None:
                 stripped = _strip_article(item_name).strip()
                 stripped = _normalize_sort_key(stripped)
                 letters_only = "".join(c for c in stripped if c.isalpha())
-                sort_key = letters_only.upper()[:2] if len(letters_only) >= 2 else letters_only.upper().ljust(2, "A")
+                sort_key = (
+                    letters_only.upper()[:2]
+                    if len(letters_only) >= 2
+                    else letters_only.upper().ljust(2, "A")
+                )
 
                 # Trouver la subdivision correspondante dans le plan cible
                 for start, end in target_plan.ranges:
