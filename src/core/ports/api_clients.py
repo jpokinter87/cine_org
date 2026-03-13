@@ -73,6 +73,7 @@ class MediaDetails:
     vote_count: Optional[int] = None
     collection_id: Optional[int] = None
     collection_name: Optional[str] = None
+    is_tv: bool = False
 
 
 @dataclass

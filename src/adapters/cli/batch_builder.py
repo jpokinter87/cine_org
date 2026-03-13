@@ -120,6 +120,7 @@ async def _enrich_movie_metadata(
     movie_id: str,
     tmdb_client,
     container: "Container",
+    source: str = "tmdb",
 ) -> tuple[
     tuple[str, ...], "MediaDetails | None", str | None, float | None, int | None
 ]:
@@ -130,6 +131,7 @@ async def _enrich_movie_metadata(
         movie_id: ID TMDB du film
         tmdb_client: Client TMDB
         container: Container pour acceder au repo IMDb
+        source: Source du candidat ("tmdb" ou "tmdb_tv" pour les séries TV TMDB)
 
     Returns:
         Tuple (genres, details, imdb_id, imdb_rating, imdb_votes)
@@ -142,12 +144,18 @@ async def _enrich_movie_metadata(
 
     if tmdb_client and getattr(tmdb_client, "_api_key", None) and movie_id:
         try:
-            movie_details = await tmdb_client.get_details(movie_id)
+            if source == "tmdb_tv":
+                movie_details = await tmdb_client.get_tv_details(movie_id)
+            else:
+                movie_details = await tmdb_client.get_details(movie_id)
             if movie_details and movie_details.genres:
                 movie_genres = movie_details.genres
 
             # Recuperer l'imdb_id via external_ids
-            external_ids = await tmdb_client.get_external_ids(movie_id)
+            if source == "tmdb_tv":
+                external_ids = await tmdb_client.get_tv_external_ids(movie_id)
+            else:
+                external_ids = await tmdb_client.get_external_ids(movie_id)
             if external_ids:
                 imdb_id = external_ids.get("imdb_id")
 
@@ -445,6 +453,8 @@ async def build_transfers_batch(
                 title=candidate_title,
                 year=candidate_year,
                 genres=series_genres,
+                overview=series_details.overview if series_details else None,
+                poster_path=series_details.poster_url if series_details else None,
             )
             episode = Episode(
                 season_number=season_num,
@@ -519,7 +529,9 @@ async def build_transfers_batch(
                 imdb_id,
                 imdb_rating,
                 imdb_votes,
-            ) = await _enrich_movie_metadata(str(candidate_id), tmdb_client, container)
+            ) = await _enrich_movie_metadata(
+                str(candidate_id), tmdb_client, container, source=candidate_source
+            )
 
             # Extraire les metadonnees techniques du fichier
             codec_video, codec_audio, resolution, languages, file_size_bytes = (

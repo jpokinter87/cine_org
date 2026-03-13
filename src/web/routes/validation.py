@@ -273,7 +273,11 @@ async def validate_candidate(
     if selected is None:
         year_int = int(year) if year and year.strip() else None
         selected = SearchResult(
-            id=candidate_id, title=title, year=year_int, source=source, score=0.0,
+            id=candidate_id,
+            title=title,
+            year=year_int,
+            source=source,
+            score=0.0,
         )
 
     try:
@@ -353,7 +357,9 @@ async def _auto_validate_series_episodes(service, pending, candidate) -> int:
 
     # Titre guessit de l'épisode validé (pour le fallback par nom de fichier)
     ref_filename = _get_filename(pending)
-    ref_title = guessit(ref_filename).get("title", "").lower().strip() if ref_filename else ""
+    ref_title = (
+        guessit(ref_filename).get("title", "").lower().strip() if ref_filename else ""
+    )
 
     for other in remaining:
         other_candidates = parse_candidates(other.candidates)
@@ -367,7 +373,11 @@ async def _auto_validate_series_episodes(service, pending, candidate) -> int:
         elif not other_candidates and ref_title:
             # Fallback : aucun candidat, comparer le titre guessit
             other_filename = _get_filename(other)
-            other_title = guessit(other_filename).get("title", "").lower().strip() if other_filename else ""
+            other_title = (
+                guessit(other_filename).get("title", "").lower().strip()
+                if other_filename
+                else ""
+            )
             if other_title and other_title == ref_title:
                 await service.validate_candidate(other, candidate)
                 auto_count += 1
@@ -449,6 +459,90 @@ async def reject_pending(
     response = HTMLResponse(html)
     response.headers["HX-Redirect"] = "/validation"
     return response
+
+
+@router.post("/{pending_id}/play")
+async def play_pending(
+    request: Request,
+    pending_id: str,
+    profile: str | None = None,
+):
+    """Lance le lecteur pour visionner le fichier en attente de validation."""
+    from ..routes.library.player import _launch_player, _resolve_video_path
+
+    container = request.app.state.container
+    service = container.validation_service()
+    pending = service.get_pending_by_id(pending_id)
+
+    if pending is None or not pending.video_file or not pending.video_file.path:
+        return HTMLResponse(
+            '<span class="play-error">Fichier introuvable</span>',
+            status_code=404,
+        )
+
+    resolved = _resolve_video_path(str(pending.video_file.path))
+    if not resolved:
+        return HTMLResponse(
+            '<span class="play-error">Fichier introuvable sur le disque</span>',
+            status_code=404,
+        )
+
+    pid, is_remote, pname = _launch_player(resolved, profile_name=profile)
+
+    # Retourner un fragment "Lecture en cours" avec polling pour revenir au bouton
+    import html as _html
+
+    label = (
+        f"Lecture en cours… ({_html.escape(pname)})" if pname else "Lecture en cours…"
+    )
+    html_resp = (
+        f'<span class="play-launched"'
+        f' hx-get="/validation/{pending_id}/play-status/{pid}"'
+        f' hx-trigger="load delay:2s"'
+        f' hx-swap="outerHTML">'
+        f"{label}</span>"
+    )
+    return HTMLResponse(html_resp)
+
+
+@router.get("/{pending_id}/play-status/{pid}")
+async def play_status_pending(
+    request: Request,
+    pending_id: str,
+    pid: int,
+):
+    """Verifie si le lecteur tourne encore, sinon retourne le bouton Visionner."""
+    from ..routes.library.player import _active_players
+
+    if pid in _active_players:
+        proc, is_remote, pname = _active_players[pid]
+        if proc.poll() is None:
+            # Encore en cours
+            import html as _html
+
+            label = (
+                f"Lecture en cours… ({_html.escape(pname)})"
+                if pname
+                else "Lecture en cours…"
+            )
+            return HTMLResponse(
+                f'<span class="play-launched"'
+                f' hx-get="/validation/{pending_id}/play-status/{pid}"'
+                f' hx-trigger="load delay:2s"'
+                f' hx-swap="outerHTML">'
+                f"{label}</span>"
+            )
+        del _active_players[pid]
+
+    # Lecture terminee : retourner le bouton Visionner
+    return HTMLResponse(
+        f'<button class="action-btn-play"'
+        f' hx-post="/validation/{pending_id}/play"'
+        f' hx-swap="outerHTML">'
+        f'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">'
+        f'<polygon points="5 3 19 12 5 21 5 3"/></svg>'
+        f" Visionner</button>"
+    )
 
 
 @router.get("/{pending_id}/search", response_class=HTMLResponse)
@@ -562,11 +656,11 @@ async def search_by_id(
     enriched = [
         {
             "candidate": SearchResult(
-                id=id_value,
+                id=details.id,
                 title=details.title or id_value,
                 year=details.year,
                 score=100.0,
-                source=id_type if id_type != "imdb" else "tmdb",
+                source="tmdb_tv" if details.is_tv else (id_type if id_type != "imdb" else "tmdb"),
             ),
             "details": details,
             "score_class": "score-high",
@@ -595,11 +689,13 @@ async def _fetch_details(
 ) -> Optional[MediaDetails]:
     """Récupère les détails d'un média via le client API approprié."""
     try:
-        if source == "tmdb":
+        if source in ("tmdb", "tmdb_tv"):
             client = container.tmdb_client()
             api_key = getattr(client, "_api_key", None)
             if not api_key:
                 return None
+            if source == "tmdb_tv":
+                return await client.get_tv_details(media_id)
             return await client.get_details(media_id)
         elif source == "tvdb":
             client = container.tvdb_client()

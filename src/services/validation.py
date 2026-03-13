@@ -209,13 +209,15 @@ class ValidationService:
         Returns:
             MediaDetails ou None si non trouve ou client non disponible
         """
-        if source == "tmdb":
+        if source in ("tmdb", "tmdb_tv"):
             if self._tmdb_client is None:
                 return None
             # Verifier si le client a une api_key valide
             api_key = getattr(self._tmdb_client, "_api_key", None)
             if not api_key:
                 return None
+            if source == "tmdb_tv":
+                return await self._tmdb_client.get_tv_details(media_id)
             return await self._tmdb_client.get_details(media_id)
 
         elif source == "tvdb":

@@ -158,7 +158,9 @@ class TMDBClient(IMediaAPIClient):
                 SearchResult(
                     id=str(item["id"]),
                     title=localized_title or original_title,
-                    original_title=original_title if original_title != localized_title else None,
+                    original_title=original_title
+                    if original_title != localized_title
+                    else None,
                     year=item_year,
                     source=self.source,
                 )
@@ -302,15 +304,17 @@ class TMDBClient(IMediaAPIClient):
             "include_adult": "false",
         }
 
-        response = await request_with_retry(
-            client, "GET", "/search/tv", params=params
-        )
+        response = await request_with_retry(client, "GET", "/search/tv", params=params)
         data = response.json()
 
         results = []
         for item in data.get("results", []):
             first_air_date = item.get("first_air_date", "")
-            item_year = int(first_air_date[:4]) if first_air_date and len(first_air_date) >= 4 else None
+            item_year = (
+                int(first_air_date[:4])
+                if first_air_date and len(first_air_date) >= 4
+                else None
+            )
 
             localized_title = item.get("name", "")
             original_title = item.get("original_name", "")
@@ -319,7 +323,9 @@ class TMDBClient(IMediaAPIClient):
                 SearchResult(
                     id=str(item["id"]),
                     title=localized_title or original_title,
-                    original_title=original_title if original_title != localized_title else None,
+                    original_title=original_title
+                    if original_title != localized_title
+                    else None,
                     year=item_year,
                     source=self.source,
                 )
@@ -363,7 +369,11 @@ class TMDBClient(IMediaAPIClient):
 
         # Annee depuis first_air_date
         first_air_date = data.get("first_air_date", "")
-        year = int(first_air_date[:4]) if first_air_date and len(first_air_date) >= 4 else None
+        year = (
+            int(first_air_date[:4])
+            if first_air_date and len(first_air_date) >= 4
+            else None
+        )
 
         # Genres (noms FR depuis l'API, fallback sur mapping TV)
         genres = tuple(
@@ -377,7 +387,9 @@ class TMDBClient(IMediaAPIClient):
 
         # Createur(s) : equivalent du realisateur pour les series
         creators = data.get("created_by", [])
-        director = ", ".join(c.get("name", "") for c in creators[:2]) if creators else None
+        director = (
+            ", ".join(c.get("name", "") for c in creators[:2]) if creators else None
+        )
 
         # Acteurs principaux depuis credits
         cast: tuple[str, ...] = ()
@@ -401,6 +413,7 @@ class TMDBClient(IMediaAPIClient):
             cast=cast,
             vote_average=vote_average,
             vote_count=vote_count,
+            is_tv=True,
         )
 
         await self._cache.set_details(cache_key, details)
@@ -438,30 +451,11 @@ class TMDBClient(IMediaAPIClient):
             tmdb_id = str(movie_results[0]["id"])
             return await self.get_details(tmdb_id)
 
-        # Chercher dans les résultats séries TV
+        # Chercher dans les résultats séries TV → détails complets via get_tv_details
         tv_results = data.get("tv_results", [])
         if tv_results:
-            item = tv_results[0]
-            # Construire un MediaDetails directement
-            release_date = item.get("first_air_date", "")
-            year = int(release_date[:4]) if release_date and len(release_date) >= 4 else None
-            poster_path = item.get("poster_path")
-            poster_url = f"{self.TMDB_IMAGE_BASE_URL}{poster_path}" if poster_path else None
-
-            return MediaDetails(
-                id=str(item["id"]),
-                title=item.get("name", item.get("original_name", "")),
-                original_title=item.get("original_name"),
-                year=year,
-                genres=tuple(
-                    TMDB_GENRE_MAPPING.get(gid, "Inconnu")
-                    for gid in item.get("genre_ids", [])
-                ),
-                overview=item.get("overview"),
-                poster_url=poster_url,
-                vote_average=item.get("vote_average"),
-                vote_count=item.get("vote_count"),
-            )
+            tmdb_tv_id = str(tv_results[0]["id"])
+            return await self.get_tv_details(tmdb_tv_id)
 
         return None
 
