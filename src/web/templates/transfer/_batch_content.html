@@ -350,8 +350,29 @@ function hideDuplicateDialog() {
     document.getElementById('duplicate-resolve-overlay').classList.remove('active');
 }
 
+function _saveCollapsedState() {
+    var collapsed = [];
+    document.querySelectorAll('.tree-group.tree-group-collapsed').forEach(function(el) {
+        var path = el.getAttribute('data-group-path');
+        if (path) collapsed.push(path);
+    });
+    return collapsed;
+}
+
+function _restoreCollapsedState(collapsed) {
+    document.querySelectorAll('.tree-group[data-group-path]').forEach(function(el) {
+        var path = el.getAttribute('data-group-path');
+        if (collapsed.indexOf(path) !== -1) {
+            el.classList.add('tree-group-collapsed');
+        }
+    });
+}
+
 function resolveDuplicate(choice) {
     hideDuplicateDialog();
+
+    // Sauvegarder l'etat collapsed avant remplacement du DOM
+    var collapsedState = _saveCollapsedState();
 
     var body = 'title=' + encodeURIComponent(_dupCurrentTitle) +
                '&year=' + encodeURIComponent(_dupCurrentYear) +
@@ -366,6 +387,8 @@ function resolveDuplicate(choice) {
     .then(function(html) {
         document.getElementById('duplicate-tree-zone').innerHTML = html;
         htmx.process(document.getElementById('duplicate-tree-zone'));
+        // Restaurer l'etat collapsed des groupes
+        _restoreCollapsedState(collapsedState);
         // Mettre à jour le bouton de transfert
         _updateTransferButton();
     });
