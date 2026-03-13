@@ -14,10 +14,18 @@
 
     <div class="detail-title-row">
         <h1 class="detail-title">{{ file_info.filename }}</h1>
-        <button class="action-btn-reject" onclick="showRejectDialog()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            Ignorer ce fichier
-        </button>
+        <div class="detail-title-actions">
+            <button class="action-btn-play"
+                    hx-post="/validation/{{ pending.id }}/play"
+                    hx-swap="outerHTML">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Visionner
+            </button>
+            <button class="action-btn-reject" onclick="showRejectDialog()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                Ignorer ce fichier
+            </button>
+        </div>
     </div>
     <div class="detail-meta">
         <span class="type-badge {{ 'badge-series' if is_series else 'badge-film' }}">

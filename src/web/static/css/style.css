@@ -1088,6 +1088,47 @@ a.genre-tag-storage:hover {
     flex-shrink: 0;
 }
 
+/* ── Detail Title Actions (play + reject wrapper) ── */
+
+.detail-title-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+/* ── Play Button (in detail header) ── */
+
+.action-btn-play {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.45rem 0.9rem;
+    border: 1px solid rgba(78, 203, 141, 0.25);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--accent-emerald);
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, opacity 0.2s;
+    opacity: 0.7;
+}
+
+.action-btn-play:hover {
+    background: var(--accent-emerald-dim);
+    border-color: rgba(78, 203, 141, 0.4);
+    opacity: 1;
+}
+
+.action-btn-play svg {
+    flex-shrink: 0;
+}
+
 /* ── Reject Button (in detail header) ── */
 
 .action-btn-reject {
