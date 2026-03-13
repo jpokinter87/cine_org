@@ -8,12 +8,12 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 **v2.0 Production & Maintenance Complète** (v2.0.0)
 Status: 🚧 In Progress
-Phases: 1 of 4 complete
+Phases: 2 of 4 complete
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 35 | Maintenance Web Complète | 1 | Complete | 2026-03-08 |
-| 36 | Doublons Symlinks Cross-Genre | TBD | Not started | - |
+| 36 | Doublons Symlinks Cross-Genre | 1 | Complete | 2026-03-13 |
 | 37 | Déploiement Production | TBD | Not started | - |
 | 38 | Intégration Jellyfin | TBD | Not started | - |
 
@@ -21,9 +21,9 @@ Phases: 1 of 4 complete
 
 Corrections web (cleanup fix, repair symlinks, purge fantomes), detection orphelins par symlinks, reconciliation DB (symlink_path), cache analyse. Sandbox des orphelins differe a une phase dediee.
 
-### Phase 36: Doublons Symlinks Cross-Genre
+### Phase 36: Doublons Symlinks Cross-Genre (Complete)
 
-Focus: Détection des symlinks dans video/ pointant vers le même fichier physique mais classés dans des genres différents (ex: Comédie dramatique dans Comédie ET Drame). Nettoyage selon le genre prioritaire (GENRE_HIERARCHY). Fonction générale.
+Détection et correction des symlinks cross-genre, option CLI --only, bouton Visionner en validation, fix TMDB séries TV via IMDB.
 
 ### Phase 37: Déploiement Production
 
@@ -158,4 +158,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-08 — Phase 35 complete*
+*Last updated: 2026-03-13 — Phase 36 complete*

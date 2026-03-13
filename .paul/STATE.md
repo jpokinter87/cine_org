@@ -10,21 +10,21 @@ See: .paul/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Milestone: v2.0 Production & Maintenance Complète
-Phase: 35 of 4 (Maintenance Web Complète) — Complete
-Plan: 35-01 complete (1/1)
-Status: Phase 35 complete, ready for next phase
-Last activity: 2026-03-08 — Phase 35 complete, SUMMARY created
+Phase: 36 of 4 (Doublons Symlinks Cross-Genre) — Complete
+Plan: 36-01 unified (1/1)
+Status: Phase complete, ready for next phase
+Last activity: 2026-03-13 — Phase 36 unified
 
 Progress:
-- v2.0: [██░░░░░░░░] 25% (1/4 phases)
-- Phase 35: [██████████] 100%
+- v2.0: [█████░░░░░] 50% (2/4 phases)
+- Phase 36: [██████████] 100%
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop complete - ready for next PLAN]
+  ✓        ✓        ✓     [Loop complete — Phase 36 done]
 ```
 
 ## Accumulated Context
@@ -89,6 +89,8 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Cache analyse _analysis_cache module-level pour partage analyse → fix
 - Réconciliation DB dry-run avant apply pour actions sur fichiers réels
 - Sandbox des orphelins différé à une phase dédiée (périmètre trop large)
+- Source tmdb_tv pour distinguer film/série TV TMDB dans tout le pipeline (validation + batch_builder)
+- is_tv flag sur MediaDetails pour marquer les résultats TV TMDB
 
 ### Deferred Issues
 - README.md à réécrire de fond en comble : nouvelles commandes, structure répertoires attendue, architecture, configuration
@@ -111,27 +113,22 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Doublons physiques + symlinks orphelins cross-genre : des films existent en double dans storage (même taille, noms différents) avec des symlinks dans plusieurs genres
 - Sandbox management complet : sandboxer orphelins vers .sandbox/orphans/, interface gestion (liste/suppression/réinjection workflow)
 - Vérifier détection doublons avec un film (testé uniquement avec séries jusqu'ici)
-- Bouton "Visionner" dans validation manuelle (confirmer visuellement une association)
-- Bug TMDB "Tout le bleu du ciel" (tt35562998) : recherche IMDb ID échoue à récupérer les détails
 - Trous dans subdivisions alphabétiques : étendre la borne la plus proche au lieu de laisser à la racine
+- Optimisation cross-genre : utiliser symlink_path en DB comme pré-filtre rapide avant le scan filesystem (évite rglob sur 5000+ fichiers)
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: 70471b7 (feat(web): maintenance complète — corrections web, réconciliation DB, orphelins par symlinks)
+Last commit: 3ec3124 (chore: mise à jour pagination et lock dependencies)
 Branch: master
 
 ## Session Continuity
 
-Last session: 2026-03-08
-Stopped at: Phase 35 complete, UNIFY done
-Next action: Start next phase (36: Doublons Symlinks Cross-Genre) or plan sandbox phase
-Resume file: .paul/phases/35-maintenance-web-complete/35-01-SUMMARY.md
-Resume context:
-- Phase 35 complete : corrections web, reconciliation DB, orphelins par symlinks
-- Sandbox des orphelins à planifier comme phase dédiée
-- Prochaine phase planifiée : 36 (Doublons Symlinks Cross-Genre)
+Last session: 2026-03-13
+Stopped at: Phase 36 unified
+Next action: Plan next phase (37 Déploiement Production or 38 Intégration Jellyfin)
+Resume file: .paul/phases/36-doublons-symlinks-cross-genre/36-01-SUMMARY.md
 
 ---
 *STATE.md — Updated after every significant action*
