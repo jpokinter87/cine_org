@@ -29,6 +29,13 @@ def cleanup(
         bool,
         typer.Option("--fix", help="Executer les corrections (defaut: rapport seul)"),
     ] = False,
+    only: Annotated[
+        Optional[str],
+        typer.Option(
+            "--only",
+            help="Corriger uniquement ce type : broken, misplaced, duplicates, cross-genre, subdivide, empty",
+        ),
+    ] = None,
     skip_repair: Annotated[
         bool,
         typer.Option("--skip-repair", help="Ne pas reparer les symlinks casses"),
@@ -43,16 +50,71 @@ def cleanup(
     ] = 90.0,
     max_per_dir: Annotated[
         int,
-        typer.Option("--max-per-dir", help="Nombre max de sous-repertoires avant subdivision"),
+        typer.Option(
+            "--max-per-dir", help="Nombre max de sous-repertoires avant subdivision"
+        ),
     ] = 50,
 ) -> None:
-    """Nettoie et reorganise le repertoire video."""
-    asyncio.run(_cleanup_async(video_dir, fix, skip_repair, skip_subdivide, min_score, max_per_dir))
+    """Analyse et corrige les problemes du repertoire video.
+
+    Sans --fix, affiche un rapport des problemes detectes et le met en cache.
+    Avec --fix, applique toutes les corrections. Avec --only, cible un seul type.
+
+    Types de problemes detectes :
+
+      broken       Symlinks casses (cible supprimee ou deplacee)
+      misplaced    Symlinks dans le mauvais genre/repertoire
+      duplicates   Symlinks en double dans le meme repertoire
+      cross-genre  Symlinks vers le meme fichier dans des genres differents
+      subdivide    Repertoires avec trop d'elements (> max-per-dir)
+      empty        Repertoires vides
+
+    Exemples :
+
+      cineorg cleanup                       Rapport seul (analyse + cache)
+      cineorg cleanup --fix                  Corriger tous les problemes
+      cineorg cleanup --only cross-genre     Corriger les doublons cross-genre uniquement
+      cineorg cleanup --only empty           Supprimer les repertoires vides uniquement
+      cineorg cleanup --fix --skip-repair    Tout corriger sauf les symlinks casses
+      cineorg cleanup --min-score 95         Reparer seulement si score >= 95%
+      cineorg cleanup --max-per-dir 30       Subdiviser des que > 30 elements
+    """
+    if only and not fix:
+        fix = True  # --only implique --fix
+    asyncio.run(
+        _cleanup_async(
+            video_dir, fix, only, skip_repair, skip_subdivide, min_score, max_per_dir
+        )
+    )
+
+
+VALID_ONLY_VALUES = {
+    "broken",
+    "misplaced",
+    "duplicates",
+    "cross-genre",
+    "subdivide",
+    "empty",
+}
+
+
+def _should_run(
+    step: str, only: Optional[str], skip_repair: bool, skip_subdivide: bool
+) -> bool:
+    """Determine si une etape de correction doit s'executer."""
+    if only:
+        return step == only
+    if step == "broken" and skip_repair:
+        return False
+    if step == "subdivide" and skip_subdivide:
+        return False
+    return True
 
 
 async def _cleanup_async(
     video_dir_arg: Optional[Path],
     fix: bool,
+    only: Optional[str],
     skip_repair: bool,
     skip_subdivide: bool,
     min_score: float,
@@ -88,11 +150,20 @@ async def _cleanup_async(
         repair_service=repair,
     )
 
+    # Valider --only
+    if only and only not in VALID_ONLY_VALUES:
+        console.print(
+            f"[red]Erreur: --only invalide: '{only}'[/red]\n"
+            f"[dim]Valeurs acceptees: {', '.join(sorted(VALID_ONLY_VALUES))}[/dim]"
+        )
+        raise typer.Exit(1)
+
     loguru_logger.disable("src")
 
     try:
         # Construire l'index fichiers
         with Status("[cyan]Indexation du stockage...", console=console) as status:
+
             def update_status(count: int, msg: str) -> None:
                 status.update(f"[cyan]Indexation: {count} fichiers...")
 
@@ -129,20 +200,29 @@ async def _cleanup_async(
         if not fix:
             console.print(
                 "\n[dim]Pour corriger : cineorg cleanup --fix[/dim]"
+                "\n[dim]Pour corriger un type : cineorg cleanup --only cross-genre[/dim]"
             )
             return
 
         # Executer les corrections
-        console.print("\n[bold cyan]Execution des corrections[/bold cyan]\n")
+        if only:
+            console.print(f"\n[bold cyan]Correction ciblee : {only}[/bold cyan]\n")
+        else:
+            console.print("\n[bold cyan]Execution des corrections[/bold cyan]\n")
 
         # 1. Reparer symlinks casses (score >= min_score)
-        if not skip_repair and report.broken_symlinks:
+        if (
+            _should_run("broken", only, skip_repair, skip_subdivide)
+            and report.broken_symlinks
+        ):
             repairable = [
-                b for b in report.broken_symlinks
+                b
+                for b in report.broken_symlinks
                 if b.best_candidate and b.candidate_score >= min_score
             ]
             unrepairable = [
-                b for b in report.broken_symlinks
+                b
+                for b in report.broken_symlinks
                 if b.best_candidate is None or b.candidate_score < min_score
             ]
 
@@ -159,7 +239,8 @@ async def _cleanup_async(
                         total=len(repairable),
                     )
                     result = cleanup_svc.repair_broken_symlinks(
-                        repairable, min_score=min_score,
+                        repairable,
+                        min_score=min_score,
                     )
                     progress.update(task, completed=len(repairable))
 
@@ -176,7 +257,10 @@ async def _cleanup_async(
                 )
 
         # 2. Corriger symlinks mal places
-        if report.misplaced_symlinks:
+        if (
+            _should_run("misplaced", only, skip_repair, skip_subdivide)
+            and report.misplaced_symlinks
+        ):
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
@@ -196,7 +280,10 @@ async def _cleanup_async(
             )
 
         # 3. Supprimer symlinks dupliques
-        if report.duplicate_symlinks:
+        if (
+            _should_run("duplicates", only, skip_repair, skip_subdivide)
+            and report.duplicate_symlinks
+        ):
             total_remove = sum(len(d.remove) for d in report.duplicate_symlinks)
             with Progress(
                 SpinnerColumn(),
@@ -216,8 +303,37 @@ async def _cleanup_async(
                 f"  Symlinks dupliques supprimes: [green]{result.duplicate_symlinks_removed}[/green]"
             )
 
-        # 4. Subdiviser repertoires surcharges
-        if not skip_subdivide and report.oversized_dirs:
+        # 4. Supprimer doublons cross-genre
+        if (
+            _should_run("cross-genre", only, skip_repair, skip_subdivide)
+            and report.cross_genre_duplicates
+        ):
+            total_remove = sum(len(d.remove) for d in report.cross_genre_duplicates)
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                console=console,
+            ) as progress:
+                task = progress.add_task(
+                    "[cyan]Suppression des doublons cross-genre...",
+                    total=total_remove,
+                )
+                result = cleanup_svc.fix_cross_genre_duplicates(
+                    report.cross_genre_duplicates
+                )
+                progress.update(task, completed=total_remove)
+
+            console.print(
+                f"  Doublons cross-genre supprimes: [green]{result.cross_genre_removed}[/green]"
+            )
+
+        # 5. Subdiviser repertoires surcharges
+        if (
+            _should_run("subdivide", only, skip_repair, skip_subdivide)
+            and report.oversized_dirs
+        ):
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
@@ -237,8 +353,11 @@ async def _cleanup_async(
                 f"  Symlinks redistribues: [green]{result.symlinks_redistributed}[/green]"
             )
 
-        # 5. Nettoyer repertoires vides
-        if report.empty_dirs:
+        # 6. Nettoyer repertoires vides
+        if (
+            _should_run("empty", only, skip_repair, skip_subdivide)
+            and report.empty_dirs
+        ):
             result = cleanup_svc.clean_empty_dirs(report.empty_dirs)
             console.print(
                 f"  Repertoires vides supprimes: [green]{result.empty_dirs_removed}[/green]"
