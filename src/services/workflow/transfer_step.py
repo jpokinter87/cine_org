@@ -85,8 +85,8 @@ class TransferStepMixin:
         )
 
     def _update_file_paths(self, transfers: list[dict], results: list[dict]) -> None:
-        """Met a jour file_path sur Movie/Episode apres transfert reussi."""
-        from src.infrastructure.persistence.models import MovieModel, EpisodeModel
+        """Met a jour file_path et symlink_path sur Movie/Episode apres transfert reussi."""
+        from src.infrastructure.persistence.models import EpisodeModel, MovieModel
 
         session = self._container.session()
         updated = 0
@@ -95,17 +95,20 @@ class TransferStepMixin:
             if not result.get("success"):
                 continue
 
+            storage_path = transfer.get("destination")
             symlink_path = transfer.get("symlink_destination")
-            if not symlink_path:
+            if not storage_path:
                 continue
 
-            file_path_str = str(symlink_path)
+            storage_str = str(storage_path)
+            symlink_str = str(symlink_path) if symlink_path else None
 
             movie_id = transfer.get("movie_id")
             if movie_id:
                 movie = session.get(MovieModel, int(movie_id))
                 if movie:
-                    movie.file_path = file_path_str
+                    movie.file_path = storage_str
+                    movie.symlink_path = symlink_str
                     session.add(movie)
                     updated += 1
 
@@ -113,7 +116,8 @@ class TransferStepMixin:
             if episode_id:
                 ep = session.get(EpisodeModel, int(episode_id))
                 if ep:
-                    ep.file_path = file_path_str
+                    ep.file_path = storage_str
+                    ep.symlink_path = symlink_str
                     session.add(ep)
                     updated += 1
 

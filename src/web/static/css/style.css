@@ -35,6 +35,31 @@
     --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border);
 }
 
+/* ── Scrollbar ── */
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
 /* ── Reset & Base ── */
 
 *, *::before, *::after {
@@ -4307,6 +4332,16 @@ a.tech-badge-codec:hover {
     background: rgba(255, 255, 255, 0.02);
 }
 
+.lib-episode-playable {
+    cursor: pointer;
+}
+
+.lib-episode-playable:focus {
+    outline: none;
+    background: rgba(232, 168, 73, 0.08);
+    box-shadow: inset 3px 0 0 var(--accent-amber);
+}
+
 .lib-episode-num {
     font-size: 0.8125rem;
     font-weight: 600;
@@ -6108,6 +6143,14 @@ details[open] > .maint-issue-toggle::before {
     opacity: 0.6;
 }
 .play-profile-option:hover .play-profile-icon {
+    opacity: 1;
+}
+.play-profile-option.play-profile-focus {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+    box-shadow: inset 3px 0 0 var(--accent-amber);
+}
+.play-profile-option.play-profile-focus .play-profile-icon {
     opacity: 1;
 }
 

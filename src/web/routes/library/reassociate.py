@@ -12,6 +12,7 @@ from sqlmodel import select
 from ....infrastructure.persistence.database import get_session
 from ....infrastructure.persistence.models import (
     ConfirmedAssociationModel,
+    EpisodeModel,
     MovieModel,
     SeriesModel,
 )
@@ -54,6 +55,7 @@ async def movie_reassociate_overlay(request: Request, movie_id: int):
             "year": movie.year,
             "current_tmdb_id": movie.tmdb_id,
             "local_duration_seconds": file_duration,
+            "sample_file_path": movie.file_path,
         },
     )
 
@@ -217,6 +219,22 @@ async def series_reassociate_overlay(request: Request, series_id: int):
 
     local_seasons, local_episodes = _get_local_series_counts(series_id)
 
+    # Récupérer le file_path du premier épisode pour identification
+    session2 = next(get_session())
+    try:
+        from sqlmodel import select
+
+        first_ep = session2.exec(
+            select(EpisodeModel)
+            .where(EpisodeModel.series_id == series_id)
+            .where(EpisodeModel.file_path.is_not(None))  # type: ignore[union-attr]
+            .order_by(EpisodeModel.season_number, EpisodeModel.episode_number)
+            .limit(1)
+        ).first()
+        sample_file_path = first_ep.file_path if first_ep else None
+    finally:
+        session2.close()
+
     return templates.TemplateResponse(
         request,
         "library/_reassociate_overlay.html",
@@ -229,6 +247,7 @@ async def series_reassociate_overlay(request: Request, series_id: int):
             "local_duration_seconds": None,
             "local_seasons": local_seasons,
             "local_episodes": local_episodes,
+            "sample_file_path": sample_file_path,
         },
     )
 
@@ -382,6 +401,41 @@ async def series_reassociate_apply(
 
         session.add(series)
         session.commit()
+
+        # Mettre à jour les titres des épisodes via TMDB
+        episodes = session.exec(
+            select(EpisodeModel).where(EpisodeModel.series_id == series_id)
+        ).all()
+
+        if episodes:
+            import httpx
+
+            updated_eps = 0
+            async with httpx.AsyncClient(timeout=15.0) as http:
+                for ep in episodes:
+                    if ep.season_number is None or ep.episode_number is None:
+                        continue
+                    try:
+                        resp = await http.get(
+                            f"https://api.themoviedb.org/3/tv/{tmdb_id}"
+                            f"/season/{ep.season_number}"
+                            f"/episode/{ep.episode_number}",
+                            params={
+                                "api_key": tmdb_client._api_key,
+                                "language": "fr-FR",
+                            },
+                        )
+                        if resp.status_code == 200:
+                            ep_data = resp.json()
+                            new_title = ep_data.get("name")
+                            if new_title and new_title != ep.title:
+                                ep.title = new_title
+                                session.add(ep)
+                                updated_eps += 1
+                    except Exception:
+                        pass
+            if updated_eps:
+                session.commit()
     finally:
         session.close()
 

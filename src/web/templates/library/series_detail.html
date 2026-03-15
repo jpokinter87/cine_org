@@ -170,14 +170,18 @@
             </summary>
             <div class="lib-episode-list">
                 {% for ep in episodes %}
-                <div class="lib-episode-row">
+                <div class="lib-episode-row{% if ep.file_path %} lib-episode-playable{% endif %}" tabindex="0"
+                    {% if ep.file_path %}
+                    data-play-url="/library/episodes/{{ ep.id }}/play"
+                    onclick="episodeRowClick(event, this)"
+                    {% endif %}>
                     <span class="lib-episode-num">E{{ '%02d'|format(ep.episode_number) }}</span>
                     <span class="lib-episode-title">{{ ep.title or 'Épisode ' ~ ep.episode_number }}</span>
                     {% if ep.file_path %}
                     {% with play_entity_type="episodes", play_entity_id=ep.id, play_btn_class="lib-episode-play-btn", play_show_label=false %}
                     {% include "library/_play_btn.html" %}
                     {% endwith %}
-                    <button class="lib-episode-file-btn" onclick="this.nextElementSibling.classList.toggle('visible')" title="Afficher le fichier">
+                    <button class="lib-episode-file-btn" onclick="event.stopPropagation(); this.nextElementSibling.classList.toggle('visible')" title="Afficher le fichier">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                     </button>
                     <div class="lib-episode-file-path">
@@ -235,6 +239,142 @@ function openPosterLightbox(src) {
         if (document.querySelector('.reassociate-overlay')) return;
         if (e.key === 'ArrowLeft' && prev) window.location.href = prev;
         if (e.key === 'ArrowRight' && next) window.location.href = next;
+    });
+})();
+
+/* Navigation épisodes : clic ligne + clavier */
+function episodeRowClick(e, row) {
+    /* Ignorer si clic sur le bouton fichier ou le chemin du fichier */
+    if (e.target.closest('.lib-episode-file-btn, .lib-episode-file-path')) return;
+    /* Ignorer si clic directement sur le bouton play (il a son propre handler) */
+    if (e.target.closest('.lib-episode-play-btn, .play-popover-trigger, .play-profile-popover')) return;
+    /* Ouvrir le popover ou lancer directement */
+    var trigger = row.querySelector('.play-popover-trigger');
+    if (trigger) {
+        e.stopPropagation();
+        togglePlayPopover(trigger);
+        return;
+    }
+    var playBtn = row.querySelector('.lib-episode-play-btn');
+    if (playBtn) playBtn.click();
+}
+
+(function() {
+    function getAllEpisodeRows() {
+        return Array.from(document.querySelectorAll('.lib-episode-row[tabindex]'));
+    }
+
+    function getSeasonGroups() {
+        return Array.from(document.querySelectorAll('.lib-season-group'));
+    }
+
+    function focusRow(row) {
+        if (!row) return;
+        /* Ouvrir le details parent si fermé */
+        var details = row.closest('details');
+        if (details && !details.open) details.open = true;
+        row.focus();
+        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+
+    document.addEventListener('keydown', function(e) {
+        /* Ne pas interférer avec overlay ou input */
+        if (document.querySelector('.reassociate-overlay')) return;
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+        var rows = getAllEpisodeRows();
+        if (!rows.length) return;
+
+        var active = document.activeElement;
+        var idx = rows.indexOf(active);
+
+        /* Priorité : popover ouvert → naviguer dedans */
+        var openPopover = document.querySelector('.play-wrapper.popover-open .play-profile-popover');
+        if (openPopover) {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                var opts = Array.from(openPopover.querySelectorAll('.play-profile-option'));
+                var fi = opts.findIndex(function(o) { return o.classList.contains('play-profile-focus'); });
+                opts.forEach(function(o) { o.classList.remove('play-profile-focus'); });
+                if (e.key === 'ArrowDown') fi = fi < opts.length - 1 ? fi + 1 : 0;
+                else fi = fi > 0 ? fi - 1 : opts.length - 1;
+                opts[fi].classList.add('play-profile-focus');
+                return;
+            }
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                var focused = openPopover.querySelector('.play-profile-focus');
+                if (focused) focused.click();
+                else {
+                    var def = openPopover.querySelector('.play-profile-option.default') || openPopover.querySelector('.play-profile-option');
+                    if (def) def.click();
+                }
+                return;
+            }
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                var w = openPopover.closest('.play-wrapper');
+                w.classList.remove('popover-open', 'popover-above', 'popover-right');
+                openPopover.querySelectorAll('.play-profile-focus').forEach(function(o) { o.classList.remove('play-profile-focus'); });
+                return;
+            }
+        }
+
+        /* Navigation épisodes */
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (idx < 0) focusRow(rows[0]);
+            else if (idx < rows.length - 1) focusRow(rows[idx + 1]);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (idx < 0) focusRow(rows[rows.length - 1]);
+            else if (idx > 0) focusRow(rows[idx - 1]);
+        } else if (e.key === 'PageDown') {
+            e.preventDefault();
+            /* Saison suivante : premier épisode de la saison d'après */
+            var seasons = getSeasonGroups();
+            var currentSeason = active ? active.closest('.lib-season-group') : null;
+            var si = currentSeason ? seasons.indexOf(currentSeason) : -1;
+            if (si < seasons.length - 1) {
+                var nextSeason = seasons[si + 1];
+                nextSeason.open = true;
+                var firstRow = nextSeason.querySelector('.lib-episode-row[tabindex]');
+                focusRow(firstRow);
+            }
+        } else if (e.key === 'PageUp') {
+            e.preventDefault();
+            /* Saison précédente */
+            var seasons = getSeasonGroups();
+            var currentSeason = active ? active.closest('.lib-season-group') : null;
+            var si = currentSeason ? seasons.indexOf(currentSeason) : seasons.length;
+            if (si > 0) {
+                var prevSeason = seasons[si - 1];
+                prevSeason.open = true;
+                var firstRow = prevSeason.querySelector('.lib-episode-row[tabindex]');
+                focusRow(firstRow);
+            }
+        } else if (e.key === 'Enter' && idx >= 0) {
+            e.preventDefault();
+            var row = rows[idx];
+            if (!row.classList.contains('lib-episode-playable')) return;
+
+            /* Ouvrir le popover (ou lancer directement si profil unique) */
+            var trigger = row.querySelector('.play-popover-trigger');
+            if (trigger) {
+                togglePlayPopover(trigger);
+                /* Pré-sélectionner le profil par défaut */
+                var popover = row.querySelector('.play-profile-popover');
+                if (popover) {
+                    var opts = popover.querySelectorAll('.play-profile-option');
+                    opts.forEach(function(o) { o.classList.remove('play-profile-focus'); });
+                    var def = popover.querySelector('.play-profile-option.default') || opts[0];
+                    if (def) def.classList.add('play-profile-focus');
+                }
+            } else {
+                var playBtn = row.querySelector('.lib-episode-play-btn');
+                if (playBtn) playBtn.click();
+            }
+        }
     });
 })();
 </script>

@@ -366,6 +366,37 @@ def _group_by_path(entries: list[dict], key: str, prefix: str) -> list[dict]:
 # ═══════════════════════════════════════
 
 
+def _update_db_paths(container, transfer: dict, destination: Path, symlink_dest) -> None:
+    """Met à jour file_path et symlink_path en DB après un transfert réussi."""
+    from src.infrastructure.persistence.database import get_session
+    from src.infrastructure.persistence.models import EpisodeModel, MovieModel
+
+    session = next(get_session())
+    try:
+        storage_str = str(destination)
+        symlink_str = str(symlink_dest) if symlink_dest else None
+
+        movie_id = transfer.get("movie_id")
+        if movie_id:
+            movie = session.get(MovieModel, int(movie_id))
+            if movie:
+                movie.file_path = storage_str
+                movie.symlink_path = symlink_str
+                session.add(movie)
+                session.commit()
+
+        episode_id = transfer.get("episode_id")
+        if episode_id:
+            ep = session.get(EpisodeModel, int(episode_id))
+            if ep:
+                ep.file_path = storage_str
+                ep.symlink_path = symlink_str
+                session.add(ep)
+                session.commit()
+    finally:
+        session.close()
+
+
 async def _run_web_transfer(
     container,
     transfers: list[dict],
@@ -908,6 +939,17 @@ async def _run_web_transfer(
             # Laisser respirer l'event loop
             if i % 2 == 0:
                 await asyncio.sleep(0)
+
+        # Mettre à jour file_path et symlink_path en DB pour tous les transferts réussis
+        if not dry_run:
+            for transfer in transfers:
+                destination = transfer.get("destination")
+                symlink_dest = transfer.get("symlink_destination")
+                if destination and Path(str(destination)).exists():
+                    try:
+                        _update_db_paths(container, transfer, Path(str(destination)), symlink_dest)
+                    except Exception as e:
+                        logger.warning("Erreur mise à jour DB pour %s: %s", transfer.get("new_filename"), e)
 
         progress.message = "Simulation terminée" if dry_run else "Transfert terminé"
         progress.complete = True

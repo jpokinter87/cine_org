@@ -35,6 +35,11 @@
                 Contenu local : <strong>{{ local_seasons }} saison{{ 's' if local_seasons != 1 else '' }}, {{ local_episodes }} épisode{{ 's' if local_episodes != 1 else '' }}</strong>
             </div>
             {% endif %}
+            {% if sample_file_path %}
+            <div class="reassociate-local-info" style="font-size: 0.75rem; opacity: 0.7; word-break: break-all;">
+                Fichier : {{ sample_file_path.split('/')[-1] }}
+            </div>
+            {% endif %}
         </div>
 
         <div class="reassociate-results" id="reassociate-results">
