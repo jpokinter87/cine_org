@@ -18,9 +18,9 @@
     </div>
     {% endif %}
 
-    <div class="config-restart-notice">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        Les modifications seront prises en compte au prochain redémarrage du serveur
+    <div class="config-restart-notice" style="color: var(--accent-emerald); border-color: var(--accent-emerald-dim);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="16 8 10 14 8 12"/></svg>
+        Les modifications sont appliquées immédiatement après enregistrement
     </div>
 
     <form method="post" action="/config" class="config-form" id="config-form">

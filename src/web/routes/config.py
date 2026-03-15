@@ -247,6 +247,10 @@ async def config_save(request: Request):
     if updates:
         _write_env(updates)
 
+    # Recharger la configuration en mémoire
+    container = request.app.state.container
+    container.config.reset()
+
     return RedirectResponse(url="/config?saved=1", status_code=303)
 
 
