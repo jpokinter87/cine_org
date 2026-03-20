@@ -161,14 +161,29 @@ class SandboxService:
                 logger.error("Tentative de réinjection hors sandbox : {}", path)
                 continue
 
-            dest = self._downloads_dir / path.name
+            # Conserver le sous-répertoire de type (Films/ ou Series/) pour
+            # que le scan workflow détecte correctement le type de contenu
+            try:
+                relative = path.relative_to(self._orphans_dir)
+                # Premier segment = Films, Series, Documentaires...
+                type_dir = relative.parts[0] if relative.parts else ""
+            except ValueError:
+                type_dir = ""
+
+            if type_dir:
+                dest_dir = self._downloads_dir / type_dir
+            else:
+                dest_dir = self._downloads_dir
+            dest_dir.mkdir(parents=True, exist_ok=True)
+
+            dest = dest_dir / path.name
             # Éviter l'écrasement
             if dest.exists():
                 stem = dest.stem
                 suffix = dest.suffix
                 counter = 1
                 while dest.exists():
-                    dest = self._downloads_dir / f"{stem} ({counter}){suffix}"
+                    dest = dest_dir / f"{stem} ({counter}){suffix}"
                     counter += 1
 
             shutil.move(str(path), str(dest))

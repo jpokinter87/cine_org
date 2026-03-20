@@ -89,7 +89,9 @@ class TestListSandboxed:
         assert result[0].name == "film.mkv"
         assert result[0].size == len("content123")
         assert isinstance(result[0].modified, datetime)
-        assert result[0].original_path == dirs["storage"] / "Films" / "Action" / "film.mkv"
+        assert (
+            result[0].original_path == dirs["storage"] / "Films" / "Action" / "film.mkv"
+        )
 
     def test_empty_sandbox(self, service):
         """Un sandbox vide retourne une liste vide."""
@@ -140,30 +142,42 @@ class TestDeleteFiles:
 class TestReinjectFiles:
     """Tests pour reinject_files()."""
 
-    def test_move_to_downloads(self, service, dirs):
-        """Déplace les fichiers vers downloads."""
+    def test_move_to_downloads_preserves_type(self, service, dirs):
+        """Déplace les fichiers vers downloads/Films ou downloads/Series."""
         orphans_dir = dirs["sandbox"] / "orphans"
-        f = _create_file(orphans_dir / "Films" / "film.mkv", "video_data")
+        f = _create_file(orphans_dir / "Films" / "Action" / "film.mkv", "video_data")
 
         count = service.reinject_files([f])
 
         assert count == 1
         assert not f.exists()
-        assert (dirs["downloads"] / "film.mkv").exists()
-        assert (dirs["downloads"] / "film.mkv").read_text() == "video_data"
+        assert (dirs["downloads"] / "Films" / "film.mkv").exists()
+        assert (dirs["downloads"] / "Films" / "film.mkv").read_text() == "video_data"
 
-    def test_avoid_overwrite(self, service, dirs):
-        """Évite l'écrasement en ajoutant un compteur."""
+    def test_move_series_to_downloads_series(self, service, dirs):
+        """Les séries vont dans downloads/Series."""
         orphans_dir = dirs["sandbox"] / "orphans"
-        _create_file(dirs["downloads"] / "film.mkv", "existing")
-        f = _create_file(orphans_dir / "film.mkv", "new_version")
+        f = _create_file(orphans_dir / "Series" / "TV" / "ep01.mkv", "episode")
 
         count = service.reinject_files([f])
 
         assert count == 1
-        assert (dirs["downloads"] / "film.mkv").read_text() == "existing"
-        assert (dirs["downloads"] / "film (1).mkv").exists()
-        assert (dirs["downloads"] / "film (1).mkv").read_text() == "new_version"
+        assert (dirs["downloads"] / "Series" / "ep01.mkv").exists()
+
+    def test_avoid_overwrite(self, service, dirs):
+        """Évite l'écrasement en ajoutant un compteur."""
+        orphans_dir = dirs["sandbox"] / "orphans"
+        _create_file(dirs["downloads"] / "Films" / "film.mkv", "existing")
+        f = _create_file(orphans_dir / "Films" / "film.mkv", "new_version")
+
+        count = service.reinject_files([f])
+
+        assert count == 1
+        assert (dirs["downloads"] / "Films" / "film.mkv").read_text() == "existing"
+        assert (dirs["downloads"] / "Films" / "film (1).mkv").exists()
+        assert (
+            dirs["downloads"] / "Films" / "film (1).mkv"
+        ).read_text() == "new_version"
 
     def test_refuse_outside_sandbox(self, service, dirs):
         """Refuse de réinjecter un fichier hors du sandbox."""
