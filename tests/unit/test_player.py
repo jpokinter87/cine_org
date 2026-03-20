@@ -273,5 +273,6 @@ class TestSeriesPlay:
         client = TestClient(app)
 
         resp = client.post("/library/series/1/play")
-        assert resp.status_code == 404
+        assert resp.status_code == 200
         assert "Aucun épisode" in resp.text
+        assert "play-error" in resp.text

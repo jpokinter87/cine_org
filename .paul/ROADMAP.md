@@ -8,14 +8,15 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 **v2.0 Production & Maintenance Complète** (v2.0.0)
 Status: 🚧 In Progress
-Phases: 2 of 4 complete
+Phases: 2 of 5 complete
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 35 | Maintenance Web Complète | 1 | Complete | 2026-03-08 |
 | 36 | Doublons Symlinks Cross-Genre | 1 | Complete | 2026-03-13 |
-| 37 | Déploiement Production | TBD | Not started | - |
-| 38 | Intégration Jellyfin | TBD | Not started | - |
+| 37 | Optimisations & Sandbox | 2 | Planning | - |
+| 38 | Déploiement Production | TBD | Not started | - |
+| 39 | Intégration Jellyfin | TBD | Not started | - |
 
 ### Phase 35: Maintenance Web Complète (Complete)
 
@@ -25,11 +26,15 @@ Corrections web (cleanup fix, repair symlinks, purge fantomes), detection orphel
 
 Détection et correction des symlinks cross-genre, option CLI --only, bouton Visionner en validation, fix TMDB séries TV via IMDB.
 
-### Phase 37: Déploiement Production
+### Phase 37: Optimisations & Sandbox
+
+Focus: Pré-filtre DB pour scan cross-genre (symlink_path en DB au lieu de rglob sur 5000+ fichiers). Sandbox complet des orphelins : déplacement vers .sandbox/orphans/ en préservant l'arborescence, interface web de gestion (liste fichiers sandboxés, aperçu, taille, date, existence d'une autre version). Actions : suppression définitive ou réinjection dans le workflow. Gestion de la corbeille dans la page maintenance (liste, restauration, vidage définitif).
+
+### Phase 38: Déploiement Production
 
 Focus: Service systemd pour uvicorn, workflow git dev→serveur (push/pull), configuration paths/ports/logs. Documentation déploiement. Permettre de continuer le développement sur la machine de dev.
 
-### Phase 38: Intégration Jellyfin
+### Phase 39: Intégration Jellyfin
 
 Focus: Corriger les volumes Docker pour que Jellyfin accède aux symlinks dans /media/Serveur/Collection. Montage symlinks + cibles (storage) avec les mêmes chemins absolus dans le container. Vérification scan bibliothèque.
 

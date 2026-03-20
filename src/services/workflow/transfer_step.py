@@ -80,6 +80,9 @@ class TransferStepMixin:
         # Mettre a jour file_path sur les entites apres transfert reussi
         self._update_file_paths(state.transfers, results)
 
+        # Log de transfert pour traçabilité
+        self._write_transfer_log(state.transfers, results, config.storage_dir)
+
         self._console.print(
             f"\n[bold green]{success_count}[/bold green] fichier(s) transféré(s)"
         )
@@ -123,6 +126,42 @@ class TransferStepMixin:
 
         if updated:
             session.commit()
+
+    def _write_transfer_log(
+        self, transfers: list[dict], results: list[dict], storage_dir: object
+    ) -> None:
+        """Écrit un log JSON des transferts effectués."""
+        import json
+        from datetime import datetime
+        from pathlib import Path
+
+        details = []
+        for transfer, result in zip(transfers, results):
+            if result.get("success"):
+                details.append(
+                    {
+                        "name": transfer.get("new_filename", ""),
+                        "storage": str(transfer.get("destination", "")),
+                        "symlink": str(transfer.get("symlink_destination", "")),
+                    }
+                )
+        if not details:
+            return
+
+        log_dir = Path(storage_dir) / ".transfer_logs"
+        log_dir.mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_file = log_dir / f"transfer_{timestamp}.json"
+        log_data = {
+            "timestamp": datetime.now().isoformat(),
+            "count": len(details),
+            "files": details,
+        }
+        try:
+            log_file.write_text(json.dumps(log_data, ensure_ascii=False, indent=2))
+            self._console.print(f"[dim]Log de transfert : {log_file}[/dim]")
+        except Exception as e:
+            self._console.print(f"[dim]Log de transfert impossible : {e}[/dim]")
 
     def _print_summary(self, state: WorkflowState) -> None:
         """Affiche le résumé final du workflow."""

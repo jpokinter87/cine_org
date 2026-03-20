@@ -45,6 +45,7 @@ class DuplicateMatch:
     similarity_reason: str
     quality: Optional[QualityComparison] = None
     existing_seasons: Optional[set[int]] = None
+    existing_episodes: Optional[set[str]] = None
 
 
 # Articles ignorés pour la normalisation des titres
@@ -335,10 +336,12 @@ class DuplicateDetector:
                 else:
                     reason = f"Noms différents : '{dir_name}' vs '{new_name}'"
 
-                # Collecter les numéros de saison pour les séries
+                # Collecter les numéros de saison et épisodes pour les séries
                 existing_seasons = None
+                existing_episodes = None
                 if is_series:
                     existing_seasons = self._collect_existing_seasons(subdir)
+                    existing_episodes = self._collect_existing_episodes(subdir)
 
                 return DuplicateMatch(
                     existing_dir=subdir,
@@ -346,6 +349,7 @@ class DuplicateDetector:
                     existing_files=files_info,
                     similarity_reason=reason,
                     existing_seasons=existing_seasons,
+                    existing_episodes=existing_episodes,
                 )
 
             # Descendre dans les sous-répertoires de subdivision (lettres, plages)
@@ -413,6 +417,20 @@ class DuplicateDetector:
         except PermissionError:
             pass
         return seasons
+
+    @staticmethod
+    def _collect_existing_episodes(series_dir: Path) -> set[str]:
+        """Collecte les identifiants SxxExx existants dans un dossier de série."""
+        episodes = set()
+        try:
+            for item in series_dir.rglob("*"):
+                if item.is_file() and item.suffix.lower() in VIDEO_EXTENSIONS:
+                    m = re.search(r"S(\d+)E(\d+)", item.name, re.IGNORECASE)
+                    if m:
+                        episodes.add(f"S{int(m.group(1)):02d}E{int(m.group(2)):02d}")
+        except PermissionError:
+            pass
+        return episodes
 
     def _collect_files_info(
         self, directory: Path, is_series: bool

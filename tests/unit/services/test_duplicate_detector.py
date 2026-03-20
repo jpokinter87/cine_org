@@ -352,3 +352,92 @@ class TestCompareQuality:
         comparison = detector.compare_quality(existing_files, new_file)
 
         assert comparison.recommended == "new"
+
+
+class TestMissingEpisodeNotDuplicate:
+    """Un épisode manquant ajouté à une série existante n'est PAS un doublon.
+
+    Bug critique corrigé : ajouter S01E06 à une série qui a S01E01-E05
+    ne doit pas marquer l'épisode comme doublon (et donc sandbox toute la série).
+    """
+
+    def test_missing_episode_not_duplicate(
+        self, detector: DuplicateDetector, video_dir: Path
+    ):
+        """Épisode S01E06 manquant dans une série qui a S01E01-E05."""
+        series_dir = (
+            video_dir
+            / "Series"
+            / "Animation"
+            / "K-L"
+            / "Love, Death & Robots (2019)"
+        )
+        saison = series_dir / "Saison 01"
+        saison.mkdir(parents=True)
+        for ep in range(1, 6):
+            (saison / f"Love, Death & Robots (2019) - S01E{ep:02d}.mkv").write_bytes(
+                b"\x00" * 1024
+            )
+
+        result = detector.detect_duplicate(
+            title="Love, Death & Robots",
+            year=2019,
+            video_dir=video_dir,
+            is_series=True,
+        )
+
+        assert result is not None
+        assert result.existing_episodes is not None
+        assert "S01E06" not in result.existing_episodes
+        assert "S01E01" in result.existing_episodes
+
+    def test_existing_episode_is_duplicate(
+        self, detector: DuplicateDetector, video_dir: Path
+    ):
+        """Épisode S01E01 existe déjà → c'est un vrai doublon."""
+        series_dir = (
+            video_dir
+            / "Series"
+            / "Animation"
+            / "K-L"
+            / "Love, Death & Robots (2019)"
+        )
+        saison = series_dir / "Saison 01"
+        saison.mkdir(parents=True)
+        (saison / "Love, Death & Robots (2019) - S01E01.mkv").write_bytes(
+            b"\x00" * 1024
+        )
+
+        result = detector.detect_duplicate(
+            title="Love, Death & Robots",
+            year=2019,
+            video_dir=video_dir,
+            is_series=True,
+        )
+
+        assert result is not None
+        assert result.existing_episodes is not None
+        assert "S01E01" in result.existing_episodes
+
+    def test_existing_episodes_collected(
+        self, detector: DuplicateDetector, video_dir: Path
+    ):
+        """Les identifiants SxxExx sont correctement collectés."""
+        series_dir = video_dir / "Series" / "TV" / "B" / "Big Mouth (2022)"
+        saison1 = series_dir / "Saison 01"
+        saison1.mkdir(parents=True)
+        saison2 = series_dir / "Saison 02"
+        saison2.mkdir(parents=True)
+        (saison1 / "Big Mouth (2022) - S01E01.mkv").write_bytes(b"\x00" * 1024)
+        (saison1 / "Big Mouth (2022) - S01E02.mkv").write_bytes(b"\x00" * 1024)
+        (saison2 / "Big Mouth (2022) - S02E01.mkv").write_bytes(b"\x00" * 1024)
+
+        result = detector.detect_duplicate(
+            title="Big Mouth",
+            year=2022,
+            video_dir=video_dir,
+            is_series=True,
+        )
+
+        assert result is not None
+        assert result.existing_episodes == {"S01E01", "S01E02", "S02E01"}

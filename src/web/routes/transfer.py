@@ -132,37 +132,90 @@ def _sandbox_existing(
     sandbox_dir: Path,
     storage_dir: Path,
     video_dir: Path,
+    *,
+    episode_key: str | None = None,
 ) -> None:
     """
     Déplace les fichiers existants (storage + symlinks video) vers le sandbox.
 
     existing_dir est dans video_dir (symlinks). On suit les symlinks pour
     trouver le vrai chemin storage, puis on déplace et supprime les symlinks.
+
+    Pour les séries, si episode_key est fourni (ex: "S01E03"), seuls les
+    fichiers de cet épisode sont sandboxés au lieu du dossier entier.
+    Pour les films, tout le dossier est déplacé (comportement original).
     """
     sandbox_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Trouver le vrai chemin storage via les symlinks
     storage_path = _resolve_storage_path(existing_dir, storage_dir)
 
-    if storage_path and storage_path.exists() and storage_path.is_dir():
-        try:
-            relative = storage_path.relative_to(storage_dir)
-        except ValueError:
-            relative = Path(storage_path.name)
-        dest = sandbox_dir / relative
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(storage_path), str(dest))
-        logger.info("Sandbox (storage) : {} → {}", storage_path, dest)
-    else:
+    if not storage_path or not storage_path.exists() or not storage_path.is_dir():
         logger.warning(
             "Sandbox: impossible de résoudre le chemin storage pour {}",
             existing_dir,
         )
+        return
 
-    # 2. Supprimer le répertoire de symlinks dans video_dir
-    if existing_dir.exists() and existing_dir.is_dir():
-        shutil.rmtree(str(existing_dir))
-        logger.info("Symlinks supprimés : {}", existing_dir)
+    try:
+        relative = storage_path.relative_to(storage_dir)
+    except ValueError:
+        relative = Path(storage_path.name)
+
+    if episode_key:
+        # Séries : ne sandboxer que les fichiers de l'épisode spécifique
+        import re
+
+        pattern = re.compile(re.escape(episode_key), re.IGNORECASE)
+        moved = 0
+        for item in storage_path.rglob("*"):
+            if item.is_file() and pattern.search(item.name):
+                item_rel = item.relative_to(storage_dir)
+                dest = sandbox_dir / item_rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(item), str(dest))
+                moved += 1
+                logger.info("Sandbox (épisode) : {} → {}", item, dest)
+        # Supprimer les symlinks correspondants dans video_dir
+        for item in existing_dir.rglob("*"):
+            if item.is_symlink() and pattern.search(item.name):
+                item.unlink()
+                logger.info("Symlink supprimé : {}", item)
+        if moved == 0:
+            logger.warning(
+                "Sandbox: aucun fichier {} trouvé dans {}", episode_key, storage_path
+            )
+    else:
+        # Films : déplacer tout le dossier (comportement original)
+        dest = sandbox_dir / relative
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(storage_path), str(dest))
+        logger.info("Sandbox (storage) : {} → {}", storage_path, dest)
+
+        # Supprimer le répertoire de symlinks dans video_dir
+        if existing_dir.exists() and existing_dir.is_dir():
+            shutil.rmtree(str(existing_dir))
+            logger.info("Symlinks supprimés : {}", existing_dir)
+
+
+def _write_transfer_log(details: list[dict], storage_dir: Path) -> None:
+    """Écrit un fichier JSON de log des transferts effectués."""
+    from datetime import datetime
+
+    log_dir = storage_dir / ".transfer_logs"
+    log_dir.mkdir(exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"transfer_{timestamp}.json"
+    log_data = {
+        "timestamp": datetime.now().isoformat(),
+        "count": len(details),
+        "files": details,
+    }
+    try:
+        log_file.write_text(json.dumps(log_data, ensure_ascii=False, indent=2))
+        logger.info("Log de transfert : {}", log_file)
+    except Exception as e:
+        logger.warning("Impossible d'écrire le log de transfert : {}", e)
 
 
 def _build_tree_data(transfers: list[dict], storage_dir: Path, video_dir: Path) -> dict:
@@ -428,6 +481,16 @@ async def _run_web_transfer(
         progress.total = len(transfers)
         progress.message = f"{mode_label} de {len(transfers)} fichier(s)…"
 
+        def _extract_episode_key(transfer: dict) -> str | None:
+            """Extrait SxxExx du nom de fichier si c'est une série."""
+            if not transfer.get("is_series"):
+                return None
+            import re
+
+            fn = transfer.get("new_filename", "")
+            m = re.search(r"(S\d+E\d+)", fn, re.IGNORECASE)
+            return m.group(1).upper() if m else None
+
         def _record_transfer(name: str, dest: Path, sym: Optional[Path]) -> None:
             """Enregistre les détails d'un transfert réussi."""
             progress.transferred_files.append(name)
@@ -486,9 +549,11 @@ async def _run_web_transfer(
                             f"[Simulation] Remplacement (pré) : {display_name}"
                         )
                     else:
-                        # Sandbox : ne déplacer qu'une fois par répertoire existant
-                        existing_dir_key = str(duplicate_match.existing_dir)
-                        if existing_dir_key not in _moved_to_sandbox:
+                        # Sandbox : sandboxer l'épisode spécifique (séries)
+                        # ou le dossier entier (films)
+                        ep_key = _extract_episode_key(transfer)
+                        sandbox_key = f"{duplicate_match.existing_dir}|{ep_key or '*'}"
+                        if sandbox_key not in _moved_to_sandbox:
                             try:
                                 sandbox_dir = _get_sandbox_dir(settings)
                                 _sandbox_existing(
@@ -496,6 +561,7 @@ async def _run_web_transfer(
                                     sandbox_dir,
                                     storage_dir,
                                     video_dir,
+                                    episode_key=ep_key,
                                 )
                             except Exception as e:
                                 logger.warning(
@@ -503,7 +569,7 @@ async def _run_web_transfer(
                                     duplicate_match.existing_dir,
                                     e,
                                 )
-                            _moved_to_sandbox.add(existing_dir_key)
+                            _moved_to_sandbox.add(sandbox_key)
 
                         # Transférer le nouveau fichier (même si sandbox a échoué)
                         try:
@@ -542,8 +608,9 @@ async def _run_web_transfer(
 
                 elif pre_resolution == "keep_both":
                     if not dry_run:
-                        existing_dir_key = str(duplicate_match.existing_dir)
-                        if existing_dir_key not in _moved_to_sandbox:
+                        ep_key = _extract_episode_key(transfer)
+                        sandbox_key = f"{duplicate_match.existing_dir}|{ep_key or '*'}"
+                        if sandbox_key not in _moved_to_sandbox:
                             try:
                                 sandbox_dir = _get_sandbox_dir(settings)
                                 _sandbox_existing(
@@ -551,8 +618,9 @@ async def _run_web_transfer(
                                     sandbox_dir,
                                     storage_dir,
                                     video_dir,
+                                    episode_key=ep_key,
                                 )
-                                _moved_to_sandbox.add(existing_dir_key)
+                                _moved_to_sandbox.add(sandbox_key)
                             except Exception as e:
                                 logger.warning(
                                     "Erreur sandbox %s: %s",
@@ -679,9 +747,11 @@ async def _run_web_transfer(
                         _record_transfer(display_name, destination, symlink_dest)
                         progress.message = f"[Simulation] Remplacement : {display_name}"
                     else:
-                        # Sandbox : déplacer l'ancien (une seule fois par répertoire)
-                        existing_dir_key = str(duplicate_match.existing_dir)
-                        if existing_dir_key not in _moved_to_sandbox:
+                        # Sandbox : sandboxer l'épisode spécifique (séries)
+                        # ou le dossier entier (films)
+                        ep_key = _extract_episode_key(transfer)
+                        sandbox_key = f"{duplicate_match.existing_dir}|{ep_key or '*'}"
+                        if sandbox_key not in _moved_to_sandbox:
                             try:
                                 sandbox_dir = _get_sandbox_dir(settings)
                                 _sandbox_existing(
@@ -689,6 +759,7 @@ async def _run_web_transfer(
                                     sandbox_dir,
                                     storage_dir,
                                     video_dir,
+                                    episode_key=ep_key,
                                 )
                             except Exception as e:
                                 logger.warning(
@@ -696,7 +767,7 @@ async def _run_web_transfer(
                                     duplicate_match.existing_dir,
                                     e,
                                 )
-                            _moved_to_sandbox.add(existing_dir_key)
+                            _moved_to_sandbox.add(sandbox_key)
                         # Transférer le nouveau normalement
                         try:
                             result = transferer.transfer_file(
@@ -722,18 +793,19 @@ async def _run_web_transfer(
 
                 elif choice == "keep_both":
                     if not dry_run:
-                        existing_dir_key = str(duplicate_match.existing_dir)
-                        if existing_dir_key not in _moved_to_sandbox:
+                        ep_key = _extract_episode_key(transfer)
+                        sandbox_key = f"{duplicate_match.existing_dir}|{ep_key or '*'}"
+                        if sandbox_key not in _moved_to_sandbox:
                             try:
-                                # Sandbox : déplacer l'ancien (une seule fois par répertoire)
                                 sandbox_dir = _get_sandbox_dir(settings)
                                 _sandbox_existing(
                                     duplicate_match.existing_dir,
                                     sandbox_dir,
                                     storage_dir,
                                     video_dir,
+                                    episode_key=ep_key,
                                 )
-                                _moved_to_sandbox.add(existing_dir_key)
+                                _moved_to_sandbox.add(sandbox_key)
                             except Exception as e:
                                 logger.warning(
                                     "Erreur sandbox %s: %s",
@@ -953,6 +1025,10 @@ async def _run_web_transfer(
 
         progress.message = "Simulation terminée" if dry_run else "Transfert terminé"
         progress.complete = True
+
+        # Log de transfert pour traçabilité
+        if not dry_run and progress.transferred_details:
+            _write_transfer_log(progress.transferred_details, storage_dir)
 
     except Exception as e:
         logger.exception("Erreur lors du transfert web: %s", e)

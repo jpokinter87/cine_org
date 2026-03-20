@@ -306,10 +306,7 @@ async def movie_play(
             )
 
     if not resolved:
-        return HTMLResponse(
-            "<p class='reassociate-empty'>Fichier vidéo introuvable</p>",
-            status_code=404,
-        )
+        return HTMLResponse(_error_html("Fichier vidéo introuvable", "movies", movie_id))
 
     pid, _, pname = _launch_player(resolved, profile_name=profile)
     return HTMLResponse(_playing_html(pid, "movies", movie_id, pname))
@@ -332,8 +329,7 @@ async def episode_play(
     resolved = _resolve_video_path(file_path)
     if not resolved:
         return HTMLResponse(
-            "<p class='reassociate-empty'>Fichier vidéo introuvable</p>",
-            status_code=404,
+            _error_html("Fichier vidéo introuvable", "episodes", episode_id)
         )
 
     pid, _, pname = _launch_player(resolved, profile_name=profile)
@@ -361,8 +357,9 @@ async def series_play(
         ).first()
         if not episode:
             return HTMLResponse(
-                "<p class='reassociate-empty'>Aucun épisode avec fichier disponible</p>",
-                status_code=404,
+                _error_html(
+                    "Aucun épisode avec fichier disponible", "series", series_id
+                )
             )
         file_path = episode.file_path
     finally:
@@ -371,8 +368,7 @@ async def series_play(
     resolved = _resolve_video_path(file_path)
     if not resolved:
         return HTMLResponse(
-            "<p class='reassociate-empty'>Fichier vidéo introuvable</p>",
-            status_code=404,
+            _error_html("Fichier vidéo introuvable", "series", series_id)
         )
 
     pid, _, pname = _launch_player(resolved, profile_name=profile)

@@ -476,15 +476,21 @@ async def play_pending(
 
     if pending is None or not pending.video_file or not pending.video_file.path:
         return HTMLResponse(
-            '<span class="play-error">Fichier introuvable</span>',
-            status_code=404,
+            '<span class="play-error"'
+            f' hx-get="/validation/{pending_id}/play-status/0"'
+            ' hx-trigger="load delay:4s"'
+            ' hx-swap="outerHTML">'
+            "Fichier introuvable</span>",
         )
 
     resolved = _resolve_video_path(str(pending.video_file.path))
     if not resolved:
         return HTMLResponse(
-            '<span class="play-error">Fichier introuvable sur le disque</span>',
-            status_code=404,
+            '<span class="play-error"'
+            f' hx-get="/validation/{pending_id}/play-status/0"'
+            ' hx-trigger="load delay:4s"'
+            ' hx-swap="outerHTML">'
+            "Fichier introuvable sur le disque</span>",
         )
 
     pid, is_remote, pname = _launch_player(resolved, profile_name=profile)

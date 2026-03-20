@@ -787,17 +787,25 @@ def _detect_duplicates(
             seen_titles[cache_key] = match
 
         if match is not None:
-            # Saisons partielles : si la série existante n'a pas cette saison,
-            # l'épisode n'est pas un doublon (nouvelles saisons)
-            if is_series and match.existing_seasons:
+            # Séries : vérifier au niveau épisode, pas saison.
+            # Un épisode manquant ajouté à une série existante n'est PAS un doublon.
+            if is_series:
                 new_fn = t.get("new_filename", "")
-                season_m = re.search(r"S(\d+)E\d+", new_fn, re.IGNORECASE)
-                if season_m:
-                    new_season = int(season_m.group(1))
-                    if new_season not in match.existing_seasons:
+                ep_m = re.search(r"S(\d+)E(\d+)", new_fn, re.IGNORECASE)
+                if ep_m:
+                    new_ep_key = f"S{int(ep_m.group(1)):02d}E{int(ep_m.group(2)):02d}"
+                    # Vérification par épisode exact (prioritaire)
+                    if match.existing_episodes and new_ep_key not in match.existing_episodes:
                         t["has_duplicate"] = False
                         t["duplicate_match"] = None
                         continue
+                    # Fallback : vérification par saison (si pas d'épisodes collectés)
+                    if not match.existing_episodes and match.existing_seasons:
+                        new_season = int(ep_m.group(1))
+                        if new_season not in match.existing_seasons:
+                            t["has_duplicate"] = False
+                            t["duplicate_match"] = None
+                            continue
 
             # Calculer le score de qualité comparatif
             source = t.get("source")
