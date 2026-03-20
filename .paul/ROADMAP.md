@@ -8,13 +8,13 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 **v2.0 Production & Maintenance Complète** (v2.0.0)
 Status: 🚧 In Progress
-Phases: 2 of 5 complete
+Phases: 3 of 5 complete
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 35 | Maintenance Web Complète | 1 | Complete | 2026-03-08 |
 | 36 | Doublons Symlinks Cross-Genre | 1 | Complete | 2026-03-13 |
-| 37 | Optimisations & Sandbox | 2 | Planning | - |
+| 37 | Optimisations & Sandbox | 2 | Complete | 2026-03-20 |
 | 38 | Déploiement Production | TBD | Not started | - |
 | 39 | Intégration Jellyfin | TBD | Not started | - |
 
@@ -26,9 +26,9 @@ Corrections web (cleanup fix, repair symlinks, purge fantomes), detection orphel
 
 Détection et correction des symlinks cross-genre, option CLI --only, bouton Visionner en validation, fix TMDB séries TV via IMDB.
 
-### Phase 37: Optimisations & Sandbox
+### Phase 37: Optimisations & Sandbox (Complete)
 
-Focus: Pré-filtre DB pour scan cross-genre (symlink_path en DB au lieu de rglob sur 5000+ fichiers). Sandbox complet des orphelins : déplacement vers .sandbox/orphans/ en préservant l'arborescence, interface web de gestion (liste fichiers sandboxés, aperçu, taille, date, existence d'une autre version). Actions : suppression définitive ou réinjection dans le workflow. Gestion de la corbeille dans la page maintenance (liste, restauration, vidage définitif).
+Plan 37-01 : Cross-genre DB-first (symlink_path), corbeille maintenance (liste/restauration/vidage), Comédie dramatique. Plan 37-02 : SandboxService complet (déplacement/liste/suppression/réinjection), interface web sandbox dans maintenance, nettoyage automatique symlinks résiduels, fix critique _sandbox_existing (garde-fou subdivision).
 
 ### Phase 38: Déploiement Production
 
@@ -163,4 +163,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-13 — Phase 36 complete*
+*Last updated: 2026-03-20 — Phase 37 complete*

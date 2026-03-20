@@ -10,21 +10,21 @@ See: .paul/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Milestone: v2.0 Production & Maintenance Complète
-Phase: 37 of 5 (Optimisations & Sandbox) — In Progress
-Plan: 37-01 complet, 37-02 en attente
-Status: Plan 37-01 UNIFY terminé, prêt pour plan 37-02
-Last activity: 2026-03-20 — Plan 37-01 complété (cross-genre DB + corbeille + Comédie dramatique)
+Phase: 37 of 5 (Optimisations & Sandbox) — Complete
+Plan: 37-02 complet (2/2 plans)
+Status: Phase 37 terminée — prêt pour transition
+Last activity: 2026-03-20 — Plan 37-02 complété (sandbox orphelins + fix subdivision)
 
 Progress:
-- v2.0: [█████░░░░░] 40% (2/5 phases)
-- Phase 37: [█████░░░░░] 50% (1/2 plans)
+- v2.0: [██████░░░░] 60% (3/5 phases)
+- Phase 37: [██████████] 100% (2/2 plans)
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop 37-01 complete — ready for next PLAN]
+  ✓        ✓        ✓     [Loop 37-02 complete — phase 37 terminée]
 ```
 
 ## Accumulated Context
@@ -88,12 +88,16 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Orphelins par symlinks : fichier orphelin = pas ciblé par un symlink (remplace comparaison DB)
 - Cache analyse _analysis_cache module-level pour partage analyse → fix
 - Réconciliation DB dry-run avant apply pour actions sur fichiers réels
-- Sandbox des orphelins différé à une phase dédiée (périmètre trop large)
 - Source tmdb_tv pour distinguer film/série TV TMDB dans tout le pipeline (validation + batch_builder)
 - is_tv flag sur MediaDetails pour marquer les résultats TV TMDB
 - Cross-genre DB-first : requête symlink_path groupée par file_path, fallback filesystem si vide
 - Corbeille maintenance : routes /maintenance/trash/* avec spinner vidage + dialog confirmation
 - Comédie+Drame → Comédie dramatique : règle combinatoire dans get_priority_genre(), genres protégés priment
+- sandbox_dir = storage_dir/.sandbox (même volume, pas de copie réseau)
+- Réinjection sandbox dans downloads/Films ou downloads/Series (détection type correcte)
+- Nettoyage séquelles symlinks : matching titre+année (films), titre+SxxExx (épisodes), format scene
+- _is_subdivision_path() : garde-fou critique empêchant sandbox de détruire une subdivision entière
+- htmx.process() obligatoire après innerHTML sur résultats SSE (attributs hx-* non activés sinon)
 
 ### Deferred Issues
 - README.md à réécrire de fond en comble : nouvelles commandes, structure répertoires attendue, architecture, configuration
@@ -104,35 +108,34 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - 285 épisodes sans titre (limites TVDB : séries anciennes, numérotation spéciale)
 - 5 séries sans tvdb_id (Dahmer="Monstre" sur TVDB, Ed Gein/Playgame/Suspect pas sur TVDB, Punisher=homonyme)
 - Lecteur distant : aucun message d'erreur si le profil est mal configuré (lecture s'arrête après 1s sans feedback)
-- ~100 symlinks cassés irréductibles (fichiers source supprimés du storage)
+- ~58 symlinks cassés irréductibles (fichiers source supprimés du storage, après nettoyage séquelles)
 - Test suppression depuis machine distante (vérifier bouton masqué + routes bloquées)
 - Test lectures simultanées sur profils différents (ordi Windows indisponible)
 - Vérification tooltips workflow click-to-toggle (pas de fichiers à traiter pour tester)
-- Skill gap /frontend-design : invoquer systématiquement pour les phases UI
 - 487 épisodes avec langue indétectable (fichiers anciens sans métadonnée langue)
 - Quelques tvdb_id potentiellement erronés (découvert avec BSG 1978 vs 2004)
 - 3 doublons DB (même file_path, 2 MovieModel) : Double mise, Compañeros, Plein la vue — purger l'entrée excédentaire
-- Doublons physiques + symlinks orphelins cross-genre : des films existent en double dans storage (même taille, noms différents) avec des symlinks dans plusieurs genres
-- Sandbox management complet : sandboxer orphelins vers .sandbox/orphans/, interface gestion (liste/suppression/réinjection workflow)
 - Vérifier détection doublons avec un film (testé uniquement avec séries jusqu'ici)
 - Trous dans subdivisions alphabétiques : étendre la borne la plus proche au lieu de laisser à la racine
+- Vérifier si le bug subdivision a causé des dégâts dans des sessions antérieures (pré-existait depuis phase 35)
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: dd5997a (fix(config): rechargement à chaud après modification de la configuration)
+Last commit: 37fa1e6 (fix(sandbox): réinjection dans downloads/Films ou downloads/Series selon type)
 Branch: master
 
 ## Session Continuity
 
 Last session: 2026-03-20
-Stopped at: Plan 37-01 complet (UNIFY)
-Next action: /paul:apply .paul/phases/37-optimisations-sandbox/37-02-PLAN.md
-Resume file: .paul/phases/37-optimisations-sandbox/37-01-SUMMARY.md
+Stopped at: Phase 37 complète (UNIFY 37-02)
+Next action: Transition phase 37 → phase suivante
+Resume file: .paul/phases/37-optimisations-sandbox/37-02-SUMMARY.md
 Resume context:
 - Plan 37-01 : Complet (cross-genre DB + corbeille maintenance + Comédie dramatique)
-- Plan 37-02 : Sandbox orphelins complet avec UI (checkpoint visual, wave 2, prêt)
+- Plan 37-02 : Complet (sandbox orphelins + fix subdivision + nettoyage séquelles)
+- Phase 37 : 100% terminée, prête pour transition
 
 ---
 *STATE.md — Updated after every significant action*
