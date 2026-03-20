@@ -330,25 +330,68 @@ def _extract_genre_folder(symlink_path: Path, video_dir: Path) -> str | None:
     return parts[0]
 
 
-def scan_cross_genre_duplicates(video_dir: Path) -> list[CrossGenreDuplicate]:
-    """
-    Detecte les symlinks pointant vers le meme fichier physique dans des genres differents.
+def _build_cross_genre_result(
+    target: Path,
+    genre_map: dict[str, list[Path]],
+) -> CrossGenreDuplicate | None:
+    """Construit un CrossGenreDuplicate a partir d'un genre_map avec 2+ genres."""
+    if len(genre_map) < 2:
+        return None
 
-    Groupe les symlinks sous video/Films/ par cible resolue, puis identifie
-    les groupes ou les symlinks apparaissent dans des dossiers genre differents.
-    Le symlink dans le genre le plus prioritaire (GENRE_HIERARCHY) est conserve.
+    genres_sorted = sorted(genre_map.keys(), key=_get_genre_folder_priority)
+    keep_genre = genres_sorted[0]
+    keep_symlinks = genre_map[keep_genre]
+    keep_symlinks.sort(key=lambda p: len(p.name), reverse=True)
+    keep = keep_symlinks[0]
 
-    Args:
-        video_dir: Repertoire video a scanner.
+    remove = []
+    remove_genres = []
+    for sl in keep_symlinks[1:]:
+        remove.append(sl)
+        remove_genres.append(keep_genre)
+    for genre in genres_sorted[1:]:
+        for sl in genre_map[genre]:
+            remove.append(sl)
+            remove_genres.append(genre)
 
-    Returns:
-        Liste de CrossGenreDuplicate pour chaque groupe cross-genre.
-    """
+    return CrossGenreDuplicate(
+        target_path=target,
+        keep=keep,
+        keep_genre=keep_genre,
+        remove=remove,
+        remove_genres=remove_genres,
+    )
+
+
+def _scan_cross_genre_via_db(
+    video_dir: Path,
+    movie_repo: Any,
+) -> list[CrossGenreDuplicate]:
+    """Detecte les doublons cross-genre via requete DB (symlink_path)."""
+    candidates = movie_repo.get_cross_genre_candidates()
+    result = []
+
+    for file_path, entries in candidates.items():
+        genre_map: dict[str, list[Path]] = defaultdict(list)
+        for _model_id, symlink_path in entries:
+            sl = Path(symlink_path)
+            genre = _extract_genre_folder(sl, video_dir)
+            if genre:
+                genre_map[genre].append(sl)
+
+        dup = _build_cross_genre_result(Path(file_path), genre_map)
+        if dup:
+            result.append(dup)
+
+    return result
+
+
+def _scan_cross_genre_via_filesystem(video_dir: Path) -> list[CrossGenreDuplicate]:
+    """Detecte les doublons cross-genre via scan filesystem (fallback)."""
     films_dir = video_dir / "Films"
     if not films_dir.exists():
         return []
 
-    # Grouper les symlinks par cible (readlink rapide, sans resolution complete)
     # Premiere passe : grouper par cible brute (readlink) — O(1) par symlink
     raw_groups: dict[Path, list[Path]] = defaultdict(list)
 
@@ -382,48 +425,49 @@ def scan_cross_genre_duplicates(video_dir: Path) -> list[CrossGenreDuplicate]:
         if len(symlinks) < 2:
             continue
 
-        # Extraire le genre de chaque symlink
         genre_map: dict[str, list[Path]] = defaultdict(list)
         for sl in symlinks:
             genre = _extract_genre_folder(sl, video_dir)
             if genre:
                 genre_map[genre].append(sl)
 
-        # Ignorer si tous dans le meme genre (traite par scan_duplicate_symlinks)
-        if len(genre_map) < 2:
-            continue
-
-        # Determiner le genre prioritaire
-        genres_sorted = sorted(genre_map.keys(), key=_get_genre_folder_priority)
-        keep_genre = genres_sorted[0]
-        # Parmi les symlinks du genre prioritaire, garder le nom le plus long
-        keep_symlinks = genre_map[keep_genre]
-        keep_symlinks.sort(key=lambda p: len(p.name), reverse=True)
-        keep = keep_symlinks[0]
-
-        remove = []
-        remove_genres = []
-        # Ajouter les symlinks redondants du meme genre prioritaire (sauf keep)
-        for sl in keep_symlinks[1:]:
-            remove.append(sl)
-            remove_genres.append(keep_genre)
-        # Ajouter tous les symlinks des autres genres
-        for genre in genres_sorted[1:]:
-            for sl in genre_map[genre]:
-                remove.append(sl)
-                remove_genres.append(genre)
-
-        result.append(
-            CrossGenreDuplicate(
-                target_path=target,
-                keep=keep,
-                keep_genre=keep_genre,
-                remove=remove,
-                remove_genres=remove_genres,
-            )
-        )
+        dup = _build_cross_genre_result(target, genre_map)
+        if dup:
+            result.append(dup)
 
     return result
+
+
+def scan_cross_genre_duplicates(
+    video_dir: Path, movie_repo: Any = None
+) -> list[CrossGenreDuplicate]:
+    """
+    Detecte les symlinks pointant vers le meme fichier physique dans des genres differents.
+
+    Utilise la DB (symlink_path) comme source primaire si un movie_repo est fourni
+    et que suffisamment de films ont un symlink_path renseigne. Sinon, fallback
+    sur le scan filesystem.
+
+    Args:
+        video_dir: Repertoire video a scanner.
+        movie_repo: Repository films optionnel pour requete DB.
+
+    Returns:
+        Liste de CrossGenreDuplicate pour chaque groupe cross-genre.
+    """
+    if movie_repo is not None:
+        try:
+            result = _scan_cross_genre_via_db(video_dir, movie_repo)
+            if result:
+                logger.debug(
+                    "Cross-genre : {} doublon(s) detecte(s) via DB", len(result)
+                )
+                return result
+            # Si la DB ne retourne rien, tenter le filesystem (symlink_path pas peuple)
+        except Exception as e:
+            logger.warning("Cross-genre DB fallback : {}", e)
+
+    return _scan_cross_genre_via_filesystem(video_dir)
 
 
 def scan_oversized_dirs(

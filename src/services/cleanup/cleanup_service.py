@@ -152,7 +152,7 @@ class CleanupService:
         return scan_duplicate_symlinks(video_dir)
 
     def _scan_cross_genre_duplicates(self, video_dir: Path):
-        return scan_cross_genre_duplicates(video_dir)
+        return scan_cross_genre_duplicates(video_dir, movie_repo=self._movie_repo)
 
     def _scan_oversized_dirs(self, video_dir: Path, max_per_dir: int = 50):
         return scan_oversized_dirs(video_dir, max_per_dir)

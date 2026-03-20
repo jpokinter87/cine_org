@@ -4,6 +4,7 @@ Routes de la page de maintenance.
 Affiche les diagnostics d'integrite et de nettoyage de la videotheque
 avec progression SSE en temps reel. Permet l'execution des corrections
 depuis le web (cleanup fix, repair symlinks) avec restriction localhost.
+Inclut la gestion de la corbeille (liste, restauration, vidage).
 
 Scope limite aux Films et Series uniquement.
 """
@@ -14,6 +15,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
+from sqlmodel import select
 
 from ..deps import templates
 
@@ -77,11 +79,54 @@ def _sse_complete(html: str) -> str:
 
 @router.get("/maintenance")
 async def maintenance_page(request: Request):
-    """Page principale de maintenance."""
+    """Page principale de maintenance avec section corbeille."""
+    from ...infrastructure.persistence.database import get_session
+    from ...infrastructure.persistence.models import TrashModel
+
     client_host = request.client.host if request.client else ""
     is_local = client_host in _LOCAL_HOSTS
+
+    # Charger les elements de la corbeille
+    session = next(get_session())
+    try:
+        items_raw = session.exec(
+            select(TrashModel).order_by(TrashModel.deleted_at.desc())
+        ).all()
+
+        trash_items = []
+        episode_counts: dict[int, int] = {}
+        for t in items_raw:
+            if t.entity_type == "episode":
+                meta = t.entity_metadata
+                series_trash_id = meta.get("_series_trash_id")
+                if series_trash_id:
+                    episode_counts[series_trash_id] = (
+                        episode_counts.get(series_trash_id, 0) + 1
+                    )
+                continue
+            meta = t.entity_metadata
+            trash_items.append({
+                "id": t.id,
+                "entity_type": t.entity_type,
+                "title": meta.get("title", "Sans titre"),
+                "year": meta.get("year"),
+                "deleted_at": t.deleted_at,
+            })
+
+        for item in trash_items:
+            if item["entity_type"] == "series":
+                item["episode_count"] = episode_counts.get(item["id"], 0)
+    finally:
+        session.close()
+
     return templates.TemplateResponse(
-        request, "maintenance/index.html", {"is_local": is_local}
+        request,
+        "maintenance/index.html",
+        {
+            "is_local": is_local,
+            "trash_items": trash_items,
+            "trash_count": len(trash_items),
+        },
     )
 
 
@@ -705,6 +750,122 @@ async def run_cleanup_fix_sse(request: Request):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Corbeille — Restauration et vidage depuis la page maintenance
+# ---------------------------------------------------------------------------
+
+
+@router.post("/maintenance/trash/{trash_id}/restore", response_class=HTMLResponse)
+async def maintenance_restore_trash(request: Request, trash_id: int):
+    """Restaure un element depuis la corbeille (redirige vers maintenance)."""
+    from ...infrastructure.persistence.database import get_session
+    from ...infrastructure.persistence.models import (
+        EpisodeModel,
+        MovieModel,
+        SeriesModel,
+        TrashModel,
+    )
+    from ...web.routes.library.trash import _apply_metadata
+
+    client_host = request.client.host if request.client else ""
+    if client_host not in _LOCAL_HOSTS:
+        return HTMLResponse(
+            '<div class="action-msg action-error">Restauration autorisee uniquement depuis la machine maitre.</div>',
+            status_code=403,
+        )
+
+    session = next(get_session())
+    try:
+        trash = session.get(TrashModel, trash_id)
+        if not trash:
+            return HTMLResponse(
+                '<div class="action-msg action-error">Element introuvable.</div>',
+                status_code=404,
+            )
+
+        meta = trash.entity_metadata
+
+        if trash.entity_type == "movie":
+            movie = MovieModel()
+            _apply_metadata(movie, meta, exclude={"id"})
+            session.add(movie)
+
+        elif trash.entity_type == "series":
+            series = SeriesModel()
+            _apply_metadata(series, meta, exclude={"id"})
+            session.add(series)
+            session.flush()
+            new_series_id = series.id
+
+            episode_trash_items = session.exec(
+                select(TrashModel).where(TrashModel.entity_type == "episode")
+            ).all()
+
+            for ep_trash in episode_trash_items:
+                ep_meta = ep_trash.entity_metadata
+                if ep_meta.get("_series_trash_id") == trash.id:
+                    episode = EpisodeModel()
+                    _apply_metadata(
+                        episode, ep_meta, exclude={"id", "_series_trash_id"}
+                    )
+                    episode.series_id = new_series_id
+                    session.add(episode)
+                    session.delete(ep_trash)
+
+        session.delete(trash)
+        session.commit()
+    finally:
+        session.close()
+
+    # Retourner le HTML vide (htmx swap outerHTML la supprime)
+    return HTMLResponse("")
+
+
+@router.post("/maintenance/trash/empty", response_class=HTMLResponse)
+async def maintenance_empty_trash(request: Request):
+    """Vide definitivement la corbeille depuis la page maintenance."""
+    from ...infrastructure.persistence.database import get_session
+    from ...infrastructure.persistence.models import TrashModel
+
+    client_host = request.client.host if request.client else ""
+    if client_host not in _LOCAL_HOSTS:
+        return HTMLResponse(
+            '<div class="action-msg action-error">Vidage autorise uniquement depuis la machine maitre.</div>',
+            status_code=403,
+        )
+
+    container = request.app.state.container
+    file_system = container.file_system()
+
+    session = next(get_session())
+    try:
+        all_trash = session.exec(select(TrashModel)).all()
+        deleted_files = 0
+
+        for trash in all_trash:
+            meta = trash.entity_metadata
+            file_path = meta.get("file_path")
+            if file_path:
+                path = Path(file_path)
+                if path.exists():
+                    file_system.delete(path)
+                    deleted_files += 1
+            session.delete(trash)
+
+        session.commit()
+    finally:
+        session.close()
+
+    response = HTMLResponse(
+        '<div class="maint-trash-empty-state">'
+        "Corbeille vidée — "
+        f"{deleted_files} fichier(s) supprimé(s) définitivement."
+        "</div>"
+    )
+    response.headers["HX-Trigger"] = "trashEmptied"
+    return response
 
 
 # ---------------------------------------------------------------------------

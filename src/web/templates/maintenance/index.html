@@ -58,8 +58,116 @@
             </div>
             <div id="cleanup-results"></div>
         </div>
+
+        <!-- Corbeille -->
+        <div class="maint-card">
+            <div class="maint-card-header">
+                <div class="maint-card-icon" style="background: rgba(220, 80, 80, 0.12); color: #dc5050;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </div>
+                <div>
+                    <h2 class="maint-card-title">Corbeille
+                        {% if trash_count > 0 %}
+                        <span style="font-family: var(--font-body); font-size: 0.8125rem; color: var(--text-muted); font-weight: 400; margin-left: 0.4rem;">{{ trash_count }} élément{{ 's' if trash_count != 1 else '' }}</span>
+                        {% endif %}
+                    </h2>
+                    <p class="maint-card-desc">Éléments supprimés depuis la bibliothèque. Restauration ou suppression définitive.</p>
+                </div>
+            </div>
+
+            <div id="trash-section">
+            {% if trash_items %}
+                <div class="maint-trash-list">
+                    {% for item in trash_items %}
+                    <div class="maint-trash-item" id="trash-item-{{ item.id }}">
+                        <div class="maint-trash-item-info">
+                            <span class="maint-trash-item-type {{ 'type-movie' if item.entity_type == 'movie' else 'type-series' }}">
+                                {{ 'Film' if item.entity_type == 'movie' else 'Série' }}
+                            </span>
+                            <span class="maint-trash-item-title">{{ item.title }}{% if item.year %} ({{ item.year }}){% endif %}</span>
+                            {% if item.entity_type == 'series' and item.episode_count %}
+                            <span class="maint-trash-item-meta">{{ item.episode_count }} épisode{{ 's' if item.episode_count != 1 else '' }}</span>
+                            {% endif %}
+                            <span class="maint-trash-item-meta">{{ item.deleted_at.strftime('%d/%m/%Y') if item.deleted_at else '?' }}</span>
+                        </div>
+                        {% if is_local %}
+                        <button class="maint-trash-restore-btn"
+                                hx-post="/maintenance/trash/{{ item.id }}/restore"
+                                hx-target="#trash-item-{{ item.id }}"
+                                hx-swap="outerHTML">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                            Restaurer
+                        </button>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% if is_local %}
+                <div style="margin-top: 0.75rem; text-align: right;">
+                    <button class="maint-trash-empty-btn" onclick="document.getElementById('maint-trash-overlay').classList.add('active')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                        Vider la corbeille
+                    </button>
+                </div>
+                {% endif %}
+
+            {% else %}
+                <div class="maint-trash-empty-state">Corbeille vide</div>
+            {% endif %}
+            </div>
+
+            {% if not is_local and trash_count > 0 %}
+            <div style="text-align: center; padding: 0.5rem; color: var(--text-muted); font-size: 0.8125rem;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 3px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Actions disponibles uniquement depuis la machine maître.
+            </div>
+            {% endif %}
+        </div>
     </div>
 </div>
+
+<!-- Dialogue de confirmation vidage corbeille -->
+{% if is_local %}
+<div class="trash-empty-overlay" id="maint-trash-overlay">
+    <div class="delete-dialog">
+        <div class="delete-dialog-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <h3 class="delete-dialog-title">Vider la corbeille ?</h3>
+        <p class="delete-dialog-text">Cette action est <strong>irréversible</strong>. Tous les fichiers physiques seront définitivement supprimés.</p>
+        <div class="delete-dialog-warning">{{ trash_count }} élément{{ 's' if trash_count != 1 else '' }} sera{{ 'ont' if trash_count != 1 else '' }} supprimé{{ 's' if trash_count != 1 else '' }} définitivement.</div>
+        <div class="delete-dialog-actions">
+            <button class="reject-dialog-cancel" onclick="document.getElementById('maint-trash-overlay').classList.remove('active')">Annuler</button>
+            <button class="reject-dialog-confirm"
+                    hx-post="/maintenance/trash/empty"
+                    hx-target="#trash-section"
+                    hx-swap="innerHTML"
+                    hx-indicator="#trash-loading"
+                    onclick="document.getElementById('maint-trash-overlay').classList.remove('active'); document.getElementById('trash-section').innerHTML = document.getElementById('trash-loading-tpl').innerHTML;">
+                Supprimer définitivement
+            </button>
+        </div>
+    </div>
+</div>
+<template id="trash-loading-tpl">
+    <div class="maint-trash-loading">
+        <div class="maint-trash-spinner"></div>
+        <span>Suppression en cours...</span>
+    </div>
+</template>
+<script>
+document.getElementById('maint-trash-overlay').addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('active');
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        var ov = document.getElementById('maint-trash-overlay');
+        if (ov) ov.classList.remove('active');
+    }
+});
+</script>
+{% endif %}
 
 <script>
 function startAnalysis(type) {
@@ -173,4 +281,123 @@ function startFix(type) {
     });
 }
 </script>
+
+<style>
+.maint-trash-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-top: 0.75rem;
+}
+.maint-trash-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    gap: 0.5rem;
+}
+.maint-trash-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+.maint-trash-item-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 0;
+}
+.maint-trash-item-type {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 0.125rem 0.375rem;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+.maint-trash-item-type.type-movie {
+    background: rgba(99, 102, 241, 0.15);
+    color: #818cf8;
+}
+.maint-trash-item-type.type-series {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+}
+.maint-trash-item-title {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.maint-trash-item-meta {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    flex-shrink: 0;
+}
+.maint-trash-restore-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s;
+}
+.maint-trash-restore-btn:hover {
+    border-color: rgba(99, 102, 241, 0.4);
+    color: #818cf8;
+    background: rgba(99, 102, 241, 0.08);
+}
+.maint-trash-empty-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.375rem 0.75rem;
+    border: 1px solid rgba(220, 80, 80, 0.25);
+    border-radius: 6px;
+    background: rgba(220, 80, 80, 0.08);
+    color: #dc5050;
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.maint-trash-empty-btn:hover {
+    background: rgba(220, 80, 80, 0.15);
+    border-color: rgba(220, 80, 80, 0.4);
+}
+.maint-trash-empty-state {
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+}
+.maint-trash-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 2rem;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+}
+.maint-trash-spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-top-color: #dc5050;
+    border-radius: 50%;
+    animation: trash-spin 0.7s linear infinite;
+}
+@keyframes trash-spin {
+    to { transform: rotate(360deg); }
+}
+</style>
 {% endblock %}

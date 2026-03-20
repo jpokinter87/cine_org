@@ -10,21 +10,21 @@ See: .paul/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Milestone: v2.0 Production & Maintenance Complète
-Phase: 36 of 4 (Doublons Symlinks Cross-Genre) — Complete
-Plan: 36-01 unified (1/1)
-Status: Phase complete, ready for next phase
-Last activity: 2026-03-13 — Phase 36 unified
+Phase: 37 of 5 (Optimisations & Sandbox) — In Progress
+Plan: 37-01 complet, 37-02 en attente
+Status: Plan 37-01 UNIFY terminé, prêt pour plan 37-02
+Last activity: 2026-03-20 — Plan 37-01 complété (cross-genre DB + corbeille + Comédie dramatique)
 
 Progress:
-- v2.0: [█████░░░░░] 50% (2/4 phases)
-- Phase 36: [██████████] 100%
+- v2.0: [█████░░░░░] 40% (2/5 phases)
+- Phase 37: [█████░░░░░] 50% (1/2 plans)
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop complete — Phase 36 done]
+  ✓        ✓        ✓     [Loop 37-01 complete — ready for next PLAN]
 ```
 
 ## Accumulated Context
@@ -91,6 +91,9 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Sandbox des orphelins différé à une phase dédiée (périmètre trop large)
 - Source tmdb_tv pour distinguer film/série TV TMDB dans tout le pipeline (validation + batch_builder)
 - is_tv flag sur MediaDetails pour marquer les résultats TV TMDB
+- Cross-genre DB-first : requête symlink_path groupée par file_path, fallback filesystem si vide
+- Corbeille maintenance : routes /maintenance/trash/* avec spinner vidage + dialog confirmation
+- Comédie+Drame → Comédie dramatique : règle combinatoire dans get_priority_genre(), genres protégés priment
 
 ### Deferred Issues
 - README.md à réécrire de fond en comble : nouvelles commandes, structure répertoires attendue, architecture, configuration
@@ -108,27 +111,28 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Skill gap /frontend-design : invoquer systématiquement pour les phases UI
 - 487 épisodes avec langue indétectable (fichiers anciens sans métadonnée langue)
 - Quelques tvdb_id potentiellement erronés (découvert avec BSG 1978 vs 2004)
-- Page maintenance : ajouter la gestion de la corbeille (liste, restauration, vidage définitif)
 - 3 doublons DB (même file_path, 2 MovieModel) : Double mise, Compañeros, Plein la vue — purger l'entrée excédentaire
 - Doublons physiques + symlinks orphelins cross-genre : des films existent en double dans storage (même taille, noms différents) avec des symlinks dans plusieurs genres
 - Sandbox management complet : sandboxer orphelins vers .sandbox/orphans/, interface gestion (liste/suppression/réinjection workflow)
 - Vérifier détection doublons avec un film (testé uniquement avec séries jusqu'ici)
 - Trous dans subdivisions alphabétiques : étendre la borne la plus proche au lieu de laisser à la racine
-- Optimisation cross-genre : utiliser symlink_path en DB comme pré-filtre rapide avant le scan filesystem (évite rglob sur 5000+ fichiers)
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: 3ec3124 (chore: mise à jour pagination et lock dependencies)
+Last commit: dd5997a (fix(config): rechargement à chaud après modification de la configuration)
 Branch: master
 
 ## Session Continuity
 
-Last session: 2026-03-13
-Stopped at: Phase 36 unified
-Next action: Plan next phase (37 Déploiement Production or 38 Intégration Jellyfin)
-Resume file: .paul/phases/36-doublons-symlinks-cross-genre/36-01-SUMMARY.md
+Last session: 2026-03-20
+Stopped at: Plan 37-01 complet (UNIFY)
+Next action: /paul:apply .paul/phases/37-optimisations-sandbox/37-02-PLAN.md
+Resume file: .paul/phases/37-optimisations-sandbox/37-01-SUMMARY.md
+Resume context:
+- Plan 37-01 : Complet (cross-genre DB + corbeille maintenance + Comédie dramatique)
+- Plan 37-02 : Sandbox orphelins complet avec UI (checkpoint visual, wave 2, prêt)
 
 ---
 *STATE.md — Updated after every significant action*

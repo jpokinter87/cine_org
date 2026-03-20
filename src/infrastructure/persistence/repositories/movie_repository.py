@@ -164,6 +164,31 @@ class SQLModelMovieRepository(IMovieRepository):
         models = self._session.exec(statement).all()
         return [self._to_entity(model) for model in models]
 
+    def get_cross_genre_candidates(self) -> dict[str, list[tuple[int, str]]]:
+        """Retourne les films groupes par file_path ayant 2+ symlink_path distincts.
+
+        Returns:
+            Dict file_path → liste de (id, symlink_path) pour les groupes avec 2+ entrees.
+        """
+        statement = select(
+            MovieModel.file_path, MovieModel.id, MovieModel.symlink_path
+        ).where(
+            MovieModel.symlink_path.is_not(None),  # type: ignore[union-attr]
+            MovieModel.file_path.is_not(None),  # type: ignore[union-attr]
+        )
+        rows = self._session.exec(statement).all()
+
+        groups: dict[str, list[tuple[int, str]]] = {}
+        for file_path, model_id, symlink_path in rows:
+            groups.setdefault(file_path, []).append((model_id, symlink_path))
+
+        # Ne garder que les groupes avec 2+ symlink_path distincts
+        return {
+            fp: entries
+            for fp, entries in groups.items()
+            if len({sp for _, sp in entries}) >= 2
+        }
+
     def save(self, movie: Movie) -> Movie:
         """Sauvegarde un film (insertion ou mise a jour)."""
         # Nettoyage preventif des titres (caractères invisibles)

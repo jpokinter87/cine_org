@@ -101,6 +101,8 @@ def get_priority_genre(genres: tuple[str, ...]) -> str:
     La hiérarchie est définie dans GENRE_HIERARCHY (constants.py) :
     Animation > Science-Fiction > Fantastique > Horreur > Action > ...
 
+    Règle combinatoire : Comédie + Drame → Comédie dramatique.
+
     Args:
         genres: Tuple des genres du film.
 
@@ -110,7 +112,26 @@ def get_priority_genre(genres: tuple[str, ...]) -> str:
     if not genres:
         return "Divers"
 
-    # Chercher le premier genre dans la hiérarchie
+    genres_lower = {g.lower() for g in genres}
+
+    # Règle combinatoire : Comédie + Drame → Comédie dramatique
+    # sauf si un genre protégé (section distincte) est présent
+    _has_comedie = bool({"comedie", "comédie", "comedy"} & genres_lower)
+    _has_drame = bool({"drame", "drama"} & genres_lower)
+
+    if _has_comedie and _has_drame:
+        # Genres protégés : priment sur la règle combinatoire
+        _PROTECTED_GENRES = {
+            "Animation", "Science-Fiction", "Fantastique", "Horreur",
+            "Action", "Aventure", "Guerre", "Histoire", "Western",
+            "Crime", "Mystere", "Famille", "Musique", "Documentaire",
+        }
+        for priority_genre in GENRE_HIERARCHY:
+            if priority_genre in genres and priority_genre in _PROTECTED_GENRES:
+                return priority_genre
+        return "Comédie dramatique"
+
+    # Hiérarchie standard pour les autres films
     for priority_genre in GENRE_HIERARCHY:
         if priority_genre in genres:
             return priority_genre

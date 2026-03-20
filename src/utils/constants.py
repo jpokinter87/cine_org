@@ -149,6 +149,8 @@ GENRE_FOLDER_MAPPING = {
     "animation": "Animation",
     "comédie": "Comédie",
     "comedie": "Comédie",
+    "comédie dramatique": "Comédie dramatique",
+    "comedie dramatique": "Comédie dramatique",
     "crime": "Policier",
     "documentaire": "Documentaire",
     "drame": "Drame",
