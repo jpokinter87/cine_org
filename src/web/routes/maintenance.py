@@ -4,20 +4,24 @@ Routes de la page de maintenance.
 Affiche les diagnostics d'integrite et de nettoyage de la videotheque
 avec progression SSE en temps reel. Permet l'execution des corrections
 depuis le web (cleanup fix, repair symlinks) avec restriction localhost.
-Inclut la gestion de la corbeille (liste, restauration, vidage).
+Inclut la gestion de la corbeille (liste, restauration, vidage)
+et du sandbox (isolation des fichiers orphelins).
 
 Scope limite aux Films et Series uniquement.
 """
 
 import asyncio
 import json
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
+from loguru import logger
 from sqlmodel import select
 
 from ..deps import templates
+from ...services.sandbox_service import SandboxService
 
 router = APIRouter()
 
@@ -77,12 +81,35 @@ def _sse_complete(html: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _get_sandbox_service(container) -> SandboxService:
+    """Construit le SandboxService depuis le container."""
+    settings = container.config()
+    return container.sandbox_service(
+        sandbox_dir=settings.resolved_sandbox_dir,
+        storage_dir=settings.storage_dir,
+        downloads_dir=settings.downloads_dir,
+    )
+
+
+def _format_size(size_bytes: int) -> str:
+    """Formate une taille en octets en unité lisible."""
+    if size_bytes < 1024:
+        return f"{size_bytes} o"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} Ko"
+    elif size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f} Mo"
+    else:
+        return f"{size_bytes / (1024 * 1024 * 1024):.2f} Go"
+
+
 @router.get("/maintenance")
 async def maintenance_page(request: Request):
-    """Page principale de maintenance avec section corbeille."""
+    """Page principale de maintenance avec section corbeille et sandbox."""
     from ...infrastructure.persistence.database import get_session
     from ...infrastructure.persistence.models import TrashModel
 
+    container = request.app.state.container
     client_host = request.client.host if request.client else ""
     is_local = client_host in _LOCAL_HOSTS
 
@@ -105,19 +132,37 @@ async def maintenance_page(request: Request):
                     )
                 continue
             meta = t.entity_metadata
-            trash_items.append({
-                "id": t.id,
-                "entity_type": t.entity_type,
-                "title": meta.get("title", "Sans titre"),
-                "year": meta.get("year"),
-                "deleted_at": t.deleted_at,
-            })
+            trash_items.append(
+                {
+                    "id": t.id,
+                    "entity_type": t.entity_type,
+                    "title": meta.get("title", "Sans titre"),
+                    "year": meta.get("year"),
+                    "deleted_at": t.deleted_at,
+                }
+            )
 
         for item in trash_items:
             if item["entity_type"] == "series":
                 item["episode_count"] = episode_counts.get(item["id"], 0)
     finally:
         session.close()
+
+    # Charger les fichiers sandbox
+    sandbox_svc = _get_sandbox_service(container)
+    sandboxed_files = sandbox_svc.list_sandboxed()
+    sandbox_total_size = sum(f.size for f in sandboxed_files)
+    sandbox_items = [
+        {
+            "path": str(f.path),
+            "name": f.name,
+            "size": _format_size(f.size),
+            "size_bytes": f.size,
+            "modified": f.modified.strftime("%d/%m/%Y"),
+            "original_path": _relative_from_root(f.original_path),
+        }
+        for f in sandboxed_files
+    ]
 
     return templates.TemplateResponse(
         request,
@@ -126,6 +171,9 @@ async def maintenance_page(request: Request):
             "is_local": is_local,
             "trash_items": trash_items,
             "trash_count": len(trash_items),
+            "sandbox_items": sandbox_items,
+            "sandbox_count": len(sandbox_items),
+            "sandbox_total_size": _format_size(sandbox_total_size),
         },
     )
 
@@ -273,7 +321,60 @@ async def run_check_sse(request: Request):
         # Phase 4 — symlinks cassés (scopé Films + Séries)
         yield _sse_progress(4, len(phases), phases[3][1])
         issues = await asyncio.to_thread(_check_broken_symlinks, checker)
-        all_issues.extend(issues)
+
+        # Filtrer les séquelles : symlinks cassés dont le même film/épisode
+        # a déjà un symlink valide ailleurs dans video/.
+        # Films : clé = titre+année (insensible langue/codec).
+        # Épisodes : clé = titre normalisé + SxxExx (insensible année/codec).
+        _EP_RE = re.compile(
+            r"^(.+?)\s*(?:\(\d{4}\)\s*)?-\s*(S\d{2}E\d{2})", re.IGNORECASE
+        )
+        _FILM_RE = re.compile(r"^(.+?)\s*\((\d{4})\)")
+        # Format scene : Title.Year. ou Title Year. (points comme séparateurs)
+        _SCENE_RE = re.compile(r"^(.+?)[.\s](\d{4})[.\s]")
+
+        def _stale_key(name: str) -> str | None:
+            # Épisode d'abord (plus spécifique)
+            m = _EP_RE.match(name)
+            if m:
+                title = re.sub(r"\s+", " ", m.group(1).strip()).lower()
+                return f"{title}|{m.group(2).upper()}"
+            # Film : Titre (Année)
+            m = _FILM_RE.match(name)
+            if m:
+                return f"{m.group(1).strip().lower()}|{m.group(2)}"
+            # Fallback : format scene Titre.Année. ou Titre Année.
+            m = _SCENE_RE.match(name)
+            if m:
+                title = m.group(1).replace(".", " ").strip().lower()
+                return f"{title}|{m.group(2)}"
+            return None
+
+        # Clés de tous les symlinks valides
+        working_keys: set[str] = set()
+        for symlink_path in target_to_symlink.values():
+            key = _stale_key(Path(symlink_path).name)
+            if key:
+                working_keys.add(key)
+
+        stale_cleaned = 0
+        for issue in issues:
+            broken_key = _stale_key(issue.path.name)
+            if broken_key and broken_key in working_keys:
+                # Séquelle — supprimer le symlink cassé silencieusement
+                try:
+                    issue.path.unlink()
+                    stale_cleaned += 1
+                except OSError:
+                    all_issues.append(issue)
+            else:
+                all_issues.append(issue)
+
+        if stale_cleaned:
+            logger.info(
+                "{} symlink(s) résiduels supprimés (homonyme valide existant)",
+                stale_cleaned,
+            )
 
         # Construire les suggestions
         ghost = [i for i in all_issues if i.type.value == "ghost_entry"]
@@ -1286,3 +1387,187 @@ async def reconcile_db_apply_sse(request: Request):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Sandbox — Isolation, suppression et réinjection des fichiers orphelins
+# ---------------------------------------------------------------------------
+
+
+@router.get("/maintenance/sandbox/move-orphans")
+async def sandbox_move_orphans_sse(request: Request):
+    """SSE endpoint : déplace les fichiers orphelins vers le sandbox avec progression."""
+    client_host = request.client.host if request.client else ""
+    if client_host not in _LOCAL_HOSTS:
+        return HTMLResponse(
+            "<p>Action autorisee uniquement depuis la machine maitre.</p>",
+            status_code=403,
+        )
+
+    container = request.app.state.container
+
+    # Récupérer les orphelins depuis le cache d'analyse
+    cached_orphans = _analysis_cache.get("check_orphans", [])
+    if not cached_orphans:
+        # Pas d'orphelins : envoyer un complete immédiat
+        async def empty_stream():
+            html = "<div class=\"sandbox-msg sandbox-msg-warn\">Aucun orphelin en cache. Lancez d'abord l'analyse d'intégrité.</div>"
+            yield _sse_complete(html)
+
+        return StreamingResponse(
+            empty_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    orphan_paths = [issue.path for issue in cached_orphans]
+    total = len(orphan_paths)
+    sandbox_svc = _get_sandbox_service(container)
+
+    # Déplacer par lots pour émettre la progression SSE
+    BATCH_SIZE = 10
+
+    async def event_stream():
+        moved_count = 0
+        yield _sse_progress(0, total, "Démarrage...")
+
+        for i in range(0, total, BATCH_SIZE):
+            batch = orphan_paths[i : i + BATCH_SIZE]
+            moved = await asyncio.to_thread(sandbox_svc.sandbox_orphans, batch)
+            moved_count += moved
+            yield _sse_progress(
+                min(i + BATCH_SIZE, total),
+                total,
+                f"{moved_count} fichier(s) déplacé(s)",
+            )
+
+        # Invalider le cache orphelins
+        _analysis_cache.pop("check_orphans", None)
+
+        # Construire le HTML final
+        sandboxed = sandbox_svc.list_sandboxed()
+        total_size = sum(f.size for f in sandboxed)
+        sandbox_items = [
+            {
+                "path": str(f.path),
+                "name": f.name,
+                "size": _format_size(f.size),
+                "size_bytes": f.size,
+                "modified": f.modified.strftime("%d/%m/%Y"),
+                "original_path": _relative_from_root(f.original_path),
+            }
+            for f in sandboxed
+        ]
+
+        html = templates.env.get_template("maintenance/_sandbox_section.html").render(
+            sandbox_items=sandbox_items,
+            sandbox_count=len(sandbox_items),
+            sandbox_total_size=_format_size(total_size),
+            is_local=True,
+            flash_message=f"{moved_count} fichier(s) déplacé(s) vers le sandbox.",
+        )
+        yield _sse_complete(html)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/maintenance/sandbox/delete", response_class=HTMLResponse)
+async def sandbox_delete(request: Request):
+    """Supprime définitivement les fichiers sélectionnés du sandbox."""
+    client_host = request.client.host if request.client else ""
+    if client_host not in _LOCAL_HOSTS:
+        return HTMLResponse(
+            '<div class="action-msg action-error">Action autorisee uniquement depuis la machine maitre.</div>',
+            status_code=403,
+        )
+
+    container = request.app.state.container
+    form = await request.form()
+    selected = form.getlist("selected")
+    if not selected:
+        return HTMLResponse(
+            '<div class="sandbox-msg sandbox-msg-warn">Aucun fichier selectionne.</div>'
+        )
+
+    paths = [Path(p) for p in selected]
+    sandbox_svc = _get_sandbox_service(container)
+    deleted = await asyncio.to_thread(sandbox_svc.delete_files, paths)
+
+    # Retourner la section mise à jour
+    sandboxed = sandbox_svc.list_sandboxed()
+    total_size = sum(f.size for f in sandboxed)
+    sandbox_items = [
+        {
+            "path": str(f.path),
+            "name": f.name,
+            "size": _format_size(f.size),
+            "size_bytes": f.size,
+            "modified": f.modified.strftime("%d/%m/%Y"),
+            "original_path": _relative_from_root(f.original_path),
+        }
+        for f in sandboxed
+    ]
+
+    html = templates.env.get_template("maintenance/_sandbox_section.html").render(
+        sandbox_items=sandbox_items,
+        sandbox_count=len(sandbox_items),
+        sandbox_total_size=_format_size(total_size),
+        is_local=True,
+        flash_message=f"{deleted} fichier(s) supprimé(s) définitivement.",
+    )
+    return HTMLResponse(html)
+
+
+@router.post("/maintenance/sandbox/reinject", response_class=HTMLResponse)
+async def sandbox_reinject(request: Request):
+    """Réinjecte les fichiers sélectionnés dans le répertoire downloads."""
+    client_host = request.client.host if request.client else ""
+    if client_host not in _LOCAL_HOSTS:
+        return HTMLResponse(
+            '<div class="action-msg action-error">Action autorisee uniquement depuis la machine maitre.</div>',
+            status_code=403,
+        )
+
+    container = request.app.state.container
+    form = await request.form()
+    selected = form.getlist("selected")
+    if not selected:
+        return HTMLResponse(
+            '<div class="sandbox-msg sandbox-msg-warn">Aucun fichier selectionne.</div>'
+        )
+
+    paths = [Path(p) for p in selected]
+    sandbox_svc = _get_sandbox_service(container)
+    reinjected = await asyncio.to_thread(sandbox_svc.reinject_files, paths)
+
+    # Retourner la section mise à jour
+    sandboxed = sandbox_svc.list_sandboxed()
+    total_size = sum(f.size for f in sandboxed)
+    sandbox_items = [
+        {
+            "path": str(f.path),
+            "name": f.name,
+            "size": _format_size(f.size),
+            "size_bytes": f.size,
+            "modified": f.modified.strftime("%d/%m/%Y"),
+            "original_path": _relative_from_root(f.original_path),
+        }
+        for f in sandboxed
+    ]
+
+    html = templates.env.get_template("maintenance/_sandbox_section.html").render(
+        sandbox_items=sandbox_items,
+        sandbox_count=len(sandbox_items),
+        sandbox_total_size=_format_size(total_size),
+        is_local=True,
+        flash_message=f"{reinjected} fichier(s) réinjecté(s) dans les téléchargements.",
+    )
+    return HTMLResponse(html)

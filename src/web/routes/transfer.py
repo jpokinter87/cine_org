@@ -118,13 +118,69 @@ def _resolve_storage_path(existing_dir: Path, storage_dir: Path) -> Path | None:
                     # Vérifier que c'est bien dans storage_dir
                     try:
                         storage_path.relative_to(storage_dir)
-                        return storage_path
                     except ValueError:
                         continue
+                    # Garde-fou : vérifier que ce n'est pas un répertoire de
+                    # subdivision (contenant plusieurs séries/films). Un répertoire
+                    # de contenu valide contient des fichiers vidéo ou des dossiers
+                    # "Saison", pas d'autres répertoires de séries.
+                    if _is_subdivision_path(storage_path):
+                        logger.warning(
+                            "Resolve storage: {} résolu vers subdivision {}, ignoré",
+                            existing_dir,
+                            storage_path,
+                        )
+                        continue
+                    return storage_path
     except (PermissionError, OSError) as e:
         logger.warning("Erreur parcours symlinks dans %s: %s", existing_dir, e)
 
     return None
+
+
+def _is_subdivision_path(path: Path) -> bool:
+    """Vérifie si un chemin est un répertoire de subdivision (pas de contenu).
+
+    Un répertoire de subdivision contient d'autres répertoires de séries/films.
+    Un répertoire de contenu contient des fichiers vidéo ou des dossiers 'Saison'.
+    """
+    if not path.is_dir():
+        return False
+
+    try:
+        subdirs = [d for d in path.iterdir() if d.is_dir()]
+    except PermissionError:
+        return False
+
+    # S'il contient un dossier "Saison", c'est un répertoire de série → pas subdivision
+    for d in subdirs:
+        if d.name.lower().startswith("saison"):
+            return False
+
+    # S'il contient des fichiers vidéo directement, c'est du contenu
+    from ...utils.constants import VIDEO_EXTENSIONS
+
+    for item in path.iterdir():
+        if item.is_file() and item.suffix.lower() in VIDEO_EXTENSIONS:
+            return False
+
+    # S'il contient plusieurs sous-répertoires qui eux-mêmes ont du contenu,
+    # c'est une subdivision
+    content_dirs = 0
+    for d in subdirs:
+        # Vérifier si le sous-dossier contient du contenu (fichiers ou Saison)
+        try:
+            has_content = any(
+                f.is_file() or f.name.lower().startswith("saison") for f in d.iterdir()
+            )
+            if has_content:
+                content_dirs += 1
+            if content_dirs >= 2:
+                return True
+        except PermissionError:
+            continue
+
+    return False
 
 
 def _sandbox_existing(
@@ -153,6 +209,16 @@ def _sandbox_existing(
     if not storage_path or not storage_path.exists() or not storage_path.is_dir():
         logger.warning(
             "Sandbox: impossible de résoudre le chemin storage pour {}",
+            existing_dir,
+        )
+        return
+
+    # Garde-fou critique : ne JAMAIS sandboxer un répertoire de subdivision
+    if _is_subdivision_path(storage_path):
+        logger.error(
+            "BLOQUÉ: tentative de sandbox sur un répertoire de subdivision {} "
+            "(source: {}). Opération annulée pour protéger la vidéothèque.",
+            storage_path,
             existing_dir,
         )
         return
@@ -419,7 +485,9 @@ def _group_by_path(entries: list[dict], key: str, prefix: str) -> list[dict]:
 # ═══════════════════════════════════════
 
 
-def _update_db_paths(container, transfer: dict, destination: Path, symlink_dest) -> None:
+def _update_db_paths(
+    container, transfer: dict, destination: Path, symlink_dest
+) -> None:
     """Met à jour file_path et symlink_path en DB après un transfert réussi."""
     from src.infrastructure.persistence.database import get_session
     from src.infrastructure.persistence.models import EpisodeModel, MovieModel
@@ -1019,9 +1087,15 @@ async def _run_web_transfer(
                 symlink_dest = transfer.get("symlink_destination")
                 if destination and Path(str(destination)).exists():
                     try:
-                        _update_db_paths(container, transfer, Path(str(destination)), symlink_dest)
+                        _update_db_paths(
+                            container, transfer, Path(str(destination)), symlink_dest
+                        )
                     except Exception as e:
-                        logger.warning("Erreur mise à jour DB pour %s: %s", transfer.get("new_filename"), e)
+                        logger.warning(
+                            "Erreur mise à jour DB pour %s: %s",
+                            transfer.get("new_filename"),
+                            e,
+                        )
 
         progress.message = "Simulation terminée" if dry_run else "Transfert terminé"
         progress.complete = True

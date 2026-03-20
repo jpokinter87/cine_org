@@ -25,6 +25,7 @@ from .infrastructure.persistence.repositories import (
 )
 from .infrastructure.persistence.hash_service import compute_file_hash
 from .services.enricher import EnricherService
+from .services.sandbox_service import SandboxService
 from .services.importer import ImporterService
 from .services.cleanup import CleanupService
 from .services.integrity import IntegrityChecker
@@ -202,6 +203,10 @@ class Container(containers.DeclarativeContainer):
         series_repo=series_repository,
         episode_repo=episode_repository,
     )
+
+    # Service de sandbox - Factory car dépend des paths de configuration
+    # Note: sandbox_dir, storage_dir, downloads_dir passés via config
+    sandbox_service = providers.Factory(SandboxService)
 
     # Service de workflow - Factory pour nouvelle instance a chaque execution
     # Orchestre le workflow complet de traitement des videos

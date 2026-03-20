@@ -59,6 +59,27 @@
             <div id="cleanup-results"></div>
         </div>
 
+        <!-- Sandbox -->
+        <div class="maint-card maint-card-sandbox">
+            <div class="maint-card-header">
+                <div class="maint-card-icon maint-icon-sandbox">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                </div>
+                <div>
+                    <h2 class="maint-card-title">Sandbox
+                        {% if sandbox_count > 0 %}
+                        <span style="font-family: var(--font-body); font-size: 0.8125rem; color: var(--text-muted); font-weight: 400; margin-left: 0.4rem;">{{ sandbox_count }} fichier{{ 's' if sandbox_count != 1 else '' }} — {{ sandbox_total_size }}</span>
+                        {% endif %}
+                    </h2>
+                    <p class="maint-card-desc">Fichiers orphelins isolés pour revue. Supprimer définitivement ou réinjecter dans le workflow.</p>
+                </div>
+            </div>
+
+            <div id="sandbox-section">
+                {% include "maintenance/_sandbox_section.html" %}
+            </div>
+        </div>
+
         <!-- Corbeille -->
         <div class="maint-card">
             <div class="maint-card-header">
@@ -126,6 +147,62 @@
         </div>
     </div>
 </div>
+
+<!-- Dialogue de confirmation suppression sandbox -->
+{% if is_local %}
+<div class="trash-empty-overlay" id="sandbox-delete-overlay">
+    <div class="delete-dialog">
+        <div class="delete-dialog-icon" style="color: #e85d75;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <h3 class="delete-dialog-title">Supprimer définitivement ?</h3>
+        <p class="delete-dialog-text">Les fichiers sélectionnés seront <strong>supprimés physiquement</strong>. Cette action est irréversible.</p>
+        <div class="delete-dialog-warning" id="sandbox-delete-count-msg">0 fichier(s) sélectionné(s)</div>
+        <div class="delete-dialog-actions">
+            <button class="reject-dialog-cancel" onclick="document.getElementById('sandbox-delete-overlay').classList.remove('active')">Annuler</button>
+            <button class="reject-dialog-confirm" onclick="sandboxSubmit('delete')">
+                Supprimer définitivement
+            </button>
+        </div>
+    </div>
+</div>
+<script>
+document.getElementById('sandbox-delete-overlay').addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('active');
+});
+</script>
+
+<!-- Dialogue de confirmation sandboxing orphelins -->
+<div class="trash-empty-overlay" id="sandbox-move-overlay">
+    <div class="delete-dialog">
+        <div class="delete-dialog-icon" style="color: #a882ff;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        </div>
+        <h3 class="delete-dialog-title">Sandboxer les orphelins ?</h3>
+        <p class="delete-dialog-text">Les fichiers orphelins seront déplacés vers le sandbox pour revue. Ils pourront être supprimés ou réinjectés dans le workflow.</p>
+        <div class="delete-dialog-warning" id="sandbox-move-count-msg">0 fichier(s)</div>
+        <div class="delete-dialog-actions">
+            <button class="reject-dialog-cancel" onclick="document.getElementById('sandbox-move-overlay').classList.remove('active')">Annuler</button>
+            <button class="reject-dialog-confirm" style="background: #a882ff; border-color: #a882ff;" onclick="document.getElementById('sandbox-move-overlay').classList.remove('active'); sandboxMoveOrphansConfirmed()">
+                Déplacer vers le sandbox
+            </button>
+        </div>
+    </div>
+</div>
+<script>
+document.getElementById('sandbox-move-overlay').addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('active');
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        var ov = document.getElementById('sandbox-move-overlay');
+        if (ov) ov.classList.remove('active');
+        var ov2 = document.getElementById('sandbox-delete-overlay');
+        if (ov2) ov2.classList.remove('active');
+    }
+});
+</script>
+{% endif %}
 
 <!-- Dialogue de confirmation vidage corbeille -->
 {% if is_local %}
@@ -204,6 +281,8 @@ function startAnalysis(type) {
         setTimeout(function() {
             var d = JSON.parse(e.data);
             results.innerHTML = d.html;
+            // Activer les attributs hx-* dans le HTML injecté dynamiquement
+            if (typeof htmx !== 'undefined') htmx.process(results);
             progress.style.display = 'none';
             bar.classList.remove('complete');
             btn.style.display = '';
@@ -220,6 +299,101 @@ function startAnalysis(type) {
             bar.classList.remove('error');
             btn.style.display = '';
         }, 2000);
+    });
+}
+
+/* ----- Sandbox ----- */
+function sandboxMoveOrphans(count) {
+    // Ouvrir le dialogue custom au lieu de confirm() natif
+    var msg = document.getElementById('sandbox-move-count-msg');
+    if (msg) msg.textContent = count + ' fichier(s) orphelin(s)';
+    document.getElementById('sandbox-move-overlay').classList.add('active');
+}
+
+function sandboxMoveOrphansConfirmed() {
+    var actions = document.getElementById('sandbox-orphans-actions');
+    var progress = document.getElementById('sandbox-move-progress');
+    var bar = document.getElementById('sandbox-move-bar');
+    var phase = document.getElementById('sandbox-move-phase');
+
+    if (actions) actions.style.display = 'none';
+    if (progress) {
+        progress.style.display = 'block';
+        bar.style.width = '0%';
+        phase.textContent = 'Démarrage...';
+    }
+
+    var es = new EventSource('/maintenance/sandbox/move-orphans');
+
+    es.addEventListener('progress', function(e) {
+        var d = JSON.parse(e.data);
+        var pct = (d.phase / d.total) * 100;
+        bar.style.width = Math.max(pct, 2) + '%';
+        phase.innerHTML = '<span class="maint-phase-counter">' + d.phase + '/' + d.total + '</span> ' + d.label;
+    });
+
+    es.addEventListener('complete', function(e) {
+        es.close();
+        bar.style.width = '100%';
+        bar.classList.add('complete');
+        phase.textContent = 'Déplacement terminé';
+
+        setTimeout(function() {
+            var d = JSON.parse(e.data);
+            document.getElementById('sandbox-section').innerHTML = d.html;
+            progress.style.display = 'none';
+            bar.classList.remove('complete');
+            bar.style.width = '0%';
+        }, 400);
+    });
+
+    es.addEventListener('error', function() {
+        es.close();
+        bar.classList.add('error');
+        phase.textContent = 'Erreur lors du déplacement';
+        setTimeout(function() {
+            progress.style.display = 'none';
+            bar.classList.remove('error');
+            if (actions) actions.style.display = '';
+        }, 2000);
+    });
+}
+
+function sandboxToggleAll(master) {
+    var cbs = document.querySelectorAll('.sandbox-cb');
+    cbs.forEach(function(cb) { cb.checked = master.checked; });
+    sandboxUpdateActions();
+}
+
+function sandboxUpdateActions() {
+    var checked = document.querySelectorAll('.sandbox-cb:checked');
+    var count = checked.length;
+    var countEl = document.getElementById('sandbox-sel-count');
+    var btnDel = document.getElementById('sandbox-btn-delete');
+    var btnReinject = document.getElementById('sandbox-btn-reinject');
+    var countMsg = document.getElementById('sandbox-delete-count-msg');
+
+    if (countEl) countEl.textContent = count + ' sélectionné(s)';
+    if (btnDel) btnDel.disabled = count === 0;
+    if (btnReinject) btnReinject.disabled = count === 0;
+    if (countMsg) countMsg.textContent = count + ' fichier(s) sélectionné(s)';
+}
+
+function sandboxSubmit(action) {
+    var overlay = document.getElementById('sandbox-delete-overlay');
+    if (overlay) overlay.classList.remove('active');
+
+    var form = document.getElementById('sandbox-form');
+    if (!form) return;
+    var formData = new FormData(form);
+
+    fetch('/maintenance/sandbox/' + action, {
+        method: 'POST',
+        body: formData
+    })
+    .then(function(resp) { return resp.text(); })
+    .then(function(html) {
+        document.getElementById('sandbox-section').innerHTML = html;
     });
 }
 
@@ -264,6 +438,7 @@ function startFix(type) {
         setTimeout(function() {
             var d = JSON.parse(e.data);
             results.innerHTML = d.html;
+            if (typeof htmx !== 'undefined') htmx.process(results);
             progress.style.display = 'none';
             bar.classList.remove('complete');
         }, 400);
@@ -398,6 +573,188 @@ function startFix(type) {
 }
 @keyframes trash-spin {
     to { transform: rotate(360deg); }
+}
+
+/* ── Sandbox ── */
+.maint-icon-sandbox {
+    background: rgba(168, 130, 255, 0.12);
+    color: #a882ff;
+}
+.sandbox-flash {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+    background: rgba(78, 203, 141, 0.08);
+    border: 1px solid rgba(78, 203, 141, 0.2);
+    border-radius: 6px;
+    color: var(--accent-emerald);
+    font-size: 0.8125rem;
+    animation: sandbox-flash-in 0.3s ease;
+}
+@keyframes sandbox-flash-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.sandbox-msg { padding: 0.75rem; font-size: 0.8125rem; border-radius: 6px; }
+.sandbox-msg-warn {
+    background: rgba(232, 168, 73, 0.08);
+    color: var(--accent-amber);
+    border: 1px solid rgba(232, 168, 73, 0.2);
+}
+.sandbox-table-wrap {
+    overflow-x: auto;
+    margin: 0 -0.25rem;
+}
+.sandbox-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+.sandbox-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+.sandbox-table th {
+    text-align: left;
+    padding: 0.5rem 0.5rem;
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-card);
+    white-space: nowrap;
+}
+.sandbox-th-check { width: 28px; }
+.sandbox-table td {
+    padding: 0.4rem 0.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    vertical-align: middle;
+}
+.sandbox-row:hover td {
+    background: rgba(255, 255, 255, 0.02);
+}
+.sandbox-td-check { width: 28px; text-align: center; }
+.sandbox-td-name {
+    font-weight: 500;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.sandbox-td-size {
+    color: var(--text-secondary);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.sandbox-td-date {
+    color: var(--text-muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.sandbox-td-origin code {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.03);
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+}
+.sandbox-cb {
+    accent-color: #a882ff;
+}
+.sandbox-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-subtle);
+    gap: 0.75rem;
+}
+.sandbox-actions-left { flex-shrink: 0; }
+.sandbox-actions-right {
+    display: flex;
+    gap: 0.5rem;
+}
+.sandbox-selection-count {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+.sandbox-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 5px;
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid transparent;
+}
+.sandbox-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+.sandbox-btn-reinject {
+    background: rgba(78, 203, 141, 0.1);
+    color: var(--accent-emerald);
+    border-color: rgba(78, 203, 141, 0.2);
+}
+.sandbox-btn-reinject:not(:disabled):hover {
+    background: rgba(78, 203, 141, 0.18);
+    border-color: rgba(78, 203, 141, 0.35);
+}
+.sandbox-btn-delete {
+    background: rgba(220, 80, 80, 0.08);
+    color: #dc5050;
+    border-color: rgba(220, 80, 80, 0.2);
+}
+.sandbox-btn-delete:not(:disabled):hover {
+    background: rgba(220, 80, 80, 0.15);
+    border-color: rgba(220, 80, 80, 0.35);
+}
+.sandbox-empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 2rem;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+}
+.sandbox-remote-hint {
+    text-align: center;
+    padding: 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+}
+.sandbox-move-progress {
+    padding: 0.75rem 0 0.25rem;
+}
+.sandbox-move-bar.indeterminate {
+    width: 30% !important;
+    animation: sandbox-indeterminate 1.2s ease-in-out infinite;
+}
+@keyframes sandbox-indeterminate {
+    0% { margin-left: 0; width: 30%; }
+    50% { margin-left: 35%; width: 40%; }
+    100% { margin-left: 70%; width: 30%; }
+}
+.sandbox-move-btn {
+    background: rgba(168, 130, 255, 0.1) !important;
+    color: #a882ff !important;
+    border-color: rgba(168, 130, 255, 0.25) !important;
+}
+.sandbox-move-btn:hover {
+    background: rgba(168, 130, 255, 0.18) !important;
+    border-color: rgba(168, 130, 255, 0.4) !important;
 }
 </style>
 {% endblock %}

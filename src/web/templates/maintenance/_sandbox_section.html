@@ -1,0 +1,80 @@
+{% if flash_message is defined and flash_message %}
+<div class="sandbox-flash">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    {{ flash_message }}
+</div>
+{% endif %}
+
+{% if sandbox_items %}
+<form id="sandbox-form">
+    <div class="sandbox-table-wrap">
+        <table class="sandbox-table">
+            <thead>
+                <tr>
+                    {% if is_local %}
+                    <th class="sandbox-th-check">
+                        <input type="checkbox" id="sandbox-select-all" onchange="sandboxToggleAll(this)" title="Tout sélectionner">
+                    </th>
+                    {% endif %}
+                    <th>Fichier</th>
+                    <th>Taille</th>
+                    <th>Modifié</th>
+                    <th>Emplacement original</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in sandbox_items %}
+                <tr class="sandbox-row">
+                    {% if is_local %}
+                    <td class="sandbox-td-check">
+                        <input type="checkbox" name="selected" value="{{ item.path }}" class="sandbox-cb" onchange="sandboxUpdateActions()">
+                    </td>
+                    {% endif %}
+                    <td class="sandbox-td-name" title="{{ item.path }}">{{ item.name }}</td>
+                    <td class="sandbox-td-size">{{ item.size }}</td>
+                    <td class="sandbox-td-date">{{ item.modified }}</td>
+                    <td class="sandbox-td-origin"><code>{{ item.original_path }}</code></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_local %}
+    <div class="sandbox-actions" id="sandbox-actions">
+        <div class="sandbox-actions-left">
+            <span class="sandbox-selection-count" id="sandbox-sel-count">0 sélectionné(s)</span>
+        </div>
+        <div class="sandbox-actions-right">
+            <button type="button" class="sandbox-btn sandbox-btn-reinject" id="sandbox-btn-reinject" disabled
+                    onclick="sandboxSubmit('reinject')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Réinjecter
+            </button>
+            <button type="button" class="sandbox-btn sandbox-btn-delete" id="sandbox-btn-delete" disabled
+                    onclick="document.getElementById('sandbox-delete-overlay').classList.add('active')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                Supprimer
+            </button>
+        </div>
+    </div>
+    {% endif %}
+</form>
+
+{% else %}
+<div class="sandbox-empty-state">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+        <line x1="12" y1="22.08" x2="12" y2="12"/>
+    </svg>
+    Aucun fichier en sandbox
+</div>
+{% endif %}
+
+{% if not is_local and sandbox_count > 0 %}
+<div class="sandbox-remote-hint">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 3px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    Actions disponibles uniquement depuis la machine maître.
+</div>
+{% endif %}

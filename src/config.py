@@ -53,16 +53,35 @@ class Settings(BaseSettings):
     max_files_per_subdir: int = Field(default=50, ge=1)
     match_score_threshold: int = Field(default=85, ge=0, le=100)
 
+    # Sandbox (isolation des fichiers orphelins pour revue)
+    sandbox_dir: Optional[Path] = Field(default=None)
+
+    @property
+    def resolved_sandbox_dir(self) -> Path:
+        """Répertoire sandbox résolu : valeur explicite ou {storage_dir}/.sandbox."""
+        if self.sandbox_dir is not None:
+            return self.sandbox_dir
+        return self.storage_dir / ".sandbox"
+
     # Logging (fichier + stderr, rotation 10MB, 5 fichiers de rétention)
     log_level: str = Field(default="INFO")
     log_file: Path = Field(default=Path("logs/cineorg.log"))
     log_rotation_size: str = Field(default="10 MB")
     log_retention_count: int = Field(default=5)
 
-    @field_validator("downloads_dir", "storage_dir", "video_dir", "log_file", mode="before")
+    @field_validator(
+        "downloads_dir",
+        "storage_dir",
+        "video_dir",
+        "sandbox_dir",
+        "log_file",
+        mode="before",
+    )
     @classmethod
-    def expand_path(cls, v: str | Path) -> Path:
+    def expand_path(cls, v: str | Path | None) -> Path | None:
         """Étend ~ vers le répertoire home dans les chemins."""
+        if v is None:
+            return None
         return Path(v).expanduser()
 
     @property

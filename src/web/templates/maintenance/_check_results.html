@@ -80,6 +80,22 @@
                 {% endfor %}
             </div>
         </details>
+        {% if is_local %}
+        <div class="maint-fix-actions maint-fix-inline" id="sandbox-orphans-actions">
+            <button class="maint-fix-btn maint-fix-btn-sm sandbox-move-btn" id="btn-sandbox-orphans"
+                    onclick="sandboxMoveOrphans({{ orphan_total }})">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                Sandboxer les orphelins
+            </button>
+            <span class="maint-fix-hint">Déplace {{ orphan_total }} fichier(s) vers le sandbox pour revue</span>
+        </div>
+        <div class="sandbox-move-progress" id="sandbox-move-progress" style="display: none;">
+            <div class="maint-progress-bar-track">
+                <div class="maint-progress-bar-fill sandbox-move-bar" id="sandbox-move-bar"></div>
+            </div>
+            <div class="maint-progress-phase" id="sandbox-move-phase">Déplacement en cours...</div>
+        </div>
+        {% endif %}
         <div class="maint-cli-hint maint-cli-hint-compact">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
             <span>Fichiers dans storage/ sans symlink correspondant dans video/. Branches entieres hors scope = repertoires a deplacer hors de Films/Series dans le storage.</span>
