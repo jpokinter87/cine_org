@@ -2,7 +2,7 @@
 
 ## Project Reference
 
-See: .paul/PROJECT.md (updated 2026-03-04)
+See: .paul/PROJECT.md (updated 2026-04-04)
 
 **Core value:** Organiser et renommer automatiquement une vidéothèque personnelle à partir des téléchargements
 **Current focus:** v2.0 Production & Maintenance Complète
@@ -10,21 +10,21 @@ See: .paul/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Milestone: v2.0 Production & Maintenance Complète
-Phase: 37 of 5 (Optimisations & Sandbox) — Complete
-Plan: 37-02 complet (2/2 plans)
-Status: Phase 37 terminée — prêt pour transition
-Last activity: 2026-03-20 — Plan 37-02 complété (sandbox orphelins + fix subdivision)
+Phase: 39 of 5 (Intégration Jellyfin) — Not started
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-04-04 — Phase 38 complete, transitioned to Phase 39
 
 Progress:
-- v2.0: [██████░░░░] 60% (3/5 phases)
-- Phase 37: [██████████] 100% (2/2 plans)
+- v2.0: [████████░░] 80% (4/5 phases)
+- Phase 39: [░░░░░░░░░░] 0%
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop 37-02 complete — phase 37 terminée]
+  ✓        ✓        ✓     [Loop complete — ready for next PLAN]
 ```
 
 ## Accumulated Context
@@ -49,6 +49,8 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Popover dynamique dessous/dessus : position absolute + getBoundingClientRect() flip
 - overflow:hidden retiré de .lib-season-group — cause racine popover tronqué
 - Uvicorn logging via loguru : log_config dict avec _LoguruInterceptHandler
+- Uvicorn direct sans nginx : usage personnel réseau local, pas besoin de reverse proxy
+- deploy.sh depuis le serveur : git pull + uv sync + systemctl restart
 - Filtres bibliothèque 2 lignes : ligne 1 recherche/filtres, ligne 2 tri/checkboxes/techniques/suppression
 - Flèches tri ↑↓ au lieu de select asc/desc : hidden input + dispatchEvent HTMX
 - Section technique dépliable : collapsed class + max-height transition, auto-open si filtre actif
@@ -118,6 +120,7 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Vérifier détection doublons avec un film (testé uniquement avec séries jusqu'ici)
 - Trous dans subdivisions alphabétiques : étendre la borne la plus proche au lieu de laisser à la racine
 - Vérifier si le bug subdivision a causé des dégâts dans des sessions antérieures (pré-existait depuis phase 35)
+- Réassociation TMDB : les données techniques (résolution, codecs, langue) ne sont pas re-peuplées après correction — cartouches qualité absents sur jaquette et fiche détaillée. Le code ne touche pas ces champs mais ils n'étaient probablement jamais remplis pour les films importés. Enrichir depuis VideoFileModel ou mediainfo lors de la réassociation.
 
 ### Blockers/Concerns
 None.
@@ -128,14 +131,10 @@ Branch: master
 
 ## Session Continuity
 
-Last session: 2026-03-20
-Stopped at: Phase 37 complète (UNIFY 37-02)
-Next action: Transition phase 37 → phase suivante
-Resume file: .paul/phases/37-optimisations-sandbox/37-02-SUMMARY.md
-Resume context:
-- Plan 37-01 : Complet (cross-genre DB + corbeille maintenance + Comédie dramatique)
-- Plan 37-02 : Complet (sandbox orphelins + fix subdivision + nettoyage séquelles)
-- Phase 37 : 100% terminée, prête pour transition
+Last session: 2026-04-04
+Stopped at: Phase 38 complete, ready to plan Phase 39
+Next action: /paul:plan for Phase 39
+Resume file: .paul/ROADMAP.md
 
 ---
 *STATE.md — Updated after every significant action*

@@ -8,14 +8,14 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 **v2.0 Production & Maintenance Complète** (v2.0.0)
 Status: 🚧 In Progress
-Phases: 3 of 5 complete
+Phases: 4 of 5 complete
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 35 | Maintenance Web Complète | 1 | Complete | 2026-03-08 |
 | 36 | Doublons Symlinks Cross-Genre | 1 | Complete | 2026-03-13 |
 | 37 | Optimisations & Sandbox | 2 | Complete | 2026-03-20 |
-| 38 | Déploiement Production | TBD | Not started | - |
+| 38 | Déploiement Production | 1 | ✅ Complete | 2026-04-04 |
 | 39 | Intégration Jellyfin | TBD | Not started | - |
 
 ### Phase 35: Maintenance Web Complète (Complete)
@@ -30,9 +30,9 @@ Détection et correction des symlinks cross-genre, option CLI --only, bouton Vis
 
 Plan 37-01 : Cross-genre DB-first (symlink_path), corbeille maintenance (liste/restauration/vidage), Comédie dramatique. Plan 37-02 : SandboxService complet (déplacement/liste/suppression/réinjection), interface web sandbox dans maintenance, nettoyage automatique symlinks résiduels, fix critique _sandbox_existing (garde-fou subdivision).
 
-### Phase 38: Déploiement Production
+### Phase 38: Déploiement Production (Complete)
 
-Focus: Service systemd pour uvicorn, workflow git dev→serveur (push/pull), configuration paths/ports/logs. Documentation déploiement. Permettre de continuer le développement sur la machine de dev.
+Service systemd (cineorg.service), script deploy.sh (git pull + uv sync + restart), commande serve avec --workers et --access-log, documentation déploiement complète.
 
 ### Phase 39: Intégration Jellyfin
 
@@ -163,4 +163,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-20 — Phase 37 complete*
+*Last updated: 2026-04-04 — Phase 38 complete*

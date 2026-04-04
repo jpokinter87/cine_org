@@ -88,11 +88,15 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 - [ ] Maintenance web complète : opérations CLI depuis le web, résultats détaillés, gestion sandbox — Phase 35
 - [ ] Doublons symlinks cross-genre : détection et nettoyage symlinks même fichier dans genres différents — Phase 36
-- [ ] Déploiement production : service systemd, workflow git dev→serveur — Phase 37
-- [ ] Intégration Jellyfin : volumes Docker, montage symlinks+cibles — Phase 38
+- [ ] Intégration Jellyfin : volumes Docker, montage symlinks+cibles — Phase 39
 
 ### Validated (Recently Shipped)
 
+- [x] Déploiement production (v2.0)
+  - Service systemd pour CineOrg (restart auto, logs journalctl) — Phase 38
+  - Script deploy.sh (git pull + uv sync + restart) — Phase 38
+  - Commande serve avec --workers et --access-log — Phase 38
+  - Documentation déploiement complète — Phase 38
 - [x] Overlays qualité sur posters web (v1.9)
   - Badges résolution (4K/1080p/720p/SD), codec vidéo, langue (Multi/FR/VO) sur posters grille — Phase 33
 - [x] Détection doublons au transfert (v1.9)
@@ -225,4 +229,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-03-07 after Phase 33 Overlays Qualité Web UI*
+*Last updated: 2026-04-04 after Phase 38 Déploiement Production*

@@ -176,6 +176,8 @@ def serve(
     host: Annotated[str, typer.Option(help="Adresse d'écoute")] = "0.0.0.0",
     port: Annotated[int, typer.Option(help="Port d'écoute")] = 8000,
     reload: Annotated[bool, typer.Option(help="Rechargement automatique")] = False,
+    workers: Annotated[int, typer.Option(help="Nombre de workers uvicorn")] = 1,
+    access_log: Annotated[bool, typer.Option(help="Activer les logs d'accès HTTP")] = True,
 ) -> None:
     """Lance le serveur web CineOrg."""
     import logging
@@ -208,9 +210,15 @@ def serve(
         },
     }
 
-    typer.echo(f"Démarrage du serveur sur {host}:{port}")
+    typer.echo(f"Démarrage du serveur sur {host}:{port} ({workers} worker(s))")
     uvicorn.run(
-        "src.web.app:app", host=host, port=port, reload=reload, log_config=log_config
+        "src.web.app:app",
+        host=host,
+        port=port,
+        reload=reload,
+        workers=workers,
+        access_log=access_log,
+        log_config=log_config,
     )
 
 

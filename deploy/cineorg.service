@@ -1,0 +1,29 @@
+# CineOrg — Service systemd
+#
+# Installation :
+#   sudo cp deploy/cineorg.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable cineorg
+#   sudo systemctl start cineorg
+#
+# Logs :
+#   journalctl -u cineorg -f
+
+[Unit]
+Description=CineOrg — Gestionnaire de vidéothèque personnelle
+After=network.target
+
+[Service]
+Type=simple
+User=jp
+Group=jp
+WorkingDirectory=/home/jp/PythonProject/cine_org
+EnvironmentFile=/home/jp/PythonProject/cine_org/.env
+ExecStart=/home/jp/.local/bin/uv run cineorg serve --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
