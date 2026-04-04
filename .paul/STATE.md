@@ -130,15 +130,19 @@ PLAN ──▶ APPLY ──▶ UNIFY
 None.
 
 ### Git State
-Last commit: pending (feat(phase-39): hardlinks seeding)
+Last commit: 9ad81e6 (feat(phase-39): hardlinks seeding)
 Branch: master
 
 ## Session Continuity
 
 Last session: 2026-04-04
-Stopped at: Phase 39 complete, ready to plan Phase 40
-Next action: /paul:plan for Phase 40
-Resume file: .paul/ROADMAP.md
+Stopped at: Phase 39 complete + corrections hors-phase (service systemd, tri persistant)
+Next action: Vérifier tri persistant, commiter corrections, nettoyer fichiers test, puis /paul:plan Phase 40
+Resume file: .paul/HANDOFF-2026-04-04.md
+Resume context:
+- cineorg.service modifié (DISPLAY/WAYLAND pour mpv) — non commité
+- Persistance tri localStorage dans _filters.html — à valider
+- Fichiers test *TESTGRP* dans storage/downloads — à nettoyer
 
 ---
 *STATE.md — Updated after every significant action*

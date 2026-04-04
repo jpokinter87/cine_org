@@ -225,9 +225,30 @@
     {% endif %}
 </form>
 
-{# ── JS : flèches tri + toggle technique ── #}
+{# ── JS : flèches tri + toggle technique + persistance tri ── #}
 <script>
 (function() {
+    /* Restaurer tri depuis localStorage : redirection si nécessaire */
+    var params = new URLSearchParams(window.location.search);
+    if (!params.has('sort') && !params.has('order')) {
+        var savedSort = localStorage.getItem('lib_sort');
+        var savedOrder = localStorage.getItem('lib_order');
+        if (savedSort || savedOrder) {
+            params.set('sort', savedSort || 'title');
+            params.set('order', savedOrder || 'desc');
+            window.location.replace(window.location.pathname + '?' + params.toString());
+            return;
+        }
+    }
+
+    /* Sauvegarder le tri à chaque changement */
+    var sortSelect = document.querySelector('select[name="sort"]');
+    if (sortSelect) {
+        sortSelect.addEventListener('change', function() {
+            localStorage.setItem('lib_sort', this.value);
+        });
+    }
+
     /* Flèches de tri */
     document.querySelectorAll('.lib-sort-arrow').forEach(function(btn) {
         btn.addEventListener('click', function() {
@@ -237,6 +258,7 @@
             hidden.value = newOrder;
             group.querySelectorAll('.lib-sort-arrow').forEach(function(b) { b.classList.remove('active'); });
             this.classList.add('active');
+            localStorage.setItem('lib_order', newOrder);
             hidden.dispatchEvent(new Event('change', { bubbles: true }));
         });
     });
