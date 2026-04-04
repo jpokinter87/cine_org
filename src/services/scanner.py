@@ -158,6 +158,12 @@ class ScannerService:
                 continue
             if path.is_symlink():
                 continue
+            # Ignorer les hardlinks (fichiers transférés gardés pour seeding)
+            try:
+                if path.stat().st_nlink > 1:
+                    continue
+            except OSError:
+                continue
             if path.suffix.lower() not in VIDEO_EXTENSIONS:
                 continue
             filename_lower = path.name.lower()

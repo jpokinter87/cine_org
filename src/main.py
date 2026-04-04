@@ -35,6 +35,7 @@ from .adapters.cli.commands import (
     populate_movies,
     populate_series,
     process,
+    purge_hardlinks,
     reconcile,
     regroup,
     repair_links,
@@ -105,6 +106,7 @@ app.command()(reconcile)
 app.command(name="migrate-series")(migrate_series)
 app.command(name="fix-series-symlinks")(fix_series_symlinks)
 app.command(name="check-duplicates")(check_duplicates)
+app.command(name="purge-hardlinks")(purge_hardlinks)
 
 # Monter validate_app comme sous-commande
 app.add_typer(validate_app, name="validate")

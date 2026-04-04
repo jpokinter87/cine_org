@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     # Sandbox (isolation des fichiers orphelins pour revue)
     sandbox_dir: Optional[Path] = Field(default=None)
 
+    # Hardlinks seeding (durée de rétention des hardlinks dans downloads/)
+    hardlink_retention_days: int = Field(default=30, ge=1)
+
     @property
     def resolved_sandbox_dir(self) -> Path:
         """Répertoire sandbox résolu : valeur explicite ou {storage_dir}/.sandbox."""

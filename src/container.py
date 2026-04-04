@@ -25,6 +25,7 @@ from .infrastructure.persistence.repositories import (
 )
 from .infrastructure.persistence.hash_service import compute_file_hash
 from .services.enricher import EnricherService
+from .services.hardlink_service import HardlinkService
 from .services.sandbox_service import SandboxService
 from .services.importer import ImporterService
 from .services.cleanup import CleanupService
@@ -207,6 +208,9 @@ class Container(containers.DeclarativeContainer):
     # Service de sandbox - Factory car dépend des paths de configuration
     # Note: sandbox_dir, storage_dir, downloads_dir passés via config
     sandbox_service = providers.Factory(SandboxService)
+
+    # Service de hardlinks seeding - purge et rotation
+    hardlink_service = providers.Factory(HardlinkService, settings=config)
 
     # Service de workflow - Factory pour nouvelle instance a chaque execution
     # Orchestre le workflow complet de traitement des videos

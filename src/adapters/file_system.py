@@ -16,14 +16,14 @@ from src.core.ports.file_system import IFileSystem, ISymlinkManager
 from src.core.value_objects import MediaInfo
 
 # Extensions video supportees
-VIDEO_EXTENSIONS: frozenset[str] = frozenset({
-    ".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v"
-})
+VIDEO_EXTENSIONS: frozenset[str] = frozenset(
+    {".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v"}
+)
 
 # Patterns a ignorer dans les noms de fichiers (insensible a la casse)
-IGNORED_PATTERNS: frozenset[str] = frozenset({
-    "sample", "trailer", "preview", "extras", "bonus"
-})
+IGNORED_PATTERNS: frozenset[str] = frozenset(
+    {"sample", "trailer", "preview", "extras", "bonus"}
+)
 
 # Taille du chunk pour le calcul de hash (10 MB)
 HASH_CHUNK_SIZE: int = 10 * 1024 * 1024
@@ -259,9 +259,12 @@ class FileSystemAdapter(IFileSystem, ISymlinkManager):
             if any(pattern in filename_lower for pattern in IGNORED_PATTERNS):
                 continue
 
-            # Verifier la taille minimale
+            # Verifier taille minimale et ignorer les hardlinks (seeding)
             try:
-                if path.stat().st_size < min_file_size_bytes:
+                st = path.stat()
+                if st.st_nlink > 1:
+                    continue
+                if st.st_size < min_file_size_bytes:
                     continue
             except OSError:
                 continue

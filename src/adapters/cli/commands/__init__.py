@@ -69,6 +69,9 @@ from src.adapters.cli.commands.fix_series_symlinks_command import (
 from src.adapters.cli.commands.duplicates_command import (
     check_duplicates,
 )
+from src.adapters.cli.commands.hardlink_commands import (
+    purge_hardlinks,
+)
 
 __all__ = [
     # workflow
@@ -114,4 +117,5 @@ __all__ = [
     "migrate_series",
     "fix_series_symlinks",
     "check_duplicates",
+    "purge_hardlinks",
 ]

@@ -1,0 +1,21 @@
+# CineOrg — Purge des hardlinks de seeding
+#
+# Service oneshot déclenché par cineorg-purge.timer
+#
+# Installation :
+#   sudo cp deploy/cineorg-purge.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+
+[Unit]
+Description=CineOrg — Purge des hardlinks de seeding expirés
+After=network.target
+
+[Service]
+Type=oneshot
+User=jp
+Group=jp
+WorkingDirectory=/home/jp/PythonProject/cine_org
+EnvironmentFile=/home/jp/PythonProject/cine_org/.env
+ExecStart=/home/jp/.local/bin/uv run cineorg purge-hardlinks
+StandardOutput=journal
+StandardError=journal

@@ -168,7 +168,12 @@ class EpisodeModel(SQLModel, table=True):
 
     __tablename__ = "episodes"
     __table_args__ = (
-        Index("ix_episodes_series_season_episode", "series_id", "season_number", "episode_number"),
+        Index(
+            "ix_episodes_series_season_episode",
+            "series_id",
+            "season_number",
+            "episode_number",
+        ),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -215,7 +220,9 @@ class VideoFileModel(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     path: str = Field(index=True)  # Chemin du fichier physique (storage)
-    symlink_path: str | None = Field(default=None, index=True)  # Chemin du symlink (video)
+    symlink_path: str | None = Field(
+        default=None, index=True
+    )  # Chemin du symlink (video)
     filename: str
     file_hash: str | None = Field(default=None, index=True)
     size_bytes: int = 0
@@ -332,3 +339,21 @@ class ConfirmedAssociationModel(SQLModel, table=True):
     entity_type: str  # "movie" | "series"
     entity_id: int = Field(index=True)
     confirmed_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class HardlinkModel(SQLModel, table=True):
+    """
+    Registre des hardlinks créés dans downloads/ pour le seeding BitTorrent.
+
+    Après transfert, le fichier physique réside dans storage/ et un hardlink
+    est créé dans downloads/ avec le nom original pour le tracker.
+    Les hardlinks expirés sont purgés automatiquement par rotation.
+    """
+
+    __tablename__ = "hardlinks"
+
+    id: int | None = Field(default=None, primary_key=True)
+    download_path: str = Field(index=True)  # Chemin original dans downloads/
+    storage_path: str = Field(index=True)  # Chemin renommé dans storage/
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: datetime  # created_at + hardlink_retention_days

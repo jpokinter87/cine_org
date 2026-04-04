@@ -8,7 +8,7 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 **v2.0 Production & Maintenance Complète** (v2.0.0)
 Status: 🚧 In Progress
-Phases: 4 of 5 complete
+Phases: 5 of 6 complete
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
@@ -16,7 +16,8 @@ Phases: 4 of 5 complete
 | 36 | Doublons Symlinks Cross-Genre | 1 | Complete | 2026-03-13 |
 | 37 | Optimisations & Sandbox | 2 | Complete | 2026-03-20 |
 | 38 | Déploiement Production | 1 | ✅ Complete | 2026-04-04 |
-| 39 | Intégration Jellyfin | TBD | Not started | - |
+| 39 | Hardlinks Seeding | 2 | ✅ Complete | 2026-04-04 |
+| 40 | Intégration Jellyfin | TBD | Not started | - |
 
 ### Phase 35: Maintenance Web Complète (Complete)
 
@@ -34,7 +35,11 @@ Plan 37-01 : Cross-genre DB-first (symlink_path), corbeille maintenance (liste/r
 
 Service systemd (cineorg.service), script deploy.sh (git pull + uv sync + restart), commande serve avec --workers et --access-log, documentation déploiement complète.
 
-### Phase 39: Intégration Jellyfin
+### Phase 39: Hardlinks Seeding
+
+Création de hardlinks dans downloads/ après transfert vers storage/ pour maintenir le seeding BitTorrent. Le fichier physique vit dans storage/, le hardlink dans downloads/ conserve le nom original pour le tracker. Rotation automatique avec durée configurable. Plan 39-01 : modèle DB + hardlink au transfert + filtre scanner. Plan 39-02 : service de purge + CLI + timer systemd.
+
+### Phase 40: Intégration Jellyfin
 
 Focus: Corriger les volumes Docker pour que Jellyfin accède aux symlinks dans /media/Serveur/Collection. Montage symlinks + cibles (storage) avec les mêmes chemins absolus dans le container. Vérification scan bibliothèque.
 
@@ -163,4 +168,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-04-04 — Phase 38 complete*
+*Last updated: 2026-04-04 — Phase 39 complete*

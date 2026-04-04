@@ -86,12 +86,14 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-- [ ] Maintenance web complète : opérations CLI depuis le web, résultats détaillés, gestion sandbox — Phase 35
-- [ ] Doublons symlinks cross-genre : détection et nettoyage symlinks même fichier dans genres différents — Phase 36
-- [ ] Intégration Jellyfin : volumes Docker, montage symlinks+cibles — Phase 39
+- [ ] Intégration Jellyfin : volumes Docker, montage symlinks+cibles — Phase 40
 
 ### Validated (Recently Shipped)
 
+- [x] Hardlinks Seeding (v2.0)
+  - Hardlinks dans downloads/ après transfert pour maintenir le seeding BitTorrent — Phase 39
+  - Rotation automatique avec durée configurable (hardlink_retention_days) — Phase 39
+  - Commande CLI purge-hardlinks (--dry-run, --force) + timer systemd quotidien — Phase 39
 - [x] Déploiement production (v2.0)
   - Service systemd pour CineOrg (restart auto, logs journalctl) — Phase 38
   - Script deploy.sh (git pull + uv sync + restart) — Phase 38
@@ -206,6 +208,9 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | skip_cache sur TMDBClient.get_details() | Invalidation cache granulaire sans détruire le cache global | 2026-03-01 | Active |
 | collection_id=0 sentinel | Films sans collection marqués pour éviter re-vérification | 2026-03-01 | Active |
 | Filet doublons post-batch | Détection/correction doublons en fin de pipeline au lieu d'extraction en amont | 2026-03-01 | Active |
+| Hardlinks seeding post-transfert | os.link(storage, download) recrée le fichier original pour le tracker BitTorrent | 2026-04-04 | Active |
+| st_nlink > 1 filtre scanner | Ignore les hardlinks lors du scan downloads, simple et sans requête DB | 2026-04-04 | Active |
+| Purge hardlinks timer systemd | cineorg-purge.timer quotidien avec Persistent=true et RandomizedDelaySec | 2026-04-04 | Active |
 
 ## Success Metrics
 
@@ -229,4 +234,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-04-04 after Phase 38 Déploiement Production*
+*Last updated: 2026-04-04 after Phase 39 Hardlinks Seeding*

@@ -1,0 +1,23 @@
+# CineOrg — Timer quotidien pour purge des hardlinks
+#
+# Installation :
+#   sudo cp deploy/cineorg-purge.timer /etc/systemd/system/
+#   sudo cp deploy/cineorg-purge.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable cineorg-purge.timer
+#   sudo systemctl start cineorg-purge.timer
+#
+# Vérification :
+#   systemctl list-timers cineorg-purge*
+#   journalctl -u cineorg-purge.service
+
+[Unit]
+Description=CineOrg — Purge quotidienne des hardlinks de seeding
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

@@ -10,14 +10,14 @@ See: .paul/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Milestone: v2.0 Production & Maintenance Complète
-Phase: 39 of 5 (Intégration Jellyfin) — Not started
+Phase: 40 of 6 (Intégration Jellyfin) — Not started
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-04-04 — Phase 38 complete, transitioned to Phase 39
+Last activity: 2026-04-04 — Phase 39 complete, transitioned to Phase 40
 
 Progress:
-- v2.0: [████████░░] 80% (4/5 phases)
-- Phase 39: [░░░░░░░░░░] 0%
+- v2.0: [████████░░] 83% (5/6 phases)
+- Phase 40: [░░░░░░░░░░] 0%
 
 ## Loop Position
 
@@ -100,6 +100,10 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Nettoyage séquelles symlinks : matching titre+année (films), titre+SxxExx (épisodes), format scene
 - _is_subdivision_path() : garde-fou critique empêchant sandbox de détruire une subdivision entière
 - htmx.process() obligatoire après innerHTML sur résultats SSE (attributs hx-* non activés sinon)
+- Hardlinks seeding : os.link(storage, download) dans transfer_file(), non bloquant si cross-device
+- st_nlink > 1 filtre scanner downloads (stat unique combiné avec size check)
+- HardlinkModel SQLite avec expires_at, purge quotidienne via timer systemd
+- Nettoyage dossiers vides ascendant après purge hardlink (rmdir jusqu'à downloads_dir)
 
 ### Deferred Issues
 - README.md à réécrire de fond en comble : nouvelles commandes, structure répertoires attendue, architecture, configuration
@@ -126,14 +130,14 @@ PLAN ──▶ APPLY ──▶ UNIFY
 None.
 
 ### Git State
-Last commit: 37fa1e6 (fix(sandbox): réinjection dans downloads/Films ou downloads/Series selon type)
+Last commit: pending (feat(phase-39): hardlinks seeding)
 Branch: master
 
 ## Session Continuity
 
 Last session: 2026-04-04
-Stopped at: Phase 38 complete, ready to plan Phase 39
-Next action: /paul:plan for Phase 39
+Stopped at: Phase 39 complete, ready to plan Phase 40
+Next action: /paul:plan for Phase 40
 Resume file: .paul/ROADMAP.md
 
 ---

@@ -8,11 +8,15 @@ destination finale avec:
 - Creation de symlinks absolus dans video/ vers storage/
 """
 
+import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Protocol
+
+from loguru import logger
 
 from src.infrastructure.persistence.hash_service import compute_file_hash
 from src.utils.constants import VIDEO_EXTENSIONS
@@ -239,6 +243,9 @@ class TransfererService:
         source = Path(source)
         destination = Path(destination)
 
+        # Sauvegarder le chemin original avant destruction par atomic_move
+        original_source = Path(source)
+
         # Etape 1: Verifier les conflits
         conflict = self.check_conflict(source, destination)
         if conflict:
@@ -247,6 +254,9 @@ class TransfererService:
         # Etape 2: Deplacement atomique
         if not self._fs.atomic_move(source, destination):
             return TransferResult(success=False, error="Deplacement atomique echoue")
+
+        # Etape 2b: Hardlink pour seeding BitTorrent
+        self._create_seeding_hardlink(original_source, destination)
 
         # Etape 3: Creation du symlink (avec rollback si erreur)
         symlink_path = None
@@ -271,6 +281,60 @@ class TransfererService:
             final_path=destination,
             symlink_path=symlink_path,
         )
+
+    def _create_seeding_hardlink(
+        self, original_source: Path, storage_path: Path
+    ) -> None:
+        """
+        Crée un hardlink dans downloads/ pointant vers le fichier dans storage/.
+
+        Le hardlink conserve le nom original du fichier téléchargé pour que
+        les trackers BitTorrent puissent continuer à le partager.
+        L'entrée est enregistrée en DB pour la rotation automatique.
+
+        En cas d'échec (cross-device, permissions), un warning est loggé
+        et le transfert continue normalement.
+        """
+        try:
+            # Recréer le répertoire parent si nécessaire
+            original_source.parent.mkdir(parents=True, exist_ok=True)
+            # Hardlink : le fichier physique est dans storage, le hardlink dans downloads
+            os.link(storage_path, original_source)
+        except OSError as e:
+            logger.warning(
+                "Hardlink impossible pour {} → {} : {}",
+                original_source.name,
+                storage_path,
+                e,
+            )
+            return
+
+        # Enregistrer en DB pour la rotation
+        try:
+            from src.config import Settings
+            from src.infrastructure.persistence.database import get_engine
+            from src.infrastructure.persistence.models import HardlinkModel
+
+            from sqlmodel import Session
+
+            settings = Settings()
+            now = datetime.utcnow()
+            hardlink = HardlinkModel(
+                download_path=str(original_source),
+                storage_path=str(storage_path),
+                created_at=now,
+                expires_at=now + timedelta(days=settings.hardlink_retention_days),
+            )
+            with Session(get_engine()) as session:
+                session.add(hardlink)
+                session.commit()
+            logger.debug(
+                "Hardlink seeding créé : {} (expiration : {} jours)",
+                original_source.name,
+                settings.hardlink_retention_days,
+            )
+        except Exception as e:
+            logger.warning("Enregistrement hardlink en DB échoué : {}", e)
 
     def _create_mirror_symlink(self, storage_path: Path) -> Path:
         """

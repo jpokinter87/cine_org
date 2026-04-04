@@ -54,24 +54,16 @@ def transferer(mock_file_system, mock_symlink_manager, tmp_path):
 class TestCheckConflict:
     """Tests pour la detection de conflits."""
 
-    def test_no_existing_file_returns_none(
-        self, transferer, mock_file_system
-    ):
+    def test_no_existing_file_returns_none(self, transferer, mock_file_system):
         """Pas de conflit si le fichier destination n'existe pas."""
         mock_file_system.exists.return_value = False
-        result = transferer.check_conflict(
-            Path("/src/file.mkv"), Path("/dst/file.mkv")
-        )
+        result = transferer.check_conflict(Path("/src/file.mkv"), Path("/dst/file.mkv"))
         assert result is None
 
-    def test_same_hash_returns_duplicate(
-        self, transferer, mock_file_system
-    ):
+    def test_same_hash_returns_duplicate(self, transferer, mock_file_system):
         """Meme hash = fichier duplique."""
         mock_file_system.exists.return_value = True
-        with patch(
-            "src.services.transferer.compute_file_hash"
-        ) as mock_hash:
+        with patch("src.services.transferer.compute_file_hash") as mock_hash:
             mock_hash.side_effect = ["abc123", "abc123"]  # Meme hash
             result = transferer.check_conflict(
                 Path("/src/file.mkv"), Path("/dst/file.mkv")
@@ -81,14 +73,10 @@ class TestCheckConflict:
             assert result.existing_hash == "abc123"
             assert result.new_hash == "abc123"
 
-    def test_different_hash_returns_collision(
-        self, transferer, mock_file_system
-    ):
+    def test_different_hash_returns_collision(self, transferer, mock_file_system):
         """Hash different = collision de nom."""
         mock_file_system.exists.return_value = True
-        with patch(
-            "src.services.transferer.compute_file_hash"
-        ) as mock_hash:
+        with patch("src.services.transferer.compute_file_hash") as mock_hash:
             mock_hash.side_effect = ["abc123", "xyz789"]  # Hash differents
             result = transferer.check_conflict(
                 Path("/src/file.mkv"), Path("/dst/file.mkv")
@@ -133,7 +121,9 @@ class TestTransferFileReal:
         assert result.success
         assert result.final_path == dest
         assert dest.exists()
-        assert not source.exists()  # Source deplacee
+        # Source existe encore comme hardlink (seeding BitTorrent)
+        assert source.exists()
+        assert source.stat().st_ino == dest.stat().st_ino  # Même inode
         assert result.symlink_path is not None
         assert result.symlink_path.is_symlink()
         assert result.symlink_path.resolve() == dest
@@ -234,14 +224,10 @@ class TestTransferFileReal:
 class TestTransferFileMocked:
     """Tests avec mocks pour scenarios d'erreur."""
 
-    def test_conflict_detected_returns_failure(
-        self, transferer, mock_file_system
-    ):
+    def test_conflict_detected_returns_failure(self, transferer, mock_file_system):
         """Retourne echec si conflit detecte (mocked)."""
         mock_file_system.exists.return_value = True
-        with patch(
-            "src.services.transferer.compute_file_hash"
-        ) as mock_hash:
+        with patch("src.services.transferer.compute_file_hash") as mock_hash:
             mock_hash.side_effect = ["abc", "xyz"]  # Differents
             result = transferer.transfer_file(
                 Path("/src/file.mkv"), Path("/dst/file.mkv")
@@ -249,16 +235,12 @@ class TestTransferFileMocked:
             assert not result.success
             assert result.conflict is not None
 
-    def test_atomic_move_failure_returns_error(
-        self, transferer, mock_file_system
-    ):
+    def test_atomic_move_failure_returns_error(self, transferer, mock_file_system):
         """Retourne erreur si move atomique echoue."""
         mock_file_system.exists.return_value = False
         mock_file_system.atomic_move.return_value = False
 
-        result = transferer.transfer_file(
-            Path("/src/file.mkv"), Path("/dst/file.mkv")
-        )
+        result = transferer.transfer_file(Path("/src/file.mkv"), Path("/dst/file.mkv"))
 
         assert not result.success
         assert result.error == "Deplacement atomique echoue"
@@ -285,9 +267,7 @@ class TestAbsoluteSymlinks:
         from src.adapters.file_system import FileSystemAdapter
 
         fs = FileSystemAdapter()
-        transferer = TransfererService(
-            fs, fs, tmp_path / "storage", tmp_path / "video"
-        )
+        transferer = TransfererService(fs, fs, tmp_path / "storage", tmp_path / "video")
 
         symlink = transferer._create_mirror_symlink(target)
 
@@ -316,7 +296,9 @@ class TestAbsoluteSymlinks:
         symlink = transferer._create_mirror_symlink(target)
 
         # Le symlink doit etre dans video/Films/Science-Fiction/T/
-        expected_symlink = video / "Films" / "Science-Fiction" / "T" / "Terminator (1984).mkv"
+        expected_symlink = (
+            video / "Films" / "Science-Fiction" / "T" / "Terminator (1984).mkv"
+        )
         assert symlink == expected_symlink
         assert symlink.resolve() == target
 
@@ -337,9 +319,7 @@ class TestAbsoluteSymlinks:
         from src.adapters.file_system import FileSystemAdapter
 
         fs = FileSystemAdapter()
-        transferer = TransfererService(
-            fs, fs, tmp_path / "storage", tmp_path / "video"
-        )
+        transferer = TransfererService(fs, fs, tmp_path / "storage", tmp_path / "video")
 
         symlink = transferer._create_mirror_symlink(target)
 
