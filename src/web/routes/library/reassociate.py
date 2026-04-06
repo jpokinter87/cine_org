@@ -4,11 +4,15 @@ Routes de ré-association TMDB — correction manuelle des associations films et
 
 import json
 from datetime import datetime
+from pathlib import Path
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse, Response
 from sqlmodel import select
 
+from loguru import logger
+
+from ....adapters.parsing.guessit_parser import GuessitFilenameParser
 from ....infrastructure.persistence.database import get_session
 from ....infrastructure.persistence.models import (
     ConfirmedAssociationModel,
@@ -27,6 +31,74 @@ from .helpers import (
     _poster_url,
     _series_indicator,
 )
+
+_parser = GuessitFilenameParser()
+
+
+def _populate_tech_from_filename(movie: MovieModel) -> None:
+    """Peuple les métadonnées techniques manquantes depuis le nom de fichier."""
+    path = movie.file_path or movie.symlink_path
+    if not path:
+        return
+    filename = Path(path).name
+    parsed = _parser.parse(filename)
+    if not movie.codec_video and parsed.video_codec:
+        movie.codec_video = parsed.video_codec
+    if not movie.codec_audio and parsed.audio_codec:
+        movie.codec_audio = parsed.audio_codec
+    if not movie.resolution and parsed.resolution:
+        movie.resolution = parsed.resolution
+    if not movie.languages_json and parsed.language:
+        langs = [parsed.language] if isinstance(parsed.language, str) else list(parsed.language)
+        movie.languages_json = json.dumps(langs)
+
+def _rename_symlink_if_needed(movie: MovieModel) -> None:
+    """Renomme le symlink vidéo si le titre ou l'année a changé."""
+    import re
+
+    if not movie.symlink_path:
+        return
+    old_symlink = Path(movie.symlink_path)
+    if not old_symlink.is_symlink():
+        return
+
+    from ....services.renamer import sanitize_for_filesystem
+
+    ext = old_symlink.suffix
+    stem = old_symlink.stem
+
+    # Extraire le suffixe technique en retirant "Titre (Année)" du début
+    # Format attendu : "Titre (Année) Tech Tech Tech"
+    tech_suffix = ""
+    match = re.match(r"^.+?\(\d{4}\)\s*(.*)$", stem)
+    if match:
+        tech_suffix = match.group(1).strip()
+
+    # Construire le nouveau nom
+    name_parts = [sanitize_for_filesystem(movie.title)]
+    if movie.year:
+        name_parts.append(f"({movie.year})")
+    if tech_suffix:
+        name_parts.append(tech_suffix)
+    new_name = " ".join(name_parts) + ext
+
+    if new_name == old_symlink.name:
+        return
+
+    new_symlink = old_symlink.parent / new_name
+    if new_symlink.exists():
+        logger.warning(
+            "Renommage symlink impossible, cible existe déjà : {}", new_symlink
+        )
+        return
+
+    try:
+        old_symlink.rename(new_symlink)
+        movie.symlink_path = str(new_symlink)
+        logger.info("Symlink renommé : {} → {}", old_symlink.name, new_name)
+    except OSError as e:
+        logger.error("Erreur renommage symlink : {}", e)
+
 
 router = APIRouter()
 
@@ -133,6 +205,78 @@ async def movie_reassociate_search(request: Request, movie_id: int, q: str = "")
     )
 
 
+@router.get("/movies/{movie_id}/reassociate/search-id")
+async def movie_reassociate_search_by_id(
+    request: Request,
+    movie_id: int,
+    id_type: str = Query(...),
+    id_value: str = Query(...),
+):
+    """Recherche par ID externe (TMDB/TVDB/IMDB) pour ré-association film."""
+    container = request.app.state.container
+    validation_service = container.validation_service()
+
+    # Normaliser l'ID IMDB : ajouter le préfixe 'tt' si absent
+    if id_type == "imdb" and id_value.isdigit():
+        id_value = f"tt{id_value}"
+
+    details = await validation_service.search_by_external_id(id_type, id_value)
+
+    if details is None:
+        return HTMLResponse(
+            '<p class="reassociate-empty">'
+            f"Aucun résultat pour {id_type.upper()} ID : <strong>{id_value}</strong>"
+            "</p>"
+        )
+
+    # Récupérer la durée locale et le tmdb_id actuel
+    session = next(get_session())
+    try:
+        movie = session.get(MovieModel, movie_id)
+        current_tmdb_id = movie.tmdb_id if movie else None
+    finally:
+        session.close()
+
+    local_duration = _get_file_duration(movie) if movie else None
+    indicator = _duration_indicator(
+        local_duration, details.duration_seconds if details else None
+    )
+
+    candidates = [
+        {
+            "tmdb_id": details.id,
+            "title": details.title,
+            "original_title": details.original_title,
+            "year": details.year,
+            "overview": details.overview,
+            "poster_url": _poster_url(details.poster_url)
+            if details.poster_url
+            else None,
+            "director": details.director,
+            "tmdb_duration": _format_duration(details.duration_seconds)
+            if details.duration_seconds
+            else None,
+            "tmdb_duration_seconds": details.duration_seconds,
+            "duration_indicator": indicator,
+            "is_current": str(current_tmdb_id) == str(details.id)
+            if current_tmdb_id
+            else False,
+        }
+    ]
+
+    return templates.TemplateResponse(
+        request,
+        "library/_reassociate_results.html",
+        {
+            "candidates": candidates,
+            "entity_id": movie_id,
+            "entity_type": "movie",
+            "local_duration": _format_duration(local_duration),
+            "local_duration_seconds": local_duration,
+        },
+    )
+
+
 @router.post("/movies/{movie_id}/reassociate")
 async def movie_reassociate_apply(
     request: Request,
@@ -181,6 +325,12 @@ async def movie_reassociate_apply(
                 movie.file_path = file_info.get("storage_path") or file_info.get(
                     "symlink_path"
                 )
+
+        # Peupler les métadonnées techniques si manquantes
+        _populate_tech_from_filename(movie)
+
+        # Renommer le symlink si titre/année a changé
+        _rename_symlink_if_needed(movie)
 
         # Marquer comme confirmé (exclure des futurs scans qualité)
         existing = session.exec(
@@ -326,6 +476,96 @@ async def series_reassociate_search(request: Request, series_id: int, q: str = "
     # Trier par proximite du nombre d'episodes
     if local_episodes:
         candidates.sort(key=lambda c: abs((c["nb_episodes"] or 9999) - local_episodes))
+
+    return templates.TemplateResponse(
+        request,
+        "library/_reassociate_results.html",
+        {
+            "candidates": candidates,
+            "entity_id": series_id,
+            "entity_type": "series",
+            "local_duration": None,
+            "local_duration_seconds": None,
+            "local_seasons": local_seasons,
+            "local_episodes": local_episodes,
+        },
+    )
+
+
+@router.get("/series/{series_id}/reassociate/search-id")
+async def series_reassociate_search_by_id(
+    request: Request,
+    series_id: int,
+    id_type: str = Query(...),
+    id_value: str = Query(...),
+):
+    """Recherche par ID externe (TMDB/TVDB/IMDB) pour ré-association série."""
+    container = request.app.state.container
+    validation_service = container.validation_service()
+
+    # Normaliser l'ID IMDB : ajouter le préfixe 'tt' si absent
+    if id_type == "imdb" and id_value.isdigit():
+        id_value = f"tt{id_value}"
+
+    details = await validation_service.search_by_external_id(id_type, id_value)
+
+    if details is None:
+        return HTMLResponse(
+            '<p class="reassociate-empty">'
+            f"Aucun résultat pour {id_type.upper()} ID : <strong>{id_value}</strong>"
+            "</p>"
+        )
+
+    # Récupérer le tmdb_id actuel et les stats locales
+    session = next(get_session())
+    try:
+        series = session.get(SeriesModel, series_id)
+        current_tmdb_id = series.tmdb_id if series else None
+    finally:
+        session.close()
+
+    local_seasons, local_episodes = _get_local_series_counts(series_id)
+
+    # Récupérer nombre de saisons/épisodes TMDB
+    nb_seasons = None
+    nb_episodes = None
+    try:
+        tmdb_client = container.tmdb_client()
+        client = tmdb_client._get_client()
+        from ....adapters.api.retry import request_with_retry
+
+        resp = await request_with_retry(
+            client, "GET", f"/tv/{details.id}", params={"language": "fr-FR"}
+        )
+        tv_data = resp.json()
+        nb_seasons = tv_data.get("number_of_seasons")
+        nb_episodes = tv_data.get("number_of_episodes")
+    except Exception:
+        pass
+
+    indicator = _series_indicator(
+        local_seasons, local_episodes, nb_seasons, nb_episodes
+    )
+
+    candidates = [
+        {
+            "tmdb_id": details.id,
+            "title": details.title,
+            "original_title": details.original_title,
+            "year": details.year,
+            "overview": details.overview,
+            "poster_url": _poster_url(details.poster_url)
+            if details.poster_url
+            else None,
+            "director": details.director,
+            "nb_seasons": nb_seasons,
+            "nb_episodes": nb_episodes,
+            "series_indicator": indicator,
+            "is_current": str(current_tmdb_id) == str(details.id)
+            if current_tmdb_id
+            else False,
+        }
+    ]
 
     return templates.TemplateResponse(
         request,

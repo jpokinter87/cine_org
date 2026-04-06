@@ -159,6 +159,11 @@
                         <span class="lib-file-label">Symlink video</span>
                         <code class="lib-file-path">{{ video_file.symlink_path }}</code>
                     </div>
+                    {% elif movie.symlink_path %}
+                    <div class="lib-file-row">
+                        <span class="lib-file-label">Symlink video</span>
+                        <code class="lib-file-path">{{ movie.symlink_path }}</code>
+                    </div>
                     {% endif %}
                     {# Cas 2 : fichier trouve dans video/ par titre #}
                     {% if file_info %}

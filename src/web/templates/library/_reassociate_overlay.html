@@ -8,22 +8,48 @@
         </div>
 
         <div class="reassociate-search">
-            <div class="reassociate-search-row">
-                <input
-                    type="text"
-                    class="reassociate-search-input"
-                    name="q"
-                    value="{{ title }}"
-                    placeholder="Rechercher un titre..."
-                    hx-get="/library/{{ entity_type ~ 's' if entity_type == 'movie' else entity_type }}/{{ entity_id }}/reassociate/search"
-                    hx-trigger="input changed delay:500ms, keyup[key=='Enter']"
-                    hx-target="#reassociate-results"
-                    hx-indicator="#reassociate-spinner"
-                    autofocus
-                >
-                <div class="reassociate-spinner" id="reassociate-spinner">
-                    <div class="spinner-dot"></div>
+            <div class="reassociate-search-tabs">
+                <button type="button" class="reassociate-tab active" data-tab="title">Par titre</button>
+                <button type="button" class="reassociate-tab" data-tab="id">Par ID</button>
+            </div>
+            <div class="reassociate-tab-content" id="tab-title">
+                <div class="reassociate-search-row">
+                    <input
+                        type="text"
+                        class="reassociate-search-input"
+                        name="q"
+                        value="{{ title }}"
+                        placeholder="Rechercher un titre..."
+                        hx-get="/library/{{ entity_type ~ 's' if entity_type == 'movie' else entity_type }}/{{ entity_id }}/reassociate/search"
+                        hx-trigger="input changed delay:500ms, keyup[key=='Enter']"
+                        hx-target="#reassociate-results"
+                        hx-indicator="#reassociate-spinner"
+                        autofocus
+                    >
+                    <div class="reassociate-spinner" id="reassociate-spinner">
+                        <div class="spinner-dot"></div>
+                    </div>
                 </div>
+            </div>
+            <div class="reassociate-tab-content" id="tab-id" style="display:none;">
+                <form class="reassociate-search-row reassociate-id-form"
+                      hx-get="/library/{{ entity_type ~ 's' if entity_type == 'movie' else entity_type }}/{{ entity_id }}/reassociate/search-id"
+                      hx-target="#reassociate-results"
+                      hx-indicator="#reassociate-spinner-id">
+                    <select name="id_type" class="reassociate-select">
+                        <option value="tmdb">TMDB</option>
+                        <option value="tvdb">TVDB</option>
+                        <option value="imdb">IMDB</option>
+                    </select>
+                    <input type="text" name="id_value" class="reassociate-search-input"
+                           placeholder="ID (ex: tt0235198 ou 19995)" required>
+                    <button type="submit" class="reassociate-id-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    </button>
+                    <div class="reassociate-spinner" id="reassociate-spinner-id">
+                        <div class="spinner-dot"></div>
+                    </div>
+                </form>
             </div>
             {% if local_duration_seconds %}
             <div class="reassociate-local-info">
@@ -59,13 +85,29 @@ document.addEventListener('keydown', function(e) {
 document.getElementById('reassociate-overlay').addEventListener('click', function(e) {
     if (e.target === this) this.remove();
 });
+// Onglets titre / ID
+document.querySelectorAll('.reassociate-tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+        document.querySelectorAll('.reassociate-tab').forEach(function(t) { t.classList.remove('active'); });
+        tab.classList.add('active');
+        var target = tab.getAttribute('data-tab');
+        document.getElementById('tab-title').style.display = target === 'title' ? '' : 'none';
+        document.getElementById('tab-id').style.display = target === 'id' ? '' : 'none';
+        if (target === 'id') {
+            var idInput = document.querySelector('#tab-id input[name="id_value"]');
+            if (idInput) idInput.focus();
+        } else {
+            var titleInput = document.querySelector('#tab-title .reassociate-search-input');
+            if (titleInput) { titleInput.focus(); titleInput.select(); }
+        }
+    });
+});
 // Focus sur l'input et lancer la recherche initiale
 (function() {
-    var input = document.querySelector('.reassociate-search-input');
+    var input = document.querySelector('#tab-title .reassociate-search-input');
     if (input) {
         input.focus();
         input.select();
-        // Lancer la recherche initiale via htmx.ajax
         var url = input.getAttribute('hx-get') + '?q=' + encodeURIComponent(input.value);
         htmx.ajax('GET', url, {target: '#reassociate-results'});
     }

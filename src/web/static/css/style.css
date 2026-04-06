@@ -5745,6 +5745,59 @@ details[open] > .maint-issue-toggle::before {
     font-size: 0.75rem;
     color: var(--text-secondary);
 }
+.reassociate-search-tabs {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 0.75rem;
+}
+.reassociate-tab {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+    font-family: 'DM Sans', sans-serif;
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.reassociate-tab:hover {
+    color: var(--text-primary);
+    border-color: var(--text-secondary);
+}
+.reassociate-tab.active {
+    background: var(--accent-amber);
+    color: var(--bg-base);
+    border-color: var(--accent-amber);
+}
+.reassociate-select {
+    padding: 0.6rem 0.5rem;
+    font-size: 0.85rem;
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    color: var(--text-primary);
+    outline: none;
+    min-width: 5rem;
+}
+.reassociate-select:focus {
+    border-color: var(--accent-amber);
+}
+.reassociate-id-btn {
+    padding: 0.6rem 0.7rem;
+    background: var(--accent-amber);
+    color: var(--bg-base);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: opacity 0.2s;
+}
+.reassociate-id-btn:hover {
+    opacity: 0.85;
+}
 
 .reassociate-spinner {
     display: none;

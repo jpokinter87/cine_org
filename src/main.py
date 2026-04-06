@@ -41,9 +41,24 @@ from .adapters.cli.commands import (
     repair_links,
     validate_app,
 )
+import logging as _logging
+
 from .config import Settings
 from .container import Container
 from .logging_config import configure_logging
+
+
+class _LoguruInterceptHandler(_logging.Handler):
+    """Redirige les logs stdlib (uvicorn) vers loguru."""
+
+    def emit(self, record: _logging.LogRecord) -> None:
+        try:
+            level = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+        logger.opt(depth=6, exception=record.exc_info).log(
+            level, record.getMessage()
+        )
 
 app = typer.Typer(
     name="cineorg",
@@ -182,27 +197,14 @@ def serve(
     access_log: Annotated[bool, typer.Option(help="Activer les logs d'accès HTTP")] = True,
 ) -> None:
     """Lance le serveur web CineOrg."""
-    import logging
-
     import uvicorn
-
-    # Configurer uvicorn pour router ses logs via loguru (horodatage)
-    class _LoguruInterceptHandler(logging.Handler):
-        def emit(self, record: logging.LogRecord) -> None:
-            try:
-                level = logger.level(record.levelname).name
-            except ValueError:
-                level = record.levelno
-            logger.opt(depth=6, exception=record.exc_info).log(
-                level, record.getMessage()
-            )
 
     log_config = {
         "version": 1,
         "disable_existing_loggers": False,
         "handlers": {
             "loguru": {
-                "()": lambda: _LoguruInterceptHandler(),
+                "()": _LoguruInterceptHandler,
             },
         },
         "loggers": {
@@ -213,15 +215,53 @@ def serve(
     }
 
     typer.echo(f"Démarrage du serveur sur {host}:{port} ({workers} worker(s))")
-    uvicorn.run(
-        "src.web.app:app",
-        host=host,
-        port=port,
-        reload=reload,
-        workers=workers,
-        access_log=access_log,
-        log_config=log_config,
-    )
+
+    import os
+    import signal
+    import subprocess
+
+    def _kill_port_holders(target_port: int) -> None:
+        """Tue les process qui occupent encore le port."""
+        try:
+            result = subprocess.run(
+                ["lsof", "-ti", f":{target_port}"],
+                capture_output=True, text=True, timeout=5,
+            )
+            pids = result.stdout.strip().split()
+            my_pid = str(os.getpid())
+            for pid in pids:
+                if pid and pid != my_pid:
+                    try:
+                        os.kill(int(pid), signal.SIGKILL)
+                    except (ProcessLookupError, PermissionError):
+                        pass
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
+    original_sigint = signal.getsignal(signal.SIGINT)
+
+    def _shutdown(signum: int, frame: object) -> None:
+        # Restaurer le handler par défaut pour éviter la boucle
+        signal.signal(signal.SIGINT, original_sigint)
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        _kill_port_holders(port)
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
+
+    try:
+        uvicorn.run(
+            "src.web.app:app",
+            host=host,
+            port=port,
+            reload=reload,
+            workers=workers,
+            access_log=access_log,
+            log_config=log_config,
+        )
+    except SystemExit:
+        _kill_port_holders(port)
 
 
 def main() -> None:
