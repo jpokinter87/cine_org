@@ -37,19 +37,32 @@ _parser = GuessitFilenameParser()
 
 def _populate_tech_from_filename(movie: MovieModel) -> None:
     """Peuple les métadonnées techniques manquantes depuis le nom de fichier."""
-    path = movie.file_path or movie.symlink_path
-    if not path:
+    # Essayer les deux sources : le symlink (nom standardisé) est souvent plus riche
+    paths_to_try = [p for p in (movie.symlink_path, movie.file_path) if p]
+    if not paths_to_try:
         return
-    filename = Path(path).name
-    parsed = _parser.parse(filename)
-    if not movie.codec_video and parsed.video_codec:
-        movie.codec_video = parsed.video_codec
-    if not movie.codec_audio and parsed.audio_codec:
-        movie.codec_audio = parsed.audio_codec
-    if not movie.resolution and parsed.resolution:
-        movie.resolution = parsed.resolution
-    if not movie.languages_json and parsed.language:
-        langs = [parsed.language] if isinstance(parsed.language, str) else list(parsed.language)
+
+    best_parsed = None
+    best_score = -1
+    for path in paths_to_try:
+        parsed = _parser.parse(Path(path).name)
+        score = sum(1 for v in (parsed.video_codec, parsed.audio_codec,
+                                parsed.resolution, parsed.language) if v)
+        if score > best_score:
+            best_score = score
+            best_parsed = parsed
+
+    if not best_parsed:
+        return
+
+    if not movie.codec_video and best_parsed.video_codec:
+        movie.codec_video = best_parsed.video_codec
+    if not movie.codec_audio and best_parsed.audio_codec:
+        movie.codec_audio = best_parsed.audio_codec
+    if not movie.resolution and best_parsed.resolution:
+        movie.resolution = best_parsed.resolution
+    if not movie.languages_json and best_parsed.language:
+        langs = [best_parsed.language] if isinstance(best_parsed.language, str) else list(best_parsed.language)
         movie.languages_json = json.dumps(langs)
 
 def _rename_symlink_if_needed(movie: MovieModel) -> None:
