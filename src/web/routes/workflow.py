@@ -147,6 +147,10 @@ async def _run_web_workflow(
 
         created_video_file_ids: list[str] = []
 
+        # Cache mémoire pour éviter les recherches API redondantes
+        # quand plusieurs épisodes/saisons de la même série sont dans le batch
+        series_cache: dict[tuple[str, int | None], list] = {}
+
         for i, result in enumerate(scan_results):
             progress.current = i + 1
             progress.filename = result.video_file.filename
@@ -154,7 +158,11 @@ async def _run_web_workflow(
 
             # Rechercher les candidats via API
             video_file, pending = await create_pending_validation(
-                result, matcher, tmdb_client, tvdb_client
+                result,
+                matcher,
+                tmdb_client,
+                tvdb_client,
+                series_cache=series_cache,
             )
 
             # Sauvegarder
@@ -202,7 +210,8 @@ async def _run_web_workflow(
 
         # Compter les pending restants (PENDING uniquement, pas VALIDATED)
         remaining = [
-            p for p in validation_service.list_pending()
+            p
+            for p in validation_service.list_pending()
             if p.validation_status == ValidationStatus.PENDING
         ]
         progress.pending_remaining = len(remaining)
@@ -231,6 +240,7 @@ async def _run_web_workflow(
 # ═══════════════════════════════════════
 # Routes
 # ═══════════════════════════════════════
+
 
 @router.get("/", response_class=HTMLResponse)
 async def workflow_index(request: Request):
@@ -279,9 +289,7 @@ async def workflow_start(
     request.app.state.workflow_progress = progress
 
     # Lancer le workflow en arrière-plan
-    task = asyncio.create_task(
-        _run_web_workflow(container, filter_type, progress)
-    )
+    task = asyncio.create_task(_run_web_workflow(container, filter_type, progress))
     request.app.state.workflow_task = task
 
     # Retourner le fragment qui active le suivi SSE
@@ -325,22 +333,25 @@ async def workflow_progress_sse(request: Request):
         # Envoyer le résultat final
         if progress.error:
             yield (
-                f'event: error\n'
+                f"event: error\n"
                 f'data: {{"message": "{_escape_json(progress.error)}"}}\n\n'
             )
         else:
-            complete_data = json.dumps({
-                "scanned": progress.scanned,
-                "auto_validated": progress.auto_validated,
-                "pending_remaining": progress.pending_remaining,
-                "undersized_ignored": progress.undersized_ignored,
-                "orphans_cleaned": progress.orphans_cleaned,
-                "scanned_files": progress.scanned_files,
-                "auto_validated_files": progress.auto_validated_files,
-                "pending_files": progress.pending_files,
-                "undersized_files": progress.undersized_files,
-            }, ensure_ascii=False)
-            yield f'event: complete\ndata: {complete_data}\n\n'
+            complete_data = json.dumps(
+                {
+                    "scanned": progress.scanned,
+                    "auto_validated": progress.auto_validated,
+                    "pending_remaining": progress.pending_remaining,
+                    "undersized_ignored": progress.undersized_ignored,
+                    "orphans_cleaned": progress.orphans_cleaned,
+                    "scanned_files": progress.scanned_files,
+                    "auto_validated_files": progress.auto_validated_files,
+                    "pending_files": progress.pending_files,
+                    "undersized_files": progress.undersized_files,
+                },
+                ensure_ascii=False,
+            )
+            yield f"event: complete\ndata: {complete_data}\n\n"
 
     return StreamingResponse(
         event_stream(),
@@ -359,12 +370,8 @@ async def workflow_reset(request: Request):
     container = request.app.state.container
     session = container.pending_validation_repository()._session
 
-    pending_count = session.exec(
-        select(PendingValidationModel)
-    ).all()
-    video_count = session.exec(
-        select(VideoFileModel)
-    ).all()
+    pending_count = session.exec(select(PendingValidationModel)).all()
+    video_count = session.exec(select(VideoFileModel)).all()
 
     session.exec(delete(PendingValidationModel))
     session.exec(delete(VideoFileModel))

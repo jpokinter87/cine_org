@@ -13,8 +13,13 @@ import pytest
 
 from src.core.entities.video import PendingValidation, ValidationStatus, VideoFile
 from src.core.ports.api_clients import SearchResult
+from src.core.value_objects.parsed_info import MediaType, ParsedFilename
+from src.services.scanner import ScanResult
 from src.services.workflow import WorkflowService, WorkflowState
-from src.services.workflow.pending_factory import filter_by_episode_count
+from src.services.workflow.pending_factory import (
+    create_pending_validation,
+    filter_by_episode_count,
+)
 
 
 def _make_pending(
@@ -60,7 +65,9 @@ class TestAutoValidateSeriesEpisodes:
     @pytest.mark.asyncio
     async def test_auto_validates_only_same_series(self, workflow: WorkflowService):
         """Seuls les fichiers ayant le même candidat TVDB sont auto-validés."""
-        shield_candidate = _make_candidate_dict("tvdb-shield", "Marvel's Agents of S.H.I.E.L.D.")
+        shield_candidate = _make_candidate_dict(
+            "tvdb-shield", "Marvel's Agents of S.H.I.E.L.D."
+        )
         hpi_candidate = _make_candidate_dict("tvdb-hpi", "HPI")
 
         pend_shield_e22 = _make_pending("1", "shield.s03e22.mkv", [shield_candidate])
@@ -71,7 +78,9 @@ class TestAutoValidateSeriesEpisodes:
         processed_ids: set[str] = set()
         state = WorkflowState()
 
-        candidate = SearchResult(id="tvdb-shield", title="Marvel's Agents of S.H.I.E.L.D.", source="tvdb")
+        candidate = SearchResult(
+            id="tvdb-shield", title="Marvel's Agents of S.H.I.E.L.D.", source="tvdb"
+        )
 
         await workflow._auto_validate_series_episodes(
             pend_shield_e22, candidate, remaining, processed_ids, state
@@ -84,14 +93,18 @@ class TestAutoValidateSeriesEpisodes:
         workflow._validation_service.validate_candidate.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_no_auto_validate_when_no_matching_candidate(self, workflow: WorkflowService):
+    async def test_no_auto_validate_when_no_matching_candidate(
+        self, workflow: WorkflowService
+    ):
         """Aucun fichier auto-validé si aucun n'a le candidat dans ses candidats."""
-        pend_main = _make_pending("1", "shield.s03e22.mkv", [
-            _make_candidate_dict("tvdb-shield", "Shield")
-        ])
-        pend_other = _make_pending("2", "alexandre.e01.avi", [
-            _make_candidate_dict("tvdb-alex", "Alexandre Le Grand")
-        ])
+        pend_main = _make_pending(
+            "1", "shield.s03e22.mkv", [_make_candidate_dict("tvdb-shield", "Shield")]
+        )
+        pend_other = _make_pending(
+            "2",
+            "alexandre.e01.avi",
+            [_make_candidate_dict("tvdb-alex", "Alexandre Le Grand")],
+        )
 
         remaining = [pend_main, pend_other]
         processed_ids: set[str] = set()
@@ -108,16 +121,24 @@ class TestAutoValidateSeriesEpisodes:
         workflow._validation_service.validate_candidate.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_uses_matching_candidate_from_other_list(self, workflow: WorkflowService):
+    async def test_uses_matching_candidate_from_other_list(
+        self, workflow: WorkflowService
+    ):
         """Utilise le candidat correspondant de la liste de l'autre fichier (pas l'original)."""
-        pend_main = _make_pending("1", "shield.s03e22.mkv", [
-            _make_candidate_dict("tvdb-shield", "Shield", score=67.0)
-        ])
+        pend_main = _make_pending(
+            "1",
+            "shield.s03e22.mkv",
+            [_make_candidate_dict("tvdb-shield", "Shield", score=67.0)],
+        )
         # L'autre fichier a le même candidat mais avec un score différent
-        pend_other = _make_pending("2", "shield.s03e21.mkv", [
-            _make_candidate_dict("tvdb-shield", "Shield", score=70.0),
-            _make_candidate_dict("tvdb-other", "Other Show", score=30.0),
-        ])
+        pend_other = _make_pending(
+            "2",
+            "shield.s03e21.mkv",
+            [
+                _make_candidate_dict("tvdb-shield", "Shield", score=70.0),
+                _make_candidate_dict("tvdb-other", "Other Show", score=30.0),
+            ],
+        )
 
         remaining = [pend_main, pend_other]
         processed_ids: set[str] = set()
@@ -156,19 +177,30 @@ class TestAutoValidateSeriesEpisodes:
         workflow._validation_service.validate_candidate.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_all_same_folder_different_series_not_validated(self, workflow: WorkflowService):
+    async def test_all_same_folder_different_series_not_validated(
+        self, workflow: WorkflowService
+    ):
         """Des fichiers dans le même dossier mais de séries différentes ne sont PAS auto-validés."""
         same_folder = "/downloads/series"
 
-        pend_shield = _make_pending("1", "shield.s03e22.mkv", [
-            _make_candidate_dict("tvdb-shield", "Shield")
-        ], folder=same_folder)
-        pend_hpi = _make_pending("2", "hpi.s01e01.mkv", [
-            _make_candidate_dict("tvdb-hpi", "HPI")
-        ], folder=same_folder)
-        pend_andor = _make_pending("3", "andor.s02e01.mkv", [
-            _make_candidate_dict("tvdb-andor", "Andor")
-        ], folder=same_folder)
+        pend_shield = _make_pending(
+            "1",
+            "shield.s03e22.mkv",
+            [_make_candidate_dict("tvdb-shield", "Shield")],
+            folder=same_folder,
+        )
+        pend_hpi = _make_pending(
+            "2",
+            "hpi.s01e01.mkv",
+            [_make_candidate_dict("tvdb-hpi", "HPI")],
+            folder=same_folder,
+        )
+        pend_andor = _make_pending(
+            "3",
+            "andor.s02e01.mkv",
+            [_make_candidate_dict("tvdb-andor", "Andor")],
+            folder=same_folder,
+        )
 
         remaining = [pend_shield, pend_hpi, pend_andor]
         processed_ids: set[str] = set()
@@ -196,9 +228,7 @@ class TestFilterByEpisodeCount:
         return client
 
     @pytest.mark.asyncio
-    async def test_eliminates_candidate_when_episode_exceeds_count(
-        self, tvdb_client
-    ):
+    async def test_eliminates_candidate_when_episode_exceeds_count(self, tvdb_client):
         """Un candidat avec episode > count est elimine."""
         tvdb_client.get_season_episode_count.return_value = 10
 
@@ -206,14 +236,14 @@ class TestFilterByEpisodeCount:
             SearchResult(id="111", title="Serie A", score=67.0, source="tvdb"),
         ]
 
-        result = await filter_by_episode_count(tvdb_client, candidates, season=3, episode=22)
+        result = await filter_by_episode_count(
+            tvdb_client, candidates, season=3, episode=22
+        )
 
         assert len(result) == 0
 
     @pytest.mark.asyncio
-    async def test_keeps_candidate_when_episode_within_count(
-        self, tvdb_client
-    ):
+    async def test_keeps_candidate_when_episode_within_count(self, tvdb_client):
         """Un candidat avec episode <= count est conserve."""
         tvdb_client.get_season_episode_count.return_value = 22
 
@@ -221,15 +251,15 @@ class TestFilterByEpisodeCount:
             SearchResult(id="111", title="Serie A", score=67.0, source="tvdb"),
         ]
 
-        result = await filter_by_episode_count(tvdb_client, candidates, season=3, episode=22)
+        result = await filter_by_episode_count(
+            tvdb_client, candidates, season=3, episode=22
+        )
 
         assert len(result) == 1
         assert result[0].id == "111"
 
     @pytest.mark.asyncio
-    async def test_keeps_candidate_when_season_not_found(
-        self, tvdb_client
-    ):
+    async def test_keeps_candidate_when_season_not_found(self, tvdb_client):
         """Un candidat dont la saison n'existe pas (None) est conserve par precaution."""
         tvdb_client.get_season_episode_count.return_value = None
 
@@ -237,13 +267,16 @@ class TestFilterByEpisodeCount:
             SearchResult(id="111", title="Serie A", score=67.0, source="tvdb"),
         ]
 
-        result = await filter_by_episode_count(tvdb_client, candidates, season=99, episode=1)
+        result = await filter_by_episode_count(
+            tvdb_client, candidates, season=99, episode=1
+        )
 
         assert len(result) == 1
 
     @pytest.mark.asyncio
     async def test_filters_mixed_candidates(self, tvdb_client):
         """Parmi plusieurs candidats, ceux incompatibles (episode > count) sont elimines."""
+
         async def mock_count(series_id, season):
             if series_id == "111":
                 return 22  # compatible (episode 22 <= 22)
@@ -260,7 +293,9 @@ class TestFilterByEpisodeCount:
             SearchResult(id="333", title="Serie C", score=60.0, source="tvdb"),
         ]
 
-        result = await filter_by_episode_count(tvdb_client, candidates, season=3, episode=22)
+        result = await filter_by_episode_count(
+            tvdb_client, candidates, season=3, episode=22
+        )
 
         # Serie A (compatible) et Serie C (count=None, conservee par precaution)
         assert len(result) == 2
@@ -289,7 +324,9 @@ class TestFilterByEpisodeCount:
             SearchResult(id="111", title="Serie A", score=90.0, source="tvdb"),
         ]
 
-        result = await filter_by_episode_count(tvdb_client, candidates, season=3, episode=22)
+        result = await filter_by_episode_count(
+            tvdb_client, candidates, season=3, episode=22
+        )
 
         # En cas d'erreur, on conserve le candidat par precaution
         assert len(result) == 1
@@ -297,6 +334,7 @@ class TestFilterByEpisodeCount:
     @pytest.mark.asyncio
     async def test_keeps_all_compatible_candidates(self, tvdb_client):
         """Tous les candidats compatibles (episode <= count) sont conserves."""
+
         async def mock_count(series_id, season):
             if series_id == "star-crossed":
                 return 13
@@ -308,7 +346,9 @@ class TestFilterByEpisodeCount:
 
         candidates = [
             SearchResult(id="crossed", title="Crossed", score=75.0, source="tvdb"),
-            SearchResult(id="star-crossed", title="Star-Crossed", score=70.0, source="tvdb"),
+            SearchResult(
+                id="star-crossed", title="Star-Crossed", score=70.0, source="tvdb"
+            ),
         ]
 
         result = await filter_by_episode_count(
@@ -316,3 +356,200 @@ class TestFilterByEpisodeCount:
         )
 
         assert len(result) == 2
+
+
+def _make_scan_result(
+    title: str,
+    season: int,
+    episode: int,
+    year: int | None = 2022,
+) -> ScanResult:
+    """Crée un ScanResult de série pour les tests."""
+    return ScanResult(
+        video_file=VideoFile(
+            path=Path(f"/downloads/{title}.S{season:02d}E{episode:02d}.mkv"),
+        ),
+        parsed_info=ParsedFilename(
+            title=title,
+            year=year,
+            season=season,
+            episode=episode,
+            media_type=MediaType.SERIES,
+        ),
+        detected_type=MediaType.SERIES,
+        source_directory="Series",
+        corrected_location=False,
+    )
+
+
+class TestSeriesCache:
+    """Tests pour le cache mémoire série dans create_pending_validation."""
+
+    @pytest.fixture
+    def tvdb_client(self) -> MagicMock:
+        """Client TVDB mocké retournant des résultats pour 'From'."""
+        client = MagicMock()
+        client._api_key = "fake-key"
+        client.search = AsyncMock(
+            return_value=[
+                SearchResult(id="374506", title="From", year=2022, source="tvdb"),
+            ]
+        )
+        client.get_season_episode_count = AsyncMock(return_value=10)
+        return client
+
+    @pytest.fixture
+    def matcher(self) -> MagicMock:
+        """Matcher mocké qui retourne les résultats tels quels avec score."""
+        m = MagicMock()
+        m.score_results.return_value = [
+            SearchResult(
+                id="374506", title="From", year=2022, score=100.0, source="tvdb"
+            ),
+        ]
+        return m
+
+    @pytest.mark.asyncio
+    async def test_cache_avoids_repeated_search_same_season(self, tvdb_client, matcher):
+        """Plusieurs épisodes de la même saison ne déclenchent qu'une seule recherche API."""
+        series_cache: dict[tuple[str, int | None], list] = {}
+
+        for ep in range(1, 6):
+            scan = _make_scan_result("From", season=1, episode=ep)
+            await create_pending_validation(
+                scan,
+                matcher,
+                None,
+                tvdb_client,
+                series_cache=series_cache,
+            )
+
+        # search() et score_results() appelés une seule fois
+        tvdb_client.search.assert_called_once_with("From", year=2022)
+        matcher.score_results.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_cache_avoids_repeated_search_across_seasons(
+        self, tvdb_client, matcher
+    ):
+        """Épisodes de saisons différentes partagent le même cache de recherche."""
+        series_cache: dict[tuple[str, int | None], list] = {}
+
+        episodes = [
+            ("From", 1, 1),
+            ("From", 1, 5),
+            ("From", 2, 1),
+            ("From", 2, 8),
+            ("From", 3, 1),
+        ]
+        for title, season, ep in episodes:
+            scan = _make_scan_result(title, season=season, episode=ep)
+            await create_pending_validation(
+                scan,
+                matcher,
+                None,
+                tvdb_client,
+                series_cache=series_cache,
+            )
+
+        # Recherche unique malgré 3 saisons différentes
+        tvdb_client.search.assert_called_once()
+        matcher.score_results.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_filter_by_episode_count_still_called_per_episode(
+        self, tvdb_client, matcher
+    ):
+        """Le filtrage par episode count est toujours fait par épisode (dépend de la saison)."""
+        series_cache: dict[tuple[str, int | None], list] = {}
+
+        for ep in range(1, 4):
+            scan = _make_scan_result("From", season=1, episode=ep)
+            await create_pending_validation(
+                scan,
+                matcher,
+                None,
+                tvdb_client,
+                series_cache=series_cache,
+            )
+
+        # get_season_episode_count appelé pour chaque épisode (vérification par saison)
+        assert tvdb_client.get_season_episode_count.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_different_series_not_mixed_in_cache(self, tvdb_client, matcher):
+        """Deux séries différentes ont des entrées de cache distinctes."""
+
+        # Configurer des réponses différentes par titre
+        async def mock_search(title, year=None):
+            if "From" in title:
+                return [
+                    SearchResult(id="374506", title="From", year=2022, source="tvdb")
+                ]
+            return [SearchResult(id="999", title="Lost", year=2004, source="tvdb")]
+
+        tvdb_client.search = AsyncMock(side_effect=mock_search)
+
+        def mock_score(results, title, year, duration, is_series=False):
+            return [
+                SearchResult(
+                    id=results[0].id,
+                    title=results[0].title,
+                    year=results[0].year,
+                    score=100.0,
+                    source="tvdb",
+                )
+            ]
+
+        matcher.score_results.side_effect = mock_score
+
+        series_cache: dict[tuple[str, int | None], list] = {}
+
+        scan_from = _make_scan_result("From", season=1, episode=1, year=2022)
+        scan_lost = _make_scan_result("Lost", season=1, episode=1, year=2004)
+        scan_from2 = _make_scan_result("From", season=2, episode=1, year=2022)
+
+        vf1, p1 = await create_pending_validation(
+            scan_from,
+            matcher,
+            None,
+            tvdb_client,
+            series_cache=series_cache,
+        )
+        vf2, p2 = await create_pending_validation(
+            scan_lost,
+            matcher,
+            None,
+            tvdb_client,
+            series_cache=series_cache,
+        )
+        vf3, p3 = await create_pending_validation(
+            scan_from2,
+            matcher,
+            None,
+            tvdb_client,
+            series_cache=series_cache,
+        )
+
+        # 2 recherches : From + Lost (pas 3)
+        assert tvdb_client.search.call_count == 2
+        # From et Lost ont des candidats différents
+        assert p1.candidates[0]["id"] == "374506"
+        assert p2.candidates[0]["id"] == "999"
+        assert p3.candidates[0]["id"] == "374506"
+
+    @pytest.mark.asyncio
+    async def test_without_cache_search_repeated(self, tvdb_client, matcher):
+        """Sans series_cache, chaque épisode déclenche une recherche."""
+        for ep in range(1, 4):
+            scan = _make_scan_result("From", season=1, episode=ep)
+            await create_pending_validation(
+                scan,
+                matcher,
+                None,
+                tvdb_client,
+            )
+
+        # 3 appels search sans cache
+        assert tvdb_client.search.call_count == 3
+        assert matcher.score_results.call_count == 3

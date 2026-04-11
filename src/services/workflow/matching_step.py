@@ -28,7 +28,9 @@ class MatchingStepMixin:
 
         Crée les enregistrements VideoFile et PendingValidation.
         """
-        self._console.print("\n[bold cyan]Étape 2/4: Matching avec les APIs[/bold cyan]\n")
+        self._console.print(
+            "\n[bold cyan]Étape 2/4: Matching avec les APIs[/bold cyan]\n"
+        )
 
         pending_repo = self._container.pending_validation_repository()
         video_file_repo = self._container.video_file_repository()
@@ -42,6 +44,10 @@ class MatchingStepMixin:
                 if pi.title and pi.season is not None and pi.episode is not None:
                     key = (pi.title.lower(), pi.season)
                     max_ep_map[key] = max(max_ep_map.get(key, 0), pi.episode)
+
+        # Cache mémoire pour éviter les recherches API redondantes
+        # quand plusieurs épisodes/saisons de la même série sont dans le batch
+        series_cache: dict[tuple[str, int | None], list] = {}
 
         with Progress(
             SpinnerColumn(),
@@ -68,7 +74,7 @@ class MatchingStepMixin:
 
                 # Créer VideoFile et PendingValidation
                 video_file, pending = await self._create_pending_validation(
-                    result, max_ep
+                    result, max_ep, series_cache
                 )
 
                 saved_vf = video_file_repo.save(video_file)
@@ -85,7 +91,10 @@ class MatchingStepMixin:
         )
 
     async def _create_pending_validation(
-        self, scan_result, max_episode_in_batch: Optional[int] = None
+        self,
+        scan_result,
+        max_episode_in_batch: Optional[int] = None,
+        series_cache: Optional[dict] = None,
     ) -> tuple:
         """
         Crée un VideoFile et PendingValidation à partir d'un résultat de scan.
@@ -98,6 +107,7 @@ class MatchingStepMixin:
             self._tmdb_client,
             self._tvdb_client,
             max_episode_in_batch,
+            series_cache,
         )
 
     async def _auto_validate(self, state: WorkflowState) -> None:
@@ -128,7 +138,9 @@ class MatchingStepMixin:
                     state.auto_validated_count += 1
                 progress.advance(auto_task)
 
-        self._console.print(f"[bold]{state.auto_validated_count}[/bold] fichier(s) auto-validé(s)")
+        self._console.print(
+            f"[bold]{state.auto_validated_count}[/bold] fichier(s) auto-validé(s)"
+        )
 
     async def _manual_validate(self, state: WorkflowState) -> None:
         """
@@ -139,7 +151,8 @@ class MatchingStepMixin:
         from src.adapters.cli.validation import validation_loop
 
         remaining = [
-            p for p in self._validation_service.list_pending()
+            p
+            for p in self._validation_service.list_pending()
             if p.validation_status == ValidationStatus.PENDING and not p.auto_validated
         ]
 

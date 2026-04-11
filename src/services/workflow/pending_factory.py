@@ -19,6 +19,7 @@ async def create_pending_validation(
     tmdb_client,
     tvdb_client,
     max_episode_in_batch: Optional[int] = None,
+    series_cache: Optional[dict[tuple[str, Optional[int]], list]] = None,
 ) -> tuple[VideoFile, PendingValidation]:
     """
     Crée un VideoFile et PendingValidation à partir d'un résultat de scan.
@@ -32,6 +33,9 @@ async def create_pending_validation(
         tmdb_client: Client TMDB (films)
         tvdb_client: Client TVDB (séries)
         max_episode_in_batch: Numéro max d'épisode dans le batch (CLI uniquement)
+        series_cache: Cache mémoire partagé entre appels pour éviter les
+            recherches API redondantes sur le même titre de série.
+            Clé = (titre_lower, année), valeur = candidats scorés.
 
     Returns:
         Tuple (VideoFile, PendingValidation)
@@ -52,7 +56,7 @@ async def create_pending_validation(
         )
     else:
         candidates = await _search_and_score_series(
-            title, year, matcher, tvdb_client
+            title, year, matcher, tvdb_client, series_cache
         )
 
         # Filtrer les candidats incompatibles par nombre d'épisodes
@@ -145,9 +149,24 @@ async def _search_and_score_movie(
 
 
 async def _search_and_score_series(
-    title: str, year: Optional[int], matcher, tvdb_client
+    title: str,
+    year: Optional[int],
+    matcher,
+    tvdb_client,
+    series_cache: Optional[dict[tuple[str, Optional[int]], list]] = None,
 ) -> list:
-    """Recherche et score les séries via TVDB."""
+    """Recherche et score les séries via TVDB.
+
+    Utilise un cache mémoire par (titre, année) pour éviter les recherches
+    API et le scoring redondants quand plusieurs épisodes de la même série
+    sont traités dans le même batch.
+    """
+    # Vérifier le cache mémoire (recherche + scoring déjà faits pour ce titre)
+    cache_key = (title.lower(), year) if title else None
+    if series_cache is not None and cache_key and cache_key in series_cache:
+        logger.debug(f"Cache mémoire série hit pour '{title}' ({year})")
+        return series_cache[cache_key]
+
     candidates = []
 
     if not tvdb_client or not getattr(tvdb_client, "_api_key", None):
@@ -160,6 +179,10 @@ async def _search_and_score_series(
         )
     except Exception as e:
         logger.warning(f"Erreur TVDB pour {title}: {e}")
+
+    # Stocker dans le cache mémoire pour les prochains épisodes
+    if series_cache is not None and cache_key:
+        series_cache[cache_key] = candidates
 
     return candidates
 
@@ -194,9 +217,7 @@ async def filter_by_episode_count(
     compatible = []
     for candidate in candidates:
         try:
-            count = await tvdb_client.get_season_episode_count(
-                candidate.id, season
-            )
+            count = await tvdb_client.get_season_episode_count(candidate.id, season)
             if count is not None and episode <= count:
                 compatible.append(candidate)
             elif count is None:
