@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.core.entities.media import Movie, Series
+from src.services.renamer import sanitize_for_filesystem
 from src.utils.constants import GENRE_HIERARCHY, GENRE_FOLDER_MAPPING
 from src.utils.helpers import normalize_accents as _normalize_accents
 from src.utils.helpers import strip_article as _strip_article  # noqa: F401
@@ -122,9 +123,20 @@ def get_priority_genre(genres: tuple[str, ...]) -> str:
     if _has_comedie and _has_drame:
         # Genres protégés : priment sur la règle combinatoire
         _PROTECTED_GENRES = {
-            "Animation", "Science-Fiction", "Fantastique", "Horreur",
-            "Action", "Aventure", "Guerre", "Histoire", "Western",
-            "Crime", "Mystere", "Famille", "Musique", "Documentaire",
+            "Animation",
+            "Science-Fiction",
+            "Fantastique",
+            "Horreur",
+            "Action",
+            "Aventure",
+            "Guerre",
+            "Histoire",
+            "Western",
+            "Crime",
+            "Mystere",
+            "Famille",
+            "Musique",
+            "Documentaire",
         }
         for priority_genre in GENRE_HIERARCHY:
             if priority_genre in genres and priority_genre in _PROTECTED_GENRES:
@@ -581,11 +593,12 @@ def get_series_video_destination(
     # Type de série basé sur les genres
     series_type = get_series_type(series.genres)
 
-    # Dossier de la série
+    # Dossier de la série (titre nettoyé pour le filesystem)
+    clean_title = sanitize_for_filesystem(series.title)
     if series.year:
-        series_folder = f"{series.title} ({series.year})"
+        series_folder = f"{clean_title} ({series.year})"
     else:
-        series_folder = series.title
+        series_folder = clean_title
 
     # Dossier de la saison
     season_folder = f"Saison {season_number:02d}"
