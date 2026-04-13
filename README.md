@@ -2,6 +2,11 @@
 
 Application de gestion de vidéothèque personnelle. Scanne les téléchargements, identifie les contenus via TMDB/TVDB, renomme et organise les fichiers selon un format standardisé, et crée des symlinks pour le mediacenter.
 
+> 📖 **Documentation détaillée** dans [`docs/`](docs/) :
+> - [docs/architecture.md](docs/architecture.md) — Architecture hexagonale, DI, persistance, pipeline
+> - [docs/association.md](docs/association.md) — Pipeline d'association et de réassociation TMDB/TVDB
+> - [docs/hardlinks.md](docs/hardlinks.md) — Seeding via hardlinks et purge
+
 ## Table des matières
 
 - [Installation](#installation)
@@ -15,15 +20,19 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Zone de staging](#zone-de-staging)
   - [Validation automatique et manuelle](#validation-automatique-et-manuelle)
   - [Détection des doublons](#détection-des-doublons)
+  - [Hardlinks et seeding](#hardlinks-et-seeding)
+  - [Sandbox des orphelins](#sandbox-des-orphelins)
 - [Peupler la base de données séries](#peupler-la-base-de-données-séries)
 - [Notes et évaluations](#notes-et-évaluations)
   - [Notes TMDB](#notes-tmdb)
   - [Notes IMDb](#notes-imdb)
 - [Commandes](#commandes)
+  - [Enrichissement](#enrichissement)
   - [Nettoyage et réorganisation](#nettoyage-et-réorganisation)
   - [Regroupement par préfixe de titre](#regroupement-par-préfixe-de-titre)
   - [Réparation des symlinks cassés](#réparation-des-symlinks-cassés)
   - [Consolidation des fichiers externes](#consolidation-des-fichiers-externes)
+  - [Purge des hardlinks](#purge-des-hardlinks)
 - [Format de nommage](#format-de-nommage)
 - [Interface web](#interface-web)
   - [Lancement du serveur](#lancement-du-serveur)
@@ -35,6 +44,8 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Lecteur vidéo intégré](#lecteur-vidéo-intégré)
   - [Traitement et validation](#traitement-et-validation)
   - [Transfert](#transfert)
+  - [Qualité et doublons](#qualité-et-doublons)
+  - [Corbeille](#corbeille)
   - [Maintenance](#maintenance)
   - [Configuration](#configuration-web)
 - [Stack technique](#stack-technique)
@@ -111,6 +122,8 @@ EOF
 | `CINEORG_MIN_FILE_SIZE_MB` | `100` | Taille minimum en MB |
 | `CINEORG_MATCH_SCORE_THRESHOLD` | `85` | Seuil de validation auto (%) |
 | `CINEORG_MAX_FILES_PER_SUBDIR` | `50` | Max fichiers par sous-dossier |
+| `CINEORG_HARDLINK_RETENTION_DAYS` | `30` | TTL des hardlinks de seeding (jours) |
+| `CINEORG_SANDBOX_DIR` | `{storage}/.sandbox` | Sandbox orphelins (même volume que storage) |
 | `CINEORG_LOG_LEVEL` | `INFO` | Niveau de log (DEBUG, INFO, WARNING, ERROR) |
 
 ## Architecture
@@ -310,25 +323,30 @@ Téléchargements/
     Films/ ou Series/
          └── [fichiers vidéo]
               ↓
-         Scanner (chemin, taille, nom)
+         Scanner (taille, extensions, patterns ignorés, st_nlink > 1)
               ↓
          Parser (guessit + mediainfo)
-         (titre, année, épisode, codecs, langues)
+         (titre, année, épisode, codecs, langues, durée)
               ↓
-         Matcher (recherche TMDB/TVDB, scoring)
+         Matcher (recherche TMDB/TVDB, cache série, scoring)
               ↓
          Validation
-              ├─ Score ≥ 85% + candidat unique → AUTO-VALIDATION
-              ├─ Score ≥ 95% + plusieurs candidats → AUTO-VALIDATION (haute confiance)
+              ├─ Score ≥ 85% ET candidat unique → AUTO-VALIDATION
               └─ Sinon → STAGING (validation manuelle requise)
               ↓
-         Transfert
-              ├─ Vérification conflits (hash SHA-256)
-              ├─ Déplacement atomique → storage/
-              └─ Création symlink → video/
+         Détection doublons pré-transfert (résolution dialog)
+              ↓
+         Transfert atomique
+              ├─ Déplacement → storage/
+              ├─ Création symlink → video/
+              └─ Hardlink seeding downloads/ ↔ storage/ (non bloquant cross-device)
+              ↓
+         Enrichissement (collections, notes, IMDb IDs, credits…)
               ↓
          Bibliothèque organisée
 ```
+
+> 📖 Détail complet du pipeline : [docs/association.md](docs/association.md).
 
 ### Zone de staging
 
@@ -336,10 +354,9 @@ La zone de staging est un **espace temporaire** pour les fichiers nécessitant u
 
 #### Quand un fichier va en staging
 
-- Score de correspondance < 85%
-- Plusieurs candidats avec scores similaires (< 95% pour le meilleur)
-- Aucun candidat trouvé
-- Conflit détecté avec contenu existant
+- Score de correspondance < 85 %.
+- Plusieurs candidats au-dessus du seuil (ambiguïté à trancher manuellement).
+- Aucun candidat trouvé.
 
 #### Commandes staging
 
@@ -357,9 +374,9 @@ uv run cineorg validate manual
 
 | Condition | Action |
 |-----------|--------|
-| 1 candidat, score ≥ 85% | Auto-validation |
-| Plusieurs candidats, meilleur score ≥ 95% | Auto-validation (haute confiance) |
-| Sinon | Validation manuelle requise |
+| Score ≥ 85 % **ET** candidat unique | Auto-validation |
+| Plusieurs candidats au-dessus du seuil | Validation manuelle (ambiguïté) |
+| Aucun candidat / score < 85 % | Validation manuelle |
 
 #### Formule de scoring
 
@@ -372,59 +389,71 @@ Sans durée (fallback) :
   Score = 67% × titre + 33% × année
 
 Où :
-- titre : similarité token_sort_ratio (indépendant de l'ordre des mots)
-- année : 100% si ±1 an, puis -25% par année d'écart
-- durée : 100% si ±10%, puis -50% par tranche de 10%
+- titre : token_sort_ratio avec normalisation accents/ligatures, bilingue (localisé ET original)
+- année : 1.0 si exact, 0.5 si ±1 an, 0 au-delà
+- durée : 1.0 si ±10%, 0.5 si ±20%, 0 au-delà
 ```
 
 **Séries :**
 ```
-Score = 100% × titre (similarité uniquement)
+Score = 100% × titre (avec filtrage par nombre d'épisodes compatible)
 ```
 
 #### Matching bilingue
 
 Pour les films, le système compare le titre recherché avec **le titre localisé ET le titre original**, gardant le meilleur score. Cela gère les cas comme :
-- Recherche "Kill Bill" → Candidat "Kill Bill Vol. 1" (japonais: "キル・ビル")
+- Recherche "Kill Bill" → Candidat "Kill Bill Vol. 1" (japonais : "キル・ビル")
 
 ### Détection des doublons
 
-#### Types de conflits
+La détection des doublons est effectuée **avant** le transfert. Un dialogue overlay dans le résumé batch propose une décision pour chaque conflit, avec cascade par série.
 
-| Type | Description | Action |
-|------|-------------|--------|
-| `DUPLICATE` | Même fichier (hash identique) | Skip automatique |
-| `NAME_COLLISION` | Même chemin, contenu différent | Demande utilisateur |
-| `SIMILAR_CONTENT` | Titre similaire, peut-être même média | Comparaison affichée |
+**Critères de détection** :
 
-#### Détection de contenu similaire
+- Titre normalisé (articles Le/La/The/A ignorés, accents retirés, ponctuation).
+- Année exacte.
+- Pour les séries : saison + épisode déjà présents en DB (les saisons partielles sont respectées).
 
-Le système détecte les cas subtils :
-- "Station Eleven" vs "Station Eleven (2021)"
-- "Matrix" vs "The Matrix (1999)"
-- Même série avec/sans année dans le nom
+**Cascade série** : si plusieurs épisodes d'une même série (titre + année) sont en doublon, la décision prise sur un épisode s'applique automatiquement à tout le groupe.
 
-Lors d'une détection, un tableau comparatif est affiché :
+**Scoring qualité** (pour aider la décision keep-new / keep-old) :
 
-```
-⚠ Contenu similaire détecté
+| Critère | Poids |
+|---------|------:|
+| Résolution | 25 % |
+| Codec vidéo | 20 % |
+| Bitrate vidéo (normalisé par codec) | 25 % |
+| Codec audio | 15 % |
+| Bitrate audio | 15 % |
 
-L'existant n'a pas d'année, le nouveau a (2021)
+Normalisation bitrate par codec : AV1 × 3.0, HEVC × 2.0, VP9 × 1.8, x264 × 1.0 — comparaison équitable entre un x264 8 Mbps et un HEVC 4 Mbps.
 
-Comparaison           Existant              Nouveau
-─────────────────────────────────────────────────────
-Fichiers              3                     1
-Taille totale         12.5 Go               4.2 Go
-Résolution            1080p                 2160p
-Codec vidéo           H.264                 HEVC
-Codec audio           DTS                   DTS-HD MA
+**Décisions disponibles** :
 
-Options:
-  [1] Garder l'ancien (nouveau → staging)
-  [2] Garder le nouveau (ancien → staging)
-  [3] Garder les deux (sous-dossier créé)
-  [s] Passer
-```
+- `keep_new` — remplacer l'existant par le nouveau fichier.
+- `keep_old` — skip le nouveau (reste en `downloads/`).
+- `sandbox` — déplacer le nouveau dans `.sandbox/` pour décision ultérieure.
+
+Le bouton de transfert reste **grisé** tant que tous les conflits ne sont pas tranchés.
+
+### Hardlinks et seeding
+
+Pour préserver le seeding BitTorrent après transfert, CineOrg crée un **hardlink** dans `downloads/` pointant vers le nouveau fichier dans `storage/`. Le client torrent voit toujours le fichier à son chemin d'origine, sans doubler l'occupation disque.
+
+- **TTL configurable** via `CINEORG_HARDLINK_RETENTION_DAYS` (défaut : 30 jours).
+- **Cross-device** géré : si `downloads/` et `storage/` sont sur des volumes différents, la création échoue silencieusement sans interrompre le transfert.
+- **Purge quotidienne** via un timer systemd (fichiers dans `deploy/`).
+- **Re-scan évité** : le scanner ignore les fichiers avec `st_nlink > 1`.
+
+> 📖 Installation du timer et détails : [docs/hardlinks.md](docs/hardlinks.md).
+
+### Sandbox des orphelins
+
+Les **orphelins** (fichiers physiques sans symlink les référençant) peuvent être déplacés vers un répertoire `.sandbox/` (sur le même volume que `storage/` pour éviter les copies réseau) avant suppression ou réinjection :
+
+- Détection via comparaison storage ↔ symlinks.
+- Déplacement non destructif (l'arborescence d'origine est préservée dans la sandbox).
+- Réinjection possible via le workflow (scan → match → transfer) pour les fichiers valables.
 
 ## Notes et évaluations
 
@@ -581,17 +610,40 @@ uv run cineorg populate-series --limit 50
 
 **Note** : Cette commande ne fait aucun appel API. L'enrichissement TVDB pourra être fait séparément, comme `enrich-ratings` pour les films.
 
-### Enrichir les métadonnées
+### Enrichissement
 
-Après un import, enrichir les fichiers avec les métadonnées API :
+Après un import, enrichir les fichiers avec les métadonnées API. Chaque commande est indépendante et peut être relancée sans effet de bord :
 
 ```bash
-# Enrichir les candidats API (recherche TMDB/TVDB)
+# Recherche TMDB/TVDB pour associer les films/séries sans ID API
 uv run cineorg enrich
 
-# Enrichir les notes TMDB des films existants
+# Notes TMDB (vote_average, vote_count)
 uv run cineorg enrich-ratings --limit 100
+
+# IMDb IDs (via /movie/{id}/external_ids TMDB)
+uv run cineorg enrich-imdb-ids
+
+# Collections TMDB (saga, franchise)
+uv run cineorg enrich-collections
+
+# Credits des films (réalisateur, casting)
+uv run cineorg enrich-movies-credits
+
+# Enrichissement complet des séries (poster, genres, créateurs, casting)
+uv run cineorg enrich-series
+
+# TVDB IDs pour les séries déjà en DB
+uv run cineorg enrich-tvdb-ids
+
+# Titres des épisodes via TVDB
+uv run cineorg enrich-episode-titles
+
+# Métadonnées techniques (résolution, codecs, langues) via mediainfo
+uv run cineorg enrich-tech
 ```
+
+Toutes les commandes acceptent `--limit N` pour limiter le nombre d'éléments traités (utile pour respecter les quotas API ou tester). Le rate limiting TMDB est de 0.25 s entre appels (4 req/s), et 0.3 s pour les séries TMDB.
 
 ### Gestion des notes IMDb
 
@@ -781,6 +833,62 @@ uv run cineorg consolidate --execute --dry-run
 ```
 
 **Cas d'usage** : Vous avez déplacé des fichiers sur un NAS externe pour libérer de l'espace. Plus tard, vous voulez les récupérer sur le stockage principal.
+
+### Renommage canonique
+
+La commande `rename-canonical` renomme les fichiers physiques et les symlinks selon le titre canonique stocké en base. Utile après l'import d'une vidéothèque existante ou quand des fichiers ont gardé leur nom de release scene malgré une association TMDB correcte.
+
+```bash
+# Dry-run sur un film précis
+uv run cineorg rename-canonical --movie-id 84
+
+# Dry-run depuis un cache de scan d'associations suspectes (page /quality/suspicious)
+uv run cineorg rename-canonical --from-cache logs/quality_scan_cache.json --limit 50
+
+# Exécution réelle
+uv run cineorg rename-canonical --from-cache logs/quality_scan_cache.json --execute --limit 50
+```
+
+**Fonctionnement** :
+
+1. Charge chaque `MovieModel` cible et son fichier physique.
+2. Extrait les métadonnées techniques via mediainfo.
+3. Génère le nom cible via `RenamerService` (format standardisé).
+4. Compare avec le nom actuel — skip si identique.
+5. Vérifie l'absence de conflit à la destination.
+6. En mode `--execute` : `os.rename()` dans `storage/`, recrée le symlink `video/`, met à jour `file_path`/`symlink_path` en DB.
+
+**Préservation du seeding** : `os.rename()` conserve l'inode, donc les hardlinks dans `downloads/` (voir section [Hardlinks et seeding](#hardlinks-et-seeding)) restent valides et le client torrent continue de servir le fichier.
+
+**Sortie** : table Rich listant pour chaque film son statut (`renamed` / `already_canonical` / `conflict` / `file_missing` / `error`) avec le nom actuel et le nom cible.
+
+### Purge des hardlinks
+
+La commande `purge-hardlinks` supprime les hardlinks de seeding expirés (TTL `CINEORG_HARDLINK_RETENTION_DAYS`, défaut 30 jours). Elle est généralement déclenchée automatiquement par un timer systemd, mais peut être lancée manuellement :
+
+```bash
+# Purger les hardlinks expirés
+uv run cineorg purge-hardlinks
+
+# Simulation (aucune modification)
+uv run cineorg purge-hardlinks --dry-run
+
+# Forcer la purge de tous les hardlinks (ignore expires_at)
+uv run cineorg purge-hardlinks --force
+```
+
+Les fichiers physiques dans `storage/` ne sont **jamais** touchés. Seul le hardlink dans `downloads/` est supprimé, et les dossiers parents vides sont nettoyés ascendant jusqu'à `downloads_dir`.
+
+**Installation du timer systemd** (purge quotidienne automatique) :
+
+```bash
+sudo cp deploy/cineorg-purge.service /etc/systemd/system/
+sudo cp deploy/cineorg-purge.timer   /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now cineorg-purge.timer
+```
+
+> 📖 Détails et diagnostic : [docs/hardlinks.md](docs/hardlinks.md).
 
 ## Format de nommage
 
@@ -1086,10 +1194,24 @@ La page **Validation** (`/validation`) liste les fichiers en attente de validati
 
 La page **Transfert** (`/transfer`) gère le déplacement des fichiers validés vers le stockage organisé :
 
-- Renommage selon le format standardisé
-- Création de la structure de répertoires (genre/lettre/subdivision pour les films, lettre/titre/saison pour les séries)
-- Création des symlinks dans `video/`
-- Gestion des **conflits** (doublons détectés) avec choix de résolution interactif
+- Renommage selon le format standardisé.
+- Création de la structure de répertoires (genre/lettre/subdivision pour les films, lettre/titre/saison pour les séries).
+- Création des symlinks dans `video/`.
+- Création des hardlinks de seeding dans `downloads/`.
+- Gestion des **conflits** (doublons détectés) via dialogue overlay avec cascade série et aide à la décision par scoring qualité.
+
+La progression s'affiche en temps réel via SSE (préparation du batch et exécution du transfert).
+
+### Qualité et doublons
+
+- **Page Qualité** (`/quality`) — classe les films et épisodes selon le score qualité (résolution + codecs + bitrates). Permet d'identifier les candidats à l'upgrade (versions HD ou HDR disponibles).
+- **Page Doublons** (`/duplicates`) — liste les doublons de la base (même film référencé deux fois) et les doublons physiques détectés via hash SHA-256.
+
+### Corbeille
+
+La **corbeille** (`/library/trash`) est une poubelle réversible : les fichiers supprimés depuis la bibliothèque y sont envoyés avec leurs métadonnées sérialisées. Possibilité de restaurer ou de vider définitivement.
+
+La suppression est restreinte à **localhost** — le bouton est masqué depuis une machine distante, et la route DELETE retourne 403. Évite les suppressions accidentelles depuis un client non supervisé.
 
 ### Maintenance
 
@@ -1133,31 +1255,21 @@ Les modifications sont enregistrées dans le fichier `.env` et prises en compte 
 
 ## Architecture du code
 
-Le projet suit une **architecture hexagonale** avec séparation domaine / adaptateurs / services :
+Le projet suit une **architecture hexagonale** (ports & adapters) :
 
 ```
 src/
-├── core/                    # Domaine métier (entités, ports, value objects)
-├── adapters/                # Adaptateurs (CLI, API, parsing, persistance)
-│   ├── api/                 #   Clients TMDB et TVDB avec cache et retry
-│   ├── cli/                 #   Interface Typer
-│   │   ├── commands/        #     1 fichier par commande CLI
-│   │   ├── validation/      #     Validation interactive (candidats, boucle, batch)
-│   │   └── repair/          #     Réparation interactive des symlinks
-│   ├── imdb/                #   Import datasets IMDb
-│   └── parsing/             #   guessit + mediainfo
-├── services/                # Logique métier
-│   ├── workflow/            #   Pipeline scan → match → transfer (mixin pattern)
-│   ├── repair/              #   Réparation symlinks (index, analyse, similarité)
-│   ├── cleanup/             #   Nettoyage video/ (analyse, correction, subdivision)
-│   └── ...                  #   matcher, organizer, renamer, transferer, etc.
-├── infrastructure/          # Persistance (SQLite, repositories, hash)
+├── core/                    # Domaine métier (entities, ports, value_objects)
+├── adapters/                # Adaptateurs (api, cli, parsing, imdb, file_system)
+├── services/                # Logique métier (workflow, repair, cleanup, matcher, …)
+├── infrastructure/          # Persistance (SQLModel, repositories, hash)
+├── web/                     # FastAPI + Jinja2 + HTMX
 └── utils/                   # Constantes et helpers
 ```
 
-Chaque package volumineux est découpé en modules cohérents avec un `__init__.py` qui réexporte les symboles publics pour préserver la compatibilité des imports.
+Câblage centralisé dans `src/container.py` via `dependency-injector` (Singleton pour les composants stateless, Factory pour les sessions/services stateful). Persistance SQLite avec `NullPool` (évite l'épuisement des connexions avec les Factory).
 
-**Imports** : `RepairService` s'importe depuis `src.services.repair`, et `IntegrityChecker` depuis `src.services.integrity`. Les types partagés (`RepairAction`, `RepairActionType`) restent dans `integrity`.
+> 📖 Architecture détaillée (couches, DI, persistance, pipeline, CLI, web, décisions structurantes) : [docs/architecture.md](docs/architecture.md).
 
 ## Dépannage
 
