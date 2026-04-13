@@ -8,6 +8,7 @@ Chaque entité reçoit un score de confiance (0-100). Score < 60 = suspect.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -47,6 +48,73 @@ SUSPECT_THRESHOLD = 60
 ProgressCallback = Callable[[int, int, str], None]
 
 _parser = GuessitFilenameParser()
+
+# Pattern scene-release : nom court tout lowercase avec tirets
+# Ex: hidef-btbl, nemo-madso, fhd-dmw, air-laod, mgl-mb1080p
+_SCENE_RELEASE_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)+$")
+
+# Mono-token lowercase : brian, morse, moonacre, loveactually1080p
+# (guessit tronque parfois les releases type "fhd-brian" au 2e token)
+_LOWERCASE_SINGLE_RE = re.compile(r"^[a-z][a-z0-9]{3,}$")
+
+# Dossiers de structure du storage (à ne pas utiliser comme fallback titre) :
+# lettres seules (A, B), subdivisions alpha (A-D, F-G, Ma-Mi, Mab-Man, Da-De),
+# Saison XX, ou dossiers racine (Films, Series). Case-insensitive.
+_STRUCTURE_DIR_RE = re.compile(
+    r"^[a-z]$|^[a-z]{1,4}-[a-z]{1,4}$|"
+    r"^(saison|season|s)\s*\d+$|"
+    r"^(films?|séries?|series?)(\s+tv)?$",
+    re.IGNORECASE,
+)
+
+# Mots-clés indiquant une version étendue/longue d'un film.
+# Déclenche des seuils de tolérance durée plus larges.
+# Les abréviations DC/EC/UC/TC sont case-sensitive pour éviter les faux
+# positifs (ex: "dc" dans un titre lowercase).
+_EXTENDED_CUT_RE = re.compile(
+    r"\b(extended|director'?s?[\s._-]?cut|ultimate|uncut|unrated|"
+    r"remastered|theatrical|final[\s._-]?cut|special[\s._-]?edition|"
+    r"longue[\s._-]?version|version[\s._-]?longue)\b",
+    re.IGNORECASE,
+)
+_EXTENDED_ABBREV_RE = re.compile(r"\b(DC|EC|UC|TC)\b")
+
+
+def _is_extended_cut(filename: str) -> bool:
+    """Détecte les marqueurs de version étendue (mots-clés ou abréviations)."""
+    return bool(_EXTENDED_CUT_RE.search(filename)) or bool(
+        _EXTENDED_ABBREV_RE.search(filename)
+    )
+
+
+# Suffixes de format 3D mal nettoyés par guessit (surtout quand le titre est
+# en majuscules). Ex: "LE MONDE DE NEMO 3D Side By Side PublicHD Mixed" →
+# garder uniquement "LE MONDE DE NEMO".
+_3D_SUFFIX_RE = re.compile(r"\s+3D\b.*$", re.IGNORECASE)
+
+
+def _strip_3d_suffix(title: str | None) -> str | None:
+    """Retire le suffixe 3D et ses descripteurs (Side By Side, Top-Bottom, etc.)."""
+    if not title:
+        return title
+    return _3D_SUFFIX_RE.sub("", title).strip() or title
+
+
+def _is_suspicious_title(title: str | None) -> bool:
+    """Détecte un titre extrait probablement inexploitable (scene-release,
+    trop court, lowercase mono-token). Déclenche le fallback dossier parent."""
+    if not title:
+        return True
+    stripped = title.strip()
+    if len(stripped) < 6:
+        return True
+    # Scene-release : tout lowercase avec tirets (accepte chiffres)
+    if _SCENE_RELEASE_RE.match(stripped.replace(" ", "")):
+        return True
+    # Mono-token lowercase (brian, morse, moonacre, loveactually1080p)
+    if _LOWERCASE_SINGLE_RE.match(stripped):
+        return True
+    return False
 
 
 def _best_title_score(
@@ -148,20 +216,40 @@ class AssociationChecker:
         score = 100
         reasons: list[str] = []
 
-        # Heuristique 1 : Titre (compare avec titre FR et titre original)
+        # Pré-calcul année et durée pour l'heuristique titre
+        year_match_solid = (
+            year_parsed is not None
+            and movie.year is not None
+            and abs(year_parsed - movie.year) <= 1
+        )
+        file_duration = self._get_file_duration(movie.file_path)
+        duration_match_solid = (
+            file_duration is not None
+            and movie.duration_seconds is not None
+            and movie.duration_seconds > 0
+            and abs(file_duration - movie.duration_seconds) / movie.duration_seconds
+            <= 0.15
+        )
+
+        # Heuristique 1 : Titre (compare avec titre FR et titre original).
+        # Suppression de la pénalité si année ET durée concordent : signal
+        # "traduction FR libre" plutôt que "mauvais match" (ex: The 400 Blows
+        # → Les Quatre Cents Coups, Star Wars → La Guerre des étoiles).
         title_sim = _best_title_score(title_parsed, movie.title, movie.original_title)
-        if title_sim < 60:
-            score -= 45
-            reasons.append(
-                f"Titre très différent : « {title_parsed} » vs « {movie.title} » "
-                f"(similarité {title_sim:.0f}%)"
-            )
-        elif title_sim < 75:
-            score -= 15
-            reasons.append(
-                f"Titre peu similaire : « {title_parsed} » vs « {movie.title} » "
-                f"(similarité {title_sim:.0f}%)"
-            )
+        title_override = year_match_solid and duration_match_solid
+        if not title_override:
+            if title_sim < 60:
+                score -= 45
+                reasons.append(
+                    f"Titre très différent : « {title_parsed} » vs « {movie.title} » "
+                    f"(similarité {title_sim:.0f}%)"
+                )
+            elif title_sim < 75:
+                score -= 15
+                reasons.append(
+                    f"Titre peu similaire : « {title_parsed} » vs « {movie.title} » "
+                    f"(similarité {title_sim:.0f}%)"
+                )
 
         # Heuristique 2 : Année
         if year_parsed is not None and movie.year is not None:
@@ -179,19 +267,23 @@ class AssociationChecker:
                     f"vs {movie.year} (TMDB) — 2 ans"
                 )
 
-        # Heuristique 3 : Durée (en pourcentage, cohérent avec le matcher)
-        file_duration = self._get_file_duration(movie.file_path)
+        # Heuristique 3 : Durée (en pourcentage, cohérent avec le matcher).
+        # Assouplie si version étendue détectée (Extended, Director's Cut, etc.).
         if file_duration and movie.duration_seconds and movie.duration_seconds > 0:
             diff_pct = abs(file_duration - movie.duration_seconds) / movie.duration_seconds * 100
             file_min = file_duration // 60
             tmdb_min = movie.duration_seconds // 60
-            if diff_pct >= 30:
+            is_extended = _is_extended_cut(Path(movie.file_path).name)
+            # Seuils relâchés pour versions étendues (jusqu'à +60% est normal)
+            threshold_high = 70 if is_extended else 30
+            threshold_low = 40 if is_extended else 15
+            if diff_pct >= threshold_high:
                 score -= 45
                 reasons.append(
                     f"Écart de durée important : {file_min}min (fichier) "
                     f"vs {tmdb_min}min (TMDB) — {diff_pct:.0f}% d'écart"
                 )
-            elif diff_pct >= 15:
+            elif diff_pct >= threshold_low:
                 score -= 15
                 reasons.append(
                     f"Écart de durée : {file_min}min (fichier) "
@@ -332,15 +424,44 @@ class AssociationChecker:
         ).first()
 
     def _parse_filename(self, file_path: str) -> tuple[str | None, int | None]:
-        """Extrait titre et année du nom de fichier via guessit."""
+        """Extrait titre et année. Fallback sur le dossier parent si le parse
+        du fichier est suspect (nom de scene-release, titre très court)."""
         try:
-            basename = Path(file_path).stem
+            path = Path(file_path)
+            basename = path.stem
             parsed = _parser.parse(basename)
             title = parsed.title if parsed.title != "Unknown" else None
+            # Nettoyer les suffixes 3D que guessit n'enlève pas toujours
+            # (surtout sur les titres en majuscules).
+            title = _strip_3d_suffix(title)
             year = parsed.year
-            # guessit peut retourner une liste d'années
             if isinstance(year, list):
                 year = year[0] if year else None
+
+            # Si le titre extrait est suspect, essayer le dossier parent.
+            # Cas typiques : scene-release (hidef-btbl, nemo-madso), titres
+            # très courts (tp, dmw), ou préfixes (Yves Angelo - Film).
+            if _is_suspicious_title(title):
+                parent_name = path.parent.name
+                if parent_name and not _STRUCTURE_DIR_RE.match(parent_name):
+                    parent_parsed = _parser.parse(parent_name)
+                    parent_title = (
+                        parent_parsed.title
+                        if parent_parsed.title != "Unknown"
+                        else None
+                    )
+                    # Accepter le parent même si jugé court : il reste
+                    # plus fiable qu'un scene-release, à condition d'être
+                    # au moins aussi long que le titre parsé du fichier.
+                    if parent_title and (
+                        not _is_suspicious_title(parent_title)
+                        or (title and len(parent_title) > len(title))
+                        or not title
+                    ):
+                        title = parent_title
+                        if not year and parent_parsed.year:
+                            y = parent_parsed.year
+                            year = y[0] if isinstance(y, list) else y
             return title, year
         except Exception:
             logger.debug(f"Impossible de parser : {file_path}")

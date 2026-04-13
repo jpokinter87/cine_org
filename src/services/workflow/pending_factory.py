@@ -97,7 +97,17 @@ async def create_pending_validation(
 async def _search_and_score_movie(
     title: str, year: Optional[int], media_info, matcher, tmdb_client
 ) -> list:
-    """Recherche et score les films via TMDB avec enrichissement durée top 3."""
+    """Recherche et score les films via TMDB.
+
+    Stratégie alignée sur la réassociation (UI) : quand la durée locale est
+    connue (mediainfo), enrichir systématiquement le top 10 TMDB avec
+    `get_details()` pour récupérer la durée TMDB, puis trier par écart
+    de durée primaire (avec score comme tie-break).
+
+    Retour d'expérience : tri par durée → candidat correct en #1 dans
+    ~80% des cas où le score seul se trompait (homonymes, courts-métrages,
+    traductions FR éloignées du titre parsé).
+    """
     candidates = []
 
     if not tmdb_client or not getattr(tmdb_client, "_api_key", None):
@@ -105,24 +115,41 @@ async def _search_and_score_movie(
 
     try:
         api_results = await tmdb_client.search(title, year=year)
+        # TMDB ignore le paramètre year ; on complète avec une requête
+        # "{title} {year}" (TMDB parse l'année du texte de la query et la
+        # prend en compte dans le ranking). Capture les films peu populaires
+        # noyés dans les homonymes (ex: Lamb 2021 islandais, pop 2.5).
+        if year is not None:
+            year_query = f"{title} {year}"
+            year_results = await tmdb_client.search(year_query)
+            if year_results:
+                seen = {r.id for r in api_results}
+                for r in year_results:
+                    if r.id not in seen:
+                        api_results.append(r)
+                        seen.add(r.id)
         duration = None
         if media_info and media_info.duration_seconds:
             duration = media_info.duration_seconds
 
-        # Premier scoring sans durée API
+        # Premier scoring sans durée API (fallback 67/33 titre/année)
         candidates = matcher.score_results(api_results, title, year, duration)
 
-        # Enrichir les top 3 avec durée et re-scorer
         if candidates and duration:
             from dataclasses import replace
 
             from src.services.matcher import calculate_movie_score
 
+            MAX_ENRICH = 10
+            # Durées TMDB collectées durant l'enrichissement
+            tmdb_durations: dict[str, int] = {}
+
             enriched = []
-            for cand in candidates[:3]:
+            for cand in candidates[:MAX_ENRICH]:
                 try:
                     details = await tmdb_client.get_details(cand.id)
                     if details and details.duration_seconds:
+                        tmdb_durations[cand.id] = details.duration_seconds
                         new_score = calculate_movie_score(
                             query_title=title,
                             query_year=year,
@@ -139,7 +166,20 @@ async def _search_and_score_movie(
                     pass
                 enriched.append(cand)
 
-            candidates = enriched + candidates[3:]
+            candidates = enriched + candidates[MAX_ENRICH:]
+
+            # Tri principal : écart de durée absolu (comme la réassociation).
+            # Tie-break : score décroissant. Les candidats sans durée TMDB
+            # (get_details échoué ou durée=0) reculent en fin de liste.
+            def _sort_key(c):
+                d = tmdb_durations.get(c.id)
+                if d is None:
+                    return (float("inf"), -c.score)
+                return (abs(d - duration), -c.score)
+
+            candidates.sort(key=_sort_key)
+        elif candidates:
+            # Pas de durée locale : conserver le tri par score existant.
             candidates.sort(key=lambda c: c.score, reverse=True)
 
     except Exception as e:

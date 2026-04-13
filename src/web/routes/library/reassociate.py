@@ -165,12 +165,34 @@ async def movie_reassociate_search(request: Request, movie_id: int, q: str = "")
     # Duree reelle du fichier via mediainfo (seule source fiable)
     local_duration = _get_file_duration(movie) if movie else None
 
-    # Recherche TMDB
+    # Recherche TMDB (combinée) :
+    # - Requête brute
+    # - Variante apostrophes → espace (si applicable)
+    # - Requête avec année DB du film si disponible (TMDB parse l'année
+    #   dans le texte et remonte les films peu populaires — ex: Lamb 2021
+    #   islandais, pop 2.5 noyé dans 20+ homonymes)
     results = await tmdb_client.search(q)
+    seen_ids = {r.id for r in results}
 
-    # Enrichir chaque resultat (max 8) avec les details
+    if any(c in q for c in "'’`´"):
+        q_alt = q.translate({ord(c): " " for c in "'’`´"})
+        q_alt = " ".join(q_alt.split())
+        if q_alt and q_alt.lower() != q.lower():
+            for r in await tmdb_client.search(q_alt):
+                if r.id not in seen_ids:
+                    results.append(r)
+                    seen_ids.add(r.id)
+
+    if movie and movie.year:
+        year_query = f"{q} {movie.year}"
+        for r in await tmdb_client.search(year_query):
+            if r.id not in seen_ids:
+                results.append(r)
+                seen_ids.add(r.id)
+
+    # Enrichir chaque resultat (max 15) avec les details
     candidates = []
-    for sr in results[:8]:
+    for sr in results[:15]:
         details = await tmdb_client.get_details(sr.id)
         indicator = _duration_indicator(
             local_duration, details.duration_seconds if details else None
@@ -329,6 +351,12 @@ async def movie_reassociate_apply(
         movie.cast_json = json.dumps(list(details.cast)) if details.cast else None
         movie.vote_average = details.vote_average
         movie.vote_count = details.vote_count
+        # Réinitialiser les champs collection selon le nouveau film TMDB
+        # Sentinel : 0 = vérifié, pas de collection
+        movie.collection_id = (
+            details.collection_id if details.collection_id is not None else 0
+        )
+        movie.collection_name = details.collection_name
         movie.updated_at = datetime.utcnow()
 
         # Tenter de relier le fichier physique via le symlink video/
