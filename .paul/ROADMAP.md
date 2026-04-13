@@ -2,48 +2,43 @@
 
 ## Overview
 
-CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec données enrichies, un système de gestion des associations TMDB, des données nettoyées, un code refactoré, un workflow fluide, une suggestion de films, un lecteur distant, des corrections UX, une gestion avancée des données, une réconciliation symlinks/storage robuste, et une normalisation structurelle avec détection de doublons. L'application est stable en v1.9.
+CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec données enrichies, un système de gestion des associations TMDB, des données nettoyées, un code refactoré, un workflow fluide, une suggestion de films, un lecteur distant, des corrections UX, une gestion avancée des données, une réconciliation symlinks/storage robuste, une normalisation structurelle avec détection de doublons, un déploiement production via systemd et des hardlinks de seeding BitTorrent. L'application est stable en v2.0.
 
 ## Current Milestone
 
-**v2.0 Production & Maintenance Complète** (v2.0.0)
+**v2.1 Lecteurs Externes & Intégrations** (v2.1.0)
 Status: 🚧 In Progress
-Phases: 5 of 6 complete
+Phases: 0 of 2 complete
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
-| 35 | Maintenance Web Complète | 1 | Complete | 2026-03-08 |
-| 36 | Doublons Symlinks Cross-Genre | 1 | Complete | 2026-03-13 |
-| 37 | Optimisations & Sandbox | 2 | Complete | 2026-03-20 |
-| 38 | Déploiement Production | 1 | ✅ Complete | 2026-04-04 |
-| 39 | Hardlinks Seeding | 2 | ✅ Complete | 2026-04-04 |
-| 40 | Intégration Jellyfin | TBD | Not started | - |
+| 40 | Lecteur DuneHD | 2 | 🚧 Planning | - |
+| 41 | Intégration Jellyfin | TBD | Not started | - |
 
-### Phase 35: Maintenance Web Complète (Complete)
+### Phase 40: Lecteur DuneHD
 
-Corrections web (cleanup fix, repair symlinks, purge fantomes), detection orphelins par symlinks, reconciliation DB (symlink_path), cache analyse. Sandbox des orphelins differe a une phase dediee.
+Ajout d'un nouveau type de profil lecteur "dunehd" pour déclencher la lecture sur un media player Dune HD via son API HTTP (`/cgi-bin/do?cmd=start_file_playback`), avec mapping automatique storage → URLs SMB (shares Films / Series TV). Plan 40-01 : backend DuneHDPlayer + schéma profil étendu + dispatcher. Plan 40-02 : UI web de configuration (champs conditionnels mpv/dunehd, validation, badges type) + checkpoint end-to-end sur Dune physique.
 
-### Phase 36: Doublons Symlinks Cross-Genre (Complete)
-
-Détection et correction des symlinks cross-genre, option CLI --only, bouton Visionner en validation, fix TMDB séries TV via IMDB.
-
-### Phase 37: Optimisations & Sandbox (Complete)
-
-Plan 37-01 : Cross-genre DB-first (symlink_path), corbeille maintenance (liste/restauration/vidage), Comédie dramatique. Plan 37-02 : SandboxService complet (déplacement/liste/suppression/réinjection), interface web sandbox dans maintenance, nettoyage automatique symlinks résiduels, fix critique _sandbox_existing (garde-fou subdivision).
-
-### Phase 38: Déploiement Production (Complete)
-
-Service systemd (cineorg.service), script deploy.sh (git pull + uv sync + restart), commande serve avec --workers et --access-log, documentation déploiement complète.
-
-### Phase 39: Hardlinks Seeding
-
-Création de hardlinks dans downloads/ après transfert vers storage/ pour maintenir le seeding BitTorrent. Le fichier physique vit dans storage/, le hardlink dans downloads/ conserve le nom original pour le tracker. Rotation automatique avec durée configurable. Plan 39-01 : modèle DB + hardlink au transfert + filtre scanner. Plan 39-02 : service de purge + CLI + timer systemd.
-
-### Phase 40: Intégration Jellyfin
+### Phase 41: Intégration Jellyfin
 
 Focus: Corriger les volumes Docker pour que Jellyfin accède aux symlinks dans /media/Serveur/Collection. Montage symlinks + cibles (storage) avec les mêmes chemins absolus dans le container. Vérification scan bibliothèque.
 
 ## Completed Milestones
+
+<details>
+<summary>v2.0 Production & Maintenance Complète — 2026-04-04 (5 phases)</summary>
+
+| Phase | Name | Plans | Completed |
+|-------|------|-------|-----------|
+| 35 | Maintenance Web Complète | 1/1 | 2026-03-08 |
+| 36 | Doublons Symlinks Cross-Genre | 1/1 | 2026-03-13 |
+| 37 | Optimisations & Sandbox | 2/2 | 2026-03-20 |
+| 38 | Déploiement Production | 1/1 | 2026-04-04 |
+| 39 | Hardlinks Seeding | 2/2 | 2026-04-04 |
+
+Archive: `.paul/milestones/v2.0-ROADMAP.md`
+
+</details>
 
 <details>
 <summary>v1.9 Normalisation & Intégration Jellyfin — 2026-03-07 (5 phases, 1 abandoned)</summary>
@@ -168,4 +163,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-04-04 — Phase 39 complete*
+*Last updated: 2026-04-14 — v2.0 clôturé, milestone v2.1 "Lecteurs Externes & Intégrations" ouvert avec phases 40 (DuneHD) et 41 (Jellyfin)*

@@ -16,6 +16,7 @@ from sqlmodel import select
 from ....infrastructure.persistence.database import get_session
 from ....infrastructure.persistence.models import EpisodeModel, MovieModel, SeriesModel
 from ....player_profiles import get_active_profile, get_profile_by_name, load_profiles
+from ....services.player.dunehd_player import DuneHDPlayer
 from .helpers import _find_movie_file
 
 router = APIRouter()
@@ -31,8 +32,15 @@ def _resolve_video_path(file_path: str | None) -> Path | None:
     return path if path.exists() else None
 
 
-# Stockage des processus en cours pour suivi (PID → (Popen, is_remote, profile_name))
-_active_players: dict[int, tuple[subprocess.Popen, bool, str]] = {}
+# Stockage des processus en cours pour suivi (PID → (Popen|None, is_remote, profile_name))
+# Popen=None correspond aux profils DuneHD (fire-and-forget, pas de process local à poller).
+_active_players: dict[int, tuple[Optional[subprocess.Popen], bool, str]] = {}
+
+# Erreurs DuneHD par pid synthétique (consommées par /play-status)
+_dunehd_errors: dict[int, str] = {}
+
+# Compteur de pid synthétique pour DuneHD (hors plage des vrais PIDs Linux < 4M)
+_dunehd_pid_counter = 10_000_000
 
 
 def _map_path(local_path: Path, profile: dict) -> str:
@@ -84,12 +92,31 @@ def _launch_ssh(profile: dict, file_path: Path) -> subprocess.Popen:
     )
 
 
+def _launch_dunehd(profile: dict, file_path: Path) -> int:
+    """Envoie l'ordre de lecture à un DuneHD. Retourne un pid synthétique.
+
+    En cas d'erreur API, le message est stocké dans _dunehd_errors[pid] pour
+    que /play-status puisse afficher le fragment d'erreur au poll suivant.
+    """
+    global _dunehd_pid_counter
+    _dunehd_pid_counter += 1
+    pid = _dunehd_pid_counter
+
+    player = DuneHDPlayer(profile)
+    result = player.play(file_path)
+    if not result.ok:
+        _dunehd_errors[pid] = result.error or "Erreur DuneHD"
+    return pid
+
+
 def _launch_player(
     file_path: Path, profile_name: str | None = None
 ) -> tuple[int, bool, str]:
     """Lance le lecteur selon le profil spécifié ou actif.
 
     Retourne (pid, is_remote, profile_name).
+    Pour les profils dunehd, le pid est synthétique et la lecture est
+    fire-and-forget (pas de process local à suivre).
     """
     if profile_name:
         profile = get_profile_by_name(profile_name)
@@ -97,6 +124,11 @@ def _launch_player(
             profile = get_active_profile()
     else:
         profile = get_active_profile()
+
+    if profile.get("type") == "dunehd":
+        pid = _launch_dunehd(profile, file_path)
+        _active_players[pid] = (None, True, profile["name"])
+        return pid, True, profile["name"]
 
     is_remote = (
         profile["target"] == "remote"
@@ -256,6 +288,17 @@ async def play_status(
         return HTMLResponse(_play_button_html(entity_type, entity_id))
 
     proc, is_remote, profile_name = entry
+
+    # DuneHD (fire-and-forget) : pas de process à poller
+    if proc is None:
+        _active_players.pop(pid, None)
+        error = _dunehd_errors.pop(pid, None)
+        if error:
+            return HTMLResponse(
+                _error_html(f"DuneHD : {error}", entity_type, entity_id)
+            )
+        return HTMLResponse(_play_button_html(entity_type, entity_id))
+
     if proc.poll() is None:
         # Processus encore vivant — continuer le polling
         return HTMLResponse(_playing_html(pid, entity_type, entity_id, profile_name))

@@ -13,17 +13,22 @@ _PROFILES_FILE = _PROJECT_ROOT / "player_profiles.json"
 
 _DEFAULT_PROFILE = {
     "name": "Local",
+    "type": "mpv",
     "command": "mpv",
     "target": "local",
     "ssh_host": None,
     "ssh_user": None,
     "local_path_prefix": None,
     "remote_path_prefix": None,
+    "ip": None,
+    "smb_movies_prefix": None,
+    "smb_series_prefix": None,
 }
 
 _PROFILE_FIELDS = (
-    "name", "command", "target", "ssh_host", "ssh_user",
+    "name", "type", "command", "target", "ssh_host", "ssh_user",
     "local_path_prefix", "remote_path_prefix",
+    "ip", "smb_movies_prefix", "smb_series_prefix",
 )
 
 

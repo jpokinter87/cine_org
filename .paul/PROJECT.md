@@ -12,9 +12,9 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 2.0.0-dev (Production & Maintenance Complète) |
-| Status | Development — v2.0 in progress |
-| Last Updated | 2026-03-07 |
+| Version | 2.1.0-dev (Lecteurs Externes & Intégrations) |
+| Status | Development — v2.1 in progress |
+| Last Updated | 2026-04-14 |
 
 ## Requirements
 
@@ -86,19 +86,19 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-- [ ] Intégration Jellyfin : volumes Docker, montage symlinks+cibles — Phase 40
+- [ ] Lecteur DuneHD (v2.1)
+  - Backend DuneHDPlayer (API HTTP /cgi-bin/do + mapping SMB Films/Series TV) — Phase 40-01
+  - Interface web de config profils lecteur avec champs conditionnels mpv/dunehd — Phase 40-02
+- [ ] Intégration Jellyfin (v2.1) : volumes Docker, montage symlinks+cibles — Phase 41
 
 ### Validated (Recently Shipped)
 
-- [x] Hardlinks Seeding (v2.0)
-  - Hardlinks dans downloads/ après transfert pour maintenir le seeding BitTorrent — Phase 39
-  - Rotation automatique avec durée configurable (hardlink_retention_days) — Phase 39
-  - Commande CLI purge-hardlinks (--dry-run, --force) + timer systemd quotidien — Phase 39
-- [x] Déploiement production (v2.0)
-  - Service systemd pour CineOrg (restart auto, logs journalctl) — Phase 38
-  - Script deploy.sh (git pull + uv sync + restart) — Phase 38
-  - Commande serve avec --workers et --access-log — Phase 38
-  - Documentation déploiement complète — Phase 38
+- [x] v2.0 Production & Maintenance Complète — Phases 35-39 (2026-03-08 → 2026-04-04)
+  - Maintenance web complète (cleanup fix, repair symlinks, détection orphelins par symlinks) — Phase 35
+  - Doublons symlinks cross-genre + option CLI --only — Phase 36
+  - Optimisations & Sandbox complet (interface web, réinjection, garde-fou subdivision) — Phase 37
+  - Déploiement production (systemd, deploy.sh, --workers, --access-log) — Phase 38
+  - Hardlinks Seeding (hardlinks downloads/ + rotation + purge systemd) — Phase 39
 - [x] Overlays qualité sur posters web (v1.9)
   - Badges résolution (4K/1080p/720p/SD), codec vidéo, langue (Multi/FR/VO) sur posters grille — Phase 33
 - [x] Détection doublons au transfert (v1.9)

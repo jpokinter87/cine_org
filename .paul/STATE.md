@@ -9,22 +9,22 @@ See: .paul/PROJECT.md (updated 2026-04-04)
 
 ## Current Position
 
-Milestone: v2.0 Production & Maintenance Complète
-Phase: 40 of 6 (Intégration Jellyfin) — Not started
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-04-04 — Phase 39 complete, transitioned to Phase 40
+Milestone: v2.1 Lecteurs Externes & Intégrations
+Phase: 40 of 2 (Lecteur DuneHD) — In progress [1/2 plans complete]
+Plan: 40-01 complete (loop closed), 40-02 ready to plan/apply (depends_on 40-01 satisfied)
+Status: Loop 40-01 closed, ready for PLAN/APPLY 40-02
+Last activity: 2026-04-14 — Plan 40-01 UNIFY complete, SUMMARY créé, loop fermée
 
 Progress:
-- v2.0: [████████░░] 83% (5/6 phases)
-- Phase 40: [░░░░░░░░░░] 0%
+- v2.1: [██░░░░░░░░] 25% (0 phases complètes, 1/≈4 plans livrés)
+- Phase 40: [█████░░░░░] 50% (1/2 plans)
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop complete — ready for next PLAN]
+  ✓        ✓        ✓     [Loop 40-01 complete — ready for 40-02]
 ```
 
 ## Accumulated Context
@@ -130,19 +130,22 @@ PLAN ──▶ APPLY ──▶ UNIFY
 None.
 
 ### Git State
-Last commit: 9ad81e6 (feat(phase-39): hardlinks seeding)
+Last commit: f234e7c (fix(organizer): sanitize le titre des séries pour les noms de dossiers)
 Branch: master
 
 ## Session Continuity
 
-Last session: 2026-04-04
-Stopped at: Phase 39 complete + corrections hors-phase (service systemd, tri persistant)
-Next action: Vérifier tri persistant, commiter corrections, nettoyer fichiers test, puis /paul:plan Phase 40
-Resume file: .paul/HANDOFF-2026-04-04.md
+Last session: 2026-04-14
+Stopped at: Plan 40-01 loop fermée (PLAN ✓ APPLY ✓ UNIFY ✓) — pause avant Plan 40-02
+Next action: /paul:apply .paul/phases/40-lecteur-dunehd/40-02-PLAN.md (UI config DuneHD + checkpoint end-to-end sur Dune réel)
+Resume file: .paul/HANDOFF-2026-04-14.md
 Resume context:
-- cineorg.service modifié (DISPLAY/WAYLAND pour mpv) — non commité
-- Persistance tri localStorage dans _filters.html — à valider
-- Fichiers test *TESTGRP* dans storage/downloads — à nettoyer
+- Session majeure : bascule v2.0→v2.1 (milestone clôturé, pyproject 1.9.0→2.0.0, roadmap restructurée)
+- Plan 40-01 livré complet : backend DuneHDPlayer (138 lignes) + schéma profil étendu + dispatcher, 38 tests verts, ruff clean, SUMMARY créé
+- Plan 40-02 déjà planifié, prêt à exécuter : UI config (champs conditionnels mpv/dunehd) + validation backend + checkpoint visuel end-to-end sur Dune physique
+- Config validée : DuneHD 192.168.1.4, JPSERVER SMB 192.168.1.2 (shares Films + Series TV), CineOrg web 192.168.1.15
+- Aucun commit pendant la session — working tree contient toutes les modifs 40-01
+- Tests rename-canonical en cours côté utilisateur (indépendant, hors phase)
 
 ---
 *STATE.md — Updated after every significant action*

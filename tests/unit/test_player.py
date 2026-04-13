@@ -3,7 +3,6 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from src.web.routes.library.player import (
@@ -195,6 +194,75 @@ class TestLaunchPlayer:
 
         assert pid == 43
         assert is_remote is False
+
+
+class TestLaunchPlayerDuneHD:
+    """Tests du dispatch vers DuneHDPlayer pour les profils type=dunehd."""
+
+    @patch("src.web.routes.library.player.DuneHDPlayer")
+    @patch("src.web.routes.library.player.get_active_profile")
+    @patch("src.web.routes.library.player.subprocess.Popen")
+    def test_dispatch_vers_dunehd_quand_type_dunehd(
+        self, mock_popen, mock_get_profile, mock_dunehd_cls
+    ):
+        """Un profil type=dunehd utilise DuneHDPlayer, pas subprocess.Popen."""
+        from src.services.player.dunehd_player import DuneHDResult
+
+        mock_get_profile.return_value = {
+            "name": "DuneSalon",
+            "type": "dunehd",
+            "ip": "192.168.1.4",
+            "smb_movies_prefix": "smb://192.168.1.2/Films",
+            "smb_series_prefix": "smb://192.168.1.2/Series TV",
+        }
+        mock_player = MagicMock()
+        mock_player.play.return_value = DuneHDResult(
+            ok=True, player_state="file_playback", error=None
+        )
+        mock_dunehd_cls.return_value = mock_player
+
+        pid, is_remote, pname = _launch_player(
+            Path("/storage/Films/Action/A/Film.mkv")
+        )
+
+        assert is_remote is True
+        assert pname == "DuneSalon"
+        assert pid >= 10_000_000  # pid synthétique
+        mock_dunehd_cls.assert_called_once()
+        mock_player.play.assert_called_once_with(
+            Path("/storage/Films/Action/A/Film.mkv")
+        )
+        mock_popen.assert_not_called()
+
+    @patch("src.web.routes.library.player.DuneHDPlayer")
+    @patch("src.web.routes.library.player.get_active_profile")
+    def test_stocke_erreur_quand_api_dune_echoue(
+        self, mock_get_profile, mock_dunehd_cls
+    ):
+        """Échec DuneHD : l'erreur est stockée dans _dunehd_errors pour /play-status."""
+        from src.services.player.dunehd_player import DuneHDResult
+        from src.web.routes.library import player as player_module
+
+        mock_get_profile.return_value = {
+            "name": "DuneSalon",
+            "type": "dunehd",
+            "ip": "192.168.1.4",
+            "smb_movies_prefix": "smb://192.168.1.2/Films",
+            "smb_series_prefix": "smb://192.168.1.2/Series TV",
+        }
+        mock_player = MagicMock()
+        mock_player.play.return_value = DuneHDResult(
+            ok=False, player_state=None, error="Fichier introuvable"
+        )
+        mock_dunehd_cls.return_value = mock_player
+
+        pid, _, _ = _launch_player(Path("/storage/Films/Action/A/Film.mkv"))
+
+        assert pid in player_module._dunehd_errors
+        assert player_module._dunehd_errors[pid] == "Fichier introuvable"
+        # Nettoyage pour ne pas polluer les autres tests
+        player_module._dunehd_errors.pop(pid, None)
+        player_module._active_players.pop(pid, None)
 
 
 class TestSeriesPlay:
