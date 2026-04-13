@@ -72,6 +72,9 @@ from src.adapters.cli.commands.duplicates_command import (
 from src.adapters.cli.commands.hardlink_commands import (
     purge_hardlinks,
 )
+from src.adapters.cli.commands.rename_canonical_command import (
+    rename_canonical,
+)
 
 __all__ = [
     # workflow
@@ -118,4 +121,5 @@ __all__ = [
     "fix_series_symlinks",
     "check_duplicates",
     "purge_hardlinks",
+    "rename_canonical",
 ]
