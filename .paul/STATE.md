@@ -11,15 +11,15 @@ See: .paul/PROJECT.md (updated 2026-04-04)
 
 Milestone: v2.1 Lecteurs Externes & Intégrations
 Phase: 43 of 4 (Correctifs Bibliothèque) — ✅ Complete
-Plan: 43-01 ✓ livré (UNIFY clos)
-Status: Phase 43 complète — à commiter puis démarrer phase 41 (Jellyfin) pour clôturer la milestone v2.1
-Last activity: 2026-04-14 — UNIFY plan 43-01 : recherche accents validée, 18 tests dédiés + 1204/1204 globaux
+Plan: 43-01 ✓ livré & commité (952f95c), 43-02 ✓ livré (à commiter)
+Status: Phase 43 complète — à commiter puis démarrer phase 41 (Jellyfin) pour clôturer v2.1
+Last activity: 2026-04-14 — UNIFY 43-02 : bouton ✕ + debounce + hx-preserve livrés, intermittent fix confirmé par utilisateur
 
 Progress:
 - v2.1: [████████░░] 75% (3/4 phases complètes — Phases 40, 42, 43 ✓)
 - Phase 40: [██████████] 100% (Lecteur DuneHD)
 - Phase 42: [██████████] 100% (overrides épisodes + métadonnées)
-- Phase 43: [██████████] 100% (recherche insensible aux accents)
+- Phase 43: [██████████] 100% (recherche accents + UX champs texte)
 - Phase 41: [░░░░░░░░░░] 0% (Intégration Jellyfin, à planifier)
 
 ## Loop Position
@@ -27,7 +27,7 @@ Progress:
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Plan 43-01 clos — phase 43 complète]
+  ✓        ✓        ✓     [Plan 43-02 clos — phase 43 complète]
 ```
 
 ## Accumulated Context
@@ -154,16 +154,16 @@ Feature branches merged: none
 
 ## Session Continuity
 
-Last session: 2026-04-14 (phases 42 + 43 livrées)
-Stopped at: Phase 43 complète. 42-02 commité (02e6318). 43-01 à commiter. 1204/1204 tests verts.
-Next action: Commit `feat(phase-43-01): recherche bibliothèque insensible aux accents via UDF SQLite unaccent` puis `/paul:plan` pour phase 41 (Jellyfin) et clôturer la milestone v2.1
-Resume file: .paul/phases/43-correctifs-bibliotheque/43-01-SUMMARY.md
+Last session: 2026-04-14 (phase 43 complète)
+Stopped at: UNIFY 43-02 clos. Phase 43 complète. 43-02 à commiter. 1204/1204 tests verts.
+Next action: Commit `feat(phase-43-02): bouton ✕ réutilisable sur inputs + debounce recherche 1000ms` puis `/paul:plan` pour phase 41 (Jellyfin) — dernière phase de v2.1
+Resume file: .paul/phases/43-correctifs-bibliotheque/43-02-SUMMARY.md
 Resume context:
-- Milestone v2.1 : 3/4 phases complètes (40 DuneHD, 42 Overrides Manuels, 43 Correctifs Bibliothèque)
-- Dernière phase restante : 41 Intégration Jellyfin (montage volumes Docker)
-- 43-01 livré : UDF SQLite unaccent() + search_variants étendu + _title_search_filter avec double LIKE, 18 nouveaux tests
-- Pattern établi : @event.listens_for(Engine, "connect") réutilisable pour d'autres UDF
-- Toutes les deferred issues de cette session sont résolues (bug 1 via enrich-collections, bug 2 via 43-01, bug 3 n'était pas un bug)
+- Phase 43 livrée à 2 plans : 43-01 (UDF unaccent) + 43-02 (UX champs texte)
+- 43-02 : input_clear.js + data-clearable + debounce 1000ms + hx-preserve + htmx:historyRestore + pageshow
+- Bug intermittent (croix invisible après navigation) : RÉSOLU et confirmé par utilisateur
+- Deferred : décalage visuel résiduel du hover rose du bouton ✕ — purement cosmétique, à investiguer en session interactive (cache navigateur ? conflit CSS ? injection double pré-fix ?)
+- Milestone v2.1 : 3/4 phases complètes — reste uniquement 41 Intégration Jellyfin
 
 ---
 *STATE.md — Updated after every significant action*

@@ -9418,6 +9418,76 @@ details[open] > .maint-issue-toggle::before {
 }
 
 /* ───────────────────────────────────
+   Bouton ✕ d'effacement (phase 43-02)
+   Ajoute via JS sur tout input avec
+   attribut data-clearable. Compatible
+   avec les wrappers existants (ex.
+   .lib-search-wrap avec icône loupe).
+   ─────────────────────────────────── */
+
+.input-clearable-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 100%;
+}
+.input-clearable-wrap input {
+    padding-right: 2rem;
+}
+
+.input-clear-btn {
+    position: absolute;
+    right: 0.55rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1.4rem;
+    height: 1.4rem;
+    box-sizing: border-box;
+    border-radius: 50%;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    line-height: 1;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s, background 0.15s;
+    z-index: 2;
+}
+.input-clearable-wrap.has-value .input-clear-btn,
+.input-clearable-host.has-value .input-clear-btn {
+    display: inline-flex;
+}
+.input-clear-btn svg {
+    display: block;
+}
+.input-clear-btn:hover {
+    color: var(--text-primary);
+    background: var(--accent-rose-dim);
+}
+.input-clear-btn:active {
+    background: rgba(232, 93, 117, 0.22);
+}
+.input-clear-btn:focus-visible {
+    outline: 2px solid var(--accent-amber);
+    outline-offset: 1px;
+    color: var(--accent-amber);
+}
+
+/* Quand le parent est déjà positionné (ex .lib-search-wrap) : pas de
+   nouveau wrap créé, juste l'injection du bouton. Libérer un peu
+   d'espace à droite de l'input hôte. */
+.input-clearable-host {
+    position: relative;
+}
+.input-clearable-host input[data-clearable] {
+    padding-right: 2rem;
+}
+
+/* ───────────────────────────────────
    Edition manuelle des metadonnees
    (phase 42-02) : bouton fiche,
    overlay edition, badges override.

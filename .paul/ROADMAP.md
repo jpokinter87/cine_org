@@ -15,7 +15,7 @@ Phases: 3 of 4 complete (75%)
 | 40 | Lecteur DuneHD | 2/2 | ✅ Complete | 2026-04-14 |
 | 41 | Intégration Jellyfin | TBD | 🔵 Ready to plan | - |
 | 42 | Overrides Manuels | 2/2 | ✅ Complete | 2026-04-14 |
-| 43 | Correctifs Bibliothèque | 1/1 | ✅ Complete | 2026-04-14 |
+| 43 | Correctifs Bibliothèque | 2/2 | ✅ Complete | 2026-04-14 |
 
 ### Phase 40: Lecteur DuneHD ✅
 
@@ -33,12 +33,11 @@ Livré 2026-04-14. Deux plans :
 
 ### Phase 43: Correctifs Bibliothèque ✅
 
-Livré 2026-04-14. Un plan :
-- **43-01** : recherche bibliothèque insensible aux accents via UDF SQLite `unaccent()` + extension `search_variants` + double LIKE dans `_title_search_filter` — valide dans les deux sens (« Millenium »→« Millénium » et inversement), ligatures conservées, 18 tests dédiés
+Livré 2026-04-14. Deux plans :
+- **43-01** : recherche bibliothèque insensible aux accents via UDF SQLite `unaccent()` + extension `search_variants` + double LIKE dans `_title_search_filter` — 18 tests dédiés
+- **43-02** : UX champs texte — `input_clear.js` réutilisable (data-clearable + htmx:historyRestore + pageshow) + debounce recherche 1000ms + hx-preserve="true" pour préserver le focus — deferred : décalage visuel résiduel du hover rose (purement cosmétique)
 
-Bugs initialement pressentis et réglés hors plan :
-- « Tri récemment ajouté incomplet » : non-bug, les films 2/3 étaient en DB depuis 2 mois
-- « Collections Millénium 2009 » : résolu via `enrich-collections` (rattaché à saga 24761)
+Bugs pressentis réglés hors plan : « tri récemment ajouté incomplet » (non-bug) et « Collections Millénium 2009 » (résolu via `enrich-collections`).
 
 ## Completed Milestones
 

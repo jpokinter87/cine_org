@@ -2,7 +2,7 @@
       hx-get="/library/"
       hx-target="#library-content"
       hx-push-url="true"
-      hx-trigger="change from:select, change from:input[type=checkbox], change from:input[name=order], keyup changed delay:700ms from:find input[name=q]">
+      hx-trigger="change from:select, change from:input[type=checkbox], change from:input[name=order], keyup changed delay:1000ms from:find input[name=q]">
 
     {# ── Ligne 1 : recherche, mode, type, genre, année ── #}
     <div class="lib-filters-main">
@@ -12,7 +12,11 @@
                    name="q"
                    class="lib-search-input"
                    placeholder="Rechercher un titre..."
-                   value="{{ current_q }}">
+                   value="{{ current_q }}"
+                   data-clearable
+                   autocomplete="off"
+                   hx-preserve="true"
+                   id="lib-search-input">
         </div>
 
         <select name="search_mode" class="lib-filter-select lib-filter-search-mode">
