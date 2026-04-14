@@ -154,16 +154,18 @@ Feature branches merged: none
 
 ## Session Continuity
 
-Last session: 2026-04-14 (phase 43 complète)
-Stopped at: UNIFY 43-02 clos. Phase 43 complète. 43-02 à commiter. 1204/1204 tests verts.
-Next action: Commit `feat(phase-43-02): bouton ✕ réutilisable sur inputs + debounce recherche 1000ms` puis `/paul:plan` pour phase 41 (Jellyfin) — dernière phase de v2.1
-Resume file: .paul/phases/43-correctifs-bibliotheque/43-02-SUMMARY.md
+Last session: 2026-04-14 (phases 42 + 43 livrées et commitées — pause en fin de soirée)
+Stopped at: Phase 43 complète et commitée (commit a06d052). Tous les plans 42-01/02 et 43-01/02 sont clos et commités. Branche master 5 commits en avance sur origin/master, non poussée.
+Next action: Au prochain resume → `/paul:plan` pour phase 41 Intégration Jellyfin (volumes Docker) et clôturer la milestone v2.1
+Resume file: .paul/HANDOFF-2026-04-14-phase43.md
 Resume context:
-- Phase 43 livrée à 2 plans : 43-01 (UDF unaccent) + 43-02 (UX champs texte)
-- 43-02 : input_clear.js + data-clearable + debounce 1000ms + hx-preserve + htmx:historyRestore + pageshow
-- Bug intermittent (croix invisible après navigation) : RÉSOLU et confirmé par utilisateur
-- Deferred : décalage visuel résiduel du hover rose du bouton ✕ — purement cosmétique, à investiguer en session interactive (cache navigateur ? conflit CSS ? injection double pré-fix ?)
-- Milestone v2.1 : 3/4 phases complètes — reste uniquement 41 Intégration Jellyfin
+- Session monumentale : 2 phases livrées end-to-end (42 Overrides Manuels + 43 Correctifs Bibliothèque)
+- 4 plans clos : 42-01, 42-02, 43-01, 43-02 — chacun avec PLAN + SUMMARY + commit dédié
+- 1204/1204 tests globaux verts, zéro régression
+- Handoff détaillé dans .paul/HANDOFF-2026-04-14-phase43.md
+- Milestone v2.1 : 3/4 phases ✅ — reste uniquement phase 41 Jellyfin pour clôture
+- Deferred : décalage visuel hover ✕ (cosmétique, non-bloquant)
+Git strategy: master (commits directs, pas de feature branches)
 
 ---
 *STATE.md — Updated after every significant action*
