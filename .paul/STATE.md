@@ -138,20 +138,22 @@ PLAN ──▶ APPLY ──▶ UNIFY
 None.
 
 ### Git State
-Last commit: f234e7c (fix(organizer): sanitize le titre des séries pour les noms de dossiers)
+Last commit: c42258c (feat(ui): bulles d'aide contextuelle sur config et maintenance) — pushed
+Previous: d7e8ada (feat(phase-40): Lecteur DuneHD complet — UI config & validation) — pushed
 Branch: master
+Feature branches merged: none
 
 ## Session Continuity
 
-Last session: 2026-04-14
-Stopped at: Phase 40 complète (40-01 + 40-02 unifiées) — transition de phase exécutée (STATE/PROJECT/ROADMAP alignés), commit de phase à confirmer par l'utilisateur
-Next action: /paul:plan pour Phase 41 (Intégration Jellyfin) — à lancer dans une nouvelle session (contexte saturé)
-Resume file: .paul/phases/40-lecteur-dunehd/40-02-SUMMARY.md
+Last session: 2026-04-14 15:12 (session UX inter-phases)
+Stopped at: Bulles d'aide contextuelle ajoutées sur config + maintenance, pattern réutilisable en place, commité et poussé (c42258c)
+Next action: /paul:plan pour Phase 41 (Intégration Jellyfin) — à lancer en session fraîche
+Resume file: .paul/HANDOFF-2026-04-14-1512.md
 Resume context:
-- Phase 40 Lecteur DuneHD entièrement livrée : backend (40-01) + UI config (40-02), lecture end-to-end Dune physique validée
-- 48 tests unitaires DuneHD/player/routes verts, ruff clean
-- Idée explorée en fin de session : "En cours de lecture" (reprise de position) — faisable mpv, fragile DuneHD → candidat Phase 42 post-Jellyfin
-- Git : commit de phase `feat(40): lecteur DuneHD complet (backend + UI config)` à créer au prochain passage (non encore fait — à confirmer avec utilisateur)
+- Phase 40 Lecteur DuneHD entièrement livrée (session précédente)
+- Session UX hors-phase : généralisation des hint tooltips (macros Jinja `field_label`/`hint_icon` + CSS `.field-hint` amber + cache-buster via `asset_version()`)
+- 49 tests config/maintenance/player verts, commit c42258c pushed
+- Pattern réutilisable documenté dans mémoire (`ui_hint_tooltips.md`), extension possible à workflow/validation si besoin
 - Phase 41 Jellyfin : focus volumes Docker + symlinks, à démarrer en session fraîche
 
 ---
