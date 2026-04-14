@@ -10,22 +10,22 @@ See: .paul/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Milestone: v2.1 Lecteurs Externes & Intégrations
-Phase: 42 of 3 (Overrides Manuels) — Planning
-Plan: 42-01 créé, en attente d'approbation
-Status: PLAN créé, prêt pour APPLY
-Last activity: 2026-04-14 — Plan 42-01 créé (épisodes hors canon via détection groupée au résumé workflow)
+Phase: 42 of 3 (Overrides Manuels) — In progress
+Plan: 42-01 en cours (Task 1/3 complète, pause avant Task 2)
+Status: APPLY partiel — socle DB livré et commité (63ee104), reste Task 2 (filtres) + Task 3 (UI anomalies)
+Last activity: 2026-04-14 — Task 1 livrée : SeasonOverrideModel + is_extra + migration + 5 tests verts
 
 Progress:
 - v2.1: [███░░░░░░░] 33% (1/3 phases complètes — Phase 40 ✓)
 - Phase 40: [██████████] 100% (2/2 plans complets, SUMMARY créés)
-- Phase 42: [▒░░░░░░░░░] ~5% (plan 42-01 créé, 42-02 métadonnées à venir)
+- Phase 42: [██░░░░░░░░] ~15% (plan 42-01 en cours, 1/3 tâches complètes)
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ○        ○     [Plan 42-01 créé, en attente d'approbation]
+  ✓        ◐        ○     [Plan 42-01 : Task 1/3 complète, pause avant Task 2]
 ```
 
 ## Accumulated Context
@@ -139,23 +139,25 @@ PLAN ──▶ APPLY ──▶ UNIFY
 None.
 
 ### Git State
-Last commit: c42258c (feat(ui): bulles d'aide contextuelle sur config et maintenance) — pushed
-Previous: d7e8ada (feat(phase-40): Lecteur DuneHD complet — UI config & validation) — pushed
+Last commit: 63ee104 (feat(phase-42-01): socle DB overrides hors canon — SeasonOverrideModel + is_extra) — NOT pushed
+Previous: c42258c (feat(ui): bulles d'aide contextuelle sur config et maintenance) — pushed
 Branch: master
 Feature branches merged: none
 
 ## Session Continuity
 
-Last session: 2026-04-14 15:12 (session UX inter-phases)
-Stopped at: Bulles d'aide contextuelle ajoutées sur config + maintenance, pattern réutilisable en place, commité et poussé (c42258c)
-Next action: /paul:plan pour Phase 41 (Intégration Jellyfin) — à lancer en session fraîche
-Resume file: .paul/HANDOFF-2026-04-14-1512.md
+Last session: 2026-04-14 (session phase 42 lancement)
+Stopped at: Task 1/3 du plan 42-01 livrée et commitée (63ee104 non poussé). Socle DB (SeasonOverrideModel + is_extra + migration) testé, 5/5 verts.
+Next action: Reprendre Task 2 du plan 42-01 (override dans les 2 filtres d'épisodes) via `/paul:apply .paul/phases/42-overrides-manuels/42-01-PLAN.md`
+Resume file: .paul/HANDOFF-2026-04-14-phase42.md
 Resume context:
-- Phase 40 Lecteur DuneHD entièrement livrée (session précédente)
-- Session UX hors-phase : généralisation des hint tooltips (macros Jinja `field_label`/`hint_icon` + CSS `.field-hint` amber + cache-buster via `asset_version()`)
-- 49 tests config/maintenance/player verts, commit c42258c pushed
-- Pattern réutilisable documenté dans mémoire (`ui_hint_tooltips.md`), extension possible à workflow/validation si besoin
-- Phase 41 Jellyfin : focus volumes Docker + symlinks, à démarrer en session fraîche
+- Phase 42 Overrides Manuels ajoutée (roadmap v2.1, après Phase 41 Jellyfin en attente)
+- Plan 42-01 créé avec UX « détection groupée au résumé workflow » (après 3 itérations de cadrage avec l'utilisateur)
+- Task 1/3 complète : socle DB + tests
+- Task 2 : override consulté dans filter_by_episode_count + _filter_by_episode_count_compatibility + propagation session
+- Task 3 : AnomalyDetector + section « Cas particuliers » dans workflow/_results.html + 3 routes (accept/dismiss/trash)
+- ⚠️ `/frontend-design` à charger avant Task 3
+- ⚠️ Tests : TOUJOURS `uv sync --extra dev && uv run pytest ...`
 
 ---
 *STATE.md — Updated after every significant action*
