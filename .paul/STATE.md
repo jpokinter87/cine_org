@@ -10,22 +10,24 @@ See: .paul/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Milestone: v2.1 Lecteurs Externes & Intégrations
-Phase: 42 of 3 (Overrides Manuels) — ✅ Complete
-Plan: 42-01 ✓ livré, 42-02 ✓ livré (les deux UNIFY clos)
-Status: Phase 42 complète — à commiter puis démarrer phase 41 (Jellyfin) ou phase 43 (correctifs bibliothèque)
-Last activity: 2026-04-14 — UNIFY plan 42-02 : SUMMARY créé, protection overrides validée end-to-end, 3 deferred bugs pour phase 43
+Phase: 43 of 4 (Correctifs Bibliothèque) — ✅ Complete
+Plan: 43-01 ✓ livré (UNIFY clos)
+Status: Phase 43 complète — à commiter puis démarrer phase 41 (Jellyfin) pour clôturer la milestone v2.1
+Last activity: 2026-04-14 — UNIFY plan 43-01 : recherche accents validée, 18 tests dédiés + 1204/1204 globaux
 
 Progress:
-- v2.1: [██████░░░░] 67% (2/3 phases complètes — Phases 40, 42 ✓)
+- v2.1: [████████░░] 75% (3/4 phases complètes — Phases 40, 42, 43 ✓)
 - Phase 40: [██████████] 100% (Lecteur DuneHD)
-- Phase 42: [██████████] 100% (overrides épisodes + overrides métadonnées)
+- Phase 42: [██████████] 100% (overrides épisodes + métadonnées)
+- Phase 43: [██████████] 100% (recherche insensible aux accents)
+- Phase 41: [░░░░░░░░░░] 0% (Intégration Jellyfin, à planifier)
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Plan 42-02 clos — phase 42 complète]
+  ✓        ✓        ✓     [Plan 43-01 clos — phase 43 complète]
 ```
 
 ## Accumulated Context
@@ -152,19 +154,16 @@ Feature branches merged: none
 
 ## Session Continuity
 
-Last session: 2026-04-14 (phase 42 entièrement livrée)
-Stopped at: Phase 42 complète. 42-01 commité (9fdf785). 42-02 à commiter. 1186/1186 tests verts.
-Next action: Commit groupé `feat(phase-42-02): édition manuelle des métadonnées avec protection automatique` puis `/paul:plan` pour phase 41 (Jellyfin) ou phase 43 (correctifs bibliothèque)
-Resume file: .paul/phases/42-overrides-manuels/42-02-SUMMARY.md
+Last session: 2026-04-14 (phases 42 + 43 livrées)
+Stopped at: Phase 43 complète. 42-02 commité (02e6318). 43-01 à commiter. 1204/1204 tests verts.
+Next action: Commit `feat(phase-43-01): recherche bibliothèque insensible aux accents via UDF SQLite unaccent` puis `/paul:plan` pour phase 41 (Jellyfin) et clôturer la milestone v2.1
+Resume file: .paul/phases/43-correctifs-bibliotheque/43-01-SUMMARY.md
 Resume context:
-- 42-01 livré (commit 9fdf785) : anomaly detection + override acceptance
-- 42-02 livré : édition manuelle métadonnées web, protection automatique, 46 nouveaux tests
-- enrich-collections relancé en fin de session : Millénium (2009) id=5798 rattaché à la saga 24761
-- 3 bugs deferred pour phase 43 :
-  1) Collections TMDB (Millénium 2009 NULL avant fix — résolu via enrich-collections)
-  2) Recherche sans accent (Millenium ne trouve pas Millénium) — fix non trivial (UDF SQLite)
-  3) Tri "récemment ajouté" incomplet sur films de saga
-- Prochaines phases candidates : 41 Jellyfin (volumes Docker), 43 correctifs bibliothèque
+- Milestone v2.1 : 3/4 phases complètes (40 DuneHD, 42 Overrides Manuels, 43 Correctifs Bibliothèque)
+- Dernière phase restante : 41 Intégration Jellyfin (montage volumes Docker)
+- 43-01 livré : UDF SQLite unaccent() + search_variants étendu + _title_search_filter avec double LIKE, 18 nouveaux tests
+- Pattern établi : @event.listens_for(Engine, "connect") réutilisable pour d'autres UDF
+- Toutes les deferred issues de cette session sont résolues (bug 1 via enrich-collections, bug 2 via 43-01, bug 3 n'était pas un bug)
 
 ---
 *STATE.md — Updated after every significant action*

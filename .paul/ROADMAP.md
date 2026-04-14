@@ -8,13 +8,14 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 **v2.1 Lecteurs Externes & Intégrations** (v2.1.0)
 Status: 🚧 In Progress
-Phases: 2 of 3 complete (67%)
+Phases: 3 of 4 complete (75%)
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 40 | Lecteur DuneHD | 2/2 | ✅ Complete | 2026-04-14 |
 | 41 | Intégration Jellyfin | TBD | 🔵 Ready to plan | - |
 | 42 | Overrides Manuels | 2/2 | ✅ Complete | 2026-04-14 |
+| 43 | Correctifs Bibliothèque | 1/1 | ✅ Complete | 2026-04-14 |
 
 ### Phase 40: Lecteur DuneHD ✅
 
@@ -24,14 +25,20 @@ Livré 2026-04-14 : nouveau type de profil lecteur "dunehd" déclenchant la lect
 
 Focus: Corriger les volumes Docker pour que Jellyfin accède aux symlinks dans /media/Serveur/Collection. Montage symlinks + cibles (storage) avec les mêmes chemins absolus dans le container. Vérification scan bibliothèque.
 
-### Phase 42: Overrides Manuels
+### Phase 42: Overrides Manuels ✅
 
-Focus: Permettre des overrides manuels pour gérer les cas particuliers où les données API ne correspondent pas à la réalité du fichier. Deux volets liés :
-- **Épisodes hors canon** : certaines versions téléchargées découpent les épisodes différemment de TVDB (ex. *The Big C* S04 = 4 épisodes officiels mais 8 dans la version locale). Override du nombre d'épisodes par saison + flag `is_extra` sur les épisodes acceptés au-delà du canon, pour qu'ils ne restent plus bloqués dans `/downloads`.
-- **Métadonnées manquantes** : édition manuelle d'affiche (upload local), synopsis, casting depuis la fiche web. Stockés dans des champs `*_override` qui priment sur les données API. Flag `preserve_overrides` dans l'enricher pour éviter qu'un re-enrich ne les écrase.
+Livré 2026-04-14. Deux plans :
+- **42-01** : overrides d'épisodes hors canon TVDB (`SeasonOverrideModel`, flag `is_extra`, détection d'anomalies post-workflow avec résolution groupée) — validé E2E sur *The Big C* S04
+- **42-02** : overrides de métadonnées (poster/synopsis/casting éditables depuis la fiche web, stockage `storage/.metadata/posters/`, flag `preserve_overrides` auto) — validé E2E sur Forever (1996) + Millenium, canari `CANARY_TEST_*` resté intact après enrich-series
 
-Plans: TBD (defined during /paul:plan)
-Status: Not started
+### Phase 43: Correctifs Bibliothèque ✅
+
+Livré 2026-04-14. Un plan :
+- **43-01** : recherche bibliothèque insensible aux accents via UDF SQLite `unaccent()` + extension `search_variants` + double LIKE dans `_title_search_filter` — valide dans les deux sens (« Millenium »→« Millénium » et inversement), ligatures conservées, 18 tests dédiés
+
+Bugs initialement pressentis et réglés hors plan :
+- « Tri récemment ajouté incomplet » : non-bug, les films 2/3 étaient en DB depuis 2 mois
+- « Collections Millénium 2009 » : résolu via `enrich-collections` (rattaché à saga 24761)
 
 ## Completed Milestones
 
@@ -173,4 +180,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-04-14 — Phase 42 Overrides Manuels ajoutée (épisodes hors canon + métadonnées manuelles)*
+*Last updated: 2026-04-14 — Phase 43 livrée (UDF SQLite unaccent). Milestone v2.1 : 3/4, reste phase 41 Jellyfin*

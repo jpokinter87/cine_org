@@ -49,11 +49,14 @@ def _expand_ligatures(text: str) -> str:
 
 def search_variants(query: str) -> list[str]:
     """
-    Génère les variantes de recherche pour gérer les ligatures.
+    Génère les variantes de recherche pour gérer ligatures + accents.
 
     SQLite LIKE est case-insensitive pour ASCII uniquement.
-    Pour les ligatures Unicode (œ, æ), il faut générer toutes
-    les combinaisons casse + forme (ligature vs digraphe).
+    - Ligatures Unicode (œ, æ) : combinaisons casse + forme (ligature vs digraphe).
+    - Accents (é, à, ç…) : inclusion de la forme accent-stripped pour
+      que la condition ``column.contains(variant)`` puisse matcher les
+      titres sans accent même quand la query en contient (et via l'UDF
+      ``unaccent`` côté SQL, le sens inverse est couvert aussi — phase 43-01).
     """
     variants = {query, query.lower(), query.capitalize()}
     # Déplier les ligatures (ex: "œil" → "oeil")
@@ -66,6 +69,8 @@ def search_variants(query: str) -> list[str]:
     for exp, lig in _REVERSE_LIGATURE_MAP.items():
         collapsed = collapsed.replace(exp, lig)
     variants.update({collapsed, collapsed.capitalize()})
+    # Version accent-stripped de chaque variante (phase 43-01)
+    variants.update({normalize_accents(v) for v in list(variants)})
     # Retirer les doublons tout en gardant un ordre stable
     return list(variants)
 

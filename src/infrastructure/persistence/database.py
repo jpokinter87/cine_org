@@ -9,16 +9,49 @@ Ce module fournit :
 La base de donnees est configuree via CINEORG_DATABASE_URL (defaut: sqlite:///cineorg.db).
 """
 
+import sqlite3
 from collections.abc import Generator
 from pathlib import Path
 from typing import Optional
 
-from sqlmodel import Session, SQLModel, create_engine
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
 from sqlalchemy.pool import NullPool
+from sqlmodel import Session, SQLModel, create_engine
 
 # Engine global - initialise lors du premier appel a get_engine()
 _engine: Optional[Engine] = None
+
+
+@event.listens_for(Engine, "connect")
+def _register_sqlite_udfs(dbapi_connection, connection_record) -> None:
+    """
+    Enregistre les UDF SQLite sur chaque connexion DBAPI.
+
+    - ``unaccent(text)`` : supprime les diacritiques (é→e, œuvre→œuvre).
+      Utilise ``src.utils.helpers.normalize_accents`` (NFD + filtre Mn).
+      Permet une recherche SQL insensible aux accents (phase 43-01).
+
+    ``deterministic=True`` autorise l'usage dans les index et le cache
+    de requete (requiert Python 3.8+ et SQLite 3.8.3+ — OK en 2026).
+    Fallback silencieux sans le flag si l'environnement est trop ancien.
+    """
+    if not isinstance(dbapi_connection, sqlite3.Connection):
+        return
+
+    from src.utils.helpers import normalize_accents
+
+    def _safe_unaccent(text: Optional[str]) -> Optional[str]:
+        if text is None:
+            return None
+        return normalize_accents(text)
+
+    try:
+        dbapi_connection.create_function(
+            "unaccent", 1, _safe_unaccent, deterministic=True
+        )
+    except TypeError:
+        # Ancienne version : signature sans deterministic
+        dbapi_connection.create_function("unaccent", 1, _safe_unaccent)
 
 
 def get_engine() -> Engine:

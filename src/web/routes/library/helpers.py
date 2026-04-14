@@ -10,22 +10,48 @@ from sqlmodel import select
 from ....infrastructure.persistence.database import get_session
 from ....infrastructure.persistence.models import EpisodeModel
 from ....utils.constants import GENRE_FOLDER_MAPPING
-from ....utils.helpers import search_variants
+from ....utils.helpers import normalize_accents, search_variants
 
 
 ITEMS_PER_PAGE = 24
 
 
 def _title_search_filter(model_class, q: str, extended: bool = False):
-    """Construit un filtre SQL de recherche par titre avec gestion des ligatures."""
-    from sqlalchemy import or_
+    """
+    Construit un filtre SQL de recherche par titre, insensible aux accents
+    et aux ligatures.
+
+    Deux familles de conditions combinées en OR :
+    1. LIKE direct sur chaque variante (search_variants : casse, ligatures,
+       version accent-stripped).
+    2. LIKE sur ``unaccent(title)`` contre la query accent-stripped —
+       indispensable pour matcher les titres DB accentués quand la query
+       ne l'est pas (ex: "Millenium" → "Millénium").
+
+    L'UDF ``unaccent`` est enregistrée par le listener SQLite dans
+    ``database.py``.
+    """
+    from sqlalchemy import func, or_
 
     variants = search_variants(q)
-    title_conditions = [model_class.title.contains(v) for v in variants]
+    unaccent_q = normalize_accents(q)
+    conditions = []
+
+    for v in variants:
+        conditions.append(model_class.title.contains(v))
+    # Pattern unaccent (UDF SQLite) : couvre les cas accent DB / sans-accent query
+    conditions.append(
+        func.unaccent(model_class.title).like(f"%{unaccent_q}%")
+    )
+
     if extended and hasattr(model_class, "overview"):
-        overview_conditions = [model_class.overview.contains(v) for v in variants]
-        return or_(*title_conditions, *overview_conditions)
-    return or_(*title_conditions)
+        for v in variants:
+            conditions.append(model_class.overview.contains(v))
+        conditions.append(
+            func.unaccent(model_class.overview).like(f"%{unaccent_q}%")
+        )
+
+    return or_(*conditions)
 
 
 def _parse_genres(genres_json: str | None) -> list[str]:
