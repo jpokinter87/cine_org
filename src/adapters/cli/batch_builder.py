@@ -13,7 +13,7 @@ Responsabilites:
 import re
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from rich.console import Console
 
@@ -423,6 +423,7 @@ async def build_transfers_batch(
             # Recuperer le titre d'episode et les genres depuis TVDB
             episode_title = ""
             series_genres: tuple[str, ...] = ()
+            canonical_count: Optional[int] = None
 
             if tvdb_client and getattr(tvdb_client, "_api_key", None) and candidate_id:
                 try:
@@ -437,6 +438,12 @@ async def build_transfers_batch(
                     )
                     if ep_details and ep_details.title:
                         episode_title = ep_details.title
+
+                    # Canonical count : pour marquer les episodes hors canon
+                    # comme is_extra=True (phase 42-01).
+                    canonical_count = await tvdb_client.get_season_episode_count(
+                        candidate_id, season_num
+                    )
                 except Exception:
                     pass
 
@@ -456,6 +463,9 @@ async def build_transfers_batch(
                 overview=series_details.overview if series_details else None,
                 poster_path=series_details.poster_url if series_details else None,
             )
+            is_extra = (
+                canonical_count is not None and episode_num > canonical_count
+            )
             episode = Episode(
                 season_number=season_num,
                 episode_number=episode_num,
@@ -465,6 +475,7 @@ async def build_transfers_batch(
                 resolution=resolution_str,
                 languages=languages,
                 file_size_bytes=file_size_bytes,
+                is_extra=is_extra,
             )
 
             new_filename = renamer.generate_series_filename(

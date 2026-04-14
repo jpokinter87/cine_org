@@ -8,6 +8,7 @@ pour éviter la duplication du code de matching API + scoring.
 from typing import Optional
 
 from loguru import logger
+from sqlmodel import Session
 
 from src.core.entities.video import PendingValidation, VideoFile
 from src.core.value_objects.parsed_info import MediaType
@@ -20,6 +21,7 @@ async def create_pending_validation(
     tvdb_client,
     max_episode_in_batch: Optional[int] = None,
     series_cache: Optional[dict[tuple[str, Optional[int]], list]] = None,
+    session: Optional[Session] = None,
 ) -> tuple[VideoFile, PendingValidation]:
     """
     Crée un VideoFile et PendingValidation à partir d'un résultat de scan.
@@ -64,7 +66,7 @@ async def create_pending_validation(
         episode = scan_result.parsed_info.episode
         if candidates and season is not None and episode is not None:
             filtered = await filter_by_episode_count(
-                tvdb_client, candidates, season, episode
+                tvdb_client, candidates, season, episode, session=session
             )
             if filtered:
                 candidates = filtered
@@ -232,6 +234,7 @@ async def filter_by_episode_count(
     candidates: list,
     season: int,
     episode: int,
+    session: Optional[Session] = None,
 ) -> list:
     """
     Filtre les candidats séries dont la saison n'a pas assez d'épisodes.
@@ -242,11 +245,18 @@ async def filter_by_episode_count(
     En cas d'erreur API ou d'absence de données, le candidat est conservé
     par précaution.
 
+    Si ``session`` est fourni, un éventuel ``SeasonOverrideModel`` pour
+    ``(candidate.id, season)`` est consulté et le count retenu est
+    ``max(count_tvdb, override.episode_count)`` (découpage local plus
+    large que le canon TVDB).
+
     Args:
         tvdb_client: Client TVDB
         candidates: Liste de SearchResult candidats
         season: Numéro de saison du fichier
         episode: Numéro d'épisode du fichier
+        session: Session SQLModel optionnelle pour consulter les overrides
+            (comportement rétro-compatible quand None).
 
     Returns:
         Liste filtrée de SearchResult compatibles
@@ -258,6 +268,12 @@ async def filter_by_episode_count(
     for candidate in candidates:
         try:
             count = await tvdb_client.get_season_episode_count(candidate.id, season)
+
+            if session is not None:
+                override_count = _lookup_override_count(session, candidate.id, season)
+                if override_count is not None:
+                    count = max(count or 0, override_count)
+
             if count is not None and episode <= count:
                 compatible.append(candidate)
             elif count is None:
@@ -268,3 +284,29 @@ async def filter_by_episode_count(
             compatible.append(candidate)
 
     return compatible
+
+
+def _lookup_override_count(
+    session: Session, candidate_id, season: int
+) -> Optional[int]:
+    """Retourne ``episode_count`` de l'override si présent, None sinon.
+
+    Import local de ``SeasonOverrideModel`` pour éviter les cycles
+    d'imports entre ``services.workflow`` et ``infrastructure.persistence``.
+    """
+    try:
+        tvdb_id = int(candidate_id)
+    except (TypeError, ValueError):
+        return None
+
+    from sqlmodel import select
+
+    from src.infrastructure.persistence.models import SeasonOverrideModel
+
+    override = session.exec(
+        select(SeasonOverrideModel).where(
+            SeasonOverrideModel.tvdb_id == tvdb_id,
+            SeasonOverrideModel.season_number == season,
+        )
+    ).first()
+    return override.episode_count if override is not None else None

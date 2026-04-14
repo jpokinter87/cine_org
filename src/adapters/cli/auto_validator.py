@@ -10,7 +10,7 @@ Responsabilites:
 - Filtrage des fichiers necessitant une validation manuelle
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from rich.console import Console
 from rich.progress import (
@@ -25,6 +25,8 @@ from src.core.entities.video import ValidationStatus
 from src.utils.helpers import parse_candidate
 
 if TYPE_CHECKING:
+    from sqlmodel import Session
+
     from src.adapters.api.tvdb_client import TVDBClient
     from src.core.ports.api_clients import TMDBClient
     from src.core.entities.video import PendingValidation
@@ -228,6 +230,7 @@ async def _filter_by_duration_compatibility(
 async def _filter_by_episode_count_compatibility(
     remaining: list["PendingValidation"],
     tvdb_client: "TVDBClient | None",
+    session: "Optional[Session]" = None,
 ) -> tuple[list["PendingValidation"], list["PendingValidation"]]:
     """
     Filtre les fichiers series selon la compatibilite du nombre d'episodes.
@@ -236,9 +239,15 @@ async def _filter_by_episode_count_compatibility(
     pour chaque candidat TVDB. Si un seul candidat est compatible et a un
     score >= 60%, le fichier est auto-valide.
 
+    Si ``session`` est fourni, un eventuel ``SeasonOverrideModel`` est
+    consulte et le count retenu est ``max(count_tvdb, override.episode_count)``
+    (compatibilite avec le decoupage local).
+
     Args:
         remaining: Liste des fichiers restants apres filtrage par score/duree
         tvdb_client: Client TVDB pour verifier les episodes
+        session: Session SQLModel optionnelle pour consulter les overrides
+            (retro-compatible quand None).
 
     Returns:
         Tuple (episode_validated, still_remaining)
@@ -247,6 +256,7 @@ async def _filter_by_episode_count_compatibility(
         return [], remaining
 
     from src.adapters.cli.helpers import _extract_series_info
+    from src.services.workflow.pending_factory import _lookup_override_count
 
     episode_validated = []
     still_remaining = []
@@ -285,6 +295,12 @@ async def _filter_by_episode_count_compatibility(
                 count = await tvdb_client.get_season_episode_count(
                     str(candidate_id), season
                 )
+                if session is not None:
+                    override_count = _lookup_override_count(
+                        session, candidate_id, season
+                    )
+                    if override_count is not None:
+                        count = max(count or 0, override_count)
                 if count is not None and episode <= count:
                     compatible_candidates.append(candidate)
             except Exception:
@@ -309,6 +325,7 @@ async def auto_validate_files(
     service: "ValidationService",
     tmdb_client: "TMDBClient | None" = None,
     tvdb_client: "TVDBClient | None" = None,
+    session: "Optional[Session]" = None,
 ) -> ValidationResult:
     """
     Auto-valide les fichiers selon differents criteres de confiance.
@@ -375,7 +392,7 @@ async def auto_validate_files(
     # Etape 3: Filtrage par compatibilite nombre d'episodes (TVDB)
     if remaining and tvdb_client:
         episode_validated, still_remaining = await _filter_by_episode_count_compatibility(
-            remaining, tvdb_client
+            remaining, tvdb_client, session=session
         )
 
         if episode_validated:

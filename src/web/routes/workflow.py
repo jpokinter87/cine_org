@@ -20,9 +20,13 @@ from ...core.entities.video import ValidationStatus
 from ...core.value_objects.parsed_info import MediaType
 from ...infrastructure.persistence.models import (
     PendingValidationModel,
+    SeasonOverrideModel,
     VideoFileModel,
 )
+from ...core.ports.api_clients import SearchResult
+from ...services.anomaly_detector import AnomalyDetector, ExcessEpisodeGroup
 from ...services.workflow.pending_factory import create_pending_validation
+from ...utils.helpers import parse_candidates
 from ..deps import templates
 
 logger = logging.getLogger(__name__)
@@ -54,6 +58,8 @@ class WorkflowProgress:
         self.auto_validated_files: list[str] = []
         self.pending_files: list[str] = []
         self.undersized_files: list[str] = []
+        # Groupes (serie, saison) avec episodes au-dela du canon TVDB
+        self.anomaly_groups: list[ExcessEpisodeGroup] = []
 
 
 async def _run_web_workflow(
@@ -163,6 +169,7 @@ async def _run_web_workflow(
                 tmdb_client,
                 tvdb_client,
                 series_cache=series_cache,
+                session=pending_repo._session,
             )
 
             # Sauvegarder
@@ -227,6 +234,20 @@ async def _run_web_workflow(
                 progress.auto_validated,
                 progress.pending_remaining,
             )
+
+        # Détection des anomalies de découpage (séries hors canon TVDB).
+        # Ne bloque jamais le workflow : les erreurs sont loggées et la
+        # liste reste vide.
+        try:
+            detector = AnomalyDetector(
+                session=pending_repo._session,
+                tvdb_client=tvdb_client,
+                pending_repo=validation_service,
+            )
+            progress.anomaly_groups = await detector.find_excess_episode_groups()
+        except Exception as exc:
+            logger.warning("Détection anomalies échouée : %s", exc)
+            progress.anomaly_groups = []
 
         progress.message = "Traitement terminé"
         progress.complete = True
@@ -348,6 +369,19 @@ async def workflow_progress_sse(request: Request):
                     "auto_validated_files": progress.auto_validated_files,
                     "pending_files": progress.pending_files,
                     "undersized_files": progress.undersized_files,
+                    "anomaly_groups": [
+                        {
+                            "tvdb_id": g.tvdb_id,
+                            "series_title": g.series_title,
+                            "series_year": g.series_year,
+                            "season_number": g.season_number,
+                            "tvdb_count": g.tvdb_count,
+                            "pending_count": len(g.pendings),
+                            "episode_numbers": g.episode_numbers,
+                            "validated_seasons_count": g.validated_seasons_count,
+                        }
+                        for g in progress.anomaly_groups
+                    ],
                 },
                 ensure_ascii=False,
             )
@@ -392,3 +426,161 @@ async def workflow_reset(request: Request):
 def _escape_json(s: str) -> str:
     """Échappe une chaîne pour inclusion dans du JSON."""
     return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
+# ═══════════════════════════════════════
+# Routes d'action sur les anomalies de decoupage (phase 42-01)
+# ═══════════════════════════════════════
+
+
+def _pop_anomaly_group(
+    request: Request, tvdb_id: int, season: int
+) -> Optional[ExcessEpisodeGroup]:
+    """Retire un groupe d'anomalies de l'etat workflow et le retourne."""
+    progress = getattr(request.app.state, "workflow_progress", None)
+    if progress is None:
+        return None
+    remaining: list[ExcessEpisodeGroup] = []
+    found: Optional[ExcessEpisodeGroup] = None
+    for group in progress.anomaly_groups:
+        if found is None and group.tvdb_id == tvdb_id and group.season_number == season:
+            found = group
+        else:
+            remaining.append(group)
+    progress.anomaly_groups = remaining
+    return found
+
+
+def _upsert_season_override(
+    session, tvdb_id: int, season: int, episode_count: int
+) -> None:
+    """Cree ou met a jour l'override (tvdb_id, season) avec max(existing, new)."""
+    existing = session.exec(
+        select(SeasonOverrideModel).where(
+            SeasonOverrideModel.tvdb_id == tvdb_id,
+            SeasonOverrideModel.season_number == season,
+        )
+    ).first()
+    if existing is None:
+        session.add(
+            SeasonOverrideModel(
+                tvdb_id=tvdb_id,
+                season_number=season,
+                episode_count=episode_count,
+            )
+        )
+    elif episode_count > existing.episode_count:
+        existing.episode_count = episode_count
+        session.add(existing)
+    session.commit()
+
+
+@router.post("/anomalies/accept", response_class=HTMLResponse)
+async def anomalies_accept(
+    request: Request,
+    tvdb_id: int = Form(...),
+    season: int = Form(...),
+):
+    """Accepte un groupe comme decoupage alternatif : override + validations."""
+    container = request.app.state.container
+    group = _pop_anomaly_group(request, tvdb_id, season)
+    if group is None:
+        return HTMLResponse(
+            '<div class="anomaly-resolved anomaly-resolved-muted">Groupe introuvable.</div>',
+            status_code=404,
+        )
+
+    validation_service = container.validation_service()
+    pending_repo = container.pending_validation_repository()
+    session = pending_repo._session
+
+    episode_count = max(group.max_episode_number, group.tvdb_count)
+    _upsert_season_override(session, tvdb_id, season, episode_count)
+
+    # Fallback : quand le filtre filter_by_episode_count a elimine la serie
+    # cible du set de candidats (cas The Big C S04E05+), les pendings
+    # n'ont pas ce candidat. On fabrique alors un SearchResult minimal
+    # depuis les infos du groupe detecte par AnomalyDetector. validate_candidate
+    # l'ajoutera a pending.candidates avant de persister.
+    fallback_candidate = SearchResult(
+        id=str(tvdb_id),
+        title=group.series_title,
+        year=group.series_year,
+        score=100.0,
+        source="tvdb",
+    )
+
+    # Valider chaque pending avec son top candidat TVDB (ou le fallback)
+    validated = 0
+    for pending in group.pendings:
+        candidates = parse_candidates(pending.candidates)
+        match = next(
+            (c for c in candidates if c.source == "tvdb" and str(c.id) == str(tvdb_id)),
+            None,
+        )
+        if match is None:
+            match = fallback_candidate
+        try:
+            await validation_service.validate_candidate(pending, match)
+            validated += 1
+        except Exception as exc:
+            logger.warning("validate_candidate échec pour %s : %s", pending.id, exc)
+
+    html = (
+        '<div class="anomaly-resolved anomaly-resolved-success">'
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+        'width="18" height="18"><polyline points="20 6 9 17 4 12"/></svg>'
+        f"<span>{validated} épisode(s) acceptés comme découpage alternatif — "
+        f"{group.series_title} S{season:02d}.</span>"
+        "</div>"
+    )
+    return HTMLResponse(html)
+
+
+@router.post("/anomalies/dismiss", response_class=HTMLResponse)
+async def anomalies_dismiss(
+    request: Request,
+    tvdb_id: int = Form(...),
+    season: int = Form(...),
+):
+    """Ignore un groupe pour la session courante (rien ne change en base)."""
+    _pop_anomaly_group(request, tvdb_id, season)
+    # Reponse vide pour swap HTMX
+    return HTMLResponse("")
+
+
+@router.post("/anomalies/trash", response_class=HTMLResponse)
+async def anomalies_trash(
+    request: Request,
+    tvdb_id: int = Form(...),
+    season: int = Form(...),
+):
+    """Met les pendings du groupe en corbeille (statut REJECTED)."""
+    container = request.app.state.container
+    group = _pop_anomaly_group(request, tvdb_id, season)
+    if group is None:
+        return HTMLResponse(
+            '<div class="anomaly-resolved anomaly-resolved-muted">Groupe introuvable.</div>',
+            status_code=404,
+        )
+
+    validation_service = container.validation_service()
+    trashed = 0
+    for pending in group.pendings:
+        try:
+            validation_service.reject_pending(pending)
+            trashed += 1
+        except Exception as exc:
+            logger.warning("reject_pending échec pour %s : %s", pending.id, exc)
+
+    html = (
+        '<div class="anomaly-resolved anomaly-resolved-trash">'
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+        'width="18" height="18"><polyline points="3 6 5 6 21 6"/>'
+        '<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'
+        '</svg>'
+        f"<span>{trashed} fichier(s) mis à la corbeille — "
+        f"{group.series_title} S{season:02d}.</span>"
+        "</div>"
+    )
+    return HTMLResponse(html)

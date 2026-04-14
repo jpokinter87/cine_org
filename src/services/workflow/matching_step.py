@@ -74,7 +74,7 @@ class MatchingStepMixin:
 
                 # Créer VideoFile et PendingValidation
                 video_file, pending = await self._create_pending_validation(
-                    result, max_ep, series_cache
+                    result, max_ep, series_cache, session=pending_repo._session
                 )
 
                 saved_vf = video_file_repo.save(video_file)
@@ -95,11 +95,13 @@ class MatchingStepMixin:
         scan_result,
         max_episode_in_batch: Optional[int] = None,
         series_cache: Optional[dict] = None,
+        session=None,
     ) -> tuple:
         """
         Crée un VideoFile et PendingValidation à partir d'un résultat de scan.
 
-        Délègue au module partagé pending_factory.
+        Délègue au module partagé pending_factory. ``session`` permet la
+        consultation des overrides d'épisodes (SeasonOverrideModel).
         """
         return await create_pending_validation(
             scan_result,
@@ -108,6 +110,7 @@ class MatchingStepMixin:
             self._tvdb_client,
             max_episode_in_batch,
             series_cache,
+            session=session,
         )
 
     async def _auto_validate(self, state: WorkflowState) -> None:

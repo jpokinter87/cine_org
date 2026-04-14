@@ -60,6 +60,7 @@ class SQLModelEpisodeRepository(IEpisodeRepository):
             resolution=model.resolution,
             languages=tuple(languages_list),
             file_size_bytes=model.file_size_bytes,
+            is_extra=bool(model.is_extra),
         )
 
     def _to_model(self, entity: Episode) -> EpisodeModel:
@@ -86,6 +87,7 @@ class SQLModelEpisodeRepository(IEpisodeRepository):
             resolution=entity.resolution,
             languages_json=json.dumps(list(entity.languages)) if entity.languages else None,
             file_size_bytes=entity.file_size_bytes,
+            is_extra=bool(entity.is_extra),
         )
         if entity.id:
             model.id = int(entity.id)

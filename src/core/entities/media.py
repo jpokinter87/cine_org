@@ -135,3 +135,4 @@ class Episode:
     resolution: Optional[str] = None
     languages: tuple[str, ...] = ()
     file_size_bytes: Optional[int] = None
+    is_extra: bool = False

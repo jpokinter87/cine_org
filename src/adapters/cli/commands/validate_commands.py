@@ -76,8 +76,10 @@ async def _validate_manual_async(container) -> None:
         return
 
     # Etape 1: Auto-validation par score, duree et episodes (delegue a auto_validator)
+    # Session partagee pour la consultation des overrides (SeasonOverrideModel).
+    pending_repo = container.pending_validation_repository()
     result: ValidationResult = await auto_validate_files(
-        pending_list, service, tmdb_client, tvdb_client
+        pending_list, service, tmdb_client, tvdb_client, session=pending_repo._session
     )
 
     if not result.remaining:

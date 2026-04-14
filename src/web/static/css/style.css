@@ -2283,6 +2283,261 @@ a.pagination-btn:hover {
     }
 }
 
+/* ───────────────────────────────────
+   Anomalies de decoupage (phase 42-01)
+   Proposer en fin de workflow la resolution
+   des series dont les episodes depassent
+   le canon TVDB.
+   ─────────────────────────────────── */
+
+.workflow-anomalies {
+    margin-top: 1.75rem;
+    padding: 1.5rem;
+    background: var(--accent-amber-dim);
+    border: 1px solid rgba(232, 168, 73, 0.28);
+    border-radius: var(--radius-lg);
+    animation: fadeInUp 0.4s ease both;
+}
+
+.anomalies-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    margin-bottom: 1.25rem;
+}
+
+.anomalies-icon {
+    flex-shrink: 0;
+    color: var(--accent-amber);
+    margin-top: 0.15rem;
+}
+
+.anomalies-header-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.anomalies-title {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+}
+
+.anomalies-subtitle {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.anomaly-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.anomaly-group {
+    padding: 1.1rem 1.25rem;
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.anomaly-group-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.anomaly-group-title {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    color: var(--text-primary);
+    letter-spacing: -0.005em;
+}
+
+.anomaly-group-year {
+    color: var(--text-muted);
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    font-weight: 400;
+}
+
+.anomaly-group-season {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent-amber);
+    padding: 0.25rem 0.6rem;
+    background: var(--accent-amber-dim);
+    border-radius: 999px;
+    border: 1px solid rgba(232, 168, 73, 0.22);
+}
+
+.anomaly-group-stats {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.anomaly-stat {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.4rem;
+}
+
+.anomaly-stat-value {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 1rem;
+    letter-spacing: -0.01em;
+}
+
+.anomaly-stat-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.anomaly-stat-divider {
+    color: var(--text-muted);
+    font-weight: 300;
+}
+
+.anomaly-episodes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.anomaly-ep-chip {
+    font-family: 'DM Mono', 'SF Mono', ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    padding: 0.2rem 0.5rem;
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+}
+
+.anomaly-trust-signal {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    color: var(--accent-emerald);
+    padding: 0.3rem 0.55rem;
+    background: var(--accent-emerald-dim);
+    border-radius: var(--radius-sm);
+    align-self: flex-start;
+}
+
+.anomaly-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.anomaly-form {
+    margin: 0;
+}
+
+.anomaly-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.5rem 0.85rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    font-family: var(--font-body);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.anomaly-btn svg {
+    flex-shrink: 0;
+}
+
+.anomaly-btn-accept {
+    background: var(--accent-emerald);
+    color: var(--bg-deep);
+    font-weight: 600;
+}
+
+.anomaly-btn-accept:hover {
+    background: #5fd89b;
+}
+
+.anomaly-btn-dismiss {
+    background: transparent;
+    color: var(--text-secondary);
+    border-color: var(--border);
+}
+
+.anomaly-btn-dismiss:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+    background: var(--bg-surface);
+}
+
+.anomaly-btn-trash {
+    background: transparent;
+    color: var(--accent-rose);
+    border-color: rgba(232, 93, 117, 0.35);
+}
+
+.anomaly-btn-trash:hover {
+    background: var(--accent-rose-dim);
+    border-color: var(--accent-rose);
+}
+
+.anomaly-resolved {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.9rem 1.1rem;
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    animation: fadeInUp 0.3s ease both;
+}
+
+.anomaly-resolved svg {
+    flex-shrink: 0;
+}
+
+.anomaly-resolved-success {
+    background: var(--accent-emerald-dim);
+    color: var(--accent-emerald);
+    border: 1px solid rgba(78, 203, 141, 0.25);
+}
+
+.anomaly-resolved-trash {
+    background: var(--accent-rose-dim);
+    color: var(--accent-rose);
+    border: 1px solid rgba(232, 93, 117, 0.25);
+}
+
+.anomaly-resolved-muted {
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+}
+
 /* ── Workflow Responsive ── */
 
 @media (max-width: 768px) {

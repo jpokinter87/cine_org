@@ -56,4 +56,98 @@
         <span>Tous les fichiers ont été auto-validés</span>
     </div>
     {% endif %}
+
+    {% if progress.anomaly_groups %}
+    <div class="workflow-anomalies">
+        <div class="anomalies-header">
+            <svg class="anomalies-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <div class="anomalies-header-text">
+                <h3 class="anomalies-title">Cas particuliers à traiter</h3>
+                <p class="anomalies-subtitle">
+                    Des épisodes dépassent le découpage officiel TVDB. Proposer une résolution groupée.
+                </p>
+            </div>
+        </div>
+
+        <div class="anomaly-list">
+            {% for group in progress.anomaly_groups %}
+            <div id="anomaly-{{ group.tvdb_id }}-{{ group.season_number }}"
+                 class="anomaly-group">
+                <div class="anomaly-group-head">
+                    <span class="anomaly-group-title">
+                        {{ group.series_title }}{% if group.series_year %} <span class="anomaly-group-year">({{ group.series_year }})</span>{% endif %}
+                    </span>
+                    <span class="anomaly-group-season">Saison {{ group.season_number }}</span>
+                </div>
+
+                <div class="anomaly-group-stats">
+                    <span class="anomaly-stat">
+                        <span class="anomaly-stat-value">{{ group.tvdb_count }}</span>
+                        <span class="anomaly-stat-label">canon TVDB</span>
+                    </span>
+                    <span class="anomaly-stat-divider">/</span>
+                    <span class="anomaly-stat">
+                        <span class="anomaly-stat-value">{{ group.pendings | length }}</span>
+                        <span class="anomaly-stat-label">fichier(s) hors canon</span>
+                    </span>
+                </div>
+
+                <div class="anomaly-episodes">
+                    {% for num in group.episode_numbers %}
+                    <span class="anomaly-ep-chip">E{{ '%02d' | format(num) }}</span>
+                    {% endfor %}
+                </div>
+
+                {% if group.validated_seasons_count >= 1 %}
+                <div class="anomaly-trust-signal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    {{ group.validated_seasons_count }} saison(s) déjà validée(s) pour cette série
+                </div>
+                {% endif %}
+
+                <div class="anomaly-actions">
+                    <form class="anomaly-form" method="post"
+                          hx-post="/workflow/anomalies/accept"
+                          hx-target="#anomaly-{{ group.tvdb_id }}-{{ group.season_number }}"
+                          hx-swap="outerHTML">
+                        <input type="hidden" name="tvdb_id" value="{{ group.tvdb_id }}">
+                        <input type="hidden" name="season" value="{{ group.season_number }}">
+                        <button type="submit" class="anomaly-btn anomaly-btn-accept">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>
+                            Accepter comme découpage alternatif
+                        </button>
+                    </form>
+                    <form class="anomaly-form" method="post"
+                          hx-post="/workflow/anomalies/dismiss"
+                          hx-target="#anomaly-{{ group.tvdb_id }}-{{ group.season_number }}"
+                          hx-swap="outerHTML">
+                        <input type="hidden" name="tvdb_id" value="{{ group.tvdb_id }}">
+                        <input type="hidden" name="season" value="{{ group.season_number }}">
+                        <button type="submit" class="anomaly-btn anomaly-btn-dismiss">
+                            Ignorer pour cette fois
+                        </button>
+                    </form>
+                    <form class="anomaly-form" method="post"
+                          hx-post="/workflow/anomalies/trash"
+                          hx-target="#anomaly-{{ group.tvdb_id }}-{{ group.season_number }}"
+                          hx-swap="outerHTML">
+                        <input type="hidden" name="tvdb_id" value="{{ group.tvdb_id }}">
+                        <input type="hidden" name="season" value="{{ group.season_number }}">
+                        <button type="submit" class="anomaly-btn anomaly-btn-trash">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            Corbeille
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 </div>
