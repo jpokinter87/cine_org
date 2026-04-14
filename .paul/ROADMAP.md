@@ -8,16 +8,16 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 **v2.1 Lecteurs Externes & Intégrations** (v2.1.0)
 Status: 🚧 In Progress
-Phases: 0 of 2 complete
+Phases: 1 of 2 complete (50%)
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
-| 40 | Lecteur DuneHD | 2 | 🚧 Planning | - |
-| 41 | Intégration Jellyfin | TBD | Not started | - |
+| 40 | Lecteur DuneHD | 2/2 | ✅ Complete | 2026-04-14 |
+| 41 | Intégration Jellyfin | TBD | 🔵 Ready to plan | - |
 
-### Phase 40: Lecteur DuneHD
+### Phase 40: Lecteur DuneHD ✅
 
-Ajout d'un nouveau type de profil lecteur "dunehd" pour déclencher la lecture sur un media player Dune HD via son API HTTP (`/cgi-bin/do?cmd=start_file_playback`), avec mapping automatique storage → URLs SMB (shares Films / Series TV). Plan 40-01 : backend DuneHDPlayer + schéma profil étendu + dispatcher. Plan 40-02 : UI web de configuration (champs conditionnels mpv/dunehd, validation, badges type) + checkpoint end-to-end sur Dune physique.
+Livré 2026-04-14 : nouveau type de profil lecteur "dunehd" déclenchant la lecture sur un media player Dune HD via son API HTTP (`/cgi-bin/do?cmd=start_file_playback`), avec mapping automatique storage → URLs SMB (shares Films / Series TV). Plan 40-01 : backend DuneHDPlayer + schéma profil étendu + dispatcher. Plan 40-02 : UI web de configuration (champs conditionnels mpv/dunehd, validation, badges type). Lecture end-to-end validée sur Dune physique 192.168.1.4 (film + épisode).
 
 ### Phase 41: Intégration Jellyfin
 
@@ -163,4 +163,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-04-14 — v2.0 clôturé, milestone v2.1 "Lecteurs Externes & Intégrations" ouvert avec phases 40 (DuneHD) et 41 (Jellyfin)*
+*Last updated: 2026-04-14 — Phase 40 Lecteur DuneHD complète (backend + UI config, lecture end-to-end validée), Phase 41 Jellyfin prête à planifier*

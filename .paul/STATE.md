@@ -10,21 +10,21 @@ See: .paul/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Milestone: v2.1 Lecteurs Externes & Intégrations
-Phase: 40 of 2 (Lecteur DuneHD) — In progress [1/2 plans complete]
-Plan: 40-01 complete (loop closed), 40-02 ready to plan/apply (depends_on 40-01 satisfied)
-Status: Loop 40-01 closed, ready for PLAN/APPLY 40-02
-Last activity: 2026-04-14 — Plan 40-01 UNIFY complete, SUMMARY créé, loop fermée
+Phase: 41 of 2 (Intégration Jellyfin) — Not started
+Plan: Not started
+Status: Phase 40 complète (PLAN ✓ APPLY ✓ UNIFY ✓ sur 40-01 et 40-02), prête à transitionner vers Phase 41
+Last activity: 2026-04-14 — Phase 40 Lecteur DuneHD clôturée (backend + UI config, lecture end-to-end Dune physique validée)
 
 Progress:
-- v2.1: [██░░░░░░░░] 25% (0 phases complètes, 1/≈4 plans livrés)
-- Phase 40: [█████░░░░░] 50% (1/2 plans)
+- v2.1: [█████░░░░░] 50% (1/2 phases complètes — Phase 40 ✓)
+- Phase 40: [██████████] 100% (2/2 plans complets, SUMMARY créés)
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Loop 40-01 complete — ready for 40-02]
+  ○        ○        ○     [Phase 40 fermée — prêt pour /paul:plan Phase 41]
 ```
 
 ## Accumulated Context
@@ -104,6 +104,13 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - st_nlink > 1 filtre scanner downloads (stat unique combiné avec size check)
 - HardlinkModel SQLite avec expires_at, purge quotidienne via timer systemd
 - Nettoyage dossiers vides ascendant après purge hardlink (rmdir jusqu'à downloads_dir)
+- Backend lecteur pluggable via `profile.type` (dispatcher `_launch_player`, branches mpv/dunehd isolées)
+- PID synthétique ≥ 10M pour lecteurs HTTP fire-and-forget (DuneHD), distinct des vrais PIDs Linux
+- ElementTree stdlib pour parser la réponse Dune (XML plat, pas de dépendance ajoutée)
+- httpx `params=` au lieu de `urllib.quote()` — URL-encoding géré au transport
+- `_validate_profile_form()` unifie la validation add+edit (IPv4 simple pour LAN, préfixe smb:// minimal)
+- Champs hors type courant forcés à None à la persistance (évite les résidus quand on bascule mpv→dunehd)
+- Tests routes config via FastAPI minimal (FastAPI() + router seul) sans lifespan Container
 
 ### Deferred Issues
 - README.md à réécrire de fond en comble : nouvelles commandes, structure répertoires attendue, architecture, configuration
@@ -125,6 +132,7 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Trous dans subdivisions alphabétiques : étendre la borne la plus proche au lieu de laisser à la racine
 - Vérifier si le bug subdivision a causé des dégâts dans des sessions antérieures (pré-existait depuis phase 35)
 - Réassociation TMDB : les données techniques (résolution, codecs, langue) ne sont pas re-peuplées après correction — cartouches qualité absents sur jaquette et fiche détaillée. Le code ne touche pas ces champs mais ils n'étaient probablement jamais remplis pour les films importés. Enrichir depuis VideoFileModel ou mediainfo lors de la réassociation.
+- "En cours de lecture" (reprise de position) : faisable pour mpv local/remote via IPC socket, partiellement faisable pour DuneHD via polling `command=status` (fragile). Candidat Phase 42 post-Jellyfin. Analyse faisabilité produite en fin de session 2026-04-14 (chat uniquement, pas de doc créé).
 
 ### Blockers/Concerns
 None.
@@ -136,16 +144,15 @@ Branch: master
 ## Session Continuity
 
 Last session: 2026-04-14
-Stopped at: Plan 40-01 loop fermée (PLAN ✓ APPLY ✓ UNIFY ✓) — pause avant Plan 40-02
-Next action: /paul:apply .paul/phases/40-lecteur-dunehd/40-02-PLAN.md (UI config DuneHD + checkpoint end-to-end sur Dune réel)
-Resume file: .paul/HANDOFF-2026-04-14.md
+Stopped at: Phase 40 complète (40-01 + 40-02 unifiées) — transition de phase exécutée (STATE/PROJECT/ROADMAP alignés), commit de phase à confirmer par l'utilisateur
+Next action: /paul:plan pour Phase 41 (Intégration Jellyfin) — à lancer dans une nouvelle session (contexte saturé)
+Resume file: .paul/phases/40-lecteur-dunehd/40-02-SUMMARY.md
 Resume context:
-- Session majeure : bascule v2.0→v2.1 (milestone clôturé, pyproject 1.9.0→2.0.0, roadmap restructurée)
-- Plan 40-01 livré complet : backend DuneHDPlayer (138 lignes) + schéma profil étendu + dispatcher, 38 tests verts, ruff clean, SUMMARY créé
-- Plan 40-02 déjà planifié, prêt à exécuter : UI config (champs conditionnels mpv/dunehd) + validation backend + checkpoint visuel end-to-end sur Dune physique
-- Config validée : DuneHD 192.168.1.4, JPSERVER SMB 192.168.1.2 (shares Films + Series TV), CineOrg web 192.168.1.15
-- Aucun commit pendant la session — working tree contient toutes les modifs 40-01
-- Tests rename-canonical en cours côté utilisateur (indépendant, hors phase)
+- Phase 40 Lecteur DuneHD entièrement livrée : backend (40-01) + UI config (40-02), lecture end-to-end Dune physique validée
+- 48 tests unitaires DuneHD/player/routes verts, ruff clean
+- Idée explorée en fin de session : "En cours de lecture" (reprise de position) — faisable mpv, fragile DuneHD → candidat Phase 42 post-Jellyfin
+- Git : commit de phase `feat(40): lecteur DuneHD complet (backend + UI config)` à créer au prochain passage (non encore fait — à confirmer avec utilisateur)
+- Phase 41 Jellyfin : focus volumes Docker + symlinks, à démarrer en session fraîche
 
 ---
 *STATE.md — Updated after every significant action*

@@ -1,4 +1,10 @@
 <div class="config-profiles" id="player-profiles">
+    {% if profile_error %}
+    <div class="profile-error-banner" role="alert">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span>{{ profile_error }}</span>
+    </div>
+    {% endif %}
     {# Liste des profils #}
     <div class="profiles-list">
         {% for profile in profiles %}
@@ -19,10 +25,13 @@
                         {% endif %}
                     </span>
                     <span class="profile-name">{{ profile.name }}</span>
-                    {% if profile.target == 'remote' %}
-                    <span class="profile-badge profile-badge-remote">distant</span>
-                    {% else %}
-                    <span class="profile-badge profile-badge-local">local</span>
+                    <span class="profile-type-badge profile-type-{{ profile.type or 'mpv' }}">{{ (profile.type or 'mpv')|upper }}</span>
+                    {% if (profile.type or 'mpv') == 'mpv' %}
+                        {% if profile.target == 'remote' %}
+                        <span class="profile-badge profile-badge-remote">distant</span>
+                        {% else %}
+                        <span class="profile-badge profile-badge-local">local</span>
+                        {% endif %}
                     {% endif %}
                 </button>
                 <div class="profile-actions">
@@ -41,9 +50,15 @@
                 </div>
             </div>
             <div class="profile-detail">
-                <span class="profile-info">{{ profile.command }}</span>
-                {% if profile.target == 'remote' and profile.ssh_host %}
-                <span class="profile-info">→ {{ profile.ssh_user }}@{{ profile.ssh_host }}</span>
+                {% if (profile.type or 'mpv') == 'dunehd' %}
+                    {% if profile.ip %}<span class="profile-info">{{ profile.ip }}</span>{% endif %}
+                    {% if profile.smb_movies_prefix %}<span class="profile-info">films: {{ profile.smb_movies_prefix }}</span>{% endif %}
+                    {% if profile.smb_series_prefix %}<span class="profile-info">séries: {{ profile.smb_series_prefix }}</span>{% endif %}
+                {% else %}
+                    <span class="profile-info">{{ profile.command }}</span>
+                    {% if profile.target == 'remote' and profile.ssh_host %}
+                    <span class="profile-info">→ {{ profile.ssh_user }}@{{ profile.ssh_host }}</span>
+                    {% endif %}
                 {% endif %}
             </div>
 
@@ -52,6 +67,7 @@
                 <form hx-post="/config/player-profiles/{{ profile.name }}/edit"
                       hx-target="#player-profiles"
                       hx-swap="outerHTML">
+                    {% set ptype = profile.type or 'mpv' %}
                     <div class="profile-form-grid">
                         <div class="profile-form-field">
                             <label>Nom</label>
@@ -59,33 +75,63 @@
                                    {% if profile.name == 'Local' %}readonly{% endif %}>
                         </div>
                         <div class="profile-form-field">
-                            <label>Programme</label>
-                            <input type="text" name="command" value="{{ profile.command }}" class="config-input" placeholder="mpv">
-                        </div>
-                        <div class="profile-form-field">
-                            <label>Cible</label>
-                            <select name="target" class="config-input config-select">
-                                <option value="local" {% if profile.target == 'local' %}selected{% endif %}>local</option>
-                                <option value="remote" {% if profile.target == 'remote' %}selected{% endif %}>remote</option>
+                            <label>Type</label>
+                            <select name="type" class="config-input config-select" onchange="togglePlayerTypeFields(this)">
+                                <option value="mpv" {% if ptype == 'mpv' %}selected{% endif %}>mpv</option>
+                                <option value="dunehd" {% if ptype == 'dunehd' %}selected{% endif %}>dunehd</option>
                             </select>
                         </div>
-                        <div class="profile-form-field">
-                            <label>Hôte SSH</label>
-                            <input type="text" name="ssh_host" value="{{ profile.ssh_host or '' }}" class="config-input" placeholder="192.168.1.20">
-                        </div>
-                        <div class="profile-form-field">
-                            <label>Utilisateur SSH</label>
-                            <input type="text" name="ssh_user" value="{{ profile.ssh_user or '' }}" class="config-input" placeholder="user">
-                        </div>
-                        <div class="profile-form-field">
-                            <label>Préfixe chemin local</label>
-                            <input type="text" name="local_path_prefix" value="{{ profile.local_path_prefix or '' }}" class="config-input" placeholder="/home/jp/Videos">
-                        </div>
-                        <div class="profile-form-field">
-                            <label>Préfixe chemin distant</label>
-                            <input type="text" name="remote_path_prefix" value="{{ profile.remote_path_prefix or '' }}" class="config-input" placeholder="/mnt/nas">
+                    </div>
+
+                    <div class="profile-fields-mpv" {% if ptype != 'mpv' %}style="display:none"{% endif %}>
+                        <div class="profile-form-grid">
+                            <div class="profile-form-field">
+                                <label>Programme</label>
+                                <input type="text" name="command" value="{{ profile.command or '' }}" class="config-input" placeholder="mpv">
+                            </div>
+                            <div class="profile-form-field">
+                                <label>Cible</label>
+                                <select name="target" class="config-input config-select">
+                                    <option value="local" {% if profile.target == 'local' %}selected{% endif %}>local</option>
+                                    <option value="remote" {% if profile.target == 'remote' %}selected{% endif %}>remote</option>
+                                </select>
+                            </div>
+                            <div class="profile-form-field">
+                                <label>Hôte SSH</label>
+                                <input type="text" name="ssh_host" value="{{ profile.ssh_host or '' }}" class="config-input" placeholder="192.168.1.20">
+                            </div>
+                            <div class="profile-form-field">
+                                <label>Utilisateur SSH</label>
+                                <input type="text" name="ssh_user" value="{{ profile.ssh_user or '' }}" class="config-input" placeholder="user">
+                            </div>
+                            <div class="profile-form-field">
+                                <label>Préfixe chemin local</label>
+                                <input type="text" name="local_path_prefix" value="{{ profile.local_path_prefix or '' }}" class="config-input" placeholder="/home/jp/Videos">
+                            </div>
+                            <div class="profile-form-field">
+                                <label>Préfixe chemin distant</label>
+                                <input type="text" name="remote_path_prefix" value="{{ profile.remote_path_prefix or '' }}" class="config-input" placeholder="/mnt/nas">
+                            </div>
                         </div>
                     </div>
+
+                    <div class="profile-fields-dunehd" {% if ptype != 'dunehd' %}style="display:none"{% endif %}>
+                        <div class="profile-form-grid">
+                            <div class="profile-form-field">
+                                <label>IP du Dune</label>
+                                <input type="text" name="ip" value="{{ profile.ip or '' }}" class="config-input" placeholder="192.168.1.4">
+                            </div>
+                            <div class="profile-form-field">
+                                <label>Préfixe SMB films</label>
+                                <input type="text" name="smb_movies_prefix" value="{{ profile.smb_movies_prefix or '' }}" class="config-input" placeholder="smb://192.168.1.2/Films">
+                            </div>
+                            <div class="profile-form-field">
+                                <label>Préfixe SMB séries</label>
+                                <input type="text" name="smb_series_prefix" value="{{ profile.smb_series_prefix or '' }}" class="config-input" placeholder="smb://192.168.1.2/Series TV">
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="profile-form-actions">
                         <button type="submit" class="profile-save-btn">Enregistrer</button>
                         <button type="button" class="profile-cancel-btn" onclick="toggleProfileEdit(this)">Annuler</button>
@@ -113,33 +159,63 @@
                     <input type="text" name="name" class="config-input" placeholder="Xubuntu salon" required>
                 </div>
                 <div class="profile-form-field">
-                    <label>Programme</label>
-                    <input type="text" name="command" class="config-input" value="mpv" placeholder="mpv">
-                </div>
-                <div class="profile-form-field">
-                    <label>Cible</label>
-                    <select name="target" class="config-input config-select">
-                        <option value="local">local</option>
-                        <option value="remote">remote</option>
+                    <label>Type</label>
+                    <select name="type" class="config-input config-select" onchange="togglePlayerTypeFields(this)">
+                        <option value="mpv" selected>mpv</option>
+                        <option value="dunehd">dunehd</option>
                     </select>
                 </div>
-                <div class="profile-form-field">
-                    <label>Hôte SSH</label>
-                    <input type="text" name="ssh_host" class="config-input" placeholder="192.168.1.20">
-                </div>
-                <div class="profile-form-field">
-                    <label>Utilisateur SSH</label>
-                    <input type="text" name="ssh_user" class="config-input" placeholder="user">
-                </div>
-                <div class="profile-form-field">
-                    <label>Préfixe chemin local</label>
-                    <input type="text" name="local_path_prefix" class="config-input" placeholder="/home/jp/Videos">
-                </div>
-                <div class="profile-form-field">
-                    <label>Préfixe chemin distant</label>
-                    <input type="text" name="remote_path_prefix" class="config-input" placeholder="/mnt/nas">
+            </div>
+
+            <div class="profile-fields-mpv">
+                <div class="profile-form-grid">
+                    <div class="profile-form-field">
+                        <label>Programme</label>
+                        <input type="text" name="command" class="config-input" value="mpv" placeholder="mpv">
+                    </div>
+                    <div class="profile-form-field">
+                        <label>Cible</label>
+                        <select name="target" class="config-input config-select">
+                            <option value="local">local</option>
+                            <option value="remote">remote</option>
+                        </select>
+                    </div>
+                    <div class="profile-form-field">
+                        <label>Hôte SSH</label>
+                        <input type="text" name="ssh_host" class="config-input" placeholder="192.168.1.20">
+                    </div>
+                    <div class="profile-form-field">
+                        <label>Utilisateur SSH</label>
+                        <input type="text" name="ssh_user" class="config-input" placeholder="user">
+                    </div>
+                    <div class="profile-form-field">
+                        <label>Préfixe chemin local</label>
+                        <input type="text" name="local_path_prefix" class="config-input" placeholder="/home/jp/Videos">
+                    </div>
+                    <div class="profile-form-field">
+                        <label>Préfixe chemin distant</label>
+                        <input type="text" name="remote_path_prefix" class="config-input" placeholder="/mnt/nas">
+                    </div>
                 </div>
             </div>
+
+            <div class="profile-fields-dunehd" style="display:none">
+                <div class="profile-form-grid">
+                    <div class="profile-form-field">
+                        <label>IP du Dune</label>
+                        <input type="text" name="ip" class="config-input" placeholder="192.168.1.4">
+                    </div>
+                    <div class="profile-form-field">
+                        <label>Préfixe SMB films</label>
+                        <input type="text" name="smb_movies_prefix" class="config-input" placeholder="smb://192.168.1.2/Films">
+                    </div>
+                    <div class="profile-form-field">
+                        <label>Préfixe SMB séries</label>
+                        <input type="text" name="smb_series_prefix" class="config-input" placeholder="smb://192.168.1.2/Series TV">
+                    </div>
+                </div>
+            </div>
+
             <div class="profile-form-actions">
                 <button type="submit" class="profile-save-btn">Ajouter</button>
                 <button type="button" class="profile-cancel-btn" onclick="toggleProfileAdd()">Annuler</button>
@@ -176,6 +252,14 @@
     }
     function hideDeleteProfileDialog() {
         document.getElementById('delete-profile-overlay').classList.remove('active');
+    }
+    function togglePlayerTypeFields(select) {
+        var form = select.closest('form');
+        if (!form) return;
+        var mpv = form.querySelector('.profile-fields-mpv');
+        var dune = form.querySelector('.profile-fields-dunehd');
+        if (mpv) mpv.style.display = (select.value === 'mpv') ? '' : 'none';
+        if (dune) dune.style.display = (select.value === 'dunehd') ? '' : 'none';
     }
     </script>
 </div>

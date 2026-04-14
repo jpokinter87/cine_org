@@ -5,6 +5,7 @@ Affiche et permet de modifier les paramètres de l'application (répertoires, cl
 seuils de traitement, logging) via le fichier .env.
 """
 
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Request
@@ -256,7 +257,10 @@ async def config_save(request: Request):
 
 # ── Routes HTMX pour les profils lecteur ────────────────────────────
 
-def _profiles_fragment(request: Request) -> str:
+_IP_REGEX = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
+
+
+def _profiles_fragment(request: Request, error: str | None = None) -> str:
     """Génère le fragment HTML de la section profils lecteur."""
     profiles_data = load_profiles()
     return templates.TemplateResponse(
@@ -265,8 +269,85 @@ def _profiles_fragment(request: Request) -> str:
         {
             "profiles": profiles_data.get("profiles", []),
             "active_profile": profiles_data.get("active", "Local"),
+            "profile_error": error,
         },
     )
+
+
+def _validate_profile_form(form_data: dict) -> tuple[dict | None, str | None]:
+    """Valide les données d'un profil. Retourne (profil_normalisé, None) ou (None, message).
+
+    - Nettoie les champs (strip + "" → None pour les optionnels).
+    - Pour type=dunehd : exige ip (format IPv4) et préfixes SMB (commençant par smb://).
+    - Pour type=mpv : exige un nom ; si target=remote, ssh_host et ssh_user requis.
+    """
+
+    def _get(key: str) -> str:
+        return str(form_data.get(key, "") or "").strip()
+
+    name = _get("name")
+    if not name:
+        return None, "Le nom du profil est requis."
+
+    ptype = _get("type") or "mpv"
+    if ptype not in ("mpv", "dunehd"):
+        return None, f"Type de profil inconnu : {ptype}"
+
+    profile: dict = {"name": name, "type": ptype}
+
+    if ptype == "dunehd":
+        ip = _get("ip")
+        smb_movies = _get("smb_movies_prefix")
+        smb_series = _get("smb_series_prefix")
+        if not ip:
+            return None, "L'IP du Dune est requise pour un profil dunehd."
+        if not _IP_REGEX.match(ip):
+            return None, f"L'IP « {ip} » n'est pas au format attendu (ex. 192.168.1.4)."
+        if not smb_movies:
+            return None, "Le préfixe SMB films est requis pour un profil dunehd."
+        if not smb_movies.startswith("smb://"):
+            return None, "Le préfixe SMB films doit commencer par « smb:// »."
+        if not smb_series:
+            return None, "Le préfixe SMB séries est requis pour un profil dunehd."
+        if not smb_series.startswith("smb://"):
+            return None, "Le préfixe SMB séries doit commencer par « smb:// »."
+        profile.update(
+            {
+                "ip": ip,
+                "smb_movies_prefix": smb_movies,
+                "smb_series_prefix": smb_series,
+                "command": None,
+                "target": None,
+                "ssh_host": None,
+                "ssh_user": None,
+                "local_path_prefix": None,
+                "remote_path_prefix": None,
+            }
+        )
+    else:
+        target = _get("target") or "local"
+        ssh_host = _get("ssh_host") or None
+        ssh_user = _get("ssh_user") or None
+        if target == "remote":
+            if not ssh_host:
+                return None, "L'hôte SSH est requis pour une cible distante."
+            if not ssh_user:
+                return None, "L'utilisateur SSH est requis pour une cible distante."
+        profile.update(
+            {
+                "command": _get("command") or "mpv",
+                "target": target,
+                "ssh_host": ssh_host,
+                "ssh_user": ssh_user,
+                "local_path_prefix": _get("local_path_prefix") or None,
+                "remote_path_prefix": _get("remote_path_prefix") or None,
+                "ip": None,
+                "smb_movies_prefix": None,
+                "smb_series_prefix": None,
+            }
+        )
+
+    return profile, None
 
 
 @router.post("/config/player-profiles/active")
@@ -283,17 +364,10 @@ async def profile_set_active(request: Request):
 async def profile_add(request: Request):
     """Ajoute un nouveau profil."""
     form = await request.form()
-    profile = {
-        "name": form.get("name", "").strip(),
-        "command": form.get("command", "mpv").strip() or "mpv",
-        "target": form.get("target", "local"),
-        "ssh_host": form.get("ssh_host", "").strip() or None,
-        "ssh_user": form.get("ssh_user", "").strip() or None,
-        "local_path_prefix": form.get("local_path_prefix", "").strip() or None,
-        "remote_path_prefix": form.get("remote_path_prefix", "").strip() or None,
-    }
-    if profile["name"]:
-        add_profile(profile)
+    profile, error = _validate_profile_form(dict(form))
+    if error:
+        return _profiles_fragment(request, error=error)
+    add_profile(profile)
     return _profiles_fragment(request)
 
 
@@ -301,15 +375,11 @@ async def profile_add(request: Request):
 async def profile_edit(request: Request, name: str):
     """Modifie un profil existant."""
     form = await request.form()
-    profile = {
-        "name": form.get("name", name).strip(),
-        "command": form.get("command", "mpv").strip() or "mpv",
-        "target": form.get("target", "local"),
-        "ssh_host": form.get("ssh_host", "").strip() or None,
-        "ssh_user": form.get("ssh_user", "").strip() or None,
-        "local_path_prefix": form.get("local_path_prefix", "").strip() or None,
-        "remote_path_prefix": form.get("remote_path_prefix", "").strip() or None,
-    }
+    form_data = dict(form)
+    form_data.setdefault("name", name)
+    profile, error = _validate_profile_form(form_data)
+    if error:
+        return _profiles_fragment(request, error=error)
     update_profile(name, profile)
     return _profiles_fragment(request)
 

@@ -4920,6 +4920,40 @@ a.tech-badge-codec:hover {
     color: #8ab4ff;
 }
 
+.profile-type-badge {
+    font-size: 0.65rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-family: var(--font-body, 'DM Sans', sans-serif);
+    font-weight: 600;
+}
+
+.profile-type-mpv {
+    background: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
+}
+
+.profile-type-dunehd {
+    background: rgba(217, 165, 74, 0.18);
+    color: #d9a54a;
+}
+
+.profile-error-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+    background: rgba(231, 76, 60, 0.12);
+    color: #e7a39b;
+    border: 1px solid rgba(231, 76, 60, 0.3);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-family: var(--font-body, 'DM Sans', sans-serif);
+}
+
 .profile-actions {
     display: flex;
     gap: 0.25rem;
@@ -5030,21 +5064,26 @@ a.tech-badge-codec:hover {
     align-items: center;
     gap: 0.4rem;
     margin-top: 0.75rem;
-    background: none;
-    border: 1px dashed var(--border);
-    color: var(--text-muted);
-    padding: 0.5rem 1rem;
+    background: rgba(212, 168, 83, 0.1);
+    border: 1px solid var(--accent, #d4a853);
+    color: var(--accent, #d4a853);
+    padding: 0.6rem 1rem;
     border-radius: var(--radius-md, 8px);
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
+    font-weight: 500;
     width: 100%;
     justify-content: center;
-    transition: border-color 0.2s, color 0.2s;
+    transition: background 0.2s, color 0.2s, transform 0.1s;
 }
 
 .profile-add-toggle:hover {
-    border-color: var(--accent, #d4a853);
-    color: var(--accent, #d4a853);
+    background: var(--accent, #d4a853);
+    color: var(--bg-darker, #1a1a2e);
+}
+
+.profile-add-toggle:active {
+    transform: translateY(1px);
 }
 
 .profile-add-form {

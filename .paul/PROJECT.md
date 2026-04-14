@@ -13,7 +13,7 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | Attribute | Value |
 |-----------|-------|
 | Version | 2.1.0-dev (Lecteurs Externes & Intégrations) |
-| Status | Development — v2.1 in progress |
+| Status | Development — v2.1 in progress (Phase 40 ✓, Phase 41 à démarrer) |
 | Last Updated | 2026-04-14 |
 
 ## Requirements
@@ -86,12 +86,14 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ### Active (In Progress)
 
-- [ ] Lecteur DuneHD (v2.1)
-  - Backend DuneHDPlayer (API HTTP /cgi-bin/do + mapping SMB Films/Series TV) — Phase 40-01
-  - Interface web de config profils lecteur avec champs conditionnels mpv/dunehd — Phase 40-02
 - [ ] Intégration Jellyfin (v2.1) : volumes Docker, montage symlinks+cibles — Phase 41
 
 ### Validated (Recently Shipped)
+
+- [x] Lecteur DuneHD (v2.1) — Phase 40 (2026-04-14)
+  - Backend DuneHDPlayer (API HTTP /cgi-bin/do + mapping SMB Films/Series TV) — Phase 40-01
+  - Interface web de config profils lecteur avec champs conditionnels mpv/dunehd — Phase 40-02
+  - Lecture end-to-end validée sur Dune physique (192.168.1.4 + SMB JPSERVER) — Phase 40-02
 
 - [x] v2.0 Production & Maintenance Complète — Phases 35-39 (2026-03-08 → 2026-04-04)
   - Maintenance web complète (cleanup fix, repair symlinks, détection orphelins par symlinks) — Phase 35
@@ -211,6 +213,12 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 | Hardlinks seeding post-transfert | os.link(storage, download) recrée le fichier original pour le tracker BitTorrent | 2026-04-04 | Active |
 | st_nlink > 1 filtre scanner | Ignore les hardlinks lors du scan downloads, simple et sans requête DB | 2026-04-04 | Active |
 | Purge hardlinks timer systemd | cineorg-purge.timer quotidien avec Persistent=true et RandomizedDelaySec | 2026-04-04 | Active |
+| Backend lecteur pluggable via profile.type | Dispatcher `_launch_player` avec branches mpv/dunehd isolées, futurs backends (Chromecast, Plex Remote) intégrables sans toucher les routes | 2026-04-14 | Active |
+| PID synthétique ≥ 10M pour lecteurs HTTP | Fire-and-forget DuneHD sans complexifier `_active_players`, cas `proc=None` unique branche dans /play-status | 2026-04-14 | Active |
+| Validation IPv4 simple pour LAN | Regex `^\d{1,3}(\.\d{1,3}){3}$` suffit pour un LAN privé, évite la complexité RFC | 2026-04-14 | Active |
+| Préfixe SMB minimal (smb:// uniquement) | Autorise shares exotiques (espaces, accents) sans faux positifs bloquants | 2026-04-14 | Active |
+| `_validate_profile_form()` unifié add+edit | Entry-point unique de normalisation, pas de duplication, cohérent avec DRY | 2026-04-14 | Active |
+| Champs hors type forcés à None | Évite résidus ssh_host en passant mpv→dunehd, état profil toujours cohérent | 2026-04-14 | Active |
 
 ## Success Metrics
 
@@ -234,4 +242,4 @@ Organiser et renommer automatiquement une vidéothèque personnelle à partir de
 
 ---
 *PROJECT.md — Updated when requirements or context change*
-*Last updated: 2026-04-04 after Phase 39 Hardlinks Seeding*
+*Last updated: 2026-04-14 after Phase 40 Lecteur DuneHD*
