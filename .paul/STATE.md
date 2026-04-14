@@ -10,21 +10,22 @@ See: .paul/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Milestone: v2.1 Lecteurs Externes & Intégrations
-Phase: 41 of 2 (Intégration Jellyfin) — Not started
-Plan: Not started
-Status: Phase 40 complète (PLAN ✓ APPLY ✓ UNIFY ✓ sur 40-01 et 40-02), prête à transitionner vers Phase 41
-Last activity: 2026-04-14 — Phase 40 Lecteur DuneHD clôturée (backend + UI config, lecture end-to-end Dune physique validée)
+Phase: 42 of 3 (Overrides Manuels) — Planning
+Plan: 42-01 créé, en attente d'approbation
+Status: PLAN créé, prêt pour APPLY
+Last activity: 2026-04-14 — Plan 42-01 créé (épisodes hors canon via détection groupée au résumé workflow)
 
 Progress:
-- v2.1: [█████░░░░░] 50% (1/2 phases complètes — Phase 40 ✓)
+- v2.1: [███░░░░░░░] 33% (1/3 phases complètes — Phase 40 ✓)
 - Phase 40: [██████████] 100% (2/2 plans complets, SUMMARY créés)
+- Phase 42: [▒░░░░░░░░░] ~5% (plan 42-01 créé, 42-02 métadonnées à venir)
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ○        ○        ○     [Phase 40 fermée — prêt pour /paul:plan Phase 41]
+  ✓        ○        ○     [Plan 42-01 créé, en attente d'approbation]
 ```
 
 ## Accumulated Context

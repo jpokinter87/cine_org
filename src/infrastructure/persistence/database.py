@@ -248,3 +248,23 @@ def _run_migrations() -> None:
                 text("ALTER TABLE movies ADD COLUMN collection_name VARCHAR")
             )
             conn.commit()
+
+        # Migration 10: Ajouter is_extra a episodes si manquante
+        # (Phase 42-01 : episodes hors canon des decoupages alternatifs)
+        result = conn.execute(text("PRAGMA table_info(episodes)"))
+        episode_columns = [row[1] for row in result.fetchall()]
+
+        if "is_extra" not in episode_columns:
+            conn.execute(
+                text(
+                    "ALTER TABLE episodes ADD COLUMN is_extra "
+                    "BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_episodes_is_extra "
+                    "ON episodes(is_extra)"
+                )
+            )
+            conn.commit()

@@ -8,12 +8,13 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 **v2.1 Lecteurs Externes & Intégrations** (v2.1.0)
 Status: 🚧 In Progress
-Phases: 1 of 2 complete (50%)
+Phases: 1 of 3 complete (33%)
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 40 | Lecteur DuneHD | 2/2 | ✅ Complete | 2026-04-14 |
 | 41 | Intégration Jellyfin | TBD | 🔵 Ready to plan | - |
+| 42 | Overrides Manuels | 1/2 planifié | 🟡 Planning | - |
 
 ### Phase 40: Lecteur DuneHD ✅
 
@@ -22,6 +23,15 @@ Livré 2026-04-14 : nouveau type de profil lecteur "dunehd" déclenchant la lect
 ### Phase 41: Intégration Jellyfin
 
 Focus: Corriger les volumes Docker pour que Jellyfin accède aux symlinks dans /media/Serveur/Collection. Montage symlinks + cibles (storage) avec les mêmes chemins absolus dans le container. Vérification scan bibliothèque.
+
+### Phase 42: Overrides Manuels
+
+Focus: Permettre des overrides manuels pour gérer les cas particuliers où les données API ne correspondent pas à la réalité du fichier. Deux volets liés :
+- **Épisodes hors canon** : certaines versions téléchargées découpent les épisodes différemment de TVDB (ex. *The Big C* S04 = 4 épisodes officiels mais 8 dans la version locale). Override du nombre d'épisodes par saison + flag `is_extra` sur les épisodes acceptés au-delà du canon, pour qu'ils ne restent plus bloqués dans `/downloads`.
+- **Métadonnées manquantes** : édition manuelle d'affiche (upload local), synopsis, casting depuis la fiche web. Stockés dans des champs `*_override` qui priment sur les données API. Flag `preserve_overrides` dans l'enricher pour éviter qu'un re-enrich ne les écrase.
+
+Plans: TBD (defined during /paul:plan)
+Status: Not started
 
 ## Completed Milestones
 
@@ -163,4 +173,4 @@ Archive: `.paul/milestones/v1.2-ROADMAP.md`
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-04-14 — Phase 40 Lecteur DuneHD complète (backend + UI config, lecture end-to-end validée), Phase 41 Jellyfin prête à planifier*
+*Last updated: 2026-04-14 — Phase 42 Overrides Manuels ajoutée (épisodes hors canon + métadonnées manuelles)*

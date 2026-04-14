@@ -192,6 +192,7 @@ class EpisodeModel(SQLModel, table=True):
     resolution: str | None = None
     languages_json: str | None = None
     file_size_bytes: int | None = None
+    is_extra: bool = Field(default=False, index=True)
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 
@@ -339,6 +340,36 @@ class ConfirmedAssociationModel(SQLModel, table=True):
     entity_type: str  # "movie" | "series"
     entity_id: int = Field(index=True)
     confirmed_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SeasonOverrideModel(SQLModel, table=True):
+    """
+    Override manuel du nombre d'episodes d'une saison.
+
+    Permet de gerer les cas ou le decoupage du distributeur differe du
+    canon TVDB (ex: saison officielle = 4 episodes, fichier telecharge
+    = 8 episodes). L'override est consulte par les filtres
+    filter_by_episode_count (matching) et
+    _filter_by_episode_count_compatibility (auto-validation) pour
+    autoriser les episodes au-dela du canon.
+    """
+
+    __tablename__ = "season_overrides"
+    __table_args__ = (
+        Index(
+            "ix_season_overrides_tvdb_season",
+            "tvdb_id",
+            "season_number",
+            unique=True,
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    tvdb_id: int = Field(index=True)
+    season_number: int
+    episode_count: int  # Nombre declare par l'utilisateur (decoupage local)
+    created_at: datetime | None = Field(default_factory=datetime.utcnow)
+    updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 
 
 class HardlinkModel(SQLModel, table=True):
