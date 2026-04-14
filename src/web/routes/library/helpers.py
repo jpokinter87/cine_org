@@ -129,6 +129,27 @@ def _poster_url(poster_path: str | None) -> str | None:
     return None
 
 
+def _effective_poster_url(
+    poster_override: str | None, poster_path: str | None
+) -> str | None:
+    """
+    URL de jaquette à afficher : override si défini, sinon API.
+
+    L'override peut être :
+    - une URL externe (http/https) → retournée telle quelle
+    - un chemin local sous storage/.metadata/posters/ → servi via la route
+      `/library/metadata/posters/{filename}`
+    """
+    if poster_override:
+        if poster_override.startswith(("http://", "https://")):
+            return poster_override
+        from pathlib import Path
+
+        filename = Path(poster_override).name
+        return f"/library/metadata/posters/{filename}"
+    return _poster_url(poster_path)
+
+
 def _best_rating(vote_average: float | None, imdb_rating: float | None) -> float | None:
     """Retourne la meilleure note disponible : IMDb en priorite, sinon TMDB."""
     if imdb_rating is not None:

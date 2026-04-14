@@ -60,6 +60,7 @@ class Movie:
     resolution: Optional[str] = None
     languages: tuple[str, ...] = ()
     file_size_bytes: Optional[int] = None
+    preserve_overrides: bool = False
 
 
 @dataclass
@@ -103,6 +104,7 @@ class Series:
     imdb_votes: Optional[int] = None
     director: Optional[str] = None
     cast: tuple[str, ...] = ()
+    preserve_overrides: bool = False
 
 
 @dataclass

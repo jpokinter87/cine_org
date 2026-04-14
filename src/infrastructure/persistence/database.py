@@ -268,3 +268,71 @@ def _run_migrations() -> None:
                 )
             )
             conn.commit()
+
+        # Migration 11: Overrides manuels sur movies (phase 42-02)
+        result = conn.execute(text("PRAGMA table_info(movies)"))
+        movie_columns = [row[1] for row in result.fetchall()]
+
+        if "poster_override" not in movie_columns:
+            conn.execute(
+                text("ALTER TABLE movies ADD COLUMN poster_override VARCHAR")
+            )
+            conn.commit()
+        if "overview_override" not in movie_columns:
+            conn.execute(
+                text("ALTER TABLE movies ADD COLUMN overview_override VARCHAR")
+            )
+            conn.commit()
+        if "cast_override_json" not in movie_columns:
+            conn.execute(
+                text("ALTER TABLE movies ADD COLUMN cast_override_json VARCHAR")
+            )
+            conn.commit()
+        if "preserve_overrides" not in movie_columns:
+            conn.execute(
+                text(
+                    "ALTER TABLE movies ADD COLUMN preserve_overrides "
+                    "BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_movies_preserve_overrides "
+                    "ON movies(preserve_overrides)"
+                )
+            )
+            conn.commit()
+
+        # Migration 12: Overrides manuels sur series (phase 42-02)
+        result = conn.execute(text("PRAGMA table_info(series)"))
+        series_columns = [row[1] for row in result.fetchall()]
+
+        if "poster_override" not in series_columns:
+            conn.execute(
+                text("ALTER TABLE series ADD COLUMN poster_override VARCHAR")
+            )
+            conn.commit()
+        if "overview_override" not in series_columns:
+            conn.execute(
+                text("ALTER TABLE series ADD COLUMN overview_override VARCHAR")
+            )
+            conn.commit()
+        if "cast_override_json" not in series_columns:
+            conn.execute(
+                text("ALTER TABLE series ADD COLUMN cast_override_json VARCHAR")
+            )
+            conn.commit()
+        if "preserve_overrides" not in series_columns:
+            conn.execute(
+                text(
+                    "ALTER TABLE series ADD COLUMN preserve_overrides "
+                    "BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_series_preserve_overrides "
+                    "ON series(preserve_overrides)"
+                )
+            )
+            conn.commit()

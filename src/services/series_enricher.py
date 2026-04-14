@@ -131,8 +131,11 @@ class SeriesEnricherService:
             # Sauvegarder le tmdb_id
             series.tmdb_id = int(best.id)
 
-            # Mettre a jour la serie avec les donnees TMDB
-            if details.poster_url:
+            # Mettre a jour la serie avec les donnees TMDB.
+            # Phase 42-02 : les champs poster/overview/director/cast ne
+            # sont pas ecrases si l'utilisateur a protege la fiche.
+            preserve = bool(series.preserve_overrides)
+            if not preserve and details.poster_url:
                 series.poster_path = details.poster_url
             if details.vote_average is not None:
                 series.vote_average = details.vote_average
@@ -140,13 +143,13 @@ class SeriesEnricherService:
                 series.vote_count = details.vote_count
             if details.genres:
                 series.genres = details.genres
-            if details.overview:
+            if not preserve and details.overview:
                 series.overview = details.overview
             if details.original_title:
                 series.original_title = details.original_title
-            if details.director:
+            if not preserve and details.director:
                 series.director = details.director
-            if details.cast:
+            if not preserve and details.cast:
                 series.cast = details.cast
 
             # Recuperer l'imdb_id via les IDs externes TMDB

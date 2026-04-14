@@ -91,13 +91,17 @@ class MoviesEnricherService:
                     stats.failed += 1
                     result = EnrichmentResult.FAILED
                 else:
-                    if details.director:
-                        movie.director = details.director
-                    if details.cast:
-                        movie.cast = details.cast
-                    # Enrichir aussi le poster si manquant
-                    if not movie.poster_path and details.poster_url:
-                        movie.poster_path = details.poster_url
+                    # Phase 42-02 : preserver les overrides manuels.
+                    # Les champs director/cast/poster_path ne sont pas
+                    # ecrases si l'utilisateur a explicitement protege
+                    # cette fiche.
+                    if not movie.preserve_overrides:
+                        if details.director:
+                            movie.director = details.director
+                        if details.cast:
+                            movie.cast = details.cast
+                        if not movie.poster_path and details.poster_url:
+                            movie.poster_path = details.poster_url
                     self._movie_repo.save(movie)
                     stats.enriched += 1
                     result = EnrichmentResult.SUCCESS

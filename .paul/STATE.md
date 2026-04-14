@@ -10,22 +10,22 @@ See: .paul/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Milestone: v2.1 Lecteurs Externes & Intégrations
-Phase: 42 of 3 (Overrides Manuels) — In progress
-Plan: 42-01 complet (SUMMARY créé), 42-02 (métadonnées) à planifier
-Status: UNIFY complet pour 42-01 — prêt à commiter puis /paul:plan pour 42-02
-Last activity: 2026-04-14 — Plan 42-01 livré end-to-end : anomaly detection + override + validation groupée, testé sur The Big C S04
+Phase: 42 of 3 (Overrides Manuels) — ✅ Complete
+Plan: 42-01 ✓ livré, 42-02 ✓ livré (les deux UNIFY clos)
+Status: Phase 42 complète — à commiter puis démarrer phase 41 (Jellyfin) ou phase 43 (correctifs bibliothèque)
+Last activity: 2026-04-14 — UNIFY plan 42-02 : SUMMARY créé, protection overrides validée end-to-end, 3 deferred bugs pour phase 43
 
 Progress:
-- v2.1: [███░░░░░░░] 33% (1/3 phases complètes — Phase 40 ✓)
-- Phase 40: [██████████] 100% (2/2 plans complets, SUMMARY créés)
-- Phase 42: [█████░░░░░] ~50% (plan 42-01 complet et vérifié, 42-02 à planifier)
+- v2.1: [██████░░░░] 67% (2/3 phases complètes — Phases 40, 42 ✓)
+- Phase 40: [██████████] 100% (Lecteur DuneHD)
+- Phase 42: [██████████] 100% (overrides épisodes + overrides métadonnées)
 
 ## Loop Position
 
 Current loop state:
 ```
 PLAN ──▶ APPLY ──▶ UNIFY
-  ✓        ✓        ✓     [Plan 42-01 clos — SUMMARY créé, à commiter + /paul:plan 42-02]
+  ✓        ✓        ✓     [Plan 42-02 clos — phase 42 complète]
 ```
 
 ## Accumulated Context
@@ -152,17 +152,19 @@ Feature branches merged: none
 
 ## Session Continuity
 
-Last session: 2026-04-14 (session phase 42 complète — 42-01 livré end-to-end)
-Stopped at: UNIFY du plan 42-01 terminé. SUMMARY créé, STATE mis à jour. The Big C validé end-to-end (override 161501/4/8 + 4 pendings VALIDATED + 4 Episodes avec is_extra=1).
-Next action: Commit groupé `feat(phase-42-01): anomaly detection + override acceptance`, puis `/paul:plan` pour démarrer 42-02 (overrides métadonnées)
-Resume file: .paul/phases/42-overrides-manuels/42-01-SUMMARY.md
+Last session: 2026-04-14 (phase 42 entièrement livrée)
+Stopped at: Phase 42 complète. 42-01 commité (9fdf785). 42-02 à commiter. 1186/1186 tests verts.
+Next action: Commit groupé `feat(phase-42-02): édition manuelle des métadonnées avec protection automatique` puis `/paul:plan` pour phase 41 (Jellyfin) ou phase 43 (correctifs bibliothèque)
+Resume file: .paul/phases/42-overrides-manuels/42-02-SUMMARY.md
 Resume context:
-- Plan 42-01 clos : AnomalyDetector + filtres avec override + UI anomalies + 3 routes HTMX
-- 17 nouveaux tests verts, 1140/1140 tests globaux verts (hors tests/manual/)
-- Commit 63ee104 contient uniquement Task 1 (socle DB) — Tasks 2+3 encore en working tree
-- 2 scripts one-shot créés dans scripts/ pour faciliter les tests (reset_the_big_c.py, reset_big_c_validations.py)
-- Deferred UX : /validation ne liste pas les pendings validés via action groupée (auto_validated=False)
-- 42-02 à cadrer : édition manuelle affiche/synopsis/casting depuis la fiche web, flag preserve_overrides
+- 42-01 livré (commit 9fdf785) : anomaly detection + override acceptance
+- 42-02 livré : édition manuelle métadonnées web, protection automatique, 46 nouveaux tests
+- enrich-collections relancé en fin de session : Millénium (2009) id=5798 rattaché à la saga 24761
+- 3 bugs deferred pour phase 43 :
+  1) Collections TMDB (Millénium 2009 NULL avant fix — résolu via enrich-collections)
+  2) Recherche sans accent (Millenium ne trouve pas Millénium) — fix non trivial (UDF SQLite)
+  3) Tri "récemment ajouté" incomplet sur films de saga
+- Prochaines phases candidates : 41 Jellyfin (volumes Docker), 43 correctifs bibliothèque
 
 ---
 *STATE.md — Updated after every significant action*

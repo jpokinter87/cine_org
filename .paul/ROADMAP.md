@@ -8,13 +8,13 @@ CineOrg dispose d'un CLI complet, d'une interface web fonctionnelle avec donnée
 
 **v2.1 Lecteurs Externes & Intégrations** (v2.1.0)
 Status: 🚧 In Progress
-Phases: 1 of 3 complete (33%)
+Phases: 2 of 3 complete (67%)
 
 | Phase | Name | Plans | Status | Completed |
 |-------|------|-------|--------|-----------|
 | 40 | Lecteur DuneHD | 2/2 | ✅ Complete | 2026-04-14 |
 | 41 | Intégration Jellyfin | TBD | 🔵 Ready to plan | - |
-| 42 | Overrides Manuels | 1/2 planifié | 🟡 Planning | - |
+| 42 | Overrides Manuels | 2/2 | ✅ Complete | 2026-04-14 |
 
 ### Phase 40: Lecteur DuneHD ✅
 

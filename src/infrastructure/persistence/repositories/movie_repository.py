@@ -70,6 +70,7 @@ class SQLModelMovieRepository(IMovieRepository):
             resolution=model.resolution,
             languages=tuple(languages_list),
             file_size_bytes=model.file_size_bytes,
+            preserve_overrides=bool(model.preserve_overrides),
         )
 
     def _to_model(self, entity: Movie) -> MovieModel:
@@ -106,6 +107,7 @@ class SQLModelMovieRepository(IMovieRepository):
             resolution=entity.resolution,
             languages_json=json.dumps(list(entity.languages)) if entity.languages else None,
             file_size_bytes=entity.file_size_bytes,
+            preserve_overrides=bool(entity.preserve_overrides),
         )
         if entity.id:
             model.id = int(entity.id)

@@ -20,6 +20,7 @@ from ....infrastructure.persistence.models import MovieModel, SeriesModel
 from ...deps import templates
 from .helpers import (
     _best_rating,
+    _effective_poster_url,
     _format_duration,
     _genre_json_escaped,
     _parse_genres,
@@ -46,10 +47,12 @@ def _build_item(m, item_type: str) -> dict:
         "title": m.title,
         "year": m.year,
         "genres": _parse_genres(m.genres_json),
-        "poster_url": _poster_url(m.poster_path),
+        "poster_url": _effective_poster_url(
+            getattr(m, "poster_override", None), m.poster_path
+        ),
         "rating": rating,
         "rating_source": "IMDb" if m.imdb_rating is not None else "TMDB",
-        "overview": m.overview or "",
+        "overview": getattr(m, "overview_override", None) or m.overview or "",
         "duration": _format_duration(m.duration_seconds) if item_type == "movie" else "",
         "watched": m.watched,
         "personal_rating": m.personal_rating,

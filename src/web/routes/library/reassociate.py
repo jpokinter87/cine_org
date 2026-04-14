@@ -345,10 +345,12 @@ async def movie_reassociate_apply(
         movie.year = details.year
         movie.genres_json = json.dumps(list(details.genres)) if details.genres else None
         movie.duration_seconds = details.duration_seconds
-        movie.overview = details.overview
-        movie.poster_path = details.poster_url
-        movie.director = details.director
-        movie.cast_json = json.dumps(list(details.cast)) if details.cast else None
+        # Phase 42-02 : les overrides manuels priment sur la ré-association
+        if not movie.preserve_overrides:
+            movie.overview = details.overview
+            movie.poster_path = details.poster_url
+            movie.director = details.director
+            movie.cast_json = json.dumps(list(details.cast)) if details.cast else None
         movie.vote_average = details.vote_average
         movie.vote_count = details.vote_count
         # Réinitialiser les champs collection selon le nouveau film TMDB
@@ -660,10 +662,12 @@ async def series_reassociate_apply(
         series.genres_json = (
             json.dumps(list(details.genres)) if details.genres else None
         )
-        series.overview = details.overview
-        series.poster_path = details.poster_url
-        series.director = details.director
-        series.cast_json = json.dumps(list(details.cast)) if details.cast else None
+        # Phase 42-02 : les overrides manuels priment sur la ré-association
+        if not series.preserve_overrides:
+            series.overview = details.overview
+            series.poster_path = details.poster_url
+            series.director = details.director
+            series.cast_json = json.dumps(list(details.cast)) if details.cast else None
         series.vote_average = details.vote_average
         series.vote_count = details.vote_count
         series.updated_at = datetime.utcnow()

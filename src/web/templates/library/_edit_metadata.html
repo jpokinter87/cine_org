@@ -1,0 +1,243 @@
+{# Overlay HTMX d'edition manuelle des metadonnees (phase 42-02) #}
+
+<div class="edit-overlay" id="edit-overlay-{{ entity_id }}"
+     onclick="if(event.target===this)closeEditOverlay()">
+    <div class="edit-card" role="dialog" aria-modal="true"
+         aria-labelledby="edit-title-{{ entity_id }}">
+        <button type="button" class="edit-close" onclick="closeEditOverlay()" aria-label="Fermer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 width="18" height="18">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+        </button>
+
+        <header class="edit-header">
+            <h2 class="edit-title" id="edit-title-{{ entity_id }}">
+                Éditer la fiche
+            </h2>
+            <p class="edit-subtitle">{{ entity_title }}</p>
+            <p class="edit-header-note">
+                Les modifications enregistrées sont automatiquement protégées
+                contre les re-enrichissements.
+            </p>
+        </header>
+
+        <form class="edit-form"
+              hx-post="/library/{{ entity_type }}/{{ entity_id }}/edit"
+              hx-encoding="multipart/form-data"
+              hx-target="#edit-feedback-{{ entity_id }}"
+              hx-swap="innerHTML">
+
+            {# ── Section Affiche ── #}
+            <section class="edit-section">
+                <h3 class="edit-section-title">Affiche</h3>
+
+                <div class="edit-poster-layout">
+                    <div class="edit-poster-preview">
+                        {% if current_poster %}
+                        <img src="{{ current_poster }}" alt="Affiche actuelle" id="poster-preview-img">
+                        {% else %}
+                        <div class="edit-poster-empty">Aucune affiche</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="edit-poster-controls">
+                        <label class="edit-radio-option">
+                            <input type="radio" name="poster_mode" value="keep" checked
+                                   onchange="togglePosterMode('keep')">
+                            <span>Conserver l'actuelle</span>
+                        </label>
+                        <label class="edit-radio-option">
+                            <input type="radio" name="poster_mode" value="upload" id="pmode-upload"
+                                   onchange="togglePosterMode('upload')">
+                            <span>Depuis un fichier</span>
+                        </label>
+                        <label class="edit-radio-option">
+                            <input type="radio" name="poster_mode" value="url" id="pmode-url"
+                                   onchange="togglePosterMode('url')">
+                            <span>Depuis une URL</span>
+                        </label>
+                        {% if has_override %}
+                        <label class="edit-radio-option edit-radio-danger">
+                            <input type="radio" name="poster_mode" value="clear"
+                                   onchange="togglePosterMode('clear')">
+                            <span>Retirer l'override (retour API)</span>
+                        </label>
+                        {% endif %}
+
+                        <div class="edit-poster-input" id="poster-input-upload" hidden>
+                            <input type="file" name="poster_file" id="poster-file-input"
+                                   accept=".jpg,.jpeg,.png,.webp" class="edit-file-hidden"
+                                   onchange="onFileChosen(event)">
+                            <label for="poster-file-input" class="edit-file-button">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                     stroke-width="1.8" width="14" height="14">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="17 8 12 3 7 8"/>
+                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                </svg>
+                                <span id="file-button-label">Choisir un fichier…</span>
+                            </label>
+                            <p class="edit-hint">JPG, PNG ou WEBP</p>
+                        </div>
+
+                        <div class="edit-poster-input" id="poster-input-url" hidden>
+                            <input type="url" name="poster_url" id="poster-url-input"
+                                   placeholder="https://…/affiche.jpg"
+                                   oninput="onUrlInput()" onfocus="onUrlInput()">
+                            <p class="edit-hint">Image téléchargée localement à l'enregistrement</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {# ── Section Synopsis ── #}
+            <section class="edit-section">
+                <h3 class="edit-section-title">Synopsis</h3>
+                <textarea name="overview_override" rows="6" class="edit-textarea"
+                          placeholder="{{ overview_placeholder or 'Aucun synopsis disponible' }}">{{ current_overview }}</textarea>
+                <p class="edit-hint">Laisser vide pour revenir au synopsis API.</p>
+            </section>
+
+            {# ── Section Casting ── #}
+            <section class="edit-section">
+                <h3 class="edit-section-title">Casting</h3>
+                <div class="edit-cast-list" id="cast-list-{{ entity_id }}">
+                    {% for c in current_cast %}
+                    <div class="edit-cast-row">
+                        <input type="text" name="cast_names[]" value="{{ c.name }}" placeholder="Nom">
+                        <input type="text" name="cast_roles[]" value="{{ c.role }}" placeholder="Rôle">
+                        <button type="button" class="edit-cast-remove"
+                                onclick="this.parentElement.remove()" aria-label="Retirer">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                 width="14" height="14">
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                        </button>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button type="button" class="edit-cast-add"
+                        onclick="addCastRow('cast-list-{{ entity_id }}')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         width="14" height="14">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    Ajouter une ligne
+                </button>
+                <p class="edit-hint">Laisser vide pour revenir au casting API.</p>
+            </section>
+
+            {# ── Zone de feedback (erreurs HTMX) ── #}
+            <div id="edit-feedback-{{ entity_id }}"></div>
+
+            {# ── Actions ── #}
+            <footer class="edit-actions">
+                <button type="button" class="edit-btn edit-btn-cancel" onclick="closeEditOverlay()">
+                    Annuler
+                </button>
+                <button type="submit" class="edit-btn edit-btn-save">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         width="14" height="14">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    Enregistrer
+                </button>
+            </footer>
+        </form>
+    </div>
+</div>
+
+<script>
+(function() {
+    function togglePosterMode(mode) {
+        var ids = {upload: 'poster-input-upload', url: 'poster-input-url'};
+        Object.keys(ids).forEach(function(k) {
+            var el = document.getElementById(ids[k]);
+            if (el) el.hidden = (mode !== k);
+        });
+    }
+
+    function onFileChosen(e) {
+        // Auto-cocher le radio "upload" dès qu'un fichier est choisi
+        var radio = document.getElementById('pmode-upload');
+        if (radio) {
+            radio.checked = true;
+            togglePosterMode('upload');
+        }
+        var file = e.target.files && e.target.files[0];
+        if (!file) return;
+        // Libelle du bouton custom
+        var label = document.getElementById('file-button-label');
+        if (label) label.textContent = file.name;
+        // Preview
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+            var img = document.getElementById('poster-preview-img');
+            if (img) {
+                img.src = ev.target.result;
+            } else {
+                // Pas d'image existante : remplacer le bloc vide
+                var preview = document.querySelector('.edit-poster-preview');
+                if (preview) {
+                    preview.innerHTML = '<img src="' + ev.target.result + '" alt="Aperçu" id="poster-preview-img">';
+                }
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function onUrlInput() {
+        // Auto-cocher le radio "url" dès que l'utilisateur saisit ou focus l'URL
+        var input = document.getElementById('poster-url-input');
+        var radio = document.getElementById('pmode-url');
+        if (!input || !radio) return;
+        if (input.value.trim().length > 0 || document.activeElement === input) {
+            radio.checked = true;
+            togglePosterMode('url');
+        }
+    }
+
+    function addCastRow(listId) {
+        var list = document.getElementById(listId);
+        if (!list) return;
+        var row = document.createElement('div');
+        row.className = 'edit-cast-row';
+        row.innerHTML =
+            '<input type="text" name="cast_names[]" placeholder="Nom">' +
+            '<input type="text" name="cast_roles[]" placeholder="Rôle">' +
+            '<button type="button" class="edit-cast-remove" onclick="this.parentElement.remove()" aria-label="Retirer">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">' +
+            '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
+        list.appendChild(row);
+    }
+
+    function closeEditOverlay() {
+        var zone = document.getElementById('edit-metadata-container');
+        if (zone) zone.innerHTML = '';
+    }
+
+    // Fermeture Escape uniquement ; flèches bloquées par detail.html lorsque
+    // l'overlay est ouvert (test .edit-overlay en haut du handler global).
+    document.addEventListener('keydown', function handler(e) {
+        if (!document.querySelector('.edit-overlay')) {
+            document.removeEventListener('keydown', handler);
+            return;
+        }
+        if (e.key === 'Escape') {
+            closeEditOverlay();
+            document.removeEventListener('keydown', handler);
+        }
+    });
+
+    // Expose globalement pour les onclick inline
+    window.togglePosterMode = togglePosterMode;
+    window.onFileChosen = onFileChosen;
+    window.onUrlInput = onUrlInput;
+    window.addCastRow = addCastRow;
+    window.closeEditOverlay = closeEditOverlay;
+})();
+</script>

@@ -18,6 +18,7 @@ from .helpers import (
     _best_rating,
     _genre_json_escaped,
     _parse_genres,
+    _effective_poster_url,
     _poster_url,
     _resolution_label,
     _resolution_pixels,
@@ -154,7 +155,9 @@ async def library_index(
                         "title": m.title,
                         "year": m.year,
                         "genres": _parse_genres(m.genres_json),
-                        "poster_url": _poster_url(m.poster_path),
+                        "poster_url": _effective_poster_url(
+                            m.poster_override, m.poster_path
+                        ),
                         "rating": rating,
                         "rating_source": "IMDb"
                         if m.imdb_rating is not None
@@ -231,7 +234,9 @@ async def library_index(
                         "title": s.title,
                         "year": s.year,
                         "genres": _parse_genres(s.genres_json),
-                        "poster_url": _poster_url(s.poster_path),
+                        "poster_url": _effective_poster_url(
+                            s.poster_override, s.poster_path
+                        ),
                         "rating": rating,
                         "rating_source": "IMDb"
                         if s.imdb_rating is not None

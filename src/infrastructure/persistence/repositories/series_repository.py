@@ -61,6 +61,7 @@ class SQLModelSeriesRepository(ISeriesRepository):
             imdb_votes=model.imdb_votes,
             director=model.director,
             cast=tuple(cast_list),
+            preserve_overrides=bool(model.preserve_overrides),
         )
 
     def _to_model(self, entity: Series) -> SeriesModel:
@@ -89,6 +90,7 @@ class SQLModelSeriesRepository(ISeriesRepository):
             imdb_votes=entity.imdb_votes,
             director=entity.director,
             cast_json=json.dumps(list(entity.cast)) if entity.cast else None,
+            preserve_overrides=bool(entity.preserve_overrides),
         )
         if entity.id:
             model.id = int(entity.id)

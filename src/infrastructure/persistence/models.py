@@ -64,6 +64,11 @@ class MovieModel(SQLModel, table=True):
     collection_name: str | None = None  # Nom de la saga/collection TMDB
     watched: bool = Field(default=False, index=True)  # Film deja vu
     personal_rating: Optional[int] = Field(default=None)  # Note personnelle 1-5
+    # Overrides manuels (phase 42-02) : primes sur les valeurs API
+    poster_override: str | None = None  # chemin absolu vers .metadata/posters/...
+    overview_override: str | None = None
+    cast_override_json: str | None = None  # JSON [{"name": "...", "role": "..."}]
+    preserve_overrides: bool = Field(default=False, index=True)
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 
@@ -103,6 +108,18 @@ class MovieModel(SQLModel, table=True):
         """Serialise les acteurs en JSON."""
         self.cast_json = json.dumps(value)
 
+    @property
+    def cast_override(self) -> list[dict[str, str]]:
+        """Override manuel du casting deserialise en liste {name, role}."""
+        if self.cast_override_json:
+            return json.loads(self.cast_override_json)
+        return []
+
+    @cast_override.setter
+    def cast_override(self, value: list[dict[str, str]]) -> None:
+        """Serialise le casting override en JSON."""
+        self.cast_override_json = json.dumps(value) if value else None
+
 
 class SeriesModel(SQLModel, table=True):
     """
@@ -131,6 +148,11 @@ class SeriesModel(SQLModel, table=True):
     cast_json: str | None = None  # JSON: ["Acteur 1", "Acteur 2", ...]
     watched: bool = Field(default=False, index=True)  # Serie deja vue
     personal_rating: Optional[int] = Field(default=None)  # Note personnelle 1-5
+    # Overrides manuels (phase 42-02) : primes sur les valeurs API
+    poster_override: str | None = None
+    overview_override: str | None = None
+    cast_override_json: str | None = None
+    preserve_overrides: bool = Field(default=False, index=True)
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 
@@ -157,6 +179,18 @@ class SeriesModel(SQLModel, table=True):
     def cast(self, value: list[str]) -> None:
         """Serialise les acteurs en JSON."""
         self.cast_json = json.dumps(value)
+
+    @property
+    def cast_override(self) -> list[dict[str, str]]:
+        """Override manuel du casting deserialise en liste {name, role}."""
+        if self.cast_override_json:
+            return json.loads(self.cast_override_json)
+        return []
+
+    @cast_override.setter
+    def cast_override(self, value: list[dict[str, str]]) -> None:
+        """Serialise le casting override en JSON."""
+        self.cast_override_json = json.dumps(value) if value else None
 
 
 class EpisodeModel(SQLModel, table=True):
