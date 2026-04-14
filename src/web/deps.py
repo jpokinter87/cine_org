@@ -19,6 +19,16 @@ with open(_PROJECT_ROOT / "pyproject.toml", "rb") as f:
     _pyproject = tomllib.load(f)
 templates.env.globals["app_version"] = f"CineOrg v{_pyproject['project']['version']}"
 
+# Cache-buster pour les assets statiques (invalidé à chaque modif de style.css)
+def _asset_version() -> str:
+    """Retourne le mtime du style.css pour busting du cache navigateur."""
+    try:
+        return str(int((_WEB_DIR / "static" / "css" / "style.css").stat().st_mtime))
+    except OSError:
+        return "0"
+
+templates.env.globals["asset_version"] = _asset_version
+
 # Profils lecteur accessibles dans tous les templates (pour le sélecteur de profil)
 from ..player_profiles import load_profiles as _load_profiles  # noqa: E402
 

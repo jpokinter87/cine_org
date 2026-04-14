@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import hint_icon %}
 
 {% block title %}Configuration — CineOrg{% endblock %}
 {% block nav_config %}active{% endblock %}
@@ -46,7 +47,10 @@
                 {% for field in section.fields %}
                 <div class="config-field {% if errors and errors[field.key] %}config-field-error{% endif %}">
                     <div class="config-field-header">
-                        <label class="config-label" for="field-{{ field.key }}">{{ field.label }}</label>
+                        <label class="config-label" for="field-{{ field.key }}">
+                            {{ field.label }}
+                            {{ hint_icon(field.hint) }}
+                        </label>
                         <span class="config-desc">{{ field.desc }}</span>
                     </div>
                     <div class="config-field-input">
@@ -155,8 +159,30 @@
 <script>
 function toggleConfigSection(legend) {
     var section = legend.closest('.config-section');
-    section.classList.toggle('config-section-collapsed');
+    var body = section.querySelector('.config-section-body');
+    var willCollapse = !section.classList.contains('config-section-collapsed');
+    if (willCollapse) {
+        // Fermeture : overflow hidden immédiatement pour masquer le contenu pendant l'animation
+        if (body) body.style.overflow = 'hidden';
+        section.classList.add('config-section-collapsed');
+    } else {
+        // Ouverture : overflow visible après la fin de l'animation max-height
+        // pour permettre aux bulles d'aide de s'afficher hors du cadre
+        section.classList.remove('config-section-collapsed');
+        if (body) {
+            body.addEventListener('transitionend', function handler(e) {
+                if (e.propertyName === 'max-height') {
+                    body.style.overflow = 'visible';
+                    body.removeEventListener('transitionend', handler);
+                }
+            });
+        }
+    }
 }
+
+// Initialiser overflow: visible sur les sections déjà ouvertes au chargement
+document.querySelectorAll('.config-section:not(.config-section-collapsed) .config-section-body')
+    .forEach(function(body) { body.style.overflow = 'visible'; });
 
 function toggleSecret(btn) {
     var input = btn.previousElementSibling;

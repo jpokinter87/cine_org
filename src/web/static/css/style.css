@@ -5016,11 +5016,130 @@ a.tech-badge-codec:hover {
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.03em;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
 }
 
 .profile-form-field .config-input {
     font-size: 0.85rem;
     padding: 0.35rem 0.5rem;
+}
+
+/* Bulle d'aide contextuelle (« ? » au survol)
+   Icône en amber pour rester dans le thème graphique.
+   Bulle ancrée à gauche de l'icône par défaut (extension vers la droite)
+   — robuste pour les champs/titres situés près du bord gauche.
+   Les colonnes de droite dans un .profile-form-grid renversent l'ancrage. */
+.field-hint {
+    position: relative;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    margin-left: 0.35rem;
+    color: var(--accent-amber);
+    cursor: help;
+    transition: filter 0.15s ease;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.field-hint svg {
+    display: block;
+    width: 11px;
+    height: 11px;
+}
+
+.field-hint:hover,
+.field-hint:focus-visible {
+    filter: brightness(1.25);
+    outline: none;
+}
+
+.field-hint-bubble {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: -4px;
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.55rem 0.7rem;
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    font-weight: 400;
+    line-height: 1.45;
+    text-transform: none;
+    letter-spacing: normal;
+    white-space: normal;
+    width: max-content;
+    max-width: 300px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.15s ease, visibility 0.15s;
+    z-index: 100;
+}
+
+.field-hint-bubble::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 11px;
+    border: 6px solid transparent;
+    border-top-color: var(--border);
+}
+
+.field-hint-bubble::before {
+    content: '';
+    position: absolute;
+    top: calc(100% - 1px);
+    left: 12px;
+    border: 5px solid transparent;
+    border-top-color: var(--bg-deep);
+    z-index: 1;
+}
+
+.field-hint:hover .field-hint-bubble,
+.field-hint:focus-visible .field-hint-bubble {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Formulaire profil lecteur : colonne droite → bulle ancrée à droite. */
+.profile-form-grid .profile-form-field:nth-child(even) .field-hint-bubble {
+    left: auto;
+    right: -4px;
+}
+.profile-form-grid .profile-form-field:nth-child(even) .field-hint-bubble::after {
+    left: auto;
+    right: 11px;
+}
+.profile-form-grid .profile-form-field:nth-child(even) .field-hint-bubble::before {
+    left: auto;
+    right: 12px;
+}
+
+/* Titres des cartes maintenance : bulle sous l'icône (évite la troncature
+   en haut de viewport pour les cartes du haut de page). */
+.maint-card-title .field-hint-bubble {
+    bottom: auto;
+    top: calc(100% + 8px);
+}
+.maint-card-title .field-hint-bubble::after {
+    top: auto;
+    bottom: 100%;
+    border-top-color: transparent;
+    border-bottom-color: var(--border);
+}
+.maint-card-title .field-hint-bubble::before {
+    top: auto;
+    bottom: calc(100% - 1px);
+    border-top-color: transparent;
+    border-bottom-color: var(--bg-deep);
 }
 
 .profile-form-actions {

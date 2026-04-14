@@ -1,3 +1,4 @@
+{% from "_macros.html" import field_label %}
 <div class="config-profiles" id="player-profiles">
     {% if profile_error %}
     <div class="profile-error-banner" role="alert">
@@ -70,12 +71,12 @@
                     {% set ptype = profile.type or 'mpv' %}
                     <div class="profile-form-grid">
                         <div class="profile-form-field">
-                            <label>Nom</label>
+                            {{ field_label("Nom", "Nom du profil affiché dans l'interface (ex. « Salon », « PC bureau », « Dune Max »). Le profil « Local » ne peut pas être renommé.") }}
                             <input type="text" name="name" value="{{ profile.name }}" class="config-input"
                                    {% if profile.name == 'Local' %}readonly{% endif %}>
                         </div>
                         <div class="profile-form-field">
-                            <label>Type</label>
+                            {{ field_label("Type", "mpv = lecteur logiciel lancé en local ou via SSH. dunehd = box multimédia Dune HD pilotée par API HTTP avec lecture via partages SMB.") }}
                             <select name="type" class="config-input config-select" onchange="togglePlayerTypeFields(this)">
                                 <option value="mpv" {% if ptype == 'mpv' %}selected{% endif %}>mpv</option>
                                 <option value="dunehd" {% if ptype == 'dunehd' %}selected{% endif %}>dunehd</option>
@@ -86,30 +87,30 @@
                     <div class="profile-fields-mpv" {% if ptype != 'mpv' %}style="display:none"{% endif %}>
                         <div class="profile-form-grid">
                             <div class="profile-form-field">
-                                <label>Programme</label>
+                                {{ field_label("Programme", "Commande du lecteur à exécuter. En général « mpv ». Doit être présente dans le PATH (ou indiquer le chemin complet).") }}
                                 <input type="text" name="command" value="{{ profile.command or '' }}" class="config-input" placeholder="mpv">
                             </div>
                             <div class="profile-form-field">
-                                <label>Cible</label>
+                                {{ field_label("Cible", "local : lance le lecteur sur cette machine (le serveur web). remote : lance sur une autre machine via SSH (les champs SSH ci-dessous deviennent obligatoires).") }}
                                 <select name="target" class="config-input config-select">
                                     <option value="local" {% if profile.target == 'local' %}selected{% endif %}>local</option>
                                     <option value="remote" {% if profile.target == 'remote' %}selected{% endif %}>remote</option>
                                 </select>
                             </div>
                             <div class="profile-form-field">
-                                <label>Hôte SSH</label>
+                                {{ field_label("Hôte SSH", "IP ou nom d'hôte de la machine distante (ex. 192.168.1.20). Utilisé uniquement quand Cible = remote.") }}
                                 <input type="text" name="ssh_host" value="{{ profile.ssh_host or '' }}" class="config-input" placeholder="192.168.1.20">
                             </div>
                             <div class="profile-form-field">
-                                <label>Utilisateur SSH</label>
+                                {{ field_label("Utilisateur SSH", "Nom d'utilisateur SSH sur la machine distante. L'authentification doit être par clé publique (BatchMode=yes — pas de mot de passe interactif).") }}
                                 <input type="text" name="ssh_user" value="{{ profile.ssh_user or '' }}" class="config-input" placeholder="user">
                             </div>
                             <div class="profile-form-field">
-                                <label>Préfixe chemin local</label>
+                                {{ field_label("Préfixe chemin local", "Début du chemin des vidéos tel qu'il apparaît côté serveur web (ex. /home/jp/Videos). Sert à le remplacer par le préfixe distant avant l'envoi SSH. Laisser vide si la machine distante voit les mêmes chemins.") }}
                                 <input type="text" name="local_path_prefix" value="{{ profile.local_path_prefix or '' }}" class="config-input" placeholder="/home/jp/Videos">
                             </div>
                             <div class="profile-form-field">
-                                <label>Préfixe chemin distant</label>
+                                {{ field_label("Préfixe chemin distant", "Début du chemin des vidéos tel qu'il apparaît sur la machine distante (ex. /mnt/nas, ou \\\\NAS\\Videos pour Windows). Le préfixe local est remplacé par celui-ci avant la commande SSH.") }}
                                 <input type="text" name="remote_path_prefix" value="{{ profile.remote_path_prefix or '' }}" class="config-input" placeholder="/mnt/nas">
                             </div>
                         </div>
@@ -118,15 +119,15 @@
                     <div class="profile-fields-dunehd" {% if ptype != 'dunehd' %}style="display:none"{% endif %}>
                         <div class="profile-form-grid">
                             <div class="profile-form-field">
-                                <label>IP du Dune</label>
+                                {{ field_label("IP du Dune", "Adresse IP de la box Dune HD sur le réseau local (ex. 192.168.1.4). L'API HTTP de commande doit être activée dans les réglages du Dune.") }}
                                 <input type="text" name="ip" value="{{ profile.ip or '' }}" class="config-input" placeholder="192.168.1.4">
                             </div>
                             <div class="profile-form-field">
-                                <label>Préfixe SMB films</label>
+                                {{ field_label("Préfixe SMB films", "URL SMB du partage Films vu depuis le Dune (ex. smb://192.168.1.2/Films). Remplace la portion locale jusqu'à « /Films/ » au moment de la lecture.") }}
                                 <input type="text" name="smb_movies_prefix" value="{{ profile.smb_movies_prefix or '' }}" class="config-input" placeholder="smb://192.168.1.2/Films">
                             </div>
                             <div class="profile-form-field">
-                                <label>Préfixe SMB séries</label>
+                                {{ field_label("Préfixe SMB séries", "URL SMB du partage Séries vu depuis le Dune (ex. smb://192.168.1.2/Series TV). Remplace la portion locale jusqu'à « /Séries/ » au moment de la lecture.") }}
                                 <input type="text" name="smb_series_prefix" value="{{ profile.smb_series_prefix or '' }}" class="config-input" placeholder="smb://192.168.1.2/Series TV">
                             </div>
                         </div>
@@ -155,11 +156,11 @@
               hx-swap="outerHTML">
             <div class="profile-form-grid">
                 <div class="profile-form-field">
-                    <label>Nom</label>
+                    {{ field_label("Nom", "Nom du profil affiché dans l'interface (ex. « Salon », « PC bureau », « Dune Max »).") }}
                     <input type="text" name="name" class="config-input" placeholder="Xubuntu salon" required>
                 </div>
                 <div class="profile-form-field">
-                    <label>Type</label>
+                    {{ field_label("Type", "mpv = lecteur logiciel lancé en local ou via SSH. dunehd = box multimédia Dune HD pilotée par API HTTP avec lecture via partages SMB.") }}
                     <select name="type" class="config-input config-select" onchange="togglePlayerTypeFields(this)">
                         <option value="mpv" selected>mpv</option>
                         <option value="dunehd">dunehd</option>
@@ -170,30 +171,30 @@
             <div class="profile-fields-mpv">
                 <div class="profile-form-grid">
                     <div class="profile-form-field">
-                        <label>Programme</label>
+                        {{ field_label("Programme", "Commande du lecteur à exécuter. En général « mpv ». Doit être présente dans le PATH (ou indiquer le chemin complet).") }}
                         <input type="text" name="command" class="config-input" value="mpv" placeholder="mpv">
                     </div>
                     <div class="profile-form-field">
-                        <label>Cible</label>
+                        {{ field_label("Cible", "local : lance le lecteur sur cette machine (le serveur web). remote : lance sur une autre machine via SSH (les champs SSH ci-dessous deviennent obligatoires).") }}
                         <select name="target" class="config-input config-select">
                             <option value="local">local</option>
                             <option value="remote">remote</option>
                         </select>
                     </div>
                     <div class="profile-form-field">
-                        <label>Hôte SSH</label>
+                        {{ field_label("Hôte SSH", "IP ou nom d'hôte de la machine distante (ex. 192.168.1.20). Utilisé uniquement quand Cible = remote.") }}
                         <input type="text" name="ssh_host" class="config-input" placeholder="192.168.1.20">
                     </div>
                     <div class="profile-form-field">
-                        <label>Utilisateur SSH</label>
+                        {{ field_label("Utilisateur SSH", "Nom d'utilisateur SSH sur la machine distante. L'authentification doit être par clé publique (BatchMode=yes — pas de mot de passe interactif).") }}
                         <input type="text" name="ssh_user" class="config-input" placeholder="user">
                     </div>
                     <div class="profile-form-field">
-                        <label>Préfixe chemin local</label>
+                        {{ field_label("Préfixe chemin local", "Début du chemin des vidéos tel qu'il apparaît côté serveur web (ex. /home/jp/Videos). Sert à le remplacer par le préfixe distant avant l'envoi SSH. Laisser vide si la machine distante voit les mêmes chemins.") }}
                         <input type="text" name="local_path_prefix" class="config-input" placeholder="/home/jp/Videos">
                     </div>
                     <div class="profile-form-field">
-                        <label>Préfixe chemin distant</label>
+                        {{ field_label("Préfixe chemin distant", "Début du chemin des vidéos tel qu'il apparaît sur la machine distante (ex. /mnt/nas, ou \\\\NAS\\Videos pour Windows). Le préfixe local est remplacé par celui-ci avant la commande SSH.") }}
                         <input type="text" name="remote_path_prefix" class="config-input" placeholder="/mnt/nas">
                     </div>
                 </div>
@@ -202,15 +203,15 @@
             <div class="profile-fields-dunehd" style="display:none">
                 <div class="profile-form-grid">
                     <div class="profile-form-field">
-                        <label>IP du Dune</label>
+                        {{ field_label("IP du Dune", "Adresse IP de la box Dune HD sur le réseau local (ex. 192.168.1.4). L'API HTTP de commande doit être activée dans les réglages du Dune.") }}
                         <input type="text" name="ip" class="config-input" placeholder="192.168.1.4">
                     </div>
                     <div class="profile-form-field">
-                        <label>Préfixe SMB films</label>
+                        {{ field_label("Préfixe SMB films", "URL SMB du partage Films vu depuis le Dune (ex. smb://192.168.1.2/Films). Remplace la portion locale jusqu'à « /Films/ » au moment de la lecture.") }}
                         <input type="text" name="smb_movies_prefix" class="config-input" placeholder="smb://192.168.1.2/Films">
                     </div>
                     <div class="profile-form-field">
-                        <label>Préfixe SMB séries</label>
+                        {{ field_label("Préfixe SMB séries", "URL SMB du partage Séries vu depuis le Dune (ex. smb://192.168.1.2/Series TV). Remplace la portion locale jusqu'à « /Séries/ » au moment de la lecture.") }}
                         <input type="text" name="smb_series_prefix" class="config-input" placeholder="smb://192.168.1.2/Series TV">
                     </div>
                 </div>

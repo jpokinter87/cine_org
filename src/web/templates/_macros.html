@@ -1,0 +1,31 @@
+{#
+    Macros partagés pour les bulles d'aide contextuelle.
+
+    - field_label(text, hint=None) : label de formulaire avec icône « ? » optionnelle.
+    - hint_icon(hint) : icône « ? » seule, à placer après un titre/texte existant.
+#}
+
+{%- macro _hint_svg() -%}
+<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.3-1.5 1.7-2 2.5-.3.5-.5 1-.5 1.5"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/></svg>
+{%- endmacro -%}
+
+{% macro field_label(text, hint=None) -%}
+<label>
+    {{ text }}
+    {%- if hint %}
+    <span class="field-hint" tabindex="0" aria-label="{{ hint }}">
+        {{ _hint_svg() }}
+        <span class="field-hint-bubble">{{ hint }}</span>
+    </span>
+    {%- endif %}
+</label>
+{%- endmacro %}
+
+{% macro hint_icon(hint) -%}
+{%- if hint %}
+<span class="field-hint" tabindex="0" aria-label="{{ hint }}">
+    {{ _hint_svg() }}
+    <span class="field-hint-bubble">{{ hint }}</span>
+</span>
+{%- endif %}
+{%- endmacro %}
