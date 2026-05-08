@@ -14,6 +14,7 @@ from src.core.ports.api_clients import MediaDetails
 from src.services.series_enricher import (
     EnrichmentResult,
     SeriesEnricherService,
+    pick_best_tv_match,
 )
 
 
@@ -176,6 +177,36 @@ class TestSeriesEnricherWithIMDbCache:
 
         assert stats.enriched == 1
         mock_imdb_importer.get_rating.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_year_provided_but_no_year_match_returns_none(
+        self, mock_series_repo, mock_tmdb_client, mock_imdb_importer
+    ):
+        """Garde-fou : year fourni mais aucun resultat annee-aligne -> NOT_FOUND.
+
+        Reproduit l'ancien bug : 'Flashback' year=2011 sur TMDB ne contient
+        aucun Flashback 2011, donc enrich-series ne doit pas associer le
+        resultat #1 (Flashback 2025) a la place — sinon imdb_id/tmdb_id
+        sont ecrases avec une serie differente.
+        """
+        series = Series(id="1", title="Flashback", year=2011, tvdb_id=244011)
+        # TMDB ne renvoie que des Flashback non-2011
+        mock_tmdb_client.search_tv.return_value = [
+            _tmdb_search_result("237979", "Flashback", 2025),
+            _tmdb_search_result("88", "Flashback", 2014),
+        ]
+
+        service = SeriesEnricherService(
+            series_repo=mock_series_repo,
+            tmdb_client=mock_tmdb_client,
+            imdb_importer=mock_imdb_importer,
+        )
+        stats = await service.enrich_series([series], rate_limit_seconds=0)
+
+        assert stats.not_found == 1
+        assert stats.enriched == 0
+        # Aucun ecrasement : la serie n'a pas ete sauvee
+        mock_series_repo.save.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_existing_imdb_id_still_triggers_cache_lookup(

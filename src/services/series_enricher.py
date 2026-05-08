@@ -52,29 +52,31 @@ def pick_best_tv_match(results: list, title: str, year: Optional[int]):
     """
     Selectionne le meilleur resultat TMDB TV pour un titre+annee donnes.
 
-    Reutilise par batch_builder pour les nouvelles series et par
-    SeriesEnricherService pour le backfill.
+    Reutilise par batch_builder (nouvelles series) et SeriesEnricherService (backfill).
 
-    Priorites :
+    Strategie quand `year` est fournie :
         1. Titre exact + meme annee
-        2. Titre exact (sans annee)
-        3. Titre original exact + meme annee
-        4. Titre original exact
-        5. Meme annee parmi les 3 premiers resultats
-        6. Premier resultat (fallback)
+        2. Titre original exact + meme annee
+        3. Meme annee dans le top 3 (titre approximatif)
+        Sinon -> None (refus explicite)
+
+    Strategie sans `year` (mode degraded) :
+        1. Titre exact
+        2. Titre original exact
+        3. Premier resultat (fallback)
+
+    IMPORTANT : quand `year` est fournie, on n'accepte JAMAIS un resultat dont
+    l'annee ne correspond pas. Ce garde-fou empeche les associations
+    catastrophiques entre homonymes (ex: "Flashback 2011" Game Show associe par
+    erreur a Flashback 2025, ou "Shameless 2004" UK confondu avec Shameless US 2011).
     """
     title_lower = title.lower().strip()
 
     if year:
+        # Mode strict : annee obligatoire
         for r in results:
             if r.title.lower().strip() == title_lower and r.year == year:
                 return r
-
-    for r in results:
-        if r.title.lower().strip() == title_lower:
-            return r
-
-    if year:
         for r in results:
             if (
                 r.original_title
@@ -82,16 +84,18 @@ def pick_best_tv_match(results: list, title: str, year: Optional[int]):
                 and r.year == year
             ):
                 return r
-
-    for r in results:
-        if r.original_title and r.original_title.lower().strip() == title_lower:
-            return r
-
-    if year:
         for r in results[:3]:
             if r.year == year:
                 return r
+        return None
 
+    # Mode degraded : pas d'annee, on prend le titre exact ou le premier
+    for r in results:
+        if r.title.lower().strip() == title_lower:
+            return r
+    for r in results:
+        if r.original_title and r.original_title.lower().strip() == title_lower:
+            return r
     return results[0] if results else None
 
 
