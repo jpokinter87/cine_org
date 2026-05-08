@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Callable, Optional
 
 from src.adapters.api.tmdb_client import TMDBClient
+from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
 from src.core.entities.media import Series
 from src.core.ports.repositories import ISeriesRepository
 
@@ -47,6 +48,53 @@ class SeriesEnrichmentStats:
     skipped: int = 0
 
 
+def pick_best_tv_match(results: list, title: str, year: Optional[int]):
+    """
+    Selectionne le meilleur resultat TMDB TV pour un titre+annee donnes.
+
+    Reutilise par batch_builder pour les nouvelles series et par
+    SeriesEnricherService pour le backfill.
+
+    Priorites :
+        1. Titre exact + meme annee
+        2. Titre exact (sans annee)
+        3. Titre original exact + meme annee
+        4. Titre original exact
+        5. Meme annee parmi les 3 premiers resultats
+        6. Premier resultat (fallback)
+    """
+    title_lower = title.lower().strip()
+
+    if year:
+        for r in results:
+            if r.title.lower().strip() == title_lower and r.year == year:
+                return r
+
+    for r in results:
+        if r.title.lower().strip() == title_lower:
+            return r
+
+    if year:
+        for r in results:
+            if (
+                r.original_title
+                and r.original_title.lower().strip() == title_lower
+                and r.year == year
+            ):
+                return r
+
+    for r in results:
+        if r.original_title and r.original_title.lower().strip() == title_lower:
+            return r
+
+    if year:
+        for r in results[:3]:
+            if r.year == year:
+                return r
+
+    return results[0] if results else None
+
+
 class SeriesEnricherService:
     """
     Service pour enrichir les metadonnees TMDB des series existantes.
@@ -59,9 +107,13 @@ class SeriesEnricherService:
         self,
         series_repo: ISeriesRepository,
         tmdb_client: TMDBClient,
+        imdb_importer: Optional[IMDbDatasetImporter] = None,
     ) -> None:
         self._series_repo = series_repo
         self._tmdb_client = tmdb_client
+        # Optionnel : si fourni, on lit aussi imdb_rating + imdb_votes depuis le cache local
+        # apres avoir recupere l'imdb_id via TMDB (evite un imdb sync separe pour les series).
+        self._imdb_importer = imdb_importer
 
     async def enrich_series(
         self,
@@ -119,7 +171,7 @@ class SeriesEnricherService:
                 return EnrichmentResult.NOT_FOUND
 
             # Prendre le meilleur resultat (filtrer par annee si disponible)
-            best = self._pick_best_match(results, series.title, series.year)
+            best = pick_best_tv_match(results, series.title, series.year)
             if not best:
                 return EnrichmentResult.NOT_FOUND
 
@@ -158,6 +210,13 @@ class SeriesEnricherService:
                 if ext_ids and ext_ids.get("imdb_id"):
                     series.imdb_id = ext_ids["imdb_id"]
 
+            # Notes IMDb depuis le cache local (si importer fourni et imdb_id connu).
+            # Permet d'eviter une commande imdb sync supplementaire pour les series.
+            if self._imdb_importer and series.imdb_id:
+                rating_data = self._imdb_importer.get_rating(series.imdb_id)
+                if rating_data:
+                    series.imdb_rating, series.imdb_votes = rating_data
+
             self._series_repo.save(series)
             return EnrichmentResult.SUCCESS
 
@@ -170,38 +229,5 @@ class SeriesEnricherService:
         title: str,
         year: Optional[int],
     ):
-        """Selectionne le meilleur resultat de recherche."""
-        title_lower = title.lower().strip()
-
-        # Priorite 1 : titre exact + meme annee
-        if year:
-            for r in results:
-                r_title = r.title.lower().strip()
-                if r_title == title_lower and r.year == year:
-                    return r
-
-        # Priorite 2 : titre exact (sans annee)
-        for r in results:
-            r_title = r.title.lower().strip()
-            if r_title == title_lower:
-                return r
-
-        # Priorite 3 : titre original exact + meme annee
-        if year:
-            for r in results:
-                if r.original_title and r.original_title.lower().strip() == title_lower and r.year == year:
-                    return r
-
-        # Priorite 4 : titre original exact
-        for r in results:
-            if r.original_title and r.original_title.lower().strip() == title_lower:
-                return r
-
-        # Priorite 5 : meme annee parmi les premiers resultats
-        if year:
-            for r in results[:3]:
-                if r.year == year:
-                    return r
-
-        # Fallback : premier resultat
-        return results[0] if results else None
+        """Conserve pour compat externe : delegue a la fonction module-level."""
+        return pick_best_tv_match(results, title, year)

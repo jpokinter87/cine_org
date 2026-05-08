@@ -14,10 +14,56 @@ from rich.progress import (
     TaskProgressColumn,
     TextColumn,
 )
+from sqlmodel import Session, select
 
 from src.adapters.cli.helpers import suppress_loguru, with_container
 from src.adapters.cli.validation import console
 from src.container import Container
+
+
+def _sync_imdb_for_model(
+    session: Session,
+    model_class,
+    importer,
+    limit: int,
+) -> tuple[int, int]:
+    """
+    Synchronise les notes IMDb depuis le cache local pour un type d'entite.
+
+    Itere sur les enregistrements ayant un imdb_id mais pas encore d'imdb_rating
+    et applique la note (et le nombre de votes) trouvee dans le cache local.
+
+    Args:
+        session: Session SQLModel active
+        model_class: MovieModel ou SeriesModel
+        importer: IMDbDatasetImporter (ou tout objet exposant get_rating(imdb_id))
+        limit: Nombre maximum d'entites a traiter
+
+    Returns:
+        Tuple (synced, not_found) — nombre d'entites mises a jour et manquees.
+    """
+    statement = (
+        select(model_class)
+        .where(model_class.imdb_id.is_not(None))
+        .where(model_class.imdb_rating.is_(None))
+        .limit(limit)
+    )
+    rows = session.exec(statement).all()
+
+    synced = 0
+    not_found = 0
+    for row in rows:
+        rating = importer.get_rating(row.imdb_id)
+        if rating:
+            row.imdb_rating = rating[0]
+            row.imdb_votes = rating[1]
+            session.add(row)
+            synced += 1
+        else:
+            not_found += 1
+
+    session.commit()
+    return synced, not_found
 
 
 # Application Typer pour les commandes IMDb
@@ -84,25 +130,37 @@ def imdb_sync(
         int,
         typer.Option(
             "--limit", "-l",
-            help="Nombre maximum de films a synchroniser",
+            help="Nombre maximum d'entites a synchroniser (par cible)",
         ),
     ] = 100,
+    target: Annotated[
+        str,
+        typer.Option(
+            "--target", "-t",
+            help="Cible de la synchronisation : movies, series ou all (defaut)",
+        ),
+    ] = "all",
 ) -> None:
-    """Synchronise les notes IMDb avec les films en base."""
-    asyncio.run(_imdb_sync_async(limit))
+    """Synchronise les notes IMDb avec les films et/ou series en base."""
+    asyncio.run(_imdb_sync_async(limit, target))
 
 
 @with_container()
-async def _imdb_sync_async(container, limit: int) -> None:
+async def _imdb_sync_async(container, limit: int, target: str) -> None:
     """Implementation async de la commande imdb sync."""
     from loguru import logger as loguru_logger
 
     from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
+    from src.infrastructure.persistence.models import MovieModel, SeriesModel
 
-    # Recuperer les repositories
-    movie_repo = container.movie_repository()
+    target = target.lower().strip()
+    if target not in {"movies", "series", "all"}:
+        console.print(
+            f"[red]Cible invalide:[/red] {target!r} (movies, series ou all)"
+        )
+        return
+
     session = container.session()
-
     cache_dir = Path(".cache/imdb")
     importer = IMDbDatasetImporter(cache_dir=cache_dir, session=session)
 
@@ -110,47 +168,39 @@ async def _imdb_sync_async(container, limit: int) -> None:
     loguru_logger.disable("src")
 
     try:
-        # Lister les films avec imdb_id mais sans imdb_rating
-        from sqlmodel import select
-        from src.infrastructure.persistence.models import MovieModel
+        targets = []
+        if target in {"movies", "all"}:
+            targets.append((MovieModel, "film"))
+        if target in {"series", "all"}:
+            targets.append((SeriesModel, "serie"))
 
-        statement = (
-            select(MovieModel)
-            .where(MovieModel.imdb_id.isnot(None))
-            .where(MovieModel.imdb_rating.is_(None))
-            .limit(limit)
-        )
-        movies_to_sync = session.exec(statement).all()
+        any_synced = False
+        for model_class, label in targets:
+            console.print(
+                f"[bold cyan]Synchronisation IMDb {label}s[/bold cyan]\n"
+            )
+            synced, not_found = _sync_imdb_for_model(
+                session=session,
+                model_class=model_class,
+                importer=importer,
+                limit=limit,
+            )
+            if synced == 0 and not_found == 0:
+                console.print(f"  [dim]Aucune {label} a synchroniser.[/dim]\n")
+                continue
 
-        if not movies_to_sync:
-            console.print("[yellow]Aucun film a synchroniser.[/yellow]")
-            console.print("[dim]Tous les films avec imdb_id ont deja leurs notes IMDb.[/dim]")
-            return
+            any_synced = any_synced or synced > 0
+            console.print(f"  [green]{synced}[/green] {label}(s) synchronise(s)")
+            if not_found > 0:
+                console.print(
+                    f"  [yellow]{not_found}[/yellow] non trouve(s) dans le cache IMDb"
+                )
+            console.print()
 
-        console.print(f"[bold cyan]Synchronisation IMDb[/bold cyan]: {len(movies_to_sync)} film(s)\n")
-
-        synced = 0
-        not_found = 0
-
-        for movie in movies_to_sync:
-            rating = importer.get_rating(movie.imdb_id)
-
-            if rating:
-                movie.imdb_rating = rating[0]
-                movie.imdb_votes = rating[1]
-                session.add(movie)
-                synced += 1
-                console.print(f"  [green]✓[/green] {movie.title} - {rating[0]}/10 ({rating[1]:,} votes)")
-            else:
-                not_found += 1
-                console.print(f"  [yellow]?[/yellow] {movie.title} - non trouve dans le cache IMDb")
-
-        session.commit()
-
-        console.print(f"\n[bold]Resume:[/bold]")
-        console.print(f"  [green]{synced}[/green] synchronise(s)")
-        if not_found > 0:
-            console.print(f"  [yellow]{not_found}[/yellow] non trouve(s)")
+        if not any_synced and target == "all":
+            console.print(
+                "[dim]Tous les imdb_id de la base ont deja une note locale.[/dim]"
+            )
 
     finally:
         loguru_logger.enable("src")

@@ -461,7 +461,9 @@ CineOrg peut enrichir votre vidéothèque avec les notes et évaluations des fil
 
 ### Notes TMDB
 
-Les notes TMDB (`vote_average` et `vote_count`) sont automatiquement récupérées lors de la validation d'un film via l'API TMDB. Ces informations sont stockées en base de données pour chaque film.
+Les notes TMDB (`vote_average` et `vote_count`) sont automatiquement récupérées :
+- **pour les films** : lors de la validation, via l'API TMDB ;
+- **pour les séries** : lors du transfert d'un nouvel épisode (pont TVDB → TMDB par recherche titre+année) puis également lors de la commande `enrich-series` pour les séries déjà présentes en base.
 
 Pour enrichir les films existants qui n'ont pas encore leurs notes :
 
@@ -473,7 +475,19 @@ uv run cineorg enrich-ratings
 uv run cineorg enrich-ratings --limit 500
 ```
 
-**Note** : Cette commande utilise l'API TMDB et respecte le rate limiting (0.25s entre chaque appel).
+Pour enrichir les séries existantes (poster + notes TMDB + IMDb + créateurs + casting) :
+
+```bash
+# Enrichir les séries dont le poster, vote_average ou director est manquant
+uv run cineorg enrich-series
+
+# Forcer le re-enrichissement de toutes les séries
+uv run cineorg enrich-series --force --limit 200
+```
+
+`enrich-series` lit aussi le cache IMDb local (s'il a été importé via `imdb import`) pour peupler `imdb_rating` et `imdb_votes` directement après avoir récupéré l'`imdb_id` via TMDB — pas besoin de relancer `imdb sync` derrière.
+
+**Note** : Ces commandes utilisent l'API TMDB et respectent le rate limiting (0.25 s entre chaque appel pour les films, 0.3 s pour les séries).
 
 ### Notes IMDb
 
@@ -491,19 +505,25 @@ uv run cineorg imdb import --force
 
 Le fichier est téléchargé dans `.cache/imdb/` et importé dans la table `imdb_ratings` de la base de données locale. L'import ne sera refait que si le fichier a plus de 7 jours.
 
-#### Synchroniser avec les films
+#### Synchroniser avec les films et les séries
 
-Une fois les notes IMDb importées, vous pouvez les associer aux films de votre vidéothèque :
+Une fois les notes IMDb importées, vous pouvez les associer aux films **et aux séries** de votre vidéothèque :
 
 ```bash
-# Synchroniser les films ayant un imdb_id mais pas de note IMDb
+# Synchroniser films + séries ayant un imdb_id mais pas de note IMDb (défaut)
 uv run cineorg imdb sync
 
-# Limiter le nombre de films à synchroniser
+# Limiter le nombre d'entrées à synchroniser (par cible)
 uv run cineorg imdb sync --limit 50
+
+# Cibler uniquement les films
+uv run cineorg imdb sync --target movies
+
+# Cibler uniquement les séries
+uv run cineorg imdb sync --target series
 ```
 
-**Prérequis** : Les films doivent avoir un `imdb_id` en base. Cet ID est récupéré via l'endpoint `/movie/{id}/external_ids` de TMDB lors de l'enrichissement.
+**Prérequis** : Les entrées doivent avoir un `imdb_id` en base. Pour les films, il est récupéré via `/movie/{id}/external_ids` de TMDB lors de l'enrichissement. Pour les séries, il est récupéré soit lors du transfert d'un nouvel épisode (workflow), soit via `enrich-series` (qui lit aussi le cache IMDb dans la foulée).
 
 #### Statistiques du cache IMDb
 
@@ -651,7 +671,7 @@ Toutes les commandes acceptent `--limit N` pour limiter le nombre d'éléments t
 # Télécharger et importer les notes IMDb
 uv run cineorg imdb import
 
-# Synchroniser les notes avec les films en base
+# Synchroniser les notes avec les films et les séries en base
 uv run cineorg imdb sync
 
 # Afficher les statistiques du cache IMDb

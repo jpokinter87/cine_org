@@ -178,6 +178,89 @@ async def _enrich_movie_metadata(
     return movie_genres, movie_details, imdb_id, imdb_rating, imdb_votes
 
 
+async def _enrich_series_metadata(
+    title: str,
+    year: int | None,
+    tmdb_client,
+    container: "Container",
+) -> tuple[
+    int | None,
+    float | None,
+    int | None,
+    str | None,
+    float | None,
+    int | None,
+]:
+    """
+    Enrichit les notes d'une nouvelle serie depuis TMDB + cache IMDb local.
+
+    Pont TVDB -> TMDB -> IMDb : la serie est matchee initialement via TVDB
+    (qui n'expose pas de note), donc on cherche son equivalent TMDB pour
+    recuperer vote_average + vote_count, puis on lit le cache IMDb local
+    pour imdb_rating + imdb_votes.
+
+    Args:
+        title: Titre de la serie
+        year: Annee de premiere diffusion (peut etre None)
+        tmdb_client: Client TMDB
+        container: Container DI (pour acceder a la session IMDb)
+
+    Returns:
+        Tuple (tmdb_id, vote_average, vote_count, imdb_id, imdb_rating, imdb_votes).
+        Toute valeur indisponible vaut None — le workflow continue sans bloquer.
+    """
+    tmdb_id: int | None = None
+    vote_average: float | None = None
+    vote_count: int | None = None
+    imdb_id: str | None = None
+    imdb_rating: float | None = None
+    imdb_votes: int | None = None
+
+    if not (tmdb_client and getattr(tmdb_client, "_api_key", None)):
+        return tmdb_id, vote_average, vote_count, imdb_id, imdb_rating, imdb_votes
+
+    try:
+        from src.services.series_enricher import pick_best_tv_match
+
+        results = await tmdb_client.search_tv(title, year=year)
+        if not results:
+            return tmdb_id, vote_average, vote_count, imdb_id, imdb_rating, imdb_votes
+
+        best = pick_best_tv_match(results, title, year)
+        if not best:
+            return tmdb_id, vote_average, vote_count, imdb_id, imdb_rating, imdb_votes
+
+        details = await tmdb_client.get_tv_details(best.id)
+        if details:
+            try:
+                tmdb_id = int(best.id)
+            except (TypeError, ValueError):
+                tmdb_id = None
+            vote_average = details.vote_average
+            vote_count = details.vote_count
+
+        ext_ids = await tmdb_client.get_tv_external_ids(best.id)
+        if ext_ids:
+            imdb_id = ext_ids.get("imdb_id") or None
+
+        if imdb_id:
+            from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
+
+            imdb_session = container.session()
+            imdb_importer = IMDbDatasetImporter(
+                cache_dir=Path(".cache/imdb"), session=imdb_session
+            )
+            rating_data = imdb_importer.get_rating(imdb_id)
+            if rating_data:
+                imdb_rating, imdb_votes = rating_data
+
+    except Exception:
+        # Workflow resilient : un echec d'enrichissement ne bloque pas le transfert.
+        pass
+
+    return tmdb_id, vote_average, vote_count, imdb_id, imdb_rating, imdb_votes
+
+
 def _build_movie_transfer_data(
     pending: "PendingValidation",
     candidate: dict | object,
@@ -452,16 +535,60 @@ async def build_transfers_batch(
                 _extract_tech_from_media_info(media_info, pending.video_file)
             )
 
+            # Recuperer la serie existante (pour eviter de refaire l'enrichissement
+            # TMDB+IMDb a chaque nouvel episode et pour preserver les notes deja
+            # peuplees si la nouvelle requete TMDB echoue ou est ambigue).
+            tvdb_id_int = int(candidate_id) if candidate_id else None
+            existing_series = (
+                series_repo.get_by_tvdb_id(tvdb_id_int) if tvdb_id_int else None
+            )
+
+            if existing_series and existing_series.vote_average is not None:
+                # Notes deja peuplees pour cette serie : on ne re-interroge pas TMDB.
+                s_tmdb_id = existing_series.tmdb_id
+                s_vote_avg = existing_series.vote_average
+                s_vote_count = existing_series.vote_count
+                s_imdb_id = existing_series.imdb_id
+                s_imdb_rating = existing_series.imdb_rating
+                s_imdb_votes = existing_series.imdb_votes
+            else:
+                # Premiere apparition (ou serie sans notes) : pont TVDB -> TMDB -> IMDb.
+                (
+                    s_tmdb_id,
+                    s_vote_avg,
+                    s_vote_count,
+                    s_imdb_id,
+                    s_imdb_rating,
+                    s_imdb_votes,
+                ) = await _enrich_series_metadata(
+                    title=candidate_title,
+                    year=candidate_year,
+                    tmdb_client=tmdb_client,
+                    container=container,
+                )
+                # Conserver les valeurs preexistantes en cas d'echec de l'appel TMDB.
+                if existing_series:
+                    s_tmdb_id = s_tmdb_id or existing_series.tmdb_id
+                    s_imdb_id = s_imdb_id or existing_series.imdb_id
+                    s_imdb_rating = s_imdb_rating or existing_series.imdb_rating
+                    s_imdb_votes = s_imdb_votes or existing_series.imdb_votes
+
             # Construire les entites Series et Episode
             from src.core.entities.media import Series, Episode
 
             series = Series(
-                tvdb_id=int(candidate_id) if candidate_id else None,
+                tvdb_id=tvdb_id_int,
+                tmdb_id=s_tmdb_id,
+                imdb_id=s_imdb_id,
                 title=candidate_title,
                 year=candidate_year,
                 genres=series_genres,
                 overview=series_details.overview if series_details else None,
                 poster_path=series_details.poster_url if series_details else None,
+                vote_average=s_vote_avg,
+                vote_count=s_vote_count,
+                imdb_rating=s_imdb_rating,
+                imdb_votes=s_imdb_votes,
             )
             is_extra = (
                 canonical_count is not None and episode_num > canonical_count

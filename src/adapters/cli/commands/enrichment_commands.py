@@ -215,6 +215,9 @@ def enrich_series(
 @with_container()
 async def _enrich_series_async(container, limit: int, force: bool) -> None:
     """Implementation async de la commande enrich-series."""
+    from pathlib import Path
+
+    from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
     from src.infrastructure.persistence.models import SeriesModel
     from src.infrastructure.persistence.database import get_session
     from src.services.series_enricher import (
@@ -225,6 +228,13 @@ async def _enrich_series_async(container, limit: int, force: bool) -> None:
 
     tmdb_client = container.tmdb_client()
     series_repo = container.series_repository()
+
+    # Importer IMDb local : permet d'enrichir aussi imdb_rating/imdb_votes
+    # en une seule commande, sans devoir relancer `imdb sync` ensuite.
+    imdb_session = container.session()
+    imdb_importer = IMDbDatasetImporter(
+        cache_dir=Path(".cache/imdb"), session=imdb_session
+    )
 
     # Recuperer les series a enrichir directement via SQL
     session = next(get_session())
@@ -264,6 +274,7 @@ async def _enrich_series_async(container, limit: int, force: bool) -> None:
     service = SeriesEnricherService(
         series_repo=series_repo,
         tmdb_client=tmdb_client,
+        imdb_importer=imdb_importer,
     )
 
     with suppress_loguru():
