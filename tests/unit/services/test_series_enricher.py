@@ -41,6 +41,14 @@ def mock_imdb_importer():
     return importer
 
 
+@pytest.fixture
+def mock_episode_repo():
+    """Mock du repository episodes (vide par defaut)."""
+    repo = MagicMock()
+    repo.get_by_series.return_value = []
+    return repo
+
+
 def _tmdb_search_result(id_: str, title: str, year: int):
     """Construit un SearchResult minimal compatible avec _pick_best_match."""
     obj = MagicMock()
@@ -206,6 +214,118 @@ class TestSeriesEnricherWithIMDbCache:
         assert stats.not_found == 1
         assert stats.enriched == 0
         # Aucun ecrasement : la serie n'a pas ete sauvee
+        mock_series_repo.save.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_episode_count_guard_drops_inconsistent_candidate(
+        self, mock_series_repo, mock_tmdb_client, mock_imdb_importer, mock_episode_repo
+    ):
+        """Garde-fou : si un candidat TMDB n'a pas assez d'episodes pour les
+        saisons deja en base, il est rejete. Reproduit le scenario Shameless :
+        DB a 12 ep en S01, candidat UK n'en propose que 7 -> rejete."""
+        from src.core.entities.media import Episode
+
+        series = Series(id="42", title="Shameless", year=2011, tvdb_id=None)
+
+        # Episodes DB : S01 a 12 episodes (numerotation 1..12)
+        mock_episode_repo.get_by_series.return_value = [
+            Episode(season_number=1, episode_number=i, title=f"Ep {i}")
+            for i in range(1, 13)
+        ]
+
+        # 2 candidats avec le meme titre+annee : UK (incompatible) et US (compatible)
+        uk = _tmdb_search_result("1906", "Shameless", 2004)
+        us = _tmdb_search_result("34307", "Shameless", 2011)
+        mock_tmdb_client.search_tv.return_value = [uk, us]
+
+        # Comptes TMDB par saison : UK S01=7, US S01=12
+        async def counts_side_effect(tv_id):
+            if tv_id == "1906":
+                return {1: 7}  # UK
+            if tv_id == "34307":
+                return {1: 12}  # US
+            return {}
+
+        mock_tmdb_client.get_tv_seasons_episode_counts.side_effect = counts_side_effect
+
+        # Details et external_ids pour le candidat retenu
+        mock_tmdb_client.get_tv_details.return_value = MediaDetails(
+            id="34307", title="Shameless", year=2011, vote_average=8.2, is_tv=True
+        )
+        mock_tmdb_client.get_tv_external_ids.return_value = {"imdb_id": "tt1586680"}
+
+        service = SeriesEnricherService(
+            series_repo=mock_series_repo,
+            tmdb_client=mock_tmdb_client,
+            imdb_importer=mock_imdb_importer,
+            episode_repo=mock_episode_repo,
+        )
+        stats = await service.enrich_series([series], rate_limit_seconds=0)
+
+        assert stats.enriched == 1
+        saved = mock_series_repo.save.call_args[0][0]
+        # On a bien retenu Shameless US, pas UK
+        assert saved.tmdb_id == 34307
+        assert saved.imdb_id == "tt1586680"
+
+    @pytest.mark.asyncio
+    async def test_episode_count_guard_no_db_episodes_keeps_all(
+        self, mock_series_repo, mock_tmdb_client, mock_imdb_importer, mock_episode_repo
+    ):
+        """Sans episodes en DB, le filtre n'est pas applique (pas de signal)."""
+        series = Series(id="1", title="Forever", year=1996, tvdb_id=12345)
+        mock_episode_repo.get_by_series.return_value = []  # vide
+
+        # Si plusieurs candidats : pick_best_tv_match decide selon ses regles
+        mock_tmdb_client.search_tv.return_value = [
+            _tmdb_search_result("99", "Forever", 1996)
+        ]
+        mock_tmdb_client.get_tv_details.return_value = MediaDetails(
+            id="99", title="Forever", year=1996, vote_average=7.0, is_tv=True
+        )
+        mock_tmdb_client.get_tv_external_ids.return_value = {"imdb_id": "tt0001"}
+
+        service = SeriesEnricherService(
+            series_repo=mock_series_repo,
+            tmdb_client=mock_tmdb_client,
+            imdb_importer=mock_imdb_importer,
+            episode_repo=mock_episode_repo,
+        )
+        stats = await service.enrich_series([series], rate_limit_seconds=0)
+        assert stats.enriched == 1
+        # Pas d'appel au filtre TMDB seasons (un seul candidat de toute facon)
+        mock_tmdb_client.get_tv_seasons_episode_counts.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_episode_count_guard_returns_not_found_when_none_compatible(
+        self, mock_series_repo, mock_tmdb_client, mock_imdb_importer, mock_episode_repo
+    ):
+        """Si aucun candidat ne couvre les episodes DB, on renvoie NOT_FOUND."""
+        from src.core.entities.media import Episode
+
+        series = Series(id="42", title="Mystere", year=2020, tvdb_id=None)
+        mock_episode_repo.get_by_series.return_value = [
+            Episode(season_number=1, episode_number=20, title="Ep 20")
+        ]
+
+        a = _tmdb_search_result("1", "Mystere", 2020)
+        b = _tmdb_search_result("2", "Mystere", 2020)
+        mock_tmdb_client.search_tv.return_value = [a, b]
+
+        async def counts(tv_id):
+            return {1: 5}  # tous les deux ont juste 5 ep en S01, insuffisant
+
+        mock_tmdb_client.get_tv_seasons_episode_counts.side_effect = counts
+
+        service = SeriesEnricherService(
+            series_repo=mock_series_repo,
+            tmdb_client=mock_tmdb_client,
+            imdb_importer=mock_imdb_importer,
+            episode_repo=mock_episode_repo,
+        )
+        stats = await service.enrich_series([series], rate_limit_seconds=0)
+        assert stats.not_found == 1
+        assert stats.enriched == 0
         mock_series_repo.save.assert_not_called()
 
     @pytest.mark.asyncio

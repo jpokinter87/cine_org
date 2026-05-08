@@ -13,7 +13,7 @@ from typing import Callable, Optional
 from src.adapters.api.tmdb_client import TMDBClient
 from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
 from src.core.entities.media import Series
-from src.core.ports.repositories import ISeriesRepository
+from src.core.ports.repositories import IEpisodeRepository, ISeriesRepository
 
 
 class EnrichmentResult(str, Enum):
@@ -112,12 +112,17 @@ class SeriesEnricherService:
         series_repo: ISeriesRepository,
         tmdb_client: TMDBClient,
         imdb_importer: Optional[IMDbDatasetImporter] = None,
+        episode_repo: Optional[IEpisodeRepository] = None,
     ) -> None:
         self._series_repo = series_repo
         self._tmdb_client = tmdb_client
         # Optionnel : si fourni, on lit aussi imdb_rating + imdb_votes depuis le cache local
         # apres avoir recupere l'imdb_id via TMDB (evite un imdb sync separe pour les series).
         self._imdb_importer = imdb_importer
+        # Optionnel : si fourni, on filtre les candidats TMDB incompatibles avec
+        # les episodes deja en base (garde-fou anti-homonymes — ex: Shameless UK
+        # ne doit pas etre choisi pour une serie dont la S01 a 12 episodes en DB).
+        self._episode_repo = episode_repo
 
     async def enrich_series(
         self,
@@ -173,6 +178,18 @@ class SeriesEnricherService:
 
             if not results:
                 return EnrichmentResult.NOT_FOUND
+
+            # Garde-fou anti-homonymes : si on a deja des episodes en base et
+            # qu'il reste plusieurs candidats, ecarter ceux dont les saisons
+            # cote TMDB n'ont pas assez d'episodes pour couvrir ce qu'on a en DB.
+            if (
+                len(results) > 1
+                and series.id is not None
+                and self._episode_repo is not None
+            ):
+                results = await self._filter_by_episode_counts(results, series.id)
+                if not results:
+                    return EnrichmentResult.NOT_FOUND
 
             # Prendre le meilleur resultat (filtrer par annee si disponible)
             best = pick_best_tv_match(results, series.title, series.year)
@@ -235,3 +252,46 @@ class SeriesEnricherService:
     ):
         """Conserve pour compat externe : delegue a la fonction module-level."""
         return pick_best_tv_match(results, title, year)
+
+    async def _filter_by_episode_counts(
+        self, results: list, series_id: str
+    ) -> list:
+        """
+        Ecarte les candidats TMDB dont les saisons n'ont pas assez d'episodes
+        pour couvrir ce qui est deja stocke en base pour la serie.
+
+        Exemple : la serie en base a 12 episodes en S01. Un candidat TMDB qui
+        ne propose que 7 episodes en S01 (ex: Shameless UK) est forcement le
+        mauvais — on le retire.
+
+        Args:
+            results: Candidats TMDB renvoyes par search_tv
+            series_id: ID interne de la serie en base
+
+        Returns:
+            Sous-liste des candidats compatibles avec les comptes DB. Si la DB
+            n'a pas encore d'episodes (cas peu probable), on renvoie la liste
+            originale (pas de signal pour filtrer).
+        """
+        eps = self._episode_repo.get_by_series(series_id)
+        db_max_per_season: dict[int, int] = {}
+        for e in eps:
+            s = e.season_number
+            ep_num = e.episode_number or 0
+            if s is not None and s >= 1:
+                db_max_per_season[s] = max(db_max_per_season.get(s, 0), ep_num)
+        if not db_max_per_season:
+            return results
+
+        compatible: list = []
+        for r in results:
+            try:
+                counts = await self._tmdb_client.get_tv_seasons_episode_counts(r.id)
+            except Exception:
+                counts = {}
+            if all(
+                counts.get(season, 0) >= min_required
+                for season, min_required in db_max_per_season.items()
+            ):
+                compatible.append(r)
+        return compatible

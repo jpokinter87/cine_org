@@ -520,6 +520,49 @@ class TMDBClient(IMediaAPIClient):
             "tvdb_id": data.get("tvdb_id"),
         }
 
+    async def get_tv_seasons_episode_counts(self, tv_id: str) -> dict[int, int]:
+        """
+        Recupere le nombre d'episodes par saison pour une serie TV.
+
+        Garde-fou anti-homonymes : permet de departager deux candidats TMDB
+        portant le meme titre+annee en comparant leurs comptes d'episodes
+        avec ceux deja presents en base de donnees.
+
+        Args:
+            tv_id: ID TMDB de la serie TV
+
+        Returns:
+            Dictionnaire {numero_saison: nombre_episodes} (saison 0 / Specials
+            exclue). Vide si la serie est introuvable ou si une erreur survient.
+        """
+        cache_key = f"tmdb:tv_season_counts:{tv_id}"
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        client = self._get_client()
+        try:
+            response = await request_with_retry(client, "GET", f"/tv/{tv_id}")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return {}
+            raise
+
+        data = response.json()
+        counts: dict[int, int] = {}
+        for season in data.get("seasons", []):
+            season_number = season.get("season_number")
+            episode_count = season.get("episode_count")
+            if (
+                season_number is not None
+                and episode_count is not None
+                and season_number >= 1
+            ):
+                counts[int(season_number)] = int(episode_count)
+
+        await self._cache.set_details(cache_key, counts)
+        return counts
+
     async def close(self) -> None:
         """
         Ferme le client HTTP.

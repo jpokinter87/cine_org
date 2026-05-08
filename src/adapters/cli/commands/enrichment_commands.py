@@ -228,6 +228,7 @@ async def _enrich_series_async(container, limit: int, force: bool) -> None:
 
     tmdb_client = container.tmdb_client()
     series_repo = container.series_repository()
+    episode_repo = container.episode_repository()
 
     # Importer IMDb local : permet d'enrichir aussi imdb_rating/imdb_votes
     # en une seule commande, sans devoir relancer `imdb sync` ensuite.
@@ -275,6 +276,7 @@ async def _enrich_series_async(container, limit: int, force: bool) -> None:
         series_repo=series_repo,
         tmdb_client=tmdb_client,
         imdb_importer=imdb_importer,
+        episode_repo=episode_repo,
     )
 
     with suppress_loguru():
