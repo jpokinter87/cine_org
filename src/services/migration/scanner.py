@@ -160,7 +160,7 @@ class MigrationScanner:
         """
         Retourne (media_root, relative_category).
 
-        media_root = premier segment sous `root` (ex: "Films", "Séries").
+        media_root = premier segment sous `root` (ex: Films, Series, Animations).
         relative_category = chemin relatif de `path.parent` sous media_root.
         """
         try:
