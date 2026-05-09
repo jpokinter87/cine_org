@@ -64,6 +64,7 @@ class MigrationCandidate:
     size_bytes: Optional[int] = None
     is_broken: bool = False
     already_on_destination: bool = False
+    is_symlink: bool = True  # False si le scanner a trouvé un fichier physique au lieu d'un lien
 
 
 @dataclass
