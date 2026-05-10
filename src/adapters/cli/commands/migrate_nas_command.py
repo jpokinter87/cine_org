@@ -48,6 +48,9 @@ from src.services.matcher import MatcherService
 from src.services.migration.destination_planner import (
     MigrationDestinationPlanner,
 )
+from src.services.migration.library_presence_checker import (
+    LibraryPresenceChecker,
+)
 from src.services.migration.matching import (
     DefaultDetailsFetcher,
     MigrationMatcher,
@@ -133,6 +136,7 @@ def build_plan(
 
     matcher = None
     fetcher = None
+    library_checker = None
     if include_raw:
         tmdb = container.tmdb_client()
         tvdb = container.tvdb_client()
@@ -145,6 +149,12 @@ def build_plan(
         fetcher = DefaultDetailsFetcher(
             tmdb_client=tmdb, tvdb_client=tvdb
         )
+        library_checker = LibraryPresenceChecker(
+            movie_repo=container.movie_repository(),
+            series_repo=container.series_repository(),
+            episode_repo=container.episode_repository(),
+            parser=parser,
+        )
 
     builder = MigrationPlanBuilder(
         scanner=scanner,
@@ -154,6 +164,7 @@ def build_plan(
         matcher=matcher,
         details_fetcher=fetcher,
         include_raw=include_raw,
+        library_checker=library_checker,
     )
 
     if show_progress:
@@ -212,7 +223,8 @@ def _build_with_progress(
                     advance=1,
                     description=(
                         f"M={stats.to_migrate} L={stats.low_rated} U={stats.unrated} "
-                        f"V={stats.needs_validation} B={stats.broken} A={stats.already_on_destination}"
+                        f"V={stats.needs_validation} P={stats.already_in_library} "
+                        f"B={stats.broken} A={stats.already_on_destination}"
                     ),
                 )
 
@@ -518,6 +530,7 @@ def _display_plan_summary(
         ("LOW_RATED", s.low_rated),
         ("UNRATED", s.unrated),
         ("NEEDS_VALIDATION", s.needs_validation),
+        ("ALREADY_IN_LIBRARY", s.already_in_library),
         ("BROKEN", s.broken),
         ("ALREADY_ON_DESTINATION", s.already_on_destination),
         ("NOT_SYMLINK", s.not_symlink),
@@ -531,6 +544,11 @@ def _display_plan_summary(
         console.print(
             f"[yellow]→ {s.needs_validation} item(s) à valider via [bold]process[/bold] : "
             f"voir {csv_dir}/needs_validation.csv[/yellow]"
+        )
+    if s.already_in_library and csv_dir:
+        console.print(
+            f"[cyan]→ {s.already_in_library} item(s) déjà en bibliothèque CineOrg "
+            f"(source à supprimer manuellement) : voir {csv_dir}/already_in_library.csv[/cyan]"
         )
     if s.total_size_bytes:
         gb = s.total_size_bytes / (1024**3)

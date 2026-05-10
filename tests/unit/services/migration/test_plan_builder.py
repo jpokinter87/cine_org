@@ -828,3 +828,85 @@ def test_build_works_without_on_progress():
     )
     plan = builder.build(Path("/old"), Path("/new"))
     assert len(plan.items) == 1
+
+
+# ---- Bucket ALREADY_IN_LIBRARY (étape 2 amélioration matcher) ------------
+
+
+def test_raw_matched_already_in_library_skips_to_bucket():
+    """Si library_checker trouve un fichier existant → ALREADY_IN_LIBRARY,
+    pas de fetch détails (économie API), pas de transfert prévu."""
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=8.0
+    )
+    builder._library_checker = MagicMock()
+    builder._library_checker.find_existing_path.return_value = (
+        "/storage/Films/SF/A/Avatar (2009).mkv"
+    )
+
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    item = plan.items[0]
+    assert item.bucket == Bucket.ALREADY_IN_LIBRARY
+    assert plan.stats.already_in_library == 1
+    assert plan.stats.to_migrate == 0
+    # Pas d'appel au fetcher quand déjà en bibliothèque (économie API).
+    builder._fetcher.fetch.assert_not_called()
+    # Le tag 'existing:...' contient le path en DB pour reporting.
+    assert any(t.startswith("existing:") for t in item.tags)
+
+
+def test_raw_ambiguous_already_in_library_also_skips():
+    """Le checker fonctionne même sur AMBIGUOUS : top candidate suffit."""
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_ambiguous_outcome(), vote_average=None
+    )
+    builder._library_checker = MagicMock()
+    builder._library_checker.find_existing_path.return_value = (
+        "/storage/already.mkv"
+    )
+
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    item = plan.items[0]
+    assert item.bucket == Bucket.ALREADY_IN_LIBRARY
+    assert plan.stats.needs_validation == 0  # pas en NEEDS_VALIDATION
+    assert plan.stats.already_in_library == 1
+
+
+def test_raw_without_library_checker_keeps_normal_flow():
+    """Sans library_checker injecté, le flux normal reprend."""
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=8.0
+    )
+    # library_checker reste None (default)
+    plan = builder.build(Path("/old"), Path("/new"))
+    assert plan.items[0].bucket == Bucket.MIGRATE
+    assert plan.stats.already_in_library == 0
+
+
+def test_write_review_csvs_writes_already_in_library_file(tmp_path):
+    """already_in_library.csv listée les sources à supprimer manuellement."""
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=8.0
+    )
+    builder._library_checker = MagicMock()
+    builder._library_checker.find_existing_path.return_value = (
+        "/storage/Avatar.mkv"
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    write_review_csvs(plan, tmp_path)
+
+    csv_path = tmp_path / "already_in_library.csv"
+    assert csv_path.exists()
+    with csv_path.open(newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 1
+    assert rows[0]["source_path"].endswith("avatar.mkv")
+    assert rows[0]["existing_db_path"] == "/storage/Avatar.mkv"
+    assert rows[0]["tmdb_id"] == "19995"

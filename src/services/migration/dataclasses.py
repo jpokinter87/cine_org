@@ -26,6 +26,7 @@ class Bucket(str, Enum):
     NON_VIDEO = "non_video"  # Extension non reconnue
     NOT_SYMLINK = "not_symlink"  # Entree presente mais ce n'est pas un symlink
     NEEDS_VALIDATION = "needs_validation"  # Mode raw : match TMDB/TVDB ambigu ou absent
+    ALREADY_IN_LIBRARY = "already_in_library"  # Mode raw : oeuvre deja en DB CineOrg avec file_path
 
 
 class TransferStatus(str, Enum):
@@ -156,6 +157,7 @@ class MigrationStats:
     non_video: int = 0
     not_symlink: int = 0
     needs_validation: int = 0
+    already_in_library: int = 0
     total_size_bytes: int = 0  # Cumul des tailles des items "migrate"
 
 

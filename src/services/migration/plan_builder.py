@@ -34,6 +34,9 @@ from src.services.migration.dataclasses import (
 from src.services.migration.destination_planner import (
     MigrationDestinationPlanner,
 )
+from src.services.migration.library_presence_checker import (
+    LibraryPresenceChecker,
+)
 from src.services.migration.matching import (
     MatchKind,
     MigrationMatcher,
@@ -96,6 +99,7 @@ class MigrationPlanBuilder:
         matcher: Optional[MigrationMatcher] = None,
         details_fetcher: Optional[_DetailsFetcher] = None,
         include_raw: bool = False,
+        library_checker: Optional[LibraryPresenceChecker] = None,
     ) -> None:
         self._scanner = scanner
         self._resolver = rating_resolver
@@ -104,6 +108,7 @@ class MigrationPlanBuilder:
         self._matcher = matcher
         self._fetcher = details_fetcher
         self._include_raw = include_raw
+        self._library_checker = library_checker
 
         if self._include_raw and (
             self._matcher is None or self._fetcher is None
@@ -226,6 +231,33 @@ class MigrationPlanBuilder:
 
         top_dicts = candidates_to_dicts(outcome.top_results)
 
+        # Court-circuit : si l'oeuvre est deja en bibliotheque CineOrg
+        # (file_path non null en DB), on skip — qu'on soit MATCHED ou
+        # AMBIGUOUS (tant qu'on a un top candidate avec un id parsable).
+        if (
+            self._library_checker is not None
+            and outcome.top_results
+        ):
+            existing = self._library_checker.find_existing_path(
+                candidate, outcome
+            )
+            if existing is not None:
+                top = outcome.top_results[0]
+                return MigrationItem(
+                    item_id=_compute_item_id(candidate.symlink_path),
+                    bucket=Bucket.ALREADY_IN_LIBRARY,
+                    symlink_path=candidate.symlink_path,
+                    source_path=candidate.target_path,
+                    destination_path=None,
+                    media_root=candidate.media_root,
+                    relative_category=candidate.relative_category,
+                    size_bytes=candidate.size_bytes,
+                    rating=RatingDecision(),
+                    match=_match_info_from(top, top_dicts),
+                    is_symlink_source=False,
+                    tags=[f"existing:{existing}"],
+                )
+
         if outcome.kind != MatchKind.MATCHED or outcome.selected is None:
             return MigrationItem(
                 item_id=_compute_item_id(candidate.symlink_path),
@@ -326,6 +358,8 @@ def _accumulate_stats(stats: MigrationStats, item: MigrationItem) -> None:
         stats.non_video += 1
     elif item.bucket == Bucket.NEEDS_VALIDATION:
         stats.needs_validation += 1
+    elif item.bucket == Bucket.ALREADY_IN_LIBRARY:
+        stats.already_in_library += 1
 
 
 # ---- Sérialisation JSON ---------------------------------------------------
@@ -468,6 +502,44 @@ def write_review_csvs(plan: MigrationPlan, output_dir: Path) -> None:
         writer.writeheader()
         for item in needs_rows:
             writer.writerow(_needs_validation_row(item))
+
+    already_rows = [
+        it for it in plan.items if it.bucket == Bucket.ALREADY_IN_LIBRARY
+    ]
+    with (output_dir / "already_in_library.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=(
+                "source_path",
+                "size_bytes",
+                "tmdb_id",
+                "tvdb_id",
+                "existing_db_path",
+            ),
+        )
+        writer.writeheader()
+        for item in already_rows:
+            existing = next(
+                (t.split(":", 1)[1] for t in item.tags if t.startswith("existing:")),
+                "",
+            )
+            writer.writerow(
+                {
+                    "source_path": str(item.symlink_path),
+                    "size_bytes": item.size_bytes
+                    if item.size_bytes is not None
+                    else "",
+                    "tmdb_id": item.match.tmdb_id
+                    if item.match.tmdb_id is not None
+                    else "",
+                    "tvdb_id": item.match.tvdb_id
+                    if item.match.tvdb_id is not None
+                    else "",
+                    "existing_db_path": existing,
+                }
+            )
 
 
 def _item_to_csv_row(item: MigrationItem) -> dict[str, Any]:
