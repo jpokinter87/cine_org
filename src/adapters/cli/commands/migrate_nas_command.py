@@ -356,6 +356,10 @@ def _execute_with_progress(
                     return "starting"
                 if phase == "preparing":
                     return "preparing (DB)"
+                if phase == "hashing_source":
+                    return "hashing source (xxh3_64) — peut prendre du temps"
+                if phase == "hashing_existing":
+                    return "hashing existing destination (resume check)"
                 if phase == "checking_existing":
                     return "checking existing"
                 if phase.startswith("copying_"):

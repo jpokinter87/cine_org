@@ -300,6 +300,7 @@ class MigrationTransferExecutor:
 
         source = item.source_path
 
+        self._emit(item, "hashing_source")
         try:
             source_hash = self._hash_fn(source)
         except OSError as exc:
@@ -312,7 +313,7 @@ class MigrationTransferExecutor:
 
         # Reprise : destination déjà présente avec le bon hash → finalize direct.
         if destination.exists():
-            self._emit(item, "checking_existing")
+            self._emit(item, "hashing_existing")
             try:
                 existing_hash = self._hash_fn(destination)
             except OSError:
