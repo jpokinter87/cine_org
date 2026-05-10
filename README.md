@@ -32,6 +32,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Regroupement par préfixe de titre](#regroupement-par-préfixe-de-titre)
   - [Réparation des symlinks cassés](#réparation-des-symlinks-cassés)
   - [Consolidation des fichiers externes](#consolidation-des-fichiers-externes)
+  - [Migration depuis anciens NAS](#migration-depuis-anciens-nas)
   - [Purge des hardlinks](#purge-des-hardlinks)
 - [Format de nommage](#format-de-nommage)
 - [Interface web](#interface-web)
@@ -881,6 +882,55 @@ uv run cineorg rename-canonical --from-cache logs/quality_scan_cache.json --exec
 **Préservation du seeding** : `os.rename()` conserve l'inode, donc les hardlinks dans `downloads/` (voir section [Hardlinks et seeding](#hardlinks-et-seeding)) restent valides et le client torrent continue de servir le fichier.
 
 **Sortie** : table Rich listant pour chaque film son statut (`renamed` / `already_canonical` / `conflict` / `file_missing` / `error`) avec le nom actuel et le nom cible.
+
+### Migration depuis anciens NAS
+
+La sous-commande `migrate-nas` migre des fichiers vidéo depuis d'anciens volumes (vieux NAS, disques USB) vers le nouveau NAS, en filtrant par note minimale combinée IMDb / TMDB / personnelle. Elle préserve la source (pas de `--remove-source-files`), vérifie l'intégrité xxh3_64 source/destination après chaque copie, et swappe atomiquement les symlinks vers la nouvelle destination.
+
+**Trois étapes séparées** :
+
+```bash
+# 1. Construire le plan (lecture seule)
+uv run cineorg migrate-nas plan \
+    --source /mnt/old_nas/Vidéos \
+    --output ./migration/plan.json \
+    --csv-dir ./migration/review \
+    --threshold 6.0
+
+# 2. Exécuter les transferts (reprenable)
+uv run cineorg migrate-nas apply ./migration/plan.json
+
+# 3. Suivre l'avancement
+uv run cineorg migrate-nas status ./migration/plan.json
+```
+
+**Phase plan** : parcourt l'arborescence source (symlinks ou fichiers physiques), parse chaque nom de fichier via guessit, recherche l'œuvre en base CineOrg et calcule sa note retenue selon `max(imdb_rating, vote_average, personal_rating × 2)`. Chaque fichier est classé dans un *bucket* :
+
+| Bucket | Sens |
+|---|---|
+| `MIGRATE` | Note ≥ seuil et destination calculable — sera transféré. |
+| `LOW_RATED` | Note < seuil — ignoré (à revoir manuellement). |
+| `UNRATED` | Œuvre absente de la base ou aucune note — ignoré. |
+| `BROKEN` | Symlink brisé même après recherche dans `--alt-root`. |
+| `ALREADY_ON_DESTINATION` | Cible déjà sur le nouveau NAS — rien à faire. |
+| `NOT_SYMLINK` | Fichier physique trouvé dans la source — signalé. |
+
+Le plan est écrit en JSON (versionné, désérialisable) et accompagné de trois CSV de revue (`low_rated.csv` / `unrated.csv` / `broken.csv`) listant `symlink_path`, note, source de la note, et titre matché.
+
+**Phase apply** : pour chaque item `MIGRATE` non encore `COMMITTED` dans le state store, lance `rsync -a --partial --inplace --bwlimit=NM` avec retry sur paliers de bande passante (par défaut **25 → 20 → 15 → 10 → 5 MB/s**). Vérifie ensuite le hash xxh3_64 source/destination ; en cas de mismatch, la destination est supprimée et la source reste intacte. Si OK, le symlink est swappé via `os.symlink` + `os.replace` (atomique sur même filesystem) et l'item est marqué `COMMITTED`.
+
+Le state store est un journal SQLite local (par défaut `<plan>.json.state.sqlite`) qui suit chaque item via les statuts `PENDING` → `COPYING` → `COPIED` → `VERIFIED` → `COMMITTED` (ou `FAILED_COPY` / `FAILED_VERIFY` / `FAILED_OTHER`). Une exécution interrompue peut être relancée : seuls les items non `COMMITTED` sont retraités, et les items dont la destination existe déjà avec le bon hash sont finalisés sans re-rsync.
+
+**Options principales** :
+
+- `--source PATH` : racine de scan (anciens NAS montés en lecture).
+- `--output PATH` : chemin du plan JSON.
+- `--csv-dir PATH` : répertoire des CSV de revue (omis = pas de CSV).
+- `--alt-root PATH` (multi) : racines alternatives où retrouver les cibles brisées (utile quand un fichier physique a été déplacé sur un autre disque).
+- `--threshold FLOAT` : note minimale (échelle 0-10), défaut `6.0`.
+- `--state-store PATH` (apply / status) : journal SQLite custom.
+
+**Sécurité** : `apply` n'efface jamais la source. Le réordonnancement se fait uniquement par swap des symlinks. La suppression effective de la source relève d'une étape ultérieure (post-validation), hors du périmètre de cette commande.
 
 ### Purge des hardlinks
 
