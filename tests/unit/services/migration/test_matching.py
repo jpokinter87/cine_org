@@ -25,6 +25,7 @@ from src.services.migration.matching import (
     MatchKind,
     MatchOutcome,
     MigrationMatcher,
+    _truncate_title_at_first_number,
     candidates_to_dicts,
 )
 
@@ -387,6 +388,118 @@ async def test_tiebreak_disabled_when_query_year_missing():
     out = await matcher.match(cand)
 
     assert out.kind == MatchKind.AMBIGUOUS
+
+
+# ---- Fallback titre tronqué pour NO_RESULTS ------------------------------
+
+
+def test_truncate_title_returns_segment_before_first_number():
+    """Tronque au premier mot purement numérique (1-3 chiffres)."""
+    assert (
+        _truncate_title_at_first_number("Rivalité de génies 02 Edison Tesla")
+        == "Rivalité de génies"
+    )
+    assert (
+        _truncate_title_at_first_number("Cosmos 13 Voyage to the Edge")
+        == "Cosmos"
+    )
+
+
+def test_truncate_title_returns_none_when_no_number():
+    assert _truncate_title_at_first_number("Avatar") is None
+    assert _truncate_title_at_first_number("The Matrix Reloaded") is None
+
+
+def test_truncate_title_handles_empty_or_only_number():
+    assert _truncate_title_at_first_number("") is None
+    # "42" : pas d'espace avant le nombre → pas tronqué (titre commence par)
+    assert _truncate_title_at_first_number("42") is None
+
+
+def test_truncate_title_preserves_year_like_numbers_in_middle():
+    """Une année (4 chiffres) ne doit pas déclencher la troncature."""
+    # "Movie 2015 Edition" : 2015 a 4 chiffres → pas tronqué
+    assert _truncate_title_at_first_number("Movie 2015 Edition") is None
+
+
+@pytest.mark.asyncio
+async def test_movie_fallback_truncated_title_when_first_search_empty():
+    """Si TMDB.search initial vide, retenter avec titre tronqué."""
+    matcher = _make_matcher(
+        parsed=_parsed("Rivalité de génies 02 Edison Tesla", year=2015),
+        tmdb_results=[],  # search() default empty
+    )
+    # Reconfigure : 1er appel vide, 2e appel avec titre tronqué retourne 1 résultat.
+    matcher._tmdb.search = AsyncMock(
+        side_effect=[
+            [],  # search("Rivalité de génies 02 Edison Tesla", 2015) → vide
+            [_result("123", "Rivalité de génies", year=2015)],  # tronqué match
+        ]
+    )
+    cand = _candidate("Rivalité.de.génies.02.Edison.Tesla.2015.mkv")
+
+    out = await matcher.match(cand)
+
+    assert matcher._tmdb.search.call_count == 2
+    assert matcher._tmdb.search.call_args_list[0].args[0] == (
+        "Rivalité de génies 02 Edison Tesla"
+    )
+    assert matcher._tmdb.search.call_args_list[1].args[0] == "Rivalité de génies"
+    # Top1 score >= 85 (titre exact) → MATCHED.
+    assert out.kind == MatchKind.MATCHED
+
+
+@pytest.mark.asyncio
+async def test_movie_no_fallback_when_no_number_in_title():
+    """Pas de chiffre → pas de retry."""
+    matcher = _make_matcher(
+        parsed=_parsed("Avatar", year=2009),
+        tmdb_results=[],
+    )
+    matcher._tmdb.search = AsyncMock(return_value=[])
+    cand = _candidate("Avatar.2009.mkv")
+
+    out = await matcher.match(cand)
+
+    matcher._tmdb.search.assert_called_once()
+    assert out.kind == MatchKind.NO_RESULTS
+
+
+@pytest.mark.asyncio
+async def test_series_fallback_truncated_title_when_first_search_empty():
+    """Mode séries : fallback aussi sur les deux clients TMDB+TVDB."""
+    matcher = _make_matcher(
+        parsed=_parsed(
+            "Cosmos 13 Voyage", year=2014, media_type=MediaType.SERIES
+        ),
+    )
+    matcher._tmdb.search_tv = AsyncMock(
+        side_effect=[
+            [],
+            [_result("4607", "Cosmos", year=2014, source="tmdb_tv")],
+        ]
+    )
+    matcher._tvdb.search = AsyncMock(side_effect=[[], []])
+    cand = _candidate("Cosmos.13.S01E01.mkv", media_root="Séries")
+
+    out = await matcher.match(cand)
+
+    assert matcher._tmdb.search_tv.call_count == 2
+    assert matcher._tmdb.search_tv.call_args_list[1].args[0] == "Cosmos"
+    assert out.kind == MatchKind.MATCHED
+
+
+@pytest.mark.asyncio
+async def test_no_fallback_when_first_search_already_returns_results():
+    """Si la 1re recherche trouve déjà, pas de 2e tentative (économie API)."""
+    matcher = _make_matcher(
+        parsed=_parsed("Test 02 Episode", year=2020),
+        tmdb_results=[_result("1", "Test 02 Episode", year=2020)],
+    )
+    cand = _candidate("Test.02.Episode.2020.mkv")
+
+    await matcher.match(cand)
+    matcher._tmdb.search.assert_called_once()
 
 
 @pytest.mark.asyncio

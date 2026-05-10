@@ -16,6 +16,7 @@ exploite par le plan_builder (etape 3) pour decider entre :
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -89,39 +90,77 @@ class MigrationMatcher:
         media_type = self._guess_media_type(candidate, parsed)
 
         if media_type == MediaType.SERIES:
-            results = await self._search_series(parsed)
-            scored = self._scorer.score_results(
-                results,
-                query_title=parsed.title or "",
-                query_year=parsed.year,
-                is_series=True,
-            )
+            scored = await self._search_and_score_series(parsed)
         else:
-            results = await self._search_movie(parsed)
-            scored = self._scorer.score_results(
-                results,
-                query_title=parsed.title or "",
-                query_year=parsed.year,
-                is_series=False,
-            )
+            scored = await self._search_and_score_movie(parsed)
 
         top = scored[: self._max_top]
         return self._classify(top, query_year=parsed.year)
 
-    async def _search_movie(self, parsed: ParsedFilename) -> list[SearchResult]:
+    async def _search_and_score_movie(
+        self, parsed: ParsedFilename
+    ) -> list[SearchResult]:
+        """Recherche film + scoring, avec fallback titre tronqué si vide."""
         if not parsed.title:
             return []
-        return await self._tmdb.search(parsed.title, year=parsed.year)
+        results = await self._tmdb.search(parsed.title, year=parsed.year)
+        if results:
+            return self._scorer.score_results(
+                results,
+                query_title=parsed.title,
+                query_year=parsed.year,
+                is_series=False,
+            )
+        # Fallback : guessit peut "avaler" un n° d'épisode dans le titre
+        # (ex: "Rivalité de génies 02 Edison Tesla"). On retente avec le
+        # titre tronqué avant le premier nombre, et on score avec ce titre
+        # tronqué pour que le scoring soit cohérent avec la recherche.
+        truncated = _truncate_title_at_first_number(parsed.title)
+        if truncated and truncated != parsed.title:
+            fallback = await self._tmdb.search(truncated, year=parsed.year)
+            return self._scorer.score_results(
+                fallback,
+                query_title=truncated,
+                query_year=parsed.year,
+                is_series=False,
+            )
+        return []
 
-    async def _search_series(self, parsed: ParsedFilename) -> list[SearchResult]:
-        """Fusionne les resultats TMDB (search_tv) et TVDB pour une serie."""
+    async def _search_and_score_series(
+        self, parsed: ParsedFilename
+    ) -> list[SearchResult]:
+        """Recherche série (TMDB+TVDB) + scoring, avec fallback titre tronqué."""
         if not parsed.title:
             return []
+        merged = await self._search_series_for_title(parsed.title, parsed.year)
+        if merged:
+            return self._scorer.score_results(
+                merged,
+                query_title=parsed.title,
+                query_year=parsed.year,
+                is_series=True,
+            )
+        truncated = _truncate_title_at_first_number(parsed.title)
+        if truncated and truncated != parsed.title:
+            fallback = await self._search_series_for_title(
+                truncated, parsed.year
+            )
+            return self._scorer.score_results(
+                fallback,
+                query_title=truncated,
+                query_year=parsed.year,
+                is_series=True,
+            )
+        return []
+
+    async def _search_series_for_title(
+        self, title: str, year: Optional[int]
+    ) -> list[SearchResult]:
+        """Fusionne les resultats TMDB (search_tv) et TVDB pour un titre série."""
         merged: list[SearchResult] = []
-        # TMDB d'abord (frequemment plus complet pour series modernes)
-        tmdb_results = await self._tmdb.search_tv(parsed.title, year=parsed.year)
+        tmdb_results = await self._tmdb.search_tv(title, year=year)
         merged.extend(tmdb_results)
-        tvdb_results = await self._tvdb.search(parsed.title, year=parsed.year)
+        tvdb_results = await self._tvdb.search(title, year=year)
         merged.extend(tvdb_results)
         return merged
 
@@ -234,3 +273,25 @@ def _safe_int(value: str) -> Optional[int]:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+# Pattern : un mot constitué uniquement de 1 à 3 chiffres, entouré d'espaces
+# (ou en début/fin de chaine). Capture les n° d'épisode "avalés" dans le
+# titre par guessit (ex: "Rivalité de génies 02 Edison Tesla").
+_EPISODE_NUMBER_PATTERN = re.compile(r"\s\d{1,3}(\s|$)")
+
+
+def _truncate_title_at_first_number(title: str) -> Optional[str]:
+    """Tronque le titre avant le premier 'mot' purement numérique (1-3 chiffres).
+
+    Sert de fallback quand la recherche API retourne vide : guessit peut
+    avoir absorbé un numéro d'épisode dans le titre. Retourne None si
+    aucun nombre détecté ou si le titre tronqué serait vide.
+    """
+    if not title:
+        return None
+    match = _EPISODE_NUMBER_PATTERN.search(title)
+    if match is None:
+        return None
+    truncated = title[: match.start()].strip()
+    return truncated or None
