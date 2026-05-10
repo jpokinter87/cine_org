@@ -54,7 +54,13 @@ class FakeRsync:
         self.calls: list[tuple[Path, Path, int]] = []
         self._behaviors = list(behaviors)
 
-    def run(self, source: Path, destination: Path, bwlimit_mbps: int) -> RsyncResult:
+    def run(
+        self,
+        source: Path,
+        destination: Path,
+        bwlimit_mbps: int,
+        on_progress=None,
+    ) -> RsyncResult:
         self.calls.append((source, destination, bwlimit_mbps))
         if not self._behaviors:
             raise AssertionError("FakeRsync: appel inattendu")

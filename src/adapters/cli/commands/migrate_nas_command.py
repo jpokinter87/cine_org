@@ -331,12 +331,15 @@ def _execute_with_progress(
     )
 
     counters = {"committed": 0, "failed": 0}
+    # Phase courante de l'item en cours, conservée pour reconstituer la
+    # description Rich (mise a jour aussi par les events rsync).
+    current_phase = {"label": "starting"}
 
     loguru_logger.disable("src")
     try:
         with Progress(
             SpinnerColumn(),
-            TextColumn("[bold]{task.description}"),
+            TextColumn("{task.description}"),
             BarColumn(bar_width=30),
             MofNCompleteColumn(),
             TaskProgressColumn(),
@@ -347,11 +350,29 @@ def _execute_with_progress(
         ) as progress:
             task = progress.add_task("Démarrage…", total=total)
 
+            def _phase_label_from_emit(phase: str) -> str:
+                """Convertit un event en label lisible (sans crochets Rich)."""
+                if phase == "start":
+                    return "starting"
+                if phase == "preparing":
+                    return "preparing (DB)"
+                if phase == "checking_existing":
+                    return "checking existing"
+                if phase.startswith("copying_"):
+                    bw = phase.split("_", 1)[1]
+                    return f"rsync @ {bw}"
+                if phase == "verifying":
+                    return "verifying hash"
+                if phase == "finalizing":
+                    return "finalizing (symlink + delete src)"
+                return phase
+
             def on_event(item, phase: str) -> None:
                 size_mb = (item.size_bytes or 0) / (1024**2)
                 short = item.symlink_path.name[:55]
                 if phase == "committed":
                     counters["committed"] += 1
+                    current_phase["label"] = "committed"
                     progress.update(
                         task,
                         advance=1,
@@ -360,18 +381,38 @@ def _execute_with_progress(
                             f"({counters['committed']}/{total})"
                         ),
                     )
-                elif phase.startswith("failed"):
+                    return
+                if phase.startswith("failed"):
                     counters["failed"] += 1
+                    current_phase["label"] = "failed"
                     progress.update(
                         task,
                         advance=1,
                         description=f"[red]✗[/red] {short}",
                     )
-                else:
-                    progress.update(
-                        task,
-                        description=f"[{phase}] {short} ({size_mb:.0f} MB)",
-                    )
+                    return
+                current_phase["label"] = _phase_label_from_emit(phase)
+                progress.update(
+                    task,
+                    description=(
+                        f"[{current_phase['label']}] "
+                        f"{short} ({size_mb:.0f} MB)"
+                    ).replace("[", "\\[", 1),
+                )
+
+            def on_rsync_progress(
+                item, bytes_done: int, percent: int, speed: str
+            ) -> None:
+                """Mise a jour live pendant le rsync (via --info=progress2)."""
+                short = item.symlink_path.name[:50]
+                done_mb = bytes_done / (1024**2)
+                progress.update(
+                    task,
+                    description=(
+                        f"\\[rsync {percent:>3d}%  {speed:>10s}  "
+                        f"{done_mb:>7.0f} MB] {short}"
+                    ),
+                )
 
             executor = MigrationTransferExecutor(
                 plan=plan,
@@ -380,6 +421,7 @@ def _execute_with_progress(
                 bandwidth_steps_mbps=bandwidth_steps_mbps,
                 raw_finalizer=raw_finalizer,
                 on_event=on_event,
+                on_rsync_progress=on_rsync_progress,
             )
             outcomes = executor.execute_all()
             # Capture les FAILED qui n'ont pas émis "failed_*" (status update direct).

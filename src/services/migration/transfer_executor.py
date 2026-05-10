@@ -27,6 +27,7 @@ faite par le finalizer apres verify hash, donc atomiquement non blocante.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,11 +55,27 @@ class RsyncResult:
     error: Optional[str] = None
 
 
+class RsyncProgress(Protocol):
+    """Callback invoqué pendant rsync à chaque ligne de progression.
+
+    Args:
+        bytes_done: Octets transférés à ce point.
+        percent: Pourcentage (0-100).
+        speed: Vitesse formattée (ex: "42.05MB/s").
+    """
+
+    def __call__(self, bytes_done: int, percent: int, speed: str) -> None: ...
+
+
 class RsyncRunner(Protocol):
     """Interface minimale pour lancer un rsync. Injectable pour tests."""
 
     def run(
-        self, source: Path, destination: Path, bwlimit_mbps: int
+        self,
+        source: Path,
+        destination: Path,
+        bwlimit_mbps: int,
+        on_progress: Optional[RsyncProgress] = None,
     ) -> RsyncResult: ...
 
 
@@ -82,36 +99,104 @@ class RawItemFinalizer(Protocol):
     def finalize(self, item: MigrationItem, destination: Path) -> None: ...
 
 
+# rsync --info=progress2 produit des lignes type :
+#   "      87,121,920  10%   42.05MB/s    0:00:11  (xfr#1, to-chk=0/1)"
+# Ces lignes sont séparées par \r (carriage return) pour overwrite la même
+# ligne au terminal.
+_PROGRESS2_LINE = re.compile(
+    r"^\s*([\d,]+)\s+(\d+)%\s+(\S+)"
+)
+
+
 class _SubprocessRsyncRunner:
-    """Runner par défaut : appelle l'exécutable `rsync` du système."""
+    """Runner par défaut : appelle l'exécutable `rsync` du système.
+
+    Utilise `rsync --info=progress2` pour extraire bytes/percent/vitesse en
+    temps réel et les transmettre via le callback `on_progress` (utile pour
+    actualiser une barre Rich pendant les transferts longs).
+    """
 
     def run(
-        self, source: Path, destination: Path, bwlimit_mbps: int
+        self,
+        source: Path,
+        destination: Path,
+        bwlimit_mbps: int,
+        on_progress: Optional[RsyncProgress] = None,
     ) -> RsyncResult:
         destination.parent.mkdir(parents=True, exist_ok=True)
+        cmd = [
+            "rsync",
+            "-a",
+            "--partial",
+            "--inplace",
+            f"--bwlimit={bwlimit_mbps}M",
+            "--info=progress2",
+            "--no-inc-recursive",  # progress2 plus précis sur fichier unique
+            str(source),
+            str(destination),
+        ]
         try:
-            result = subprocess.run(
-                [
-                    "rsync",
-                    "-a",
-                    "--partial",
-                    "--inplace",
-                    f"--bwlimit={bwlimit_mbps}M",
-                    str(source),
-                    str(destination),
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=0,
             )
         except FileNotFoundError as exc:
             return RsyncResult(success=False, error=str(exc))
-        if result.returncode == 0:
+
+        # Stream stdout, parser chaque \r ou \n comme une ligne potentielle.
+        buffer = bytearray()
+        assert process.stdout is not None
+        while True:
+            chunk = process.stdout.read(64)
+            if not chunk:
+                break
+            for byte in chunk:
+                if byte in (10, 13):  # \n or \r
+                    if buffer and on_progress is not None:
+                        _parse_and_emit_progress(
+                            buffer.decode("utf-8", errors="replace"),
+                            on_progress,
+                        )
+                    buffer.clear()
+                else:
+                    buffer.append(byte)
+        # Reste éventuel
+        if buffer and on_progress is not None:
+            _parse_and_emit_progress(
+                buffer.decode("utf-8", errors="replace"), on_progress
+            )
+
+        process.wait()
+        if process.returncode == 0:
             return RsyncResult(success=True)
+        stderr_data = (
+            process.stderr.read().decode("utf-8", errors="replace").strip()
+            if process.stderr is not None
+            else ""
+        )
         return RsyncResult(
             success=False,
-            error=result.stderr.strip() or f"rsync rc={result.returncode}",
+            error=stderr_data or f"rsync rc={process.returncode}",
         )
+
+
+def _parse_and_emit_progress(line: str, on_progress: RsyncProgress) -> None:
+    """Parse une ligne rsync --info=progress2 et invoque le callback si match."""
+    match = _PROGRESS2_LINE.match(line)
+    if match is None:
+        return
+    try:
+        bytes_done = int(match.group(1).replace(",", ""))
+        percent = int(match.group(2))
+    except ValueError:
+        return
+    speed = match.group(3)
+    try:
+        on_progress(bytes_done, percent, speed)
+    except Exception:  # noqa: BLE001 — UI ne doit jamais casser le transfert
+        pass
 
 
 class MigrationTransferExecutor:
@@ -136,6 +221,9 @@ class MigrationTransferExecutor:
         hash_fn: Callable[[Path], str] = compute_file_hash,
         raw_finalizer: Optional[RawItemFinalizer] = None,
         on_event: Optional[Callable[[MigrationItem, str], None]] = None,
+        on_rsync_progress: Optional[
+            Callable[[MigrationItem, int, int, str], None]
+        ] = None,
     ) -> None:
         self._plan = plan
         self._store = state_store
@@ -144,6 +232,7 @@ class MigrationTransferExecutor:
         self._hash_fn = hash_fn
         self._raw_finalizer = raw_finalizer
         self._on_event = on_event
+        self._on_rsync_progress = on_rsync_progress
 
     def _emit(self, item: MigrationItem, phase: str) -> None:
         """Notifie un changement de phase (utile pour la barre de progression CLI)."""
@@ -234,11 +323,26 @@ class MigrationTransferExecutor:
         # Copie via rsync avec retry sur paliers de bande passante.
         last_error: Optional[str] = None
         copied = False
+
+        def _rsync_progress_for_item(
+            bytes_done: int, percent: int, speed: str
+        ) -> None:
+            if self._on_rsync_progress is not None:
+                try:
+                    self._on_rsync_progress(item, bytes_done, percent, speed)
+                except Exception:  # noqa: BLE001
+                    pass
+
         for bwlimit in self._bandwidth_steps:
             self._store.update_status(item.item_id, TransferStatus.COPYING)
             self._emit(item, f"copying_{bwlimit}mbps")
             destination.parent.mkdir(parents=True, exist_ok=True)
-            result = self._rsync.run(source, destination, bwlimit)
+            result = self._rsync.run(
+                source,
+                destination,
+                bwlimit,
+                on_progress=_rsync_progress_for_item,
+            )
             if result.success:
                 copied = True
                 break
