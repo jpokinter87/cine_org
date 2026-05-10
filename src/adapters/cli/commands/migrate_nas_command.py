@@ -350,6 +350,13 @@ def _execute_with_progress(
             console=console,
         ) as progress:
             task = progress.add_task("Démarrage…", total=total)
+            # Sous-barre dédiée au fichier en cours : total = taille du
+            # fichier, completed = octets transférés via on_rsync_progress.
+            # Donne une progression au fichier (vs progression globale aux
+            # items) avec ETA spécifique.
+            file_task = progress.add_task(
+                "(en attente)", total=1, visible=False
+            )
 
             def _phase_label_from_emit(phase: str) -> str:
                 """Convertit un event en label lisible (sans crochets Rich)."""
@@ -380,6 +387,15 @@ def _execute_with_progress(
             def on_event(item, phase: str) -> None:
                 size_mb = (item.size_bytes or 0) / (1024**2)
                 short = item.symlink_path.name[:55]
+                if phase == "start":
+                    # Activer la sous-barre fichier sur l'item en cours.
+                    progress.update(
+                        file_task,
+                        total=max(item.size_bytes or 1, 1),
+                        completed=0,
+                        description=f"\\[file] {short}",
+                        visible=True,
+                    )
                 if phase == "committed":
                     counters["committed"] += 1
                     current_phase["label"] = "committed"
@@ -391,6 +407,7 @@ def _execute_with_progress(
                             f"({counters['committed']}/{total})"
                         ),
                     )
+                    progress.update(file_task, visible=False)
                     return
                 if phase.startswith("failed"):
                     counters["failed"] += 1
@@ -400,6 +417,7 @@ def _execute_with_progress(
                         advance=1,
                         description=f"[red]✗[/red] {short}",
                     )
+                    progress.update(file_task, visible=False)
                     return
                 current_phase["label"] = _phase_label_from_emit(phase)
                 progress.update(
@@ -415,13 +433,12 @@ def _execute_with_progress(
             ) -> None:
                 """Mise a jour live pendant le rsync (via --info=progress2)."""
                 short = item.symlink_path.name[:50]
-                done_mb = bytes_done / (1024**2)
+                # Sous-barre : avancée en octets (donne ETA précis du fichier).
+                progress.update(file_task, completed=bytes_done)
+                # Barre globale : description sans %/MB (deja sur file_task).
                 progress.update(
                     task,
-                    description=(
-                        f"\\[rsync {percent:>3d}%  {speed:>10s}  "
-                        f"{done_mb:>7.0f} MB] {short}"
-                    ),
+                    description=f"\\[rsync {speed:>10s}] {short}",
                 )
 
             executor = MigrationTransferExecutor(
