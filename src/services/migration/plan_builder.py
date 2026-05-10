@@ -17,7 +17,7 @@ import json
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol
 
 import xxhash
 
@@ -112,12 +112,31 @@ class MigrationPlanBuilder:
                 "include_raw=True requires both matcher and details_fetcher"
             )
 
-    def build(self, source_root: Path, destination_root: Path) -> MigrationPlan:
-        """Itère sur le scanner, classe chaque candidat, et retourne le plan."""
-        return asyncio.run(self.build_async(source_root, destination_root))
+    def build(
+        self,
+        source_root: Path,
+        destination_root: Path,
+        *,
+        on_progress: Optional[Callable[[MigrationItem, MigrationStats], None]] = None,
+    ) -> MigrationPlan:
+        """Itère sur le scanner, classe chaque candidat, et retourne le plan.
+
+        `on_progress` (optionnel) est appelé après chaque item construit avec
+        l'item et les stats courantes. Utile pour brancher une barre de
+        progression Rich côté CLI.
+        """
+        return asyncio.run(
+            self.build_async(
+                source_root, destination_root, on_progress=on_progress
+            )
+        )
 
     async def build_async(
-        self, source_root: Path, destination_root: Path
+        self,
+        source_root: Path,
+        destination_root: Path,
+        *,
+        on_progress: Optional[Callable[[MigrationItem, MigrationStats], None]] = None,
     ) -> MigrationPlan:
         """Variante async (utile en mode raw où matcher/fetcher sont async)."""
         items: list[MigrationItem] = []
@@ -133,6 +152,9 @@ class MigrationPlanBuilder:
 
             items.append(item)
             _accumulate_stats(stats, item)
+
+            if on_progress is not None:
+                on_progress(item, stats)
 
         return MigrationPlan(
             version=_PLAN_VERSION,

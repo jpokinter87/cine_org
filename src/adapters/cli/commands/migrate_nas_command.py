@@ -21,6 +21,16 @@ from pathlib import Path
 from typing import Annotated, Any, Optional
 
 import typer
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 from rich.table import Table
 from sqlmodel import Session
 
@@ -82,6 +92,7 @@ def build_plan(
     imdb_importer: Optional[IMDbDatasetImporter] = None,
     imdb_cache_dir: Path = Path(".cache/imdb"),
     include_raw: bool = False,
+    show_progress: bool = False,
 ) -> MigrationPlan:
     """
     Construit le plan, écrit le JSON dans `output_path` et (si fourni) les
@@ -140,7 +151,10 @@ def build_plan(
         include_raw=include_raw,
     )
 
-    plan = builder.build(source_root, destination_storage_dir)
+    if show_progress:
+        plan = _build_with_progress(builder, scanner, source_root, destination_storage_dir)
+    else:
+        plan = builder.build(source_root, destination_storage_dir)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(serialize_plan(plan), encoding="utf-8")
@@ -149,6 +163,59 @@ def build_plan(
         write_review_csvs(plan, csv_dir)
 
     return plan
+
+
+def _build_with_progress(
+    builder: MigrationPlanBuilder,
+    scanner: MigrationScanner,
+    source_root: Path,
+    destination_root: Path,
+) -> MigrationPlan:
+    """Lance build() en affichant une barre de progression Rich.
+
+    Pré-compte les fichiers vidéo (rapide : juste un walk filesystem) puis
+    relance le scanner avec une barre qui suit chaque candidat traité, le
+    nom courant, et la ventilation par bucket en temps réel.
+    """
+    # Désactiver loguru pendant l'affichage Rich (mémoire CineOrg).
+    from loguru import logger as loguru_logger
+
+    loguru_logger.disable("src")
+    try:
+        console.print("[dim]Comptage initial des fichiers vidéo…[/dim]")
+        total = sum(1 for _ in scanner.scan(source_root))
+        console.print(
+            f"[dim]{total} fichier(s) vidéo détecté(s) — démarrage du plan.[/dim]\n"
+        )
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold cyan]{task.description}"),
+            BarColumn(bar_width=40),
+            MofNCompleteColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            TextColumn("•"),
+            TimeRemainingColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Scan & classification", total=total)
+
+            def on_progress(item, stats) -> None:
+                progress.update(
+                    task,
+                    advance=1,
+                    description=(
+                        f"M={stats.to_migrate} L={stats.low_rated} U={stats.unrated} "
+                        f"V={stats.needs_validation} B={stats.broken} A={stats.already_on_destination}"
+                    ),
+                )
+
+            return builder.build(
+                source_root, destination_root, on_progress=on_progress
+            )
+    finally:
+        loguru_logger.enable("src")
 
 
 def run_apply(
@@ -315,6 +382,7 @@ def plan_command(
         session=session,
         alternative_roots=list(alt_root) if alt_root else None,
         include_raw=include_raw,
+        show_progress=True,
     )
 
     _display_plan_summary(plan, output, csv_dir)

@@ -777,3 +777,54 @@ def test_legacy_mode_unchanged_when_include_raw_false():
     assert plan.items[0].bucket == Bucket.NOT_SYMLINK
     assert plan.stats.not_symlink == 1
     assert plan.stats.needs_validation == 0
+
+
+# ---- Callback de progression ---------------------------------------------
+
+
+def test_build_invokes_on_progress_callback_per_item():
+    """Le callback on_progress est appelé après chaque item construit."""
+    candidates = [
+        _candidate("a.mkv"),
+        _candidate("b.mkv"),
+        _candidate("c.mkv"),
+    ]
+    builder = _make_builder(
+        candidates,
+        {
+            "a.mkv": RatingDecision(value=8.0),
+            "b.mkv": RatingDecision(value=5.0),
+            "c.mkv": RatingDecision(),
+        },
+        {"a.mkv": Path("/new/a.mkv")},
+    )
+
+    progress_calls: list[tuple[str, Bucket, int]] = []
+
+    def on_progress(item, stats):
+        progress_calls.append(
+            (item.symlink_path.name, item.bucket, stats.total_symlinks)
+        )
+
+    builder.build(
+        Path("/old_nas/Vidéos"), Path("/new_nas"), on_progress=on_progress
+    )
+
+    assert len(progress_calls) == 3
+    # L'ordre suit le scanner ; total_symlinks est incrémenté avant chaque appel.
+    assert [c[2] for c in progress_calls] == [1, 2, 3]
+    assert progress_calls[0][1] == Bucket.MIGRATE
+    assert progress_calls[1][1] == Bucket.LOW_RATED
+    assert progress_calls[2][1] == Bucket.UNRATED
+
+
+def test_build_works_without_on_progress():
+    """Garde-fou : sans callback (rétrocompat), build() doit toujours marcher."""
+    cand = _candidate("avatar.mkv")
+    builder = _make_builder(
+        [cand],
+        {"avatar.mkv": RatingDecision(value=8.0)},
+        {"avatar.mkv": Path("/new/avatar.mkv")},
+    )
+    plan = builder.build(Path("/old"), Path("/new"))
+    assert len(plan.items) == 1
