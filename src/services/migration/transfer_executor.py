@@ -136,6 +136,10 @@ class _SubprocessRsyncRunner:
             [
                 "--info=progress2",
                 "--no-inc-recursive",  # progress2 plus précis sur fichier unique
+                # Force line buffering : sans ça, rsync bufferise progress2
+                # quand stdout n'est pas un TTY (notre cas avec subprocess.PIPE),
+                # ce qui fige la barre Rich pendant tout le transfert.
+                "--outbuf=L",
                 str(source),
                 str(destination),
             ]
