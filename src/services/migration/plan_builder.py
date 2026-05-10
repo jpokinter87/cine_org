@@ -161,6 +161,8 @@ class MigrationPlanBuilder:
             if on_progress is not None:
                 on_progress(item, stats)
 
+        _demote_movie_tmdb_collisions(items, stats)
+
         return MigrationPlan(
             version=_PLAN_VERSION,
             generated_at=datetime.utcnow(),
@@ -360,6 +362,46 @@ def _accumulate_stats(stats: MigrationStats, item: MigrationItem) -> None:
         stats.needs_validation += 1
     elif item.bucket == Bucket.ALREADY_IN_LIBRARY:
         stats.already_in_library += 1
+
+
+def _demote_movie_tmdb_collisions(
+    items: list[MigrationItem], stats: MigrationStats
+) -> None:
+    """Bascule en NEEDS_VALIDATION les items MIGRATE raw-film qui partagent
+    leur tmdb_id avec un autre item MIGRATE.
+
+    Cas typique : multi-parts (4 fichiers source → même tmdb_id → même
+    destination canonique). Sans cette détection, raw_finalizer génère le
+    même filename pour les N items et rsync --inplace écrase silencieusement
+    chaque commit précédent. Les épisodes de série ne sont pas concernés
+    (pipeline série upsert par season+episode, pas de collision possible).
+    """
+    by_tmdb: dict[int, list[MigrationItem]] = {}
+    for it in items:
+        if it.bucket != Bucket.MIGRATE:
+            continue
+        if it.is_symlink_source:
+            continue  # mode symlinks pur : destination déjà décidée par planner
+        tmdb_id = it.match.tmdb_id
+        if tmdb_id is None or it.match.tvdb_id is not None:
+            continue
+        media_root = (it.media_root or "").lower()
+        if media_root.startswith(("seri", "séri", "anim")):
+            continue  # piped via _finalize_series, pas de collision filename
+        by_tmdb.setdefault(tmdb_id, []).append(it)
+
+    for tmdb_id, group in by_tmdb.items():
+        if len(group) < 2:
+            continue
+        tag = f"collision_tmdb:{tmdb_id}"
+        for it in group:
+            it.bucket = Bucket.NEEDS_VALIDATION
+            if tag not in it.tags:
+                it.tags.append(tag)
+            stats.to_migrate -= 1
+            if it.size_bytes:
+                stats.total_size_bytes -= it.size_bytes
+            stats.needs_validation += 1
 
 
 # ---- Sérialisation JSON ---------------------------------------------------

@@ -239,6 +239,17 @@ class MigrationRawFinalizer:
                 return None
             movie = self._build_movie_from_details(details)
             movie = self._movie_repo.save(movie)
+        elif movie.file_path and Path(movie.file_path).exists():
+            # Garde-fou anti-écrasement : un Movie déjà associé à un fichier
+            # existant ne doit pas être ré-utilisé comme destination — sinon
+            # rsync --inplace écraserait silencieusement la bibliothèque.
+            # Cas typiques : multi-parts (4 fichiers source → même tmdb_id),
+            # doublon non détecté par LibraryPresenceChecker, ou Movie créé
+            # par un item antérieur du même plan.
+            raise FileExistsError(
+                f"Movie tmdb_id={tmdb_id} ({movie.title}) déjà présent en DB "
+                f"avec file_path={movie.file_path} — écrasement bloqué."
+            )
 
         extension = item.source_path.suffix or ""
         directory = self._organizer.get_movie_destination(

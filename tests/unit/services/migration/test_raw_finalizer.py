@@ -210,6 +210,58 @@ def test_finalize_without_prepare_raises():
         finalizer.finalize(item, Path("/new/Avatar.mkv"))
 
 
+def test_prepare_movie_refuses_when_existing_movie_points_to_existing_file(
+    tmp_path,
+):
+    """Garde-fou anti-écrasement : si le Movie en DB a déjà un file_path
+    pointant vers un fichier existant, prepare() lève FileExistsError pour
+    empêcher rsync d'écraser silencieusement la bibliothèque.
+
+    Cas typique attrapé : multi-parts (4 fichiers source → même tmdb_id →
+    même destination canonique) ou doublon non détecté en amont par
+    LibraryPresenceChecker (ex. Movie inséré pendant l'apply par un autre
+    item du plan).
+    """
+    existing_file = tmp_path / "Avatar (2009).mkv"
+    existing_file.write_bytes(b"x")
+    existing = Movie(
+        id="42",
+        tmdb_id=19995,
+        title="Avatar",
+        year=2009,
+        file_path=str(existing_file),
+    )
+    finalizer = _make_finalizer(movie_in_db=existing)
+    item = _raw_movie_item(tmdb_id=19995)
+
+    with pytest.raises(FileExistsError, match="déjà présent"):
+        finalizer.prepare(item)
+
+
+def test_prepare_movie_proceeds_when_existing_movie_file_path_missing(
+    tmp_path,
+):
+    """Si Movie en DB a file_path mais le fichier n'existe plus (cleanup
+    incomplet, fichier déplacé), prepare() continue normalement : pas
+    d'écrasement réel possible."""
+    stale_path = tmp_path / "Avatar (2009).mkv"  # n'existe pas
+    existing = Movie(
+        id="42",
+        tmdb_id=19995,
+        title="Avatar",
+        year=2009,
+        file_path=str(stale_path),
+    )
+    finalizer = _make_finalizer(movie_in_db=existing)
+    item = _raw_movie_item(tmdb_id=19995)
+
+    destination = finalizer.prepare(item)
+
+    assert destination == Path(
+        "/new_storage/Films/Science-Fiction/A/Avatar (2009).mkv"
+    )
+
+
 # ---- prepare() séries (étape 4b2) ----------------------------------------
 
 

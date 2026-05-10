@@ -733,6 +733,44 @@ def test_raw_matched_destination_is_none_during_plan():
     assert plan.items[0].destination_path is None
 
 
+def test_raw_movie_tmdb_collision_demoted_to_needs_validation():
+    """Si plusieurs items raw classés MIGRATE partagent le même tmdb_id (cas
+    multi-parts comme La Flor parties 1-4), tous basculent en NEEDS_VALIDATION
+    avec un tag explicatif. Sinon ils écraseraient mutuellement leur
+    destination canonique pendant l'apply : raw_finalizer génère un filename
+    basé sur Movie.title — identique pour les N parties — et rsync --inplace
+    écraserait silencieusement."""
+    cands = [
+        _candidate(f"La.Flor.partie {i}.2018.mkv", is_symlink=False)
+        for i in range(1, 5)
+    ]
+    builder = _make_raw_builder(
+        cands,
+        outcome=_make_matched_outcome(media_id="423778"),
+        vote_average=8.0,
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    assert len(plan.items) == 4
+    for item in plan.items:
+        assert item.bucket == Bucket.NEEDS_VALIDATION
+        assert any(t.startswith("collision_tmdb:423778") for t in item.tags)
+    assert plan.stats.to_migrate == 0
+    assert plan.stats.needs_validation == 4
+
+
+def test_raw_single_movie_match_unchanged_by_collision_check():
+    """Garde-fou : un seul item MIGRATE par tmdb_id reste MIGRATE."""
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=8.0
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    assert plan.items[0].bucket == Bucket.MIGRATE
+    assert plan.items[0].tags == []
+
+
 def test_write_review_csvs_writes_needs_validation_file(tmp_path):
     cand = _candidate("ambigu.mkv", is_symlink=False)
     builder = _make_raw_builder(
