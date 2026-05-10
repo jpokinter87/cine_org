@@ -201,7 +201,18 @@ def _build_with_progress(
         console.print("[dim]Comptage initial des fichiers vidéo…[/dim]")
         total = sum(1 for _ in scanner.scan(source_root))
         console.print(
-            f"[dim]{total} fichier(s) vidéo détecté(s) — démarrage du plan.[/dim]\n"
+            f"[dim]{total} fichier(s) vidéo détecté(s) — démarrage du plan.[/dim]"
+        )
+        console.print(
+            "[dim]Légende buckets : "
+            "[bold]M[/bold]igrate · "
+            "[bold]L[/bold]ow_rated · "
+            "[bold]U[/bold]nrated · "
+            "needs_[bold]V[/bold]alidation · "
+            "[bold]P[/bold]résent (déjà en DB) · "
+            "[bold]B[/bold]roken · "
+            "[bold]A[/bold]lready_on_destination"
+            "[/dim]\n"
         )
 
         with Progress(
