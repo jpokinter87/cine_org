@@ -231,6 +231,7 @@ class MigrationTransferExecutor:
         on_rsync_progress: Optional[
             Callable[[MigrationItem, int, int, str], None]
         ] = None,
+        verify_hash: bool = True,
     ) -> None:
         self._plan = plan
         self._store = state_store
@@ -240,6 +241,11 @@ class MigrationTransferExecutor:
         self._raw_finalizer = raw_finalizer
         self._on_event = on_event
         self._on_rsync_progress = on_rsync_progress
+        # Si False : skip xxh3_64 source+dest (gain de ~2 lectures complètes
+        # par fichier). Les checksums internes de rsync (rolling hash MD5)
+        # restent actifs et garantissent l'intégrité du transfert. La reprise
+        # se base alors sur la taille du fichier au lieu du hash.
+        self._verify_hash = verify_hash
 
     def _emit(self, item: MigrationItem, phase: str) -> None:
         """Notifie un changement de phase (utile pour la barre de progression CLI)."""
@@ -307,26 +313,45 @@ class MigrationTransferExecutor:
 
         source = item.source_path
 
-        self._emit(item, "hashing_source")
-        try:
-            source_hash = self._hash_fn(source)
-        except OSError as exc:
-            self._store.update_status(
-                item.item_id,
-                TransferStatus.FAILED_OTHER,
-                error_message=f"lecture source impossible: {exc}",
-            )
-            return self._outcome_or_synthetic(item.item_id, TransferStatus.FAILED_OTHER)
-
-        # Reprise : destination déjà présente avec le bon hash → finalize direct.
-        if destination.exists():
-            self._emit(item, "hashing_existing")
+        if self._verify_hash:
+            self._emit(item, "hashing_source")
             try:
-                existing_hash = self._hash_fn(destination)
-            except OSError:
-                existing_hash = None
-            if existing_hash == source_hash:
-                return self._finalize(item, source_hash, existing_hash, destination)
+                source_hash: Optional[str] = self._hash_fn(source)
+            except OSError as exc:
+                self._store.update_status(
+                    item.item_id,
+                    TransferStatus.FAILED_OTHER,
+                    error_message=f"lecture source impossible: {exc}",
+                )
+                return self._outcome_or_synthetic(
+                    item.item_id, TransferStatus.FAILED_OTHER
+                )
+        else:
+            source_hash = None
+
+        # Reprise : destination déjà présente
+        if destination.exists():
+            if self._verify_hash:
+                self._emit(item, "hashing_existing")
+                try:
+                    existing_hash: Optional[str] = self._hash_fn(destination)
+                except OSError:
+                    existing_hash = None
+                if existing_hash == source_hash:
+                    return self._finalize(
+                        item, source_hash or "", existing_hash, destination
+                    )
+            else:
+                # Mode --fast : reprise basée sur la taille (suppose qu'un
+                # rsync précédent a achevé le transfert si tailles match).
+                try:
+                    if (
+                        destination.stat().st_size == source.stat().st_size
+                        and source.stat().st_size > 0
+                    ):
+                        return self._finalize(item, "", "", destination)
+                except OSError:
+                    pass
 
         # Copie via rsync avec retry sur paliers de bande passante.
         last_error: Optional[str] = None
@@ -376,33 +401,47 @@ class MigrationTransferExecutor:
             TransferStatus.COPIED,
             bytes_transferred=bytes_transferred,
         )
-        self._emit(item, "verifying")
 
-        try:
-            dest_hash = self._hash_fn(destination)
-        except OSError as exc:
-            self._store.update_status(
-                item.item_id,
-                TransferStatus.FAILED_OTHER,
-                error_message=f"lecture destination impossible: {exc}",
-            )
-            return self._outcome_or_synthetic(item.item_id, TransferStatus.FAILED_OTHER)
-
-        if dest_hash != source_hash:
+        if self._verify_hash:
+            self._emit(item, "verifying")
             try:
-                destination.unlink()
-            except OSError:
-                pass
-            self._store.update_status(
-                item.item_id,
-                TransferStatus.FAILED_VERIFY,
-                source_hash=source_hash,
-                destination_hash=dest_hash,
-                error_message="hash mismatch source/destination",
-            )
-            return self._outcome_or_synthetic(item.item_id, TransferStatus.FAILED_VERIFY)
+                dest_hash: Optional[str] = self._hash_fn(destination)
+            except OSError as exc:
+                self._store.update_status(
+                    item.item_id,
+                    TransferStatus.FAILED_OTHER,
+                    error_message=f"lecture destination impossible: {exc}",
+                )
+                return self._outcome_or_synthetic(
+                    item.item_id, TransferStatus.FAILED_OTHER
+                )
 
-        return self._finalize(item, source_hash, dest_hash, destination)
+            if dest_hash != source_hash:
+                try:
+                    destination.unlink()
+                except OSError:
+                    pass
+                self._store.update_status(
+                    item.item_id,
+                    TransferStatus.FAILED_VERIFY,
+                    source_hash=source_hash,
+                    destination_hash=dest_hash,
+                    error_message="hash mismatch source/destination",
+                )
+                return self._outcome_or_synthetic(
+                    item.item_id, TransferStatus.FAILED_VERIFY
+                )
+        else:
+            # Mode --fast : on fait confiance aux checksums internes de rsync
+            # (rolling MD5) qui ont déjà validé le transfert bloc par bloc.
+            dest_hash = None
+
+        return self._finalize(
+            item,
+            source_hash or "",
+            dest_hash or "",
+            destination,
+        )
 
     # ---- Helpers --------------------------------------------------------
 

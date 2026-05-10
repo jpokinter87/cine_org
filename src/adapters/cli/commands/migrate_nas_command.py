@@ -255,6 +255,7 @@ def run_apply(
     bandwidth_steps_mbps: tuple[int, ...] = _DEFAULT_BANDWIDTH_STEPS_MBPS,
     session: Optional[Session] = None,
     show_progress: bool = False,
+    verify_hash: bool = True,
 ) -> list[TransferOutcome]:
     """
     Charge le plan, initialise le state store et exécute les transferts
@@ -287,6 +288,7 @@ def run_apply(
                 rsync_runner=rsync_runner,
                 bandwidth_steps_mbps=bandwidth_steps_mbps,
                 raw_finalizer=raw_finalizer,
+                verify_hash=verify_hash,
             )
         executor = MigrationTransferExecutor(
             plan=plan,
@@ -294,6 +296,7 @@ def run_apply(
             rsync_runner=rsync_runner,
             bandwidth_steps_mbps=bandwidth_steps_mbps,
             raw_finalizer=raw_finalizer,
+            verify_hash=verify_hash,
         )
         return executor.execute_all()
     finally:
@@ -307,6 +310,7 @@ def _execute_with_progress(
     rsync_runner: Optional[RsyncRunner],
     bandwidth_steps_mbps: tuple[int, ...],
     raw_finalizer,
+    verify_hash: bool = True,
 ) -> list[TransferOutcome]:
     """Exécute les transferts avec barre de progression Rich."""
     from loguru import logger as loguru_logger
@@ -449,6 +453,7 @@ def _execute_with_progress(
                 raw_finalizer=raw_finalizer,
                 on_event=on_event,
                 on_rsync_progress=on_rsync_progress,
+                verify_hash=verify_hash,
             )
             outcomes = executor.execute_all()
             # Capture les FAILED qui n'ont pas émis "failed_*" (status update direct).
@@ -640,17 +645,35 @@ def apply_command(
             help="Chemin du journal SQLite reprenable (défaut: <plan>.state.sqlite).",
         ),
     ] = None,
+    fast: Annotated[
+        bool,
+        typer.Option(
+            "--fast",
+            help=(
+                "Mode rapide : skip les hashs xxh3_64 source+destination "
+                "(gain ~2 lectures complètes par fichier). On fait confiance "
+                "aux checksums internes de rsync (rolling MD5). "
+                "Reprise basée sur la taille du fichier (suffisant si rsync "
+                "--inplace a achevé). Recommandé pour des transferts de "
+                "gros volumes sur réseau fiable."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Exécute les transferts pending et met à jour le state store."""
     state_path = state_store or plan_path.with_suffix(plan_path.suffix + ".state.sqlite")
+    mode_label = (
+        "[yellow]fast (no hash verify)[/yellow]" if fast else "verify+hash"
+    )
     console.print(
         f"[bold cyan]Exécution[/bold cyan] depuis [yellow]{plan_path}[/yellow] "
-        f"(state: [dim]{state_path}[/dim])"
+        f"(state: [dim]{state_path}[/dim], mode: {mode_label})"
     )
     outcomes = run_apply(
         plan_path=plan_path,
         state_store_path=state_path,
         show_progress=True,
+        verify_hash=not fast,
     )
 
     committed = sum(1 for o in outcomes if o.status == TransferStatus.COMMITTED)
