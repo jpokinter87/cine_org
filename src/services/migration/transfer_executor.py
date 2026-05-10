@@ -11,13 +11,17 @@ state store :
    (par défaut 25 → 20 → 15 → 10 → 5 MB/s).
 4. Vérifie le hash xxh3_64 de la destination. En cas de mismatch, supprime
    la destination et marque FAILED_VERIFY (la source reste intacte).
-5. Si VERIFIED : swap atomique du symlink (os.rename via os.replace) vers
-   la nouvelle destination, puis marque COMMITTED.
+5. Si VERIFIED : finalisation selon le mode :
+   - Mode symlinks (`is_symlink_source=True`) : swap atomique du symlink
+     (os.rename via os.replace) vers la nouvelle destination. Source intacte.
+   - Mode raw (`is_symlink_source=False`) : delegation a un `RawItemFinalizer`
+     qui insere le VideoFile en DB, cree le symlink dans video/ canonique,
+     et supprime la source physique apres verify.
+6. Marque COMMITTED.
 
-Important : rsync est invoqué SANS `--remove-source-files`. La source reste
-intacte ; le réordonnancement des fichiers se fait uniquement par swap des
-symlinks. La suppression effective de la source relève d'une étape
-ultérieure (post-validation) et n'est pas du ressort de cet exécuteur.
+Important : rsync est invoqué SANS `--remove-source-files`. En mode symlinks,
+la source reste intacte. En mode raw, la suppression source explicite est
+faite par le finalizer apres verify hash, donc atomiquement non blocante.
 """
 
 from __future__ import annotations
@@ -56,6 +60,26 @@ class RsyncRunner(Protocol):
     def run(
         self, source: Path, destination: Path, bwlimit_mbps: int
     ) -> RsyncResult: ...
+
+
+class RawItemFinalizer(Protocol):
+    """
+    Finalise un item raw (fichier physique) apres verify hash.
+
+    `prepare` est appele avant rsync : il doit retourner le chemin de
+    destination canonique sur le nouveau storage. Cela inclut typiquement
+    l'insert/upsert Movie/Series en DB pour pouvoir calculer le chemin via
+    OrganizerService + RenamerService.
+
+    `finalize` est appele apres verify hash succes : il insere le
+    VideoFileModel en DB, cree le symlink dans video/ canonique, et
+    supprime le fichier source physique. Doit etre idempotent (appel
+    repete sur un item deja finalise = no-op silencieux).
+    """
+
+    def prepare(self, item: MigrationItem) -> Optional[Path]: ...
+
+    def finalize(self, item: MigrationItem, destination: Path) -> None: ...
 
 
 class _SubprocessRsyncRunner:
@@ -110,12 +134,14 @@ class MigrationTransferExecutor:
         rsync_runner: Optional[RsyncRunner] = None,
         bandwidth_steps_mbps: tuple[int, ...] = _DEFAULT_BANDWIDTH_STEPS_MBPS,
         hash_fn: Callable[[Path], str] = compute_file_hash,
+        raw_finalizer: Optional[RawItemFinalizer] = None,
     ) -> None:
         self._plan = plan
         self._store = state_store
         self._rsync = rsync_runner or _SubprocessRsyncRunner()
         self._bandwidth_steps = tuple(bandwidth_steps_mbps)
         self._hash_fn = hash_fn
+        self._raw_finalizer = raw_finalizer
 
     def execute_all(self) -> list[TransferOutcome]:
         """Itère sur les items pending (non COMMITTED) du plan et les transfère."""
@@ -130,22 +156,47 @@ class MigrationTransferExecutor:
         return outcomes
 
     def execute_one(self, item: MigrationItem) -> TransferOutcome:
-        """Transfère un item complet (copy + verify + swap + commit)."""
+        """Transfère un item complet (copy + verify + finalize + commit)."""
         if self._store.get_status(item.item_id) == TransferStatus.COMMITTED:
             outcome = self._store.get_outcome(item.item_id)
             assert outcome is not None
             return outcome
 
-        if item.destination_path is None or item.source_path is None:
+        if item.source_path is None:
             self._store.update_status(
                 item.item_id,
                 TransferStatus.FAILED_OTHER,
-                error_message="destination_path ou source_path manquant",
+                error_message="source_path manquant",
             )
             return self._outcome_or_synthetic(item.item_id, TransferStatus.FAILED_OTHER)
 
-        source = item.source_path
+        # Mode raw : la destination canonique est calculee a l'apply via le
+        # finalizer (pas presente dans le plan).
         destination = item.destination_path
+        if destination is None:
+            if not item.is_symlink_source and self._raw_finalizer is not None:
+                try:
+                    destination = self._raw_finalizer.prepare(item)
+                except Exception as exc:  # noqa: BLE001 — le finalizer remonte
+                    self._store.update_status(
+                        item.item_id,
+                        TransferStatus.FAILED_OTHER,
+                        error_message=f"prepare raw destination échoué: {exc}",
+                    )
+                    return self._outcome_or_synthetic(
+                        item.item_id, TransferStatus.FAILED_OTHER
+                    )
+            if destination is None:
+                self._store.update_status(
+                    item.item_id,
+                    TransferStatus.FAILED_OTHER,
+                    error_message="destination_path manquant",
+                )
+                return self._outcome_or_synthetic(
+                    item.item_id, TransferStatus.FAILED_OTHER
+                )
+
+        source = item.source_path
 
         try:
             source_hash = self._hash_fn(source)
@@ -236,13 +287,21 @@ class MigrationTransferExecutor:
             destination_hash=dest_hash,
             bytes_transferred=self._safe_size(destination),
         )
+
         try:
-            _swap_symlink(item.symlink_path, destination)
-        except OSError as exc:
+            if item.is_symlink_source:
+                _swap_symlink(item.symlink_path, destination)
+            else:
+                if self._raw_finalizer is None:
+                    raise RuntimeError(
+                        "raw_finalizer requis pour finaliser un item raw"
+                    )
+                self._raw_finalizer.finalize(item, destination)
+        except (OSError, RuntimeError) as exc:
             self._store.update_status(
                 item.item_id,
                 TransferStatus.FAILED_OTHER,
-                error_message=f"swap symlink impossible: {exc}",
+                error_message=f"finalisation impossible: {exc}",
             )
             return self._outcome_or_synthetic(item.item_id, TransferStatus.FAILED_OTHER)
 

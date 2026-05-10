@@ -374,3 +374,157 @@ def test_execute_all_processes_pending_items_only(layout, store, tmp_path):
     assert outcomes[0].item_id == "bbb"
     assert outcomes[0].status == TransferStatus.COMMITTED
     assert len(rsync.calls) == 1
+
+
+# ---- Mode raw : RawItemFinalizer (étape 4a) ------------------------------
+
+
+class _FakeRawFinalizer:
+    """RawItemFinalizer factice : enregistre les appels prepare/finalize."""
+
+    def __init__(
+        self,
+        prepare_destination: Optional[Path] = None,
+        prepare_raises: Optional[Exception] = None,
+        finalize_raises: Optional[Exception] = None,
+    ) -> None:
+        self.prepare_calls: list[MigrationItem] = []
+        self.finalize_calls: list[tuple[MigrationItem, Path]] = []
+        self._destination = prepare_destination
+        self._prepare_raises = prepare_raises
+        self._finalize_raises = finalize_raises
+
+    def prepare(self, item: MigrationItem) -> Optional[Path]:
+        self.prepare_calls.append(item)
+        if self._prepare_raises is not None:
+            raise self._prepare_raises
+        return self._destination
+
+    def finalize(self, item: MigrationItem, destination: Path) -> None:
+        self.finalize_calls.append((item, destination))
+        if self._finalize_raises is not None:
+            raise self._finalize_raises
+
+
+def _raw_item(layout, item_id: str = "raw1") -> MigrationItem:
+    """MigrationItem en mode raw : is_symlink_source=False, destination_path=None."""
+    return MigrationItem(
+        item_id=item_id,
+        bucket=Bucket.MIGRATE,
+        symlink_path=layout["source_file"],  # = source physique elle-même
+        source_path=layout["source_file"],
+        destination_path=None,  # calculée à l'apply via prepare()
+        media_root="Films",
+        relative_category="",
+        size_bytes=layout["source_file"].stat().st_size,
+        rating=RatingDecision(value=8.0, source="tmdb"),
+        is_symlink_source=False,
+    )
+
+
+def test_raw_item_calls_prepare_then_finalize(layout, store):
+    item = _raw_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    canonical_dest = layout["new_storage"] / "Films" / "SF" / "A" / "Avatar.mkv"
+    finalizer = _FakeRawFinalizer(prepare_destination=canonical_dest)
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+
+    executor = MigrationTransferExecutor(
+        plan=plan,
+        state_store=store,
+        rsync_runner=rsync,
+        raw_finalizer=finalizer,
+    )
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.COMMITTED
+    # prepare appelé une fois avec l'item raw, retour utilisé comme destination
+    assert len(finalizer.prepare_calls) == 1
+    assert finalizer.prepare_calls[0] is item
+    # finalize appelé une fois avec l'item + destination retournée par prepare
+    assert len(finalizer.finalize_calls) == 1
+    finalize_item, finalize_dest = finalizer.finalize_calls[0]
+    assert finalize_item is item
+    assert finalize_dest == canonical_dest
+    # Le fichier a bien été copié
+    assert canonical_dest.exists()
+
+
+def test_raw_item_without_finalizer_fails(layout, store):
+    """Un item raw sans raw_finalizer → FAILED_OTHER (destination manquante)."""
+    item = _raw_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=FakeRsync([])
+    )  # pas de raw_finalizer
+    outcome = executor.execute_one(item)
+    assert outcome.status == TransferStatus.FAILED_OTHER
+
+
+def test_raw_prepare_failure_marks_failed_other(layout, store):
+    item = _raw_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    finalizer = _FakeRawFinalizer(prepare_raises=RuntimeError("DB indisponible"))
+    rsync = FakeRsync([])
+    executor = MigrationTransferExecutor(
+        plan=plan,
+        state_store=store,
+        rsync_runner=rsync,
+        raw_finalizer=finalizer,
+    )
+
+    outcome = executor.execute_one(item)
+    assert outcome.status == TransferStatus.FAILED_OTHER
+    # rsync n'a jamais été appelé : on s'arrête avant la copie.
+    assert rsync.calls == []
+    assert finalizer.finalize_calls == []
+
+
+def test_raw_finalize_failure_marks_failed_other(layout, store):
+    item = _raw_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    canonical_dest = layout["new_storage"] / "Films" / "SF" / "A" / "Avatar.mkv"
+    finalizer = _FakeRawFinalizer(
+        prepare_destination=canonical_dest,
+        finalize_raises=OSError("permission denied on video/"),
+    )
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+
+    executor = MigrationTransferExecutor(
+        plan=plan,
+        state_store=store,
+        rsync_runner=rsync,
+        raw_finalizer=finalizer,
+    )
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.FAILED_OTHER
+    # Le rsync + verify ont eu lieu (canonical_dest existe), mais finalize a explosé.
+    assert canonical_dest.exists()
+    assert len(finalizer.finalize_calls) == 1
+
+
+def test_symlink_mode_unchanged_when_no_finalizer_provided(layout, store):
+    """Garde-fou : un item symlinks classique reste intact sans raw_finalizer."""
+    item = _migrate_item(layout)  # is_symlink_source default True
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync
+    )  # pas de raw_finalizer
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.COMMITTED
+    # Le symlink a bien été swappé vers la nouvelle destination.
+    assert layout["symlink"].is_symlink()
+    assert layout["symlink"].resolve() == layout["destination"].resolve()
