@@ -1,0 +1,376 @@
+"""
+Tests pour MigrationTransferExecutor.
+
+L'executor consomme un MigrationPlan et un MigrationStateStore : pour chaque
+item MIGRATE non encore COMMITTED il copie via rsync (sans
+--remove-source-files), vérifie l'intégrité via xxh3_64 source/dest, swappe
+atomiquement le symlink vers la nouvelle destination, et met à jour le
+state_store à chaque transition.
+
+Le RsyncRunner est injecté pour les tests : on simule les succès/échecs
+et on copie réellement le fichier dans `on_run` quand on veut un test
+d'intégrité réaliste (vrais hashes via compute_file_hash).
+"""
+
+from __future__ import annotations
+
+import shutil
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Optional
+
+import pytest
+
+from src.services.migration.dataclasses import (
+    Bucket,
+    MigrationItem,
+    MigrationPlan,
+    MigrationStats,
+    RatingDecision,
+    TransferStatus,
+)
+from src.services.migration.state_store import MigrationStateStore
+from src.services.migration.transfer_executor import (
+    MigrationTransferExecutor,
+    RsyncResult,
+)
+
+
+# ---- Fakes ---------------------------------------------------------------
+
+
+@dataclass
+class _Behavior:
+    success: bool
+    error: Optional[str] = None
+    # Callable(source, destination) appelé avant le retour quand success=True
+    on_success: Optional[Callable[[Path, Path], None]] = None
+
+
+class FakeRsync:
+    """RsyncRunner factice qui suit un script de comportements par appel."""
+
+    def __init__(self, behaviors: list[_Behavior]) -> None:
+        self.calls: list[tuple[Path, Path, int]] = []
+        self._behaviors = list(behaviors)
+
+    def run(self, source: Path, destination: Path, bwlimit_mbps: int) -> RsyncResult:
+        self.calls.append((source, destination, bwlimit_mbps))
+        if not self._behaviors:
+            raise AssertionError("FakeRsync: appel inattendu")
+        b = self._behaviors.pop(0)
+        if b.success and b.on_success:
+            b.on_success(source, destination)
+        return RsyncResult(success=b.success, error=b.error)
+
+
+def _copy_file(source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+
+
+def _corrupt_copy(source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(b"corrupted-" + source.read_bytes()[:5])
+
+
+# ---- Fixtures ------------------------------------------------------------
+
+
+@pytest.fixture
+def layout(tmp_path):
+    """
+    Arborescence test :
+
+      tmp_path/
+        old_storage/avatar.mkv     (vraie source, contenu binaire)
+        old_video/Films/A/avatar.mkv  -> old_storage/avatar.mkv  (symlink)
+        new_storage/                  (cible des copies)
+    """
+    old_storage = tmp_path / "old_storage"
+    old_video = tmp_path / "old_video" / "Films" / "A"
+    new_storage = tmp_path / "new_storage"
+    old_storage.mkdir(parents=True)
+    old_video.mkdir(parents=True)
+    new_storage.mkdir(parents=True)
+
+    source_file = old_storage / "avatar.mkv"
+    source_file.write_bytes(b"AVATAR_CONTENT_BIN" * 100)
+
+    symlink = old_video / "avatar.mkv"
+    symlink.symlink_to(source_file)
+
+    return {
+        "old_storage": old_storage,
+        "new_storage": new_storage,
+        "source_file": source_file,
+        "symlink": symlink,
+        "destination": new_storage / "Films" / "SF" / "A" / "avatar.mkv",
+    }
+
+
+def _migrate_item(layout, item_id: str = "abc123") -> MigrationItem:
+    return MigrationItem(
+        item_id=item_id,
+        bucket=Bucket.MIGRATE,
+        symlink_path=layout["symlink"],
+        source_path=layout["source_file"],
+        destination_path=layout["destination"],
+        media_root="Films",
+        relative_category="SF/A",
+        size_bytes=layout["source_file"].stat().st_size,
+        rating=RatingDecision(value=8.0, source="imdb"),
+    )
+
+
+def _plan(items: list[MigrationItem], layout) -> MigrationPlan:
+    return MigrationPlan(
+        version=1,
+        source_root=Path("/old_video"),
+        destination_root=layout["new_storage"],
+        threshold=6.0,
+        stats=MigrationStats(),
+        items=items,
+    )
+
+
+@pytest.fixture
+def store(tmp_path):
+    return MigrationStateStore(tmp_path / "state.sqlite")
+
+
+# ---- Happy path ----------------------------------------------------------
+
+
+def test_executes_one_item_end_to_end(layout, store):
+    item = _migrate_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync
+    )
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.COMMITTED
+    assert outcome.source_hash == outcome.destination_hash
+    assert outcome.source_hash is not None
+    assert outcome.bytes_transferred == layout["source_file"].stat().st_size
+
+    # Le state store a bien été mis à jour
+    assert store.get_status(item.item_id) == TransferStatus.COMMITTED
+
+    # Le fichier destination existe et a le bon contenu
+    assert layout["destination"].exists()
+    assert layout["destination"].read_bytes() == layout["source_file"].read_bytes()
+
+    # Le symlink pointe maintenant vers la nouvelle destination (swap atomique)
+    assert layout["symlink"].is_symlink()
+    assert layout["symlink"].resolve() == layout["destination"].resolve()
+
+    # La source originale est intacte (pas de --remove-source-files)
+    assert layout["source_file"].exists()
+
+    # Un seul appel rsync à la vitesse max (25 MB/s par défaut)
+    assert len(rsync.calls) == 1
+    assert rsync.calls[0][2] == 25
+
+
+# ---- Retry sur erreur réseau --------------------------------------------
+
+
+def test_retries_on_lower_bandwidth_after_rsync_failure(layout, store):
+    item = _migrate_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    rsync = FakeRsync(
+        [
+            _Behavior(success=False, error="connection reset"),
+            _Behavior(success=False, error="connection reset"),
+            _Behavior(success=True, on_success=_copy_file),
+        ]
+    )
+
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync
+    )
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.COMMITTED
+    # Tentatives à 25, 20, 15 MB/s
+    assert [c[2] for c in rsync.calls] == [25, 20, 15]
+
+
+def test_marks_failed_copy_when_all_bandwidth_steps_fail(layout, store):
+    item = _migrate_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    # Tous les paliers échouent (5 par défaut : 25, 20, 15, 10, 5)
+    rsync = FakeRsync([_Behavior(success=False, error="fail")] * 5)
+
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync
+    )
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.FAILED_COPY
+    assert "fail" in (outcome.error_message or "")
+    assert len(rsync.calls) == 5
+    assert store.get_status(item.item_id) == TransferStatus.FAILED_COPY
+
+    # La source est intacte, pas de symlink swap
+    assert layout["source_file"].exists()
+    assert layout["symlink"].resolve() == layout["source_file"].resolve()
+    # Pas de fichier destination orphelin
+    assert not layout["destination"].exists()
+
+
+# ---- Mismatch hash → FAILED_VERIFY + suppression dest -------------------
+
+
+def test_failed_verify_removes_destination_and_keeps_source_intact(layout, store):
+    item = _migrate_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    rsync = FakeRsync([_Behavior(success=True, on_success=_corrupt_copy)])
+
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync
+    )
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.FAILED_VERIFY
+    assert outcome.source_hash != outcome.destination_hash
+    assert outcome.error_message is not None and "hash" in outcome.error_message.lower()
+
+    # Destination supprimée
+    assert not layout["destination"].exists()
+    # Source intacte
+    assert layout["source_file"].exists()
+    # Symlink inchangé
+    assert layout["symlink"].resolve() == layout["source_file"].resolve()
+
+
+# ---- Reprise -------------------------------------------------------------
+
+
+def test_skips_already_committed_item(layout, store):
+    item = _migrate_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+    store.update_status(item.item_id, TransferStatus.COMMITTED)
+
+    rsync = FakeRsync([])  # ne doit pas être appelé
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync
+    )
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.COMMITTED
+    assert rsync.calls == []
+
+
+def test_resume_when_destination_already_exists_with_matching_hash(layout, store):
+    """Reprise : le fichier a été copié dans une session précédente mais le
+    state store n'a pas été mis à jour (crash). On revérifie le hash, et si
+    OK on swap directement sans relancer rsync."""
+    item = _migrate_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    # Pré-remplit la destination avec le bon contenu
+    layout["destination"].parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(layout["source_file"], layout["destination"])
+
+    rsync = FakeRsync([])  # ne doit pas être appelé
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync
+    )
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.COMMITTED
+    assert rsync.calls == []
+    assert layout["symlink"].resolve() == layout["destination"].resolve()
+
+
+def test_resume_when_destination_exists_with_bad_hash_recopies(layout, store):
+    """Si la destination existe mais corrompue, on relance rsync."""
+    item = _migrate_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    # Pré-remplit la destination avec contenu CORROMPU
+    layout["destination"].parent.mkdir(parents=True, exist_ok=True)
+    layout["destination"].write_bytes(b"junk")
+
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync
+    )
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.COMMITTED
+    assert len(rsync.calls) == 1
+
+
+# ---- Cas dégénéré : destination_path None -------------------------------
+
+
+def test_failed_other_when_destination_path_missing(layout, store):
+    item = _migrate_item(layout)
+    item.destination_path = None  # mauvais plan
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    rsync = FakeRsync([])
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync
+    )
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.FAILED_OTHER
+
+
+# ---- execute_all --------------------------------------------------------
+
+
+def test_execute_all_processes_pending_items_only(layout, store, tmp_path):
+    # Deux items : un déjà COMMITTED, un PENDING
+    src_b = layout["old_storage"] / "b.mkv"
+    src_b.write_bytes(b"BBBB" * 50)
+    sym_b = layout["old_storage"].parent / "old_video" / "Films" / "A" / "b.mkv"
+    sym_b.parent.mkdir(parents=True, exist_ok=True)
+    sym_b.symlink_to(src_b)
+
+    item_a = _migrate_item(layout, item_id="aaa")
+    item_b = MigrationItem(
+        item_id="bbb",
+        bucket=Bucket.MIGRATE,
+        symlink_path=sym_b,
+        source_path=src_b,
+        destination_path=layout["new_storage"] / "Films" / "B" / "b.mkv",
+        media_root="Films",
+        relative_category="B",
+        size_bytes=src_b.stat().st_size,
+        rating=RatingDecision(value=7.5),
+    )
+    plan = _plan([item_a, item_b], layout)
+    store.init_from_plan(plan)
+
+    # item_a déjà fait
+    store.update_status("aaa", TransferStatus.COMMITTED)
+
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync
+    )
+    outcomes = executor.execute_all()
+
+    assert len(outcomes) == 1
+    assert outcomes[0].item_id == "bbb"
+    assert outcomes[0].status == TransferStatus.COMMITTED
+    assert len(rsync.calls) == 1

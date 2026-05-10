@@ -1,0 +1,159 @@
+"""
+Dataclasses et enums pour le service de migration NAS.
+
+Definit les structures de donnees echangees entre le scanner, le resolveur
+de notes, le planificateur de destination, le constructeur de plan et
+l'executeur de transfert.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Optional
+
+
+class Bucket(str, Enum):
+    """Categorie d'aiguillage d'un candidat de migration."""
+
+    MIGRATE = "migrate"  # Note >= seuil : a transferer
+    LOW_RATED = "low_rated"  # Note < seuil : non transfere
+    UNRATED = "unrated"  # Aucune note disponible : a valider manuellement
+    BROKEN = "broken"  # Symlink brise meme apres recherche alternative
+    ALREADY_ON_DESTINATION = "already_on_destination"  # Cible deja sur le nouveau NAS
+    NON_VIDEO = "non_video"  # Extension non reconnue
+    NOT_SYMLINK = "not_symlink"  # Entree presente mais ce n'est pas un symlink
+
+
+class TransferStatus(str, Enum):
+    """Statut d'un transfert dans le state store."""
+
+    PENDING = "pending"  # Pas encore traite
+    COPYING = "copying"  # Copie en cours (interrompue ?)
+    COPIED = "copied"  # Copie ok mais hash non verifie
+    VERIFIED = "verified"  # Hash verifie, source pas encore supprimee
+    COMMITTED = "committed"  # Source supprimee, symlink swappe : termine
+    FAILED_COPY = "failed_copy"
+    FAILED_VERIFY = "failed_verify"  # Hash mismatch : destination retiree, source intacte
+    FAILED_OTHER = "failed_other"
+
+
+@dataclass
+class MigrationCandidate:
+    """
+    Un symlink decouvert dans l'arborescence source de la migration.
+
+    Resultat brut du scanner avant arbitrage par note.
+
+    Attributs :
+        symlink_path : Chemin du symlink (sur `serveur_fichiers`).
+        target_path : Chemin de la cible resolue ou recherchee, ou None si brise.
+        media_root : Premier segment metier (Films, Series, Animations, ...).
+        relative_category : Chemin relatif sous `media_root` (genre, lettre, etc.).
+        size_bytes : Taille de la cible si accessible.
+        is_broken : True si le symlink ne resout pas et n'a pu etre retrouve.
+        already_on_destination : True si la cible pointe deja vers le nouveau NAS.
+    """
+
+    symlink_path: Path
+    target_path: Optional[Path]
+    media_root: str
+    relative_category: str
+    size_bytes: Optional[int] = None
+    is_broken: bool = False
+    already_on_destination: bool = False
+    is_symlink: bool = True  # False si le scanner a trouvé un fichier physique au lieu d'un lien
+
+
+@dataclass
+class RatingDecision:
+    """
+    Verdict du resolveur de notes pour un candidat.
+
+    Attributs :
+        value : Note combinee retenue (echelle 0-10) ou None si introuvable.
+        source : Etiquette de la source ayant fourni la note la plus haute.
+        imdb : Note IMDb brute si disponible (DB ou dataset).
+        tmdb : Note TMDB / TVDB brute si disponible.
+        personal : Note personnelle 1-5 brute si disponible (NON renormalisee).
+        movie_id_in_db : ID interne de l'entree associee dans `movies` si trouvee.
+        series_id_in_db : ID interne de l'entree associee dans `series` si trouvee.
+        title_match : Titre canonique trouve en base (utile pour le rapport).
+    """
+
+    value: Optional[float] = None
+    source: Optional[str] = None
+    imdb: Optional[float] = None
+    tmdb: Optional[float] = None
+    personal: Optional[int] = None
+    movie_id_in_db: Optional[int] = None
+    series_id_in_db: Optional[int] = None
+    title_match: Optional[str] = None
+
+
+@dataclass
+class MigrationItem:
+    """
+    Une ligne du plan de migration (un fichier a transferer ou ecarter).
+
+    Sertializee dans le JSON de plan et utilisee par l'executeur de transfert.
+    """
+
+    item_id: str  # Identifiant stable (hash du symlink) pour la reprise
+    bucket: Bucket
+    symlink_path: Path
+    source_path: Optional[Path]  # Cible resolue (sur ancien NAS)
+    destination_path: Optional[Path]  # Cible prevue (sur nouveau NAS)
+    media_root: str
+    relative_category: str
+    size_bytes: Optional[int]
+    rating: RatingDecision
+    tags: list[str] = field(default_factory=list)
+
+
+@dataclass
+class MigrationStats:
+    """Compteurs agreges du plan de migration."""
+
+    total_symlinks: int = 0
+    to_migrate: int = 0
+    low_rated: int = 0
+    unrated: int = 0
+    broken: int = 0
+    already_on_destination: int = 0
+    non_video: int = 0
+    not_symlink: int = 0
+    total_size_bytes: int = 0  # Cumul des tailles des items "migrate"
+
+
+@dataclass
+class MigrationPlan:
+    """
+    Plan complet : configuration + statistiques + liste des items.
+
+    Format de serialisation versionne (`version=1`) pour faciliter les
+    evolutions ulterieures.
+    """
+
+    version: int = 1
+    generated_at: datetime = field(default_factory=datetime.utcnow)
+    source_root: Path = Path(".")
+    destination_root: Path = Path(".")
+    threshold: float = 0.0
+    rating_strategy: str = "max"
+    stats: MigrationStats = field(default_factory=MigrationStats)
+    items: list[MigrationItem] = field(default_factory=list)
+
+
+@dataclass
+class TransferOutcome:
+    """Resultat d'un transfert individuel."""
+
+    item_id: str
+    status: TransferStatus
+    source_hash: Optional[str] = None
+    destination_hash: Optional[str] = None
+    error_message: Optional[str] = None
+    bytes_transferred: int = 0

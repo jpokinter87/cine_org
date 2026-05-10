@@ -63,6 +63,9 @@ from src.adapters.cli.commands.reconcile_command import (
 from src.adapters.cli.commands.migrate_series_command import (
     migrate_series,
 )
+from src.adapters.cli.commands.migrate_nas_command import (
+    migrate_nas_app,
+)
 from src.adapters.cli.commands.fix_series_symlinks_command import (
     fix_series_symlinks,
 )
@@ -118,6 +121,7 @@ __all__ = [
     "enrich_tvdb_ids",
     "reconcile",
     "migrate_series",
+    "migrate_nas_app",
     "fix_series_symlinks",
     "check_duplicates",
     "purge_hardlinks",

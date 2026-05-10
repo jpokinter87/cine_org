@@ -22,6 +22,7 @@ from .adapters.cli.commands import (
     fix_bad_links,
     fix_symlinks,
     imdb_app,
+    migrate_nas_app,
     migrate_series,
     fix_series_symlinks,
     check_duplicates,
@@ -130,6 +131,9 @@ app.add_typer(validate_app, name="validate")
 
 # Monter imdb_app comme sous-commande
 app.add_typer(imdb_app, name="imdb")
+
+# Monter migrate_nas_app comme sous-commande (plan / apply / status)
+app.add_typer(migrate_nas_app, name="migrate-nas")
 
 
 def get_config() -> Settings:
