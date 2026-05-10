@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 
 class Bucket(str, Enum):
@@ -25,6 +25,7 @@ class Bucket(str, Enum):
     ALREADY_ON_DESTINATION = "already_on_destination"  # Cible deja sur le nouveau NAS
     NON_VIDEO = "non_video"  # Extension non reconnue
     NOT_SYMLINK = "not_symlink"  # Entree presente mais ce n'est pas un symlink
+    NEEDS_VALIDATION = "needs_validation"  # Mode raw : match TMDB/TVDB ambigu ou absent
 
 
 class TransferStatus(str, Enum):
@@ -94,6 +95,33 @@ class RatingDecision:
 
 
 @dataclass
+class MatchInfo:
+    """
+    Resultat de l'identification TMDB/TVDB d'un fichier physique (mode raw).
+
+    Mode symlinks pur : tous les champs restent None / vides (l'oeuvre est
+    deja en DB, identifiee par rating_resolver).
+
+    Mode raw : alimente par MigrationMatcher pour decider entre MIGRATE/
+    LOW_RATED/UNRATED (match unique avec score >= seuil) et NEEDS_VALIDATION
+    (score insuffisant ou candidats multiples).
+
+    Attributs :
+        tmdb_id : ID TMDB du match retenu (films ou series).
+        tvdb_id : ID TVDB du match retenu (series uniquement).
+        score : Score de similarite normalise (0-100) du match retenu.
+        top_candidates : Top candidats serialisables (pour CSV NEEDS_VALIDATION
+            et debug). Chaque entree contient au minimum {title, year, score,
+            tmdb_id?, tvdb_id?}.
+    """
+
+    tmdb_id: Optional[int] = None
+    tvdb_id: Optional[int] = None
+    score: Optional[float] = None
+    top_candidates: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
 class MigrationItem:
     """
     Une ligne du plan de migration (un fichier a transferer ou ecarter).
@@ -110,6 +138,8 @@ class MigrationItem:
     relative_category: str
     size_bytes: Optional[int]
     rating: RatingDecision
+    match: MatchInfo = field(default_factory=MatchInfo)
+    is_symlink_source: bool = True  # False = fichier physique brut (mode raw)
     tags: list[str] = field(default_factory=list)
 
 
@@ -125,6 +155,7 @@ class MigrationStats:
     already_on_destination: int = 0
     non_video: int = 0
     not_symlink: int = 0
+    needs_validation: int = 0
     total_size_bytes: int = 0  # Cumul des tailles des items "migrate"
 
 

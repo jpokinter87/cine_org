@@ -20,6 +20,7 @@ import pytest
 
 from src.services.migration.dataclasses import (
     Bucket,
+    MatchInfo,
     MigrationCandidate,
     MigrationItem,
     MigrationPlan,
@@ -386,3 +387,144 @@ def test_write_review_csvs_handles_empty_buckets(tmp_path):
         with path.open(newline="") as f:
             rows = list(csv.DictReader(f))
         assert rows == []  # header présent mais aucune ligne
+
+
+# ---- Mode raw : extension dataclasses (étape 1) --------------------------
+
+
+def test_bucket_has_needs_validation_value():
+    """NEEDS_VALIDATION = bucket terminal pour les fichiers raw au match incertain."""
+    assert Bucket.NEEDS_VALIDATION.value == "needs_validation"
+
+
+def test_match_info_defaults_are_empty():
+    """Sans match TMDB/TVDB, MatchInfo() est vide (mode symlinks pur)."""
+    info = MatchInfo()
+    assert info.tmdb_id is None
+    assert info.tvdb_id is None
+    assert info.score is None
+    assert info.top_candidates == []
+
+
+def test_migration_item_has_match_field_with_default():
+    """MigrationItem accepte un MatchInfo par défaut (rétrocompat mode symlinks)."""
+    item = MigrationItem(
+        item_id="abc",
+        bucket=Bucket.MIGRATE,
+        symlink_path=Path("/old/x.mkv"),
+        source_path=Path("/storage/x.mkv"),
+        destination_path=Path("/new/x.mkv"),
+        media_root="Films",
+        relative_category="Drame/D",
+        size_bytes=1000,
+        rating=RatingDecision(),
+    )
+    assert item.match.tmdb_id is None
+    assert item.match.top_candidates == []
+    assert item.is_symlink_source is True
+
+
+def test_migration_item_accepts_populated_match_info():
+    """MigrationItem alimenté en mode raw porte tmdb_id, score, candidats."""
+    match = MatchInfo(
+        tmdb_id=12345,
+        score=92.5,
+        top_candidates=[
+            {"title": "Avatar", "year": 2009, "score": 92.5, "tmdb_id": 12345}
+        ],
+    )
+    item = MigrationItem(
+        item_id="abc",
+        bucket=Bucket.MIGRATE,
+        symlink_path=Path("/old/avatar.mkv"),
+        source_path=Path("/old/avatar.mkv"),
+        destination_path=Path("/new/Films/SF/A/Avatar.mkv"),
+        media_root="Films",
+        relative_category="",
+        size_bytes=2_000_000_000,
+        rating=RatingDecision(value=8.0, source="imdb"),
+        match=match,
+        is_symlink_source=False,
+    )
+    assert item.match.tmdb_id == 12345
+    assert item.match.score == 92.5
+    assert item.is_symlink_source is False
+
+
+def test_migration_stats_has_needs_validation_counter():
+    """MigrationStats expose un compteur needs_validation à 0 par défaut."""
+    stats = MigrationStats()
+    assert stats.needs_validation == 0
+
+
+def test_accumulate_stats_counts_needs_validation():
+    """Le builder incrémente needs_validation pour les items raw au match raté."""
+    cand = _candidate("ambigu.mkv", is_symlink=False)
+    builder = _make_builder([cand], {}, {})
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+    # Forcer manuellement le bucket pour tester _accumulate_stats (l'étape 3
+    # branchera la classification automatique).
+    plan.items[0].bucket = Bucket.NEEDS_VALIDATION
+    stats = MigrationStats()
+    from src.services.migration.plan_builder import _accumulate_stats
+
+    _accumulate_stats(stats, plan.items[0])
+    assert stats.needs_validation == 1
+
+
+def test_serialize_roundtrip_preserves_match_info():
+    """JSON roundtrip : tmdb_id/score/top_candidates restent intacts."""
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_builder(
+        [cand],
+        {"avatar.mkv": RatingDecision(value=8.0)},
+        {"avatar.mkv": Path("/new_nas/Films/SF/A/Avatar (2009).mkv")},
+    )
+    plan_orig = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+    # Étape 1 : on injecte directement les champs raw (l'étape 3 les remplira
+    # automatiquement). Le test garantit la persistance JSON dès maintenant.
+    plan_orig.items[0].match = MatchInfo(
+        tmdb_id=19995,
+        score=95.0,
+        top_candidates=[{"title": "Avatar", "year": 2009, "score": 95.0}],
+    )
+    plan_orig.items[0].is_symlink_source = False
+
+    plan_back = deserialize_plan(serialize_plan(plan_orig))
+
+    item = plan_back.items[0]
+    assert item.match.tmdb_id == 19995
+    assert item.match.score == 95.0
+    assert item.match.top_candidates == [
+        {"title": "Avatar", "year": 2009, "score": 95.0}
+    ]
+    assert item.is_symlink_source is False
+
+
+def test_deserialize_plan_without_match_field_defaults_to_empty():
+    """Plans pré-mode-raw (sans champs match/is_symlink_source) restent lisibles."""
+    cand = _candidate("legacy.mkv")
+    builder = _make_builder(
+        [cand],
+        {"legacy.mkv": RatingDecision(value=8.0)},
+        {"legacy.mkv": Path("/new_nas/legacy.mkv")},
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+    payload = json.loads(serialize_plan(plan))
+    # Simule un plan ancien : on retire les nouveaux champs.
+    for it in payload["items"]:
+        it.pop("match", None)
+        it.pop("is_symlink_source", None)
+    payload["stats"].pop("needs_validation", None)
+
+    # MigrationStats est strict (dataclass), on doit pouvoir réinjecter le
+    # champ manquant via un fallback : ici on vérifie au moins que l'item se
+    # désérialise avec les nouveaux defaults.
+    obj = payload
+    item_dict = obj["items"][0]
+    from src.services.migration.plan_builder import _item_from_dict
+
+    item = _item_from_dict(item_dict)
+    assert item.match.tmdb_id is None
+    assert item.match.top_candidates == []
+    assert item.is_symlink_source is True

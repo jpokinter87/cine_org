@@ -22,6 +22,7 @@ import xxhash
 
 from src.services.migration.dataclasses import (
     Bucket,
+    MatchInfo,
     MigrationCandidate,
     MigrationItem,
     MigrationPlan,
@@ -140,6 +141,8 @@ def _accumulate_stats(stats: MigrationStats, item: MigrationItem) -> None:
         stats.not_symlink += 1
     elif item.bucket == Bucket.NON_VIDEO:
         stats.non_video += 1
+    elif item.bucket == Bucket.NEEDS_VALIDATION:
+        stats.needs_validation += 1
 
 
 # ---- Sérialisation JSON ---------------------------------------------------
@@ -188,12 +191,21 @@ def _item_to_dict(item: MigrationItem) -> dict[str, Any]:
         "relative_category": item.relative_category,
         "size_bytes": item.size_bytes,
         "rating": asdict(item.rating),
+        "match": asdict(item.match),
+        "is_symlink_source": item.is_symlink_source,
         "tags": list(item.tags),
     }
 
 
 def _item_from_dict(d: dict[str, Any]) -> MigrationItem:
     rating = RatingDecision(**d.get("rating", {}))
+    match_payload = d.get("match") or {}
+    match = MatchInfo(
+        tmdb_id=match_payload.get("tmdb_id"),
+        tvdb_id=match_payload.get("tvdb_id"),
+        score=match_payload.get("score"),
+        top_candidates=list(match_payload.get("top_candidates", [])),
+    )
     return MigrationItem(
         item_id=d["item_id"],
         bucket=Bucket(d["bucket"]),
@@ -206,6 +218,8 @@ def _item_from_dict(d: dict[str, Any]) -> MigrationItem:
         relative_category=d.get("relative_category", ""),
         size_bytes=d.get("size_bytes"),
         rating=rating,
+        match=match,
+        is_symlink_source=d.get("is_symlink_source", True),
         tags=list(d.get("tags", [])),
     )
 
