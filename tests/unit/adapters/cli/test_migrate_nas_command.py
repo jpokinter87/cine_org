@@ -44,17 +44,16 @@ class _Behavior:
 
 class FakeRsync:
     def __init__(self, behaviors: list[_Behavior]) -> None:
-        self.calls: list[tuple[Path, Path, int]] = []
+        self.calls: list[tuple[Path, Path]] = []
         self._behaviors = list(behaviors)
 
     def run(
         self,
         source: Path,
         destination: Path,
-        bwlimit_mbps: int,
         on_progress=None,
     ) -> RsyncResult:
-        self.calls.append((source, destination, bwlimit_mbps))
+        self.calls.append((source, destination))
         b = self._behaviors.pop(0)
         if b.success and b.on_success:
             b.on_success(source, destination)

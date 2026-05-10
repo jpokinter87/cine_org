@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -44,12 +45,18 @@ from src.services.migration.dataclasses import (
 from src.services.migration.state_store import MigrationStateStore
 
 
-# 0 = pas de limite (vitesse max disque/réseau). Si rsync échoue (timeout
-# réseau, peer reset…), on retombe sur des paliers dégressifs pour
-# accommoder un lien saturé. Pour un transfert local rapide (cas usuel
-# de la migration depuis un disque externe), le 1er essai sans bwlimit
-# fait le job en quelques secondes au lieu de quelques minutes.
-_DEFAULT_BANDWIDTH_STEPS_MBPS: tuple[int, ...] = (0, 50, 25, 10, 5)
+# Stratégie retry simple : le rsync tourne sans bwlimit (vitesse max). En
+# cas d'échec on retente N fois avec une pause entre chaque (le NAS de
+# destination a souvent besoin d'une fenêtre pour évacuer son cache write
+# avant d'accepter une nouvelle session). Plus pertinent qu'une cascade
+# de paliers dégressifs : la grande majorité des échecs réseau/NAS sont
+# transitoires (timeout NFS, fsync long), pas une saturation de débit.
+_DEFAULT_MAX_RETRIES: int = 3
+_DEFAULT_RETRY_PAUSE_SECONDS: int = 30
+# Timeout rsync en secondes : déconnecte si aucun paquet pendant N sec.
+# Évite les hangs lors d'un fsync long côté NAS — l'erreur est propagée,
+# le retry suivant tente sa chance.
+_DEFAULT_RSYNC_TIMEOUT_SECONDS: int = 300
 
 
 @dataclass
@@ -79,7 +86,6 @@ class RsyncRunner(Protocol):
         self,
         source: Path,
         destination: Path,
-        bwlimit_mbps: int,
         on_progress: Optional[RsyncProgress] = None,
     ) -> RsyncResult: ...
 
@@ -129,14 +135,38 @@ class _SubprocessRsyncRunner:
         self,
         source: Path,
         destination: Path,
-        bwlimit_mbps: int,
         on_progress: Optional[RsyncProgress] = None,
     ) -> RsyncResult:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        cmd = ["rsync", "-a", "--partial", "--inplace", "--info=progress2"]
-        if bwlimit_mbps > 0:
-            cmd.append(f"--bwlimit={bwlimit_mbps}M")
-        cmd.extend([str(source), str(destination)])
+        # Wrappe le callback : le `bytes_done` extrait de --info=progress2
+        # est le compteur volatile de CETTE instance rsync, qui repart à 0
+        # à chaque nouvelle invocation (retry, reprise après interruption).
+        # On remplace par la taille réelle du fichier dest sur disque, qui
+        # reflète l'état persistent via --inplace --partial.
+        rsync_cb = on_progress
+        if on_progress is not None:
+            def _stat_wrapper(_bytes_done: int, percent: int, speed: str) -> None:
+                try:
+                    real = destination.stat().st_size
+                except OSError:
+                    real = _bytes_done
+                on_progress(real, percent, speed)
+            rsync_cb = _stat_wrapper
+
+        # Pas de `-a` (= -rlptgoD) : sur un NAS NFS, la préservation owner/
+        # group/perms échoue souvent (mapping uid foireux, ACL refusées) et
+        # rsync sort en rc=23 même quand le contenu est intégralement copié.
+        # Pour notre cas (migration 1 fichier vers NAS qui gère ses propres
+        # permissions), on n'a besoin de rien de tout cela.
+        cmd = [
+            "rsync",
+            "--partial",
+            "--inplace",
+            "--info=progress2",
+            f"--timeout={_DEFAULT_RSYNC_TIMEOUT_SECONDS}",
+            str(source),
+            str(destination),
+        ]
         try:
             # stderr=STDOUT : merge stderr dans stdout pour éviter le
             # blocage classique de Popen quand stderr remplit son buffer
@@ -166,16 +196,16 @@ class _SubprocessRsyncRunner:
                     if buffer:
                         decoded = buffer.decode("utf-8", errors="replace")
                         last_line = decoded
-                        if on_progress is not None:
-                            _parse_and_emit_progress(decoded, on_progress)
+                        if rsync_cb is not None:
+                            _parse_and_emit_progress(decoded, rsync_cb)
                     buffer.clear()
                 else:
                     buffer.append(byte)
         if buffer:
             decoded = buffer.decode("utf-8", errors="replace")
             last_line = decoded
-            if on_progress is not None:
-                _parse_and_emit_progress(decoded, on_progress)
+            if rsync_cb is not None:
+                _parse_and_emit_progress(decoded, rsync_cb)
 
         process.wait()
         if process.returncode == 0:
@@ -214,9 +244,12 @@ class MigrationTransferExecutor:
         plan: Plan source des items à transférer.
         state_store: Journal SQLite reprenable.
         rsync_runner: Implémentation rsync (par défaut : subprocess).
-        bandwidth_steps_mbps: Paliers de bande passante essayés en cas
-            d'échec rsync (ordre = ordre des essais).
+        max_retries: Nombre total d'essais rsync par fichier en cas
+            d'échec (1 = pas de retry).
+        retry_pause_seconds: Pause entre deux essais (laisse au NAS le
+            temps d'évacuer son cache write avant la nouvelle session).
         hash_fn: Fonction de hash. Par défaut compute_file_hash (xxh3_64).
+        sleep_fn: time.sleep par défaut. Injectable pour les tests.
     """
 
     def __init__(
@@ -224,7 +257,8 @@ class MigrationTransferExecutor:
         plan: MigrationPlan,
         state_store: MigrationStateStore,
         rsync_runner: Optional[RsyncRunner] = None,
-        bandwidth_steps_mbps: tuple[int, ...] = _DEFAULT_BANDWIDTH_STEPS_MBPS,
+        max_retries: int = _DEFAULT_MAX_RETRIES,
+        retry_pause_seconds: int = _DEFAULT_RETRY_PAUSE_SECONDS,
         hash_fn: Callable[[Path], str] = compute_file_hash,
         raw_finalizer: Optional[RawItemFinalizer] = None,
         on_event: Optional[Callable[[MigrationItem, str], None]] = None,
@@ -232,11 +266,14 @@ class MigrationTransferExecutor:
             Callable[[MigrationItem, int, int, str], None]
         ] = None,
         verify_hash: bool = True,
+        sleep_fn: Callable[[float], None] = time.sleep,
     ) -> None:
         self._plan = plan
         self._store = state_store
         self._rsync = rsync_runner or _SubprocessRsyncRunner()
-        self._bandwidth_steps = tuple(bandwidth_steps_mbps)
+        self._max_retries = max(1, int(max_retries))
+        self._retry_pause_seconds = max(0, int(retry_pause_seconds))
+        self._sleep = sleep_fn
         self._hash_fn = hash_fn
         self._raw_finalizer = raw_finalizer
         self._on_event = on_event
@@ -353,7 +390,9 @@ class MigrationTransferExecutor:
                 except OSError:
                     pass
 
-        # Copie via rsync avec retry sur paliers de bande passante.
+        # Copie via rsync : un essai à plein débit, puis N-1 retries après
+        # pause si échec. Avec --inplace --partial chaque retry reprend où
+        # le précédent s'est arrêté (pas de re-transfert depuis zéro).
         last_error: Optional[str] = None
         copied = False
 
@@ -366,31 +405,37 @@ class MigrationTransferExecutor:
                 except Exception:  # noqa: BLE001
                     pass
 
-        for bwlimit in self._bandwidth_steps:
+        for attempt in range(1, self._max_retries + 1):
             self._store.update_status(item.item_id, TransferStatus.COPYING)
-            self._emit(item, f"copying_{bwlimit}mbps")
+            self._emit(item, f"copying_attempt_{attempt}")
             destination.parent.mkdir(parents=True, exist_ok=True)
             result = self._rsync.run(
                 source,
                 destination,
-                bwlimit,
                 on_progress=_rsync_progress_for_item,
             )
             if result.success:
                 copied = True
                 break
             last_error = result.error
-            # Notifie l'erreur pour que l'utilisateur voie pourquoi on retente
-            # (au prochain palier) — utile pour debug.
             if last_error:
                 truncated = last_error[:120].replace("\n", " ")
                 self._emit(item, f"rsync_error:{truncated}")
+            # Pause avant le prochain essai (NAS récupère son cache).
+            if attempt < self._max_retries and self._retry_pause_seconds > 0:
+                self._emit(
+                    item, f"retry_pause_{self._retry_pause_seconds}s"
+                )
+                self._sleep(self._retry_pause_seconds)
 
         if not copied:
             self._store.update_status(
                 item.item_id,
                 TransferStatus.FAILED_COPY,
-                error_message=last_error or "rsync a échoué sur tous les paliers",
+                error_message=(
+                    last_error
+                    or f"rsync a échoué après {self._max_retries} essai(s)"
+                ),
             )
             return self._outcome_or_synthetic(item.item_id, TransferStatus.FAILED_COPY)
 

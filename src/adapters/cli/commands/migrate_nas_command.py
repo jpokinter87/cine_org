@@ -69,7 +69,8 @@ from src.services.migration.scanner import (
 )
 from src.services.migration.state_store import MigrationStateStore
 from src.services.migration.transfer_executor import (
-    _DEFAULT_BANDWIDTH_STEPS_MBPS,
+    _DEFAULT_MAX_RETRIES,
+    _DEFAULT_RETRY_PAUSE_SECONDS,
     MigrationTransferExecutor,
     RsyncRunner,
 )
@@ -247,12 +248,59 @@ def _build_with_progress(
         loguru_logger.enable("src")
 
 
+_PHASES_FR: tuple[str, ...] = (
+    "préparation",
+    "copie",
+    "vérification",
+    "finalisation",
+    "commit",
+)
+
+
+def _canonical_phase(emit_phase: str) -> Optional[str]:
+    """Mappe un event émis par transfer_executor sur l'une des 5 phases
+    canoniques affichées (ou None pour les events hors séquence : start,
+    failed_*, rsync_error:* — ces derniers conservent la phase précédente
+    pour ne pas casser le highlight)."""
+    if emit_phase in (
+        "preparing",
+        "hashing_source",
+        "hashing_existing",
+        "checking_existing",
+    ):
+        return "préparation"
+    if emit_phase.startswith("copying_") or emit_phase.startswith(
+        "retry_pause_"
+    ):
+        return "copie"
+    if emit_phase == "verifying":
+        return "vérification"
+    if emit_phase == "finalizing":
+        return "finalisation"
+    if emit_phase == "committed":
+        return "commit"
+    return None
+
+
+def _render_phase_sequence(current: Optional[str]) -> str:
+    """Construit la ligne de séquence des phases avec markup Rich. La phase
+    courante est en rouge gras et capitalisée ; les autres en `dim`."""
+    parts = []
+    for p in _PHASES_FR:
+        if p == current:
+            parts.append(f"[bold red]{p.upper()}[/bold red]")
+        else:
+            parts.append(f"[dim]{p}[/dim]")
+    return f"Phases : {' [dim]→[/dim] '.join(parts)}"
+
+
 def run_apply(
     *,
     plan_path: Path,
     state_store_path: Path,
     rsync_runner: Optional[RsyncRunner] = None,
-    bandwidth_steps_mbps: tuple[int, ...] = _DEFAULT_BANDWIDTH_STEPS_MBPS,
+    max_retries: int = _DEFAULT_MAX_RETRIES,
+    retry_pause_seconds: int = _DEFAULT_RETRY_PAUSE_SECONDS,
     session: Optional[Session] = None,
     show_progress: bool = False,
     verify_hash: bool = True,
@@ -269,7 +317,7 @@ def run_apply(
 
     Si `show_progress=True`, affiche une barre Rich avec le compteur
     d'items, le nom du fichier en cours et la phase en cours
-    (preparing / copying / verifying / finalizing / committed).
+    (préparation / copie / vérification / finalisation / commit).
     """
     plan = deserialize_plan(plan_path.read_text(encoding="utf-8"))
     store = MigrationStateStore(state_store_path)
@@ -286,7 +334,8 @@ def run_apply(
                 plan=plan,
                 store=store,
                 rsync_runner=rsync_runner,
-                bandwidth_steps_mbps=bandwidth_steps_mbps,
+                max_retries=max_retries,
+                retry_pause_seconds=retry_pause_seconds,
                 raw_finalizer=raw_finalizer,
                 verify_hash=verify_hash,
             )
@@ -294,7 +343,8 @@ def run_apply(
             plan=plan,
             state_store=store,
             rsync_runner=rsync_runner,
-            bandwidth_steps_mbps=bandwidth_steps_mbps,
+            max_retries=max_retries,
+            retry_pause_seconds=retry_pause_seconds,
             raw_finalizer=raw_finalizer,
             verify_hash=verify_hash,
         )
@@ -308,7 +358,8 @@ def _execute_with_progress(
     plan: MigrationPlan,
     store: MigrationStateStore,
     rsync_runner: Optional[RsyncRunner],
-    bandwidth_steps_mbps: tuple[int, ...],
+    max_retries: int,
+    retry_pause_seconds: int,
     raw_finalizer,
     verify_hash: bool = True,
 ) -> list[TransferOutcome]:
@@ -331,9 +382,6 @@ def _execute_with_progress(
         f"[cyan]{total} item(s) pending — volume estimé : "
         f"[bold]{total_size_gb:.1f} GB[/bold][/cyan]"
     )
-    console.print(
-        "[dim]Phases : preparing → copying → verifying → finalizing → committed[/dim]\n"
-    )
 
     counters = {"committed": 0, "failed": 0}
     # Phase courante de l'item en cours, conservée pour reconstituer la
@@ -353,6 +401,12 @@ def _execute_with_progress(
             TimeRemainingColumn(),
             console=console,
         ) as progress:
+            # Ligne phases : sequence des 5 phases canoniques avec phase
+            # courante en rouge gras. start=False désactive le spinner
+            # auto sur cette task (visuellement statique entre updates).
+            phase_task = progress.add_task(
+                _render_phase_sequence(None), total=None, start=False
+            )
             task = progress.add_task("Démarrage…", total=total)
             # Sous-barre dédiée au fichier en cours : total = taille du
             # fichier, completed = octets transférés via on_rsync_progress.
@@ -361,32 +415,42 @@ def _execute_with_progress(
             file_task = progress.add_task(
                 "(en attente)", total=1, visible=False
             )
+            current_canonical = {"phase": None}
 
             def _phase_label_from_emit(phase: str) -> str:
                 """Convertit un event en label lisible (sans crochets Rich)."""
                 if phase == "start":
-                    return "starting"
+                    return "démarrage"
                 if phase == "preparing":
-                    return "preparing (DB)"
+                    return "préparation (DB)"
                 if phase == "hashing_source":
-                    return "hashing source (xxh3_64) — peut prendre du temps"
+                    return "hash source (xxh3_64) — peut prendre du temps"
                 if phase == "hashing_existing":
-                    return "hashing existing destination (resume check)"
+                    return "hash dest (vérif reprise)"
                 if phase == "checking_existing":
-                    return "checking existing"
-                if phase.startswith("copying_"):
-                    bw = phase.split("_", 1)[1]
-                    if bw == "0mbps":
-                        return "rsync (no bwlimit)"
-                    return f"rsync @ {bw}"
+                    return "vérif existant"
+                if phase.startswith("copying_attempt_"):
+                    n = phase.rsplit("_", 1)[1]
+                    return f"copie (essai {n})"
+                if phase.startswith("retry_pause_"):
+                    secs = phase.removeprefix("retry_pause_").rstrip("s")
+                    return f"pause {secs}s avant nouvel essai"
                 if phase.startswith("rsync_error:"):
                     msg = phase.split(":", 1)[1][:80]
-                    return f"rsync ERROR: {msg}"
+                    return f"ERREUR rsync : {msg}"
                 if phase == "verifying":
-                    return "verifying hash"
+                    return "vérification hash"
                 if phase == "finalizing":
-                    return "finalizing (symlink + delete src)"
+                    return "finalisation (symlink + suppression source)"
                 return phase
+
+            def _refresh_phase_task(emit_phase: str) -> None:
+                canonical = _canonical_phase(emit_phase)
+                if canonical and canonical != current_canonical["phase"]:
+                    current_canonical["phase"] = canonical
+                    progress.update(
+                        phase_task, description=_render_phase_sequence(canonical)
+                    )
 
             def on_event(item, phase: str) -> None:
                 size_mb = (item.size_bytes or 0) / (1024**2)
@@ -400,6 +464,7 @@ def _execute_with_progress(
                         description=f"\\[file] {short}",
                         visible=True,
                     )
+                _refresh_phase_task(phase)
                 if phase == "committed":
                     counters["committed"] += 1
                     current_phase["label"] = "committed"
@@ -449,7 +514,8 @@ def _execute_with_progress(
                 plan=plan,
                 state_store=store,
                 rsync_runner=rsync_runner,
-                bandwidth_steps_mbps=bandwidth_steps_mbps,
+                max_retries=max_retries,
+                retry_pause_seconds=retry_pause_seconds,
                 raw_finalizer=raw_finalizer,
                 on_event=on_event,
                 on_rsync_progress=on_rsync_progress,

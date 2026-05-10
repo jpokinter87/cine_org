@@ -51,17 +51,16 @@ class FakeRsync:
     """RsyncRunner factice qui suit un script de comportements par appel."""
 
     def __init__(self, behaviors: list[_Behavior]) -> None:
-        self.calls: list[tuple[Path, Path, int]] = []
+        self.calls: list[tuple[Path, Path]] = []
         self._behaviors = list(behaviors)
 
     def run(
         self,
         source: Path,
         destination: Path,
-        bwlimit_mbps: int,
         on_progress=None,
     ) -> RsyncResult:
-        self.calls.append((source, destination, bwlimit_mbps))
+        self.calls.append((source, destination))
         if not self._behaviors:
             raise AssertionError("FakeRsync: appel inattendu")
         b = self._behaviors.pop(0)
@@ -178,15 +177,16 @@ def test_executes_one_item_end_to_end(layout, store):
     # La source originale est intacte (pas de --remove-source-files)
     assert layout["source_file"].exists()
 
-    # Un seul appel rsync sans bwlimit (défaut : 0 = no limit, vitesse max)
+    # Un seul appel rsync (succès au 1er essai)
     assert len(rsync.calls) == 1
-    assert rsync.calls[0][2] == 0
 
 
 # ---- Retry sur erreur réseau --------------------------------------------
 
 
-def test_retries_on_lower_bandwidth_after_rsync_failure(layout, store):
+def test_retries_after_rsync_failure_with_pause(layout, store):
+    """En cas d'échec rsync, retry jusqu'à max_retries avec pause entre.
+    Pause respectée via sleep_fn injectable."""
     item = _migrate_item(layout)
     plan = _plan([item], layout)
     store.init_from_plan(plan)
@@ -198,33 +198,43 @@ def test_retries_on_lower_bandwidth_after_rsync_failure(layout, store):
             _Behavior(success=True, on_success=_copy_file),
         ]
     )
+    sleep_calls: list[float] = []
 
     executor = MigrationTransferExecutor(
-        plan=plan, state_store=store, rsync_runner=rsync
+        plan=plan,
+        state_store=store,
+        rsync_runner=rsync,
+        max_retries=3,
+        retry_pause_seconds=30,
+        sleep_fn=sleep_calls.append,
     )
     outcome = executor.execute_one(item)
 
     assert outcome.status == TransferStatus.COMMITTED
-    # Tentatives sur les 3 premiers paliers du défaut (no-limit, 50, 25 MB/s).
-    assert [c[2] for c in rsync.calls] == [0, 50, 25]
+    assert len(rsync.calls) == 3
+    # 2 pauses entre les 3 essais (pas après le succès final).
+    assert sleep_calls == [30, 30]
 
 
-def test_marks_failed_copy_when_all_bandwidth_steps_fail(layout, store):
+def test_marks_failed_copy_when_all_retries_fail(layout, store):
     item = _migrate_item(layout)
     plan = _plan([item], layout)
     store.init_from_plan(plan)
 
-    # Tous les paliers échouent (5 par défaut : 25, 20, 15, 10, 5)
-    rsync = FakeRsync([_Behavior(success=False, error="fail")] * 5)
+    rsync = FakeRsync([_Behavior(success=False, error="fail")] * 3)
 
     executor = MigrationTransferExecutor(
-        plan=plan, state_store=store, rsync_runner=rsync
+        plan=plan,
+        state_store=store,
+        rsync_runner=rsync,
+        max_retries=3,
+        retry_pause_seconds=0,  # tests rapides
     )
     outcome = executor.execute_one(item)
 
     assert outcome.status == TransferStatus.FAILED_COPY
     assert "fail" in (outcome.error_message or "")
-    assert len(rsync.calls) == 5
+    assert len(rsync.calls) == 3
     assert store.get_status(item.item_id) == TransferStatus.FAILED_COPY
 
     # La source est intacte, pas de symlink swap
