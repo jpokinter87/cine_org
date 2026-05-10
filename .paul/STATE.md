@@ -12,8 +12,8 @@ See: .paul/PROJECT.md (updated 2026-04-04)
 Milestone: v2.1 Lecteurs Externes & Intégrations
 Phase: 43 of 4 (Correctifs Bibliothèque) — ✅ Complete
 Plan: 43-01 ✓ livré & commité (952f95c), 43-02 ✓ livré (à commiter)
-Status: Phase 43 complète — à commiter puis démarrer phase 41 (Jellyfin) pour clôturer v2.1
-Last activity: 2026-04-14 — UNIFY 43-02 : bouton ✕ + debounce + hx-preserve livrés, intermittent fix confirmé par utilisateur
+Status: Phase 43 complète — mode symlinks mergé (PR #1 squash 8e7ec1c) + mode raw livré + apply prod terminé sur /media/wd10-1 (12/12 MIGRATE OK). À démarrer phase 41 (Jellyfin) pour clôturer v2.1. Reste à traiter sur wd10-1 : 117 NEEDS_VALIDATION, 17 unrated, 11 already_in_library, 6 low_rated.
+Last activity: 2026-05-10 (soir) — Apply MIGRATE bouclé (12/12 commits OK : Marius, Kaili, Nobody's Fool, Les Valseuses, Her, Zillion, Jeux d'enfants, Iron Lady, YAO, Juliet Naked, Paul à Quebec, Bande de Charlie). Incident La Flor (4 parties écrasées par collision tmdb_id) → 2 garde-fous TDD + refonte rsync (retries simples + retrait `-a`) + UX apply en français. 27 commits sur feat/migrate-nas-raw-mode (dont 2 nouveaux 8610943 + e4dc1e1 ce soir). 1387 tests verts (165 migration).
 
 Progress:
 - v2.1: [████████░░] 75% (3/4 phases complètes — Phases 40, 42, 43 ✓)
@@ -119,6 +119,26 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Route accept fabrique un SearchResult fallback quand la série cible est absente de pending.candidates
 - Rendu anomalies en JS pur dans _progress.html (payload SSE complete étendu avec anomaly_groups)
 - StaticPool + check_same_thread=False pour tests TestClient FastAPI partageant une DB SQLite in-memory
+- Notes séries TV : pont TVDB → TMDB (vote_average + vote_count) → cache IMDb (imdb_rating + imdb_votes). TVDB n'expose pas de note exploitable.
+- pick_best_tv_match strict avec année : refus explicite si year fournie sans candidat année-aligné, empêche les associations catastrophiques (Shameless UK vs US, Flashback 2011 vs 2025)
+- Garde-fou anti-homonymes via comptes d'épisodes par saison : SeriesEnricherService écarte les candidats TMDB dont les saisons n'ont pas assez d'épisodes pour couvrir la DB (TMDBClient.get_tv_seasons_episode_counts)
+- enrich-series lit aussi le cache IMDb local : évite un imdb sync séparé pour les séries
+- imdb sync --target movies|series|all : commande unifiée, helper _sync_imdb_for_model factorisé
+- Migration NAS — item_id = xxh3_64(symlink_path) : empreinte stable pour reprise par state store
+- Migration NAS — state_store sqlite3 stdlib (pas SQLModel) : journal opérationnel local au package, supprimable post-migration
+- Migration NAS — threshold inclusif (value >= threshold → MIGRATE)
+- Migration NAS — RsyncRunner Protocol injectable, default subprocess (rsync -a --partial --inplace --bwlimit=NM)
+- Migration NAS — swap symlink atomique via os.symlink(tmp) + os.replace(tmp, symlink) (atomique sur même fs)
+- Migration NAS — reprise auto : si destination existe avec hash xxh3_64 match, finalize sans rsync (couvre crashes mid-flight)
+- Migration NAS — helpers build_plan/run_apply/run_status séparés des commandes Typer pour testabilité (FakeRsync + session in-memory)
+- Migration NAS — sentinel _UNSET dans tests pour distinguer "non fourni" vs explicitement None
+- Migration NAS — pas de --remove-source-files dans rsync : source intacte, swap symlink seul réordonnance ; suppression effective hors périmètre executor
+- Migration NAS — garde-fou anti-écrasement raw_finalizer : si Movie.file_path en DB pointe vers un fichier existant, lever FileExistsError → FAILED_OTHER (filet runtime contre multi-parts ou doublons non détectés en amont)
+- Migration NAS — détection collision tmdb intra-plan : N items raw-film MIGRATE avec même tmdb_id → bascule en NEEDS_VALIDATION + tag `collision_tmdb:{id}`. Évite l'écrasement multi-parts dès le plan time
+- Migration NAS — rsync sans `-a` (juste `--partial --inplace --info=progress2 --timeout=300`) : la préservation owner/group/perms sur NFS échoue (rc=23 même contenu OK), pas pertinent pour notre cas (NAS gère ses propres perms)
+- Migration NAS — stratégie retry simplifiée : 3 essais identiques avec pause 30s entre (au lieu de cascade dégressive 0→50→25→10→5 MB/s). Les échecs observés sont transitoires (timeout NFS, fsync long), pas des saturations de débit
+- Migration NAS — wrapper progress UI : utilise `dest.stat().st_size` (taille réelle persistée via --inplace) au lieu du compteur volatile de `--info=progress2` qui repart à 0 à chaque retry
+- Migration NAS — UX apply en français : 5 phases canoniques (préparation → copie → vérification → finalisation → commit), phase courante en rouge gras dans une ligne dédiée Rich
 
 ### Deferred Issues
 - README.md à réécrire de fond en comble : nouvelles commandes, structure répertoires attendue, architecture, configuration
@@ -141,31 +161,87 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Vérifier si le bug subdivision a causé des dégâts dans des sessions antérieures (pré-existait depuis phase 35)
 - Réassociation TMDB : les données techniques (résolution, codecs, langue) ne sont pas re-peuplées après correction — cartouches qualité absents sur jaquette et fiche détaillée. Le code ne touche pas ces champs mais ils n'étaient probablement jamais remplis pour les films importés. Enrichir depuis VideoFileModel ou mediainfo lors de la réassociation.
 - "En cours de lecture" (reprise de position) : faisable pour mpv local/remote via IPC socket, partiellement faisable pour DuneHD via polling `command=status` (fragile). Candidat Phase 42 post-Jellyfin. Analyse faisabilité produite en fin de session 2026-04-14 (chat uniquement, pas de doc créé).
+- ~15 séries non trouvées sur TMDB par enrich-series (homonymes ambigus : Yellowstone, Monster, Sirens, Poldark, Prey, Fiasco, Platonic…) — à matcher manuellement via la fiche web si on veut leurs notes
+- Garde-fou anti-homonymes pas encore appliqué côté matching initial du workflow (matching_step.py). Cas plus rare car validation manuelle filtre déjà, mais à envisager si récurrent.
+- Service systemd : sudo demande mot de passe lors de deploy.sh — configurer NOPASSWD pour `systemctl restart cineorg` afin que le déploiement aille au bout sans intervention
+- Vérifier sur disque s'il reste un dossier `Flashback` sans année dans video/ et storage/ après les consolidations (devrait avoir été nettoyé par le script)
+- Migration NAS — commande `cleanup-buckets` à créer pour traiter les buckets non-MIGRATE post-apply : (a) `already_in_library` → `rm` source après confirmation, (b) `needs_validation` → `mv` vers downloads + suggestion `process`, (c) `low_rated`/`unrated` → triage interactif. Évite de tout faire à la main fichier par fichier.
+- Migration NAS — mount NFS `/media/NAS64` est en mode `sync` : chaque write attend confirmation NAS, ralentit les transferts. Envisager remount `async` côté hôte pour les futures migrations massives.
+- Migration NAS — perte définitive : La Flor partie 3 source + version mono-fichier originale (id 5818) écrasées par partie 1 avant garde-fou. 3/4 du film récupérables via parties 1, 2, 4 (parties 2+4 transférées manuellement par user vers /media/NAS64/temp). Ne pas chercher à les remettre en bibliothèque (incomplet sans partie 3).
+- 117 NEEDS_VALIDATION + 17 unrated + 11 already_in_library + 6 low_rated restants sur /media/wd10-1 après apply. À traiter via futur cleanup-buckets ou manuellement.
 
 ### Blockers/Concerns
 None.
 
 ### Git State
-Last commit: 63ee104 (feat(phase-42-01): socle DB overrides hors canon — SeasonOverrideModel + is_extra) — NOT pushed
-À commiter : Tasks 2 + 3 du plan 42-01 (AnomalyDetector, filtres override, UI anomalies, fallback route accept) + tests + scripts + SUMMARY
-Previous: c42258c (feat(ui): bulles d'aide contextuelle sur config et maintenance) — pushed
-Branch: master
-Feature branches merged: none
+Branche courante : feat/migrate-nas-raw-mode (27 commits en avance sur master, dont 2 nouveaux de cette session non encore poussés)
+Last commit: e4dc1e1 refactor(migration): rsync simplifié + UX apply en français
+Stack récente (mode raw + UX apply, du plus récent au plus ancien) :
+  - e4dc1e1 refactor(migration): rsync simplifié + UX apply en français [non pushé]
+  - 8610943 fix(migration): garde-fous anti-écrasement (raw_finalizer + collision tmdb) [non pushé]
+  - c8c14af feat(migration): flag --fast
+  - e6bdbdd feat(migration): sous-barre Rich par fichier
+  - c256bbc fix(migration): parser progress2 locale fr
+  - f67f1c8 fix(migration): défaut hardcodé bwlimit shadow
+  - 57dc98b fix(migration): rsync stderr→stdout
+  - fe32f48 fix(migration): --outbuf=L (retiré ensuite côté logique)
+  - c5656b4 fix(migration): retire bwlimit défaut
+  - 6079991 fix(migration): events hashing
+  - aac51ad fix(migration): rsync streaming + escape balises
+  - 1d3f2c6 feat(migration): barre Rich apply
+  - e18cfcf Revert "fix routage path"
+  - 01922d7 feat(migration): légende buckets
+  - 97a4f54 fix(migration): routage path (revert)
+  - 2457e73 fix(series-repo): get_by_tmdb_id
+  - 6838e56 feat(migration): fallback titre tronqué
+  - 903bfbe feat(migration): bucket ALREADY_IN_LIBRARY
+  - ecb1011 feat(migration): tie-break année
+  - 872d84c feat(migration): filtrage catégories scanner
+  - 0807658 feat(migration): barre Rich plan
+  - 1ecb307 feat(migration): mode raw — CLI + wiring + README (étape 5/5)
+  - 6c48c4f wip(migration): finalize complet (étape 4b3)
+  - 5659f66 wip(migration): finalize séries (étape 4b2)
+  - 6231d99 wip(migration): finalize films (étape 4b1)
+  - 62ebd6a wip(migration): transfer_executor + Protocol (étape 4a)
+  - 3718b36 wip(migration): plan_builder mode raw (étape 3)
+  - ca53203 wip(migration): MigrationMatcher (étape 2)
+  - 17d23ae wip(migration): dataclasses (étape 1)
+Stack master :
+  - 8e7ec1c refonte(migration): package migration NAS + commande migrate-nas (PR #1 squash, 2026-05-10)
+  - 93e2839 garde-fou anti-homonymes
+  - 8ced32b scripts consolidation Flashback + Shameless
+  - b540279 fix pick_best_tv_match strict
+  - 40e32e9 feat notes séries TV
+PR mergée : #1 (mode symlinks pur) via squash le 2026-05-10
+Feature branches active : feat/migrate-nas-raw-mode (à merger une fois apply prod validé)
+Service systemd : tourne encore sur les commits d'avant le déploiement 2026-05-08 (restart cineorg en attente, sudo password requis)
 
 ## Session Continuity
 
-Last session: 2026-04-14 (phases 42 + 43 livrées et commitées — pause en fin de soirée)
-Stopped at: Phase 43 complète et commitée (commit a06d052). Tous les plans 42-01/02 et 43-01/02 sont clos et commités. Branche master 5 commits en avance sur origin/master, non poussée.
-Next action: Au prochain resume → `/paul:plan` pour phase 41 Intégration Jellyfin (volumes Docker) et clôturer la milestone v2.1
-Resume file: .paul/HANDOFF-2026-04-14-phase43.md
+Last session: 2026-05-10 (soir — apply MIGRATE bouclé + 2 patches refonte rsync + UX phases)
+Stopped at: 12/12 MIGRATE de /media/wd10-1 transférés OK (Marius, Kaili, Nobody's Fool, Les Valseuses, Her, Zillion, Jeux d'enfants, Iron Lady, YAO, Juliet Naked, Paul à Quebec, Bande de Charlie). 4 Flor parties exclues (perte partielle suite incident écrasement). Fixes livrés et committés (8610943 + e4dc1e1) mais pas encore poussés sur origin.
+Next action:
+  1. Push des 2 nouveaux commits sur origin/feat/migrate-nas-raw-mode
+  2. Traiter les autres buckets sur /media/wd10-1 :
+     - already_in_library.csv (11 items, ~28 GB) → supprimer sources
+     - needs_validation.csv (117 items) → mv vers downloads + cineorg process
+     - low_rated.csv (6 items) + unrated.csv (17 items) → triage manuel
+  3. Optionnel : créer commande `cineorg migrate-nas cleanup-buckets` pour automatiser
+  4. Une fois /media/wd10-1 vide → ouvrir PR feat/migrate-nas-raw-mode vers master
+  5. PR mergée → `/paul:plan` pour phase 41 Jellyfin (clôt v2.1)
+Resume file: .paul/HANDOFF-2026-05-10-soir.md
 Resume context:
-- Session monumentale : 2 phases livrées end-to-end (42 Overrides Manuels + 43 Correctifs Bibliothèque)
-- 4 plans clos : 42-01, 42-02, 43-01, 43-02 — chacun avec PLAN + SUMMARY + commit dédié
-- 1204/1204 tests globaux verts, zéro régression
-- Handoff détaillé dans .paul/HANDOFF-2026-04-14-phase43.md
-- Milestone v2.1 : 3/4 phases ✅ — reste uniquement phase 41 Jellyfin pour clôture
-- Deferred : décalage visuel hover ✕ (cosmétique, non-bloquant)
-Git strategy: master (commits directs, pas de feature branches)
+- Apply MIGRATE 12/12 OK après 4 itérations (la 1ère a écrasé La Flor, la 2e a fail-cosmetic 8/10 sur perms NFS, la 3e+4e ont fini propre)
+- Fixes livrés ce soir :
+  - Garde-fou raw_finalizer : refuse si Movie.file_path pointe sur fichier existant (filet runtime)
+  - Détection collision tmdb intra-plan : N items même tmdb_id → NEEDS_VALIDATION (filet plan time)
+  - Refonte rsync : retire `-a` (cause rc=23 NFS), 3 retries identiques avec pause 30s (au lieu de cascade dégressive)
+  - Wrapper progress : taille réelle dest via stat (plus de reset visuel sur retry)
+  - UX apply : phases en français + ligne dédiée avec phase courante en rouge gras
+- 165 tests migration (vs 161), 1387 globaux, zéro régression
+- 4 items Flor en failed_other dans state store (exclus). Movie id 5818 supprimé en DB. Fichier physique partie 1 (renommé La Flor (2019).mkv) supprimé du NAS.
+- Plan.json patché : 4 Flor parties basculées en bucket needs_validation (+tag collision_tmdb:423778)
+Git strategy: feat/migrate-nas-raw-mode — push les 2 nouveaux commits puis ouvrir PR vers master une fois /media/wd10-1 traité intégralement
 
 ---
 *STATE.md — Updated after every significant action*
