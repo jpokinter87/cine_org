@@ -106,10 +106,14 @@ class RawItemFinalizer(Protocol):
 
 # rsync --info=progress2 produit des lignes type :
 #   "      87,121,920  10%   42.05MB/s    0:00:11  (xfr#1, to-chk=0/1)"
-# Ces lignes sont séparées par \r (carriage return) pour overwrite la même
-# ligne au terminal.
+# Locale-dependent : selon la locale système, les milliers peuvent être
+# séparés par "," (en_US, C) ou "." (fr_FR, de_DE…). Idem pour la
+# virgule/point décimal de la vitesse. On accepte les deux dans la
+# capture du nombre d'octets, et on nettoie les séparateurs avant int().
+# Ces lignes sont séparées par \r (carriage return) pour overwrite la
+# même ligne au terminal.
 _PROGRESS2_LINE = re.compile(
-    r"^\s*([\d,]+)\s+(\d+)%\s+(\S+)"
+    r"^\s*([\d.,]+)\s+(\d+)%\s+(\S+)"
 )
 
 
@@ -187,8 +191,11 @@ def _parse_and_emit_progress(line: str, on_progress: RsyncProgress) -> None:
     match = _PROGRESS2_LINE.match(line)
     if match is None:
         return
+    # Nettoie les séparateurs de milliers : "," (locale en_US/C) ou "."
+    # (locale fr_FR/de_DE/…). int() ne tolère ni l'un ni l'autre.
+    raw = match.group(1).replace(",", "").replace(".", "").replace(" ", "")
     try:
-        bytes_done = int(match.group(1).replace(",", ""))
+        bytes_done = int(raw)
         percent = int(match.group(2))
     except ValueError:
         return
