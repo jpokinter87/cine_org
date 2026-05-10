@@ -44,7 +44,12 @@ from src.services.migration.dataclasses import (
 from src.services.migration.state_store import MigrationStateStore
 
 
-_DEFAULT_BANDWIDTH_STEPS_MBPS: tuple[int, ...] = (25, 20, 15, 10, 5)
+# 0 = pas de limite (vitesse max disque/réseau). Si rsync échoue (timeout
+# réseau, peer reset…), on retombe sur des paliers dégressifs pour
+# accommoder un lien saturé. Pour un transfert local rapide (cas usuel
+# de la migration depuis un disque externe), le 1er essai sans bwlimit
+# fait le job en quelques secondes au lieu de quelques minutes.
+_DEFAULT_BANDWIDTH_STEPS_MBPS: tuple[int, ...] = (0, 50, 25, 10, 5)
 
 
 @dataclass
@@ -124,17 +129,17 @@ class _SubprocessRsyncRunner:
         on_progress: Optional[RsyncProgress] = None,
     ) -> RsyncResult:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        cmd = [
-            "rsync",
-            "-a",
-            "--partial",
-            "--inplace",
-            f"--bwlimit={bwlimit_mbps}M",
-            "--info=progress2",
-            "--no-inc-recursive",  # progress2 plus précis sur fichier unique
-            str(source),
-            str(destination),
-        ]
+        cmd = ["rsync", "-a", "--partial", "--inplace"]
+        if bwlimit_mbps > 0:
+            cmd.append(f"--bwlimit={bwlimit_mbps}M")
+        cmd.extend(
+            [
+                "--info=progress2",
+                "--no-inc-recursive",  # progress2 plus précis sur fichier unique
+                str(source),
+                str(destination),
+            ]
+        )
         try:
             process = subprocess.Popen(
                 cmd,

@@ -364,6 +364,8 @@ def _execute_with_progress(
                     return "checking existing"
                 if phase.startswith("copying_"):
                     bw = phase.split("_", 1)[1]
+                    if bw == "0mbps":
+                        return "rsync (no bwlimit)"
                     return f"rsync @ {bw}"
                 if phase == "verifying":
                     return "verifying hash"

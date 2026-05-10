@@ -178,9 +178,9 @@ def test_executes_one_item_end_to_end(layout, store):
     # La source originale est intacte (pas de --remove-source-files)
     assert layout["source_file"].exists()
 
-    # Un seul appel rsync à la vitesse max (25 MB/s par défaut)
+    # Un seul appel rsync sans bwlimit (défaut : 0 = no limit, vitesse max)
     assert len(rsync.calls) == 1
-    assert rsync.calls[0][2] == 25
+    assert rsync.calls[0][2] == 0
 
 
 # ---- Retry sur erreur réseau --------------------------------------------
@@ -205,8 +205,8 @@ def test_retries_on_lower_bandwidth_after_rsync_failure(layout, store):
     outcome = executor.execute_one(item)
 
     assert outcome.status == TransferStatus.COMMITTED
-    # Tentatives à 25, 20, 15 MB/s
-    assert [c[2] for c in rsync.calls] == [25, 20, 15]
+    # Tentatives sur les 3 premiers paliers du défaut (no-limit, 50, 25 MB/s).
+    assert [c[2] for c in rsync.calls] == [0, 50, 25]
 
 
 def test_marks_failed_copy_when_all_bandwidth_steps_fail(layout, store):
