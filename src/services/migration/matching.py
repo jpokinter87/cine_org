@@ -203,42 +203,15 @@ class MigrationMatcher:
     def _guess_media_type(
         candidate: MigrationCandidate, parsed: ParsedFilename
     ) -> MediaType:
-        """Deduit le type media depuis le path source (priorite) ou parsed.
-
-        Le path utilisateur est plus fiable que guessit pour les cas piège :
-        - Mini-serie doc rangee dans Series/ mais avec un filename type film
-          (ex: Rivalite de genies 02 Edison Tesla 2015.mp4).
-        - Episodes avec titre court rangee dans Series/<NomSerie>/.
-
-        On regarde TOUS les segments du chemin relatif (media_root + parts
-        de relative_category), pas seulement le 1er, pour gerer les
-        arborescences imbriquees du type Videotheque10/Series/<...>.
-        """
-        # 1. Path autoritatif : un segment Series/Animations/Films decide.
-        for segment in _path_segments(candidate):
-            normalized = segment.lower()
-            if (
-                normalized.startswith("seri")
-                or normalized.startswith("séri")
-                or normalized.startswith("anim")
-            ):
-                return MediaType.SERIES
-            if normalized.startswith("film"):
-                return MediaType.MOVIE
-        # 2. Fallback : verdict guessit, sinon film par defaut.
+        """Deduit le type media depuis parsed ou le segment racine source."""
         if parsed.media_type != MediaType.UNKNOWN:
             return parsed.media_type
+        media_root = (candidate.media_root or "").lower()
+        if media_root.startswith("seri") or media_root.startswith("séri"):
+            return MediaType.SERIES
+        if media_root.startswith("anim"):
+            return MediaType.SERIES
         return MediaType.MOVIE
-
-
-def _path_segments(candidate: MigrationCandidate) -> list[str]:
-    """Retourne tous les segments du chemin relatif (root + categorie)."""
-    segments: list[str] = []
-    if candidate.media_root:
-        segments.append(candidate.media_root)
-    if candidate.relative_category:
-        segments.extend(s for s in candidate.relative_category.split("/") if s)
-    return segments
 
 
 class DefaultDetailsFetcher:
