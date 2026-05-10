@@ -135,6 +135,7 @@ class MigrationTransferExecutor:
         bandwidth_steps_mbps: tuple[int, ...] = _DEFAULT_BANDWIDTH_STEPS_MBPS,
         hash_fn: Callable[[Path], str] = compute_file_hash,
         raw_finalizer: Optional[RawItemFinalizer] = None,
+        on_event: Optional[Callable[[MigrationItem, str], None]] = None,
     ) -> None:
         self._plan = plan
         self._store = state_store
@@ -142,6 +143,15 @@ class MigrationTransferExecutor:
         self._bandwidth_steps = tuple(bandwidth_steps_mbps)
         self._hash_fn = hash_fn
         self._raw_finalizer = raw_finalizer
+        self._on_event = on_event
+
+    def _emit(self, item: MigrationItem, phase: str) -> None:
+        """Notifie un changement de phase (utile pour la barre de progression CLI)."""
+        if self._on_event is not None:
+            try:
+                self._on_event(item, phase)
+            except Exception:  # noqa: BLE001 — UI ne doit jamais casser le transfert
+                pass
 
     def execute_all(self) -> list[TransferOutcome]:
         """Itère sur les items pending (non COMMITTED) du plan et les transfère."""
@@ -162,6 +172,8 @@ class MigrationTransferExecutor:
             assert outcome is not None
             return outcome
 
+        self._emit(item, "start")
+
         if item.source_path is None:
             self._store.update_status(
                 item.item_id,
@@ -175,6 +187,7 @@ class MigrationTransferExecutor:
         destination = item.destination_path
         if destination is None:
             if not item.is_symlink_source and self._raw_finalizer is not None:
+                self._emit(item, "preparing")
                 try:
                     destination = self._raw_finalizer.prepare(item)
                 except Exception as exc:  # noqa: BLE001 — le finalizer remonte
@@ -210,6 +223,7 @@ class MigrationTransferExecutor:
 
         # Reprise : destination déjà présente avec le bon hash → finalize direct.
         if destination.exists():
+            self._emit(item, "checking_existing")
             try:
                 existing_hash = self._hash_fn(destination)
             except OSError:
@@ -222,6 +236,7 @@ class MigrationTransferExecutor:
         copied = False
         for bwlimit in self._bandwidth_steps:
             self._store.update_status(item.item_id, TransferStatus.COPYING)
+            self._emit(item, f"copying_{bwlimit}mbps")
             destination.parent.mkdir(parents=True, exist_ok=True)
             result = self._rsync.run(source, destination, bwlimit)
             if result.success:
@@ -244,6 +259,7 @@ class MigrationTransferExecutor:
             TransferStatus.COPIED,
             bytes_transferred=bytes_transferred,
         )
+        self._emit(item, "verifying")
 
         try:
             dest_hash = self._hash_fn(destination)
@@ -287,6 +303,7 @@ class MigrationTransferExecutor:
             destination_hash=dest_hash,
             bytes_transferred=self._safe_size(destination),
         )
+        self._emit(item, "finalizing")
 
         try:
             if item.is_symlink_source:
@@ -306,6 +323,7 @@ class MigrationTransferExecutor:
             return self._outcome_or_synthetic(item.item_id, TransferStatus.FAILED_OTHER)
 
         self._store.update_status(item.item_id, TransferStatus.COMMITTED)
+        self._emit(item, "committed")
         outcome = self._store.get_outcome(item.item_id)
         assert outcome is not None
         return outcome

@@ -253,6 +253,7 @@ def run_apply(
     rsync_runner: Optional[RsyncRunner] = None,
     bandwidth_steps_mbps: tuple[int, ...] = (25, 20, 15, 10, 5),
     session: Optional[Session] = None,
+    show_progress: bool = False,
 ) -> list[TransferOutcome]:
     """
     Charge le plan, initialise le state store et exécute les transferts
@@ -263,6 +264,10 @@ def run_apply(
     container (TMDB/TVDB clients, repos Movie/Series/Episode, organizer,
     renamer). Sans items raw : pas de wiring supplémentaire (mode
     symlinks pur, comportement legacy strict).
+
+    Si `show_progress=True`, affiche une barre Rich avec le compteur
+    d'items, le nom du fichier en cours et la phase en cours
+    (preparing / copying / verifying / finalizing / committed).
     """
     plan = deserialize_plan(plan_path.read_text(encoding="utf-8"))
     store = MigrationStateStore(state_store_path)
@@ -274,6 +279,14 @@ def run_apply(
         raw_finalizer = _build_raw_finalizer(plan, session=session)
     try:
         store.init_from_plan(plan)
+        if show_progress:
+            return _execute_with_progress(
+                plan=plan,
+                store=store,
+                rsync_runner=rsync_runner,
+                bandwidth_steps_mbps=bandwidth_steps_mbps,
+                raw_finalizer=raw_finalizer,
+            )
         executor = MigrationTransferExecutor(
             plan=plan,
             state_store=store,
@@ -284,6 +297,102 @@ def run_apply(
         return executor.execute_all()
     finally:
         store.close()
+
+
+def _execute_with_progress(
+    *,
+    plan: MigrationPlan,
+    store: MigrationStateStore,
+    rsync_runner: Optional[RsyncRunner],
+    bandwidth_steps_mbps: tuple[int, ...],
+    raw_finalizer,
+) -> list[TransferOutcome]:
+    """Exécute les transferts avec barre de progression Rich."""
+    from loguru import logger as loguru_logger
+
+    pending_ids = set(store.pending_items())
+    pending_items = [
+        i
+        for i in plan.items
+        if i.bucket == Bucket.MIGRATE and i.item_id in pending_ids
+    ]
+    total = len(pending_items)
+    total_size_gb = sum(i.size_bytes or 0 for i in pending_items) / (1024**3)
+    if total == 0:
+        console.print("[yellow]Aucun item à transférer (tous déjà committed).[/yellow]")
+        return []
+
+    console.print(
+        f"[cyan]{total} item(s) pending — volume estimé : "
+        f"[bold]{total_size_gb:.1f} GB[/bold][/cyan]"
+    )
+    console.print(
+        "[dim]Phases : preparing → copying → verifying → finalizing → committed[/dim]\n"
+    )
+
+    counters = {"committed": 0, "failed": 0}
+
+    loguru_logger.disable("src")
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold]{task.description}"),
+            BarColumn(bar_width=30),
+            MofNCompleteColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            TextColumn("•"),
+            TimeRemainingColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Démarrage…", total=total)
+
+            def on_event(item, phase: str) -> None:
+                size_mb = (item.size_bytes or 0) / (1024**2)
+                short = item.symlink_path.name[:55]
+                if phase == "committed":
+                    counters["committed"] += 1
+                    progress.update(
+                        task,
+                        advance=1,
+                        description=(
+                            f"[green]✓[/green] {short} "
+                            f"({counters['committed']}/{total})"
+                        ),
+                    )
+                elif phase.startswith("failed"):
+                    counters["failed"] += 1
+                    progress.update(
+                        task,
+                        advance=1,
+                        description=f"[red]✗[/red] {short}",
+                    )
+                else:
+                    progress.update(
+                        task,
+                        description=f"[{phase}] {short} ({size_mb:.0f} MB)",
+                    )
+
+            executor = MigrationTransferExecutor(
+                plan=plan,
+                state_store=store,
+                rsync_runner=rsync_runner,
+                bandwidth_steps_mbps=bandwidth_steps_mbps,
+                raw_finalizer=raw_finalizer,
+                on_event=on_event,
+            )
+            outcomes = executor.execute_all()
+            # Capture les FAILED qui n'ont pas émis "failed_*" (status update direct).
+            for o in outcomes:
+                if o.status in (
+                    TransferStatus.FAILED_COPY,
+                    TransferStatus.FAILED_VERIFY,
+                    TransferStatus.FAILED_OTHER,
+                ) and counters["failed"] == 0:
+                    counters["failed"] += 1
+            return outcomes
+    finally:
+        loguru_logger.enable("src")
 
 
 def _build_raw_finalizer(
@@ -469,7 +578,11 @@ def apply_command(
         f"[bold cyan]Exécution[/bold cyan] depuis [yellow]{plan_path}[/yellow] "
         f"(state: [dim]{state_path}[/dim])"
     )
-    outcomes = run_apply(plan_path=plan_path, state_store_path=state_path)
+    outcomes = run_apply(
+        plan_path=plan_path,
+        state_store_path=state_path,
+        show_progress=True,
+    )
 
     committed = sum(1 for o in outcomes if o.status == TransferStatus.COMMITTED)
     failed = sum(
