@@ -911,11 +911,12 @@ uv run cineorg migrate-nas status ./migration/plan.json
 | `MIGRATE` | Note ≥ seuil et destination calculable — sera transféré. |
 | `LOW_RATED` | Note < seuil — ignoré (à revoir manuellement). |
 | `UNRATED` | Œuvre absente de la base ou aucune note — ignoré. |
+| `NEEDS_VALIDATION` | Mode raw uniquement : match TMDB/TVDB ambigu — à retraiter via `process`. |
 | `BROKEN` | Symlink brisé même après recherche dans `--alt-root`. |
 | `ALREADY_ON_DESTINATION` | Cible déjà sur le nouveau NAS — rien à faire. |
-| `NOT_SYMLINK` | Fichier physique trouvé dans la source — signalé. |
+| `NOT_SYMLINK` | Mode symlinks uniquement : fichier physique signalé (utilisez `--include-raw` pour le traiter). |
 
-Le plan est écrit en JSON (versionné, désérialisable) et accompagné de trois CSV de revue (`low_rated.csv` / `unrated.csv` / `broken.csv`) listant `symlink_path`, note, source de la note, et titre matché.
+Le plan est écrit en JSON (versionné, désérialisable) et accompagné de CSV de revue (`low_rated.csv` / `unrated.csv` / `broken.csv` / `needs_validation.csv` en mode raw) listant `symlink_path`, note, source, et top candidats TMDB/TVDB sérialisés JSON pour les ambigus.
 
 **Phase apply** : pour chaque item `MIGRATE` non encore `COMMITTED` dans le state store, lance `rsync -a --partial --inplace --bwlimit=NM` avec retry sur paliers de bande passante (par défaut **25 → 20 → 15 → 10 → 5 MB/s**). Vérifie ensuite le hash xxh3_64 source/destination ; en cas de mismatch, la destination est supprimée et la source reste intacte. Si OK, le symlink est swappé via `os.symlink` + `os.replace` (atomique sur même filesystem) et l'item est marqué `COMMITTED`.
 
@@ -928,9 +929,44 @@ Le state store est un journal SQLite local (par défaut `<plan>.json.state.sqlit
 - `--csv-dir PATH` : répertoire des CSV de revue (omis = pas de CSV).
 - `--alt-root PATH` (multi) : racines alternatives où retrouver les cibles brisées (utile quand un fichier physique a été déplacé sur un autre disque).
 - `--threshold FLOAT` : note minimale (échelle 0-10), défaut `6.0`.
+- `--include-raw / --no-include-raw` : active le mode raw (voir ci-dessous), défaut `--no-include-raw`.
 - `--state-store PATH` (apply / status) : journal SQLite custom.
 
-**Sécurité** : `apply` n'efface jamais la source. Le réordonnancement se fait uniquement par swap des symlinks. La suppression effective de la source relève d'une étape ultérieure (post-validation), hors du périmètre de cette commande.
+#### Mode raw (`--include-raw`)
+
+Pour les vieux NAS **sans couche symlinks** (fichiers vidéo physiques à plat sous `Films/`, `Séries/`, `Animations/`), le mode symlinks pur classe tout en `NOT_SYMLINK` (terminal). Le mode raw active une chaîne d'identification automatique :
+
+1. **Scanner** : détecte les fichiers physiques (`is_symlink=False`).
+2. **Matcher** : interroge TMDB (films) ou TMDB+TVDB (séries) avec scoring 85 % (parité workflow standard). Score < 85 % ou candidats trop serrés (gap < 5 points) → `NEEDS_VALIDATION`.
+3. **Fetcher** : récupère `vote_average` depuis l'API pour le match retenu → bucket selon seuil.
+4. **Plan canonique** : pour les `MIGRATE`, le `destination_path` reste `null` dans le plan (calculé à l'apply via `OrganizerService` + `RenamerService` après insertion DB).
+
+À l'**apply** en mode raw, pour chaque item :
+
+1. Insertion/upsert `Movie` ou `Series` en DB (lookup par `tmdb_id`/`tvdb_id` puis fetch + `save` si absent).
+2. Pour les séries : `Episode` synthétique inséré (saison/épisode parsés depuis le filename) — titre déféré à `enrich-episode-titles`.
+3. Calcul destination canonique via `OrganizerService.get_movie_destination` (films) ou `get_series_destination` (séries).
+4. `rsync` + verify hash xxh3_64 (parité mode symlinks).
+5. **Création du symlink** dans `video/` canonique (au lieu de swap d'un symlink existant).
+6. **Suppression du fichier source** physique (différence majeure avec le mode symlinks). La source est supprimée uniquement après que le hash destination ait été vérifié — irrécupérable, mais sans risque de perte.
+
+Les items `NEEDS_VALIDATION` sont écrits dans `needs_validation.csv` avec leurs top candidats TMDB/TVDB sérialisés JSON. Pour les retraiter : lancer le workflow `process` standard sur ces fichiers (validation interactive).
+
+**Différences mode raw vs mode symlinks** :
+
+| Aspect | Mode symlinks | Mode raw |
+|---|---|---|
+| Source typique | NAS au format CineOrg (video → storage) | Vieux NAS pré-CineOrg (fichiers à plat) |
+| Identification œuvre | DB CineOrg (œuvre déjà importée) | TMDB/TVDB API (matching) |
+| Insert DB pendant apply | Non (œuvre déjà en DB) | Oui (Movie/Series + Episode si série) |
+| Source après transfert | Intacte | Supprimée après verify hash |
+| Swap symlink | Oui (sur le NAS source) | Non (création symlink dans nouveau video/) |
+| Items ambigus | N/A | `NEEDS_VALIDATION` → CSV pour `process` |
+
+**Sécurité** :
+- En mode symlinks : `apply` n'efface jamais la source.
+- En mode raw : la source est supprimée **uniquement** après verify hash xxh3_64. En cas de mismatch, la destination est supprimée et la source reste intacte — `FAILED_VERIFY` dans le state store.
+- Le state store SQLite est reprenable dans les deux modes : un crash mid-flight ne perd pas de données.
 
 ### Purge des hardlinks
 

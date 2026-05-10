@@ -34,8 +34,13 @@ from src.services.migration.dataclasses import (
     TransferOutcome,
     TransferStatus,
 )
+from src.services.matcher import MatcherService
 from src.services.migration.destination_planner import (
     MigrationDestinationPlanner,
+)
+from src.services.migration.matching import (
+    DefaultDetailsFetcher,
+    MigrationMatcher,
 )
 from src.services.migration.plan_builder import (
     MigrationPlanBuilder,
@@ -44,6 +49,7 @@ from src.services.migration.plan_builder import (
     write_review_csvs,
 )
 from src.services.migration.rating_resolver import MigrationRatingResolver
+from src.services.migration.raw_finalizer import MigrationRawFinalizer
 from src.services.migration.scanner import MigrationScanner
 from src.services.migration.state_store import MigrationStateStore
 from src.services.migration.transfer_executor import (
@@ -75,15 +81,21 @@ def build_plan(
     alternative_roots: Optional[list[Path]] = None,
     imdb_importer: Optional[IMDbDatasetImporter] = None,
     imdb_cache_dir: Path = Path(".cache/imdb"),
+    include_raw: bool = False,
 ) -> MigrationPlan:
     """
     Construit le plan, écrit le JSON dans `output_path` et (si fourni) les
     CSV de revue dans `csv_dir`. Retourne le MigrationPlan en mémoire.
+
+    Si `include_raw=True`, les fichiers physiques bruts (vieux NAS sans
+    couche symlinks) passent par TMDB/TVDB matching → bucket selon note ou
+    NEEDS_VALIDATION. Nécessite des clients API configurés.
     """
     parser = GuessitFilenameParser()
     importer = imdb_importer or IMDbDatasetImporter(
         cache_dir=imdb_cache_dir, session=session
     )
+    container = Container()
 
     scanner = MigrationScanner(
         video_extensions=VIDEO_EXTENSIONS,
@@ -96,17 +108,36 @@ def build_plan(
     planner = MigrationDestinationPlanner(
         session=session,
         parser=parser,
-        organizer=Container().organizer_service(),
-        renamer=Container().renamer_service(),
+        organizer=container.organizer_service(),
+        renamer=container.renamer_service(),
         destination_storage_dir=destination_storage_dir,
         destination_video_dir=destination_video_dir,
         source_root=source_root,
     )
+
+    matcher = None
+    fetcher = None
+    if include_raw:
+        tmdb = container.tmdb_client()
+        tvdb = container.tvdb_client()
+        matcher = MigrationMatcher(
+            parser=parser,
+            tmdb_client=tmdb,
+            tvdb_client=tvdb,
+            matcher_service=MatcherService(),
+        )
+        fetcher = DefaultDetailsFetcher(
+            tmdb_client=tmdb, tvdb_client=tvdb
+        )
+
     builder = MigrationPlanBuilder(
         scanner=scanner,
         rating_resolver=resolver,
         destination_planner=planner,
         threshold=threshold,
+        matcher=matcher,
+        details_fetcher=fetcher,
+        include_raw=include_raw,
     )
 
     plan = builder.build(source_root, destination_storage_dir)
@@ -126,13 +157,26 @@ def run_apply(
     state_store_path: Path,
     rsync_runner: Optional[RsyncRunner] = None,
     bandwidth_steps_mbps: tuple[int, ...] = (25, 20, 15, 10, 5),
+    session: Optional[Session] = None,
 ) -> list[TransferOutcome]:
     """
     Charge le plan, initialise le state store et exécute les transferts
     pending. Retourne la liste des outcomes traités cette session.
+
+    Si le plan contient des items raw (`is_symlink_source=False`), un
+    MigrationRawFinalizer est automatiquement câblé sur les services du
+    container (TMDB/TVDB clients, repos Movie/Series/Episode, organizer,
+    renamer). Sans items raw : pas de wiring supplémentaire (mode
+    symlinks pur, comportement legacy strict).
     """
     plan = deserialize_plan(plan_path.read_text(encoding="utf-8"))
     store = MigrationStateStore(state_store_path)
+    raw_finalizer = None
+    has_raw_items = any(
+        not item.is_symlink_source for item in plan.items
+    )
+    if has_raw_items:
+        raw_finalizer = _build_raw_finalizer(plan, session=session)
     try:
         store.init_from_plan(plan)
         executor = MigrationTransferExecutor(
@@ -140,10 +184,36 @@ def run_apply(
             state_store=store,
             rsync_runner=rsync_runner,
             bandwidth_steps_mbps=bandwidth_steps_mbps,
+            raw_finalizer=raw_finalizer,
         )
         return executor.execute_all()
     finally:
         store.close()
+
+
+def _build_raw_finalizer(
+    plan: MigrationPlan, *, session: Optional[Session] = None
+) -> MigrationRawFinalizer:
+    """Câble un MigrationRawFinalizer depuis le container pour le mode raw."""
+    container = Container()
+    if session is None:
+        from src.infrastructure.persistence.database import get_session
+
+        session = next(get_session())
+
+    config = container.config()
+    return MigrationRawFinalizer(
+        tmdb_client=container.tmdb_client(),
+        tvdb_client=container.tvdb_client(),
+        movie_repo=container.movie_repository(),
+        series_repo=container.series_repository(),
+        episode_repo=container.episode_repository(),
+        organizer=container.organizer_service(),
+        renamer=container.renamer_service(),
+        parser=GuessitFilenameParser(),
+        storage_dir=Path(config.storage_dir),
+        video_dir=Path(config.video_dir),
+    )
 
 
 def run_status(
@@ -207,6 +277,18 @@ def plan_command(
         float,
         typer.Option("--threshold", help="Note minimale (0-10) pour migrer."),
     ] = 6.0,
+    include_raw: Annotated[
+        bool,
+        typer.Option(
+            "--include-raw/--no-include-raw",
+            help=(
+                "Active le mode raw : les fichiers physiques bruts (vieux NAS sans "
+                "couche symlinks) sont identifiés via TMDB/TVDB et classés selon "
+                "leur note. Les matches ambigus vont dans needs_validation.csv "
+                "pour retraitement via `process`. Nécessite des clés API valides."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Construit le plan de migration (lecture seule)."""
     container = Container()
@@ -216,10 +298,11 @@ def plan_command(
 
     session = next(get_session())
 
+    mode_label = "[green]symlinks + raw[/green]" if include_raw else "symlinks"
     console.print(
         f"[bold cyan]Construction du plan[/bold cyan] "
         f"depuis [yellow]{source}[/yellow] "
-        f"(seuil note ≥ [magenta]{threshold}[/magenta])"
+        f"(seuil note ≥ [magenta]{threshold}[/magenta], mode {mode_label})"
     )
 
     plan = build_plan(
@@ -231,6 +314,7 @@ def plan_command(
         csv_dir=csv_dir,
         session=session,
         alternative_roots=list(alt_root) if alt_root else None,
+        include_raw=include_raw,
     )
 
     _display_plan_summary(plan, output, csv_dir)
@@ -327,6 +411,7 @@ def _display_plan_summary(
         ("MIGRATE", s.to_migrate),
         ("LOW_RATED", s.low_rated),
         ("UNRATED", s.unrated),
+        ("NEEDS_VALIDATION", s.needs_validation),
         ("BROKEN", s.broken),
         ("ALREADY_ON_DESTINATION", s.already_on_destination),
         ("NOT_SYMLINK", s.not_symlink),
@@ -336,6 +421,11 @@ def _display_plan_summary(
         if value:
             table.add_row(label, str(value))
     console.print(table)
+    if s.needs_validation and csv_dir:
+        console.print(
+            f"[yellow]→ {s.needs_validation} item(s) à valider via [bold]process[/bold] : "
+            f"voir {csv_dir}/needs_validation.csv[/yellow]"
+        )
     if s.total_size_bytes:
         gb = s.total_size_bytes / (1024**3)
         console.print(

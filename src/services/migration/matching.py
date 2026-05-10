@@ -156,6 +156,33 @@ class MigrationMatcher:
         return MediaType.MOVIE
 
 
+class DefaultDetailsFetcher:
+    """Implementation par defaut du _DetailsFetcher Protocol.
+
+    Cable sur les clients TMDB/TVDB existants. Utilise par le plan_builder
+    en mode raw pour recuperer le vote_average d'un match TMDB/TVDB.
+    """
+
+    def __init__(
+        self,
+        tmdb_client: TMDBClient,
+        tvdb_client: TVDBClient,
+    ) -> None:
+        self._tmdb = tmdb_client
+        self._tvdb = tvdb_client
+
+    async def fetch(
+        self, *, media_id: str, source: str
+    ):
+        if source == "tmdb":
+            return await self._tmdb.get_details(media_id)
+        if source == "tmdb_tv":
+            return await self._tmdb.get_tv_details(media_id)
+        if source == "tvdb":
+            return await self._tvdb.get_details(media_id)
+        return None
+
+
 def candidates_to_dicts(
     results: list[SearchResult],
 ) -> list[dict]:
