@@ -158,11 +158,26 @@ class MigrationRatingResolver:
     def _guess_media_type(
         candidate: MigrationCandidate, parsed: ParsedFilename
     ) -> MediaType:
+        # Path autoritatif : un segment Series/Animations/Films decide. Cf.
+        # MigrationMatcher._guess_media_type pour le rationale (mini-series
+        # doc rangees dans Series/ avec filename type film).
+        segments: list[str] = []
+        if candidate.media_root:
+            segments.append(candidate.media_root)
+        if candidate.relative_category:
+            segments.extend(
+                s for s in candidate.relative_category.split("/") if s
+            )
+        for seg in segments:
+            normalized = seg.lower()
+            if (
+                normalized.startswith("seri")
+                or normalized.startswith("séri")
+                or normalized.startswith("anim")
+            ):
+                return MediaType.SERIES
+            if normalized.startswith("film"):
+                return MediaType.MOVIE
         if parsed.media_type != MediaType.UNKNOWN:
             return parsed.media_type
-        media_root = (candidate.media_root or "").lower()
-        if media_root.startswith("séri") or media_root.startswith("seri"):
-            return MediaType.SERIES
-        if media_root.startswith("anim"):
-            return MediaType.SERIES
         return MediaType.MOVIE

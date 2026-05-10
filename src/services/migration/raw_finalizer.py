@@ -290,15 +290,29 @@ class MigrationRawFinalizer:
     # ---- Séries -----------------------------------------------------------
 
     def _is_series_item(self, item: MigrationItem) -> bool:
-        """Vrai si l'item doit etre traite comme une serie (tvdb_id ou heuristique)."""
+        """Vrai si l'item doit etre traite comme une serie (tvdb_id ou heuristique).
+
+        Examine TOUS les segments du chemin (media_root + relative_category)
+        pour gerer les arborescences imbriquees du type Videotheque/Series/...
+        """
         if item.match.tvdb_id is not None:
             return True
-        media_root = (item.media_root or "").lower()
-        return (
-            media_root.startswith("seri")
-            or media_root.startswith("séri")
-            or media_root.startswith("anim")
-        )
+        segments: list[str] = []
+        if item.media_root:
+            segments.append(item.media_root)
+        if item.relative_category:
+            segments.extend(
+                s for s in item.relative_category.split("/") if s
+            )
+        for seg in segments:
+            normalized = seg.lower()
+            if (
+                normalized.startswith("seri")
+                or normalized.startswith("séri")
+                or normalized.startswith("anim")
+            ):
+                return True
+        return False
 
     def _prepare_series(self, item: MigrationItem) -> Optional[Path]:
         if self._series_repo is None or self._parser is None:

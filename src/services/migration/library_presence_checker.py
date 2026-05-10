@@ -80,8 +80,24 @@ class LibraryPresenceChecker:
             return True
         if top.source == "tvdb" or top.source == "tmdb_tv":
             return True
-        media_root = (candidate.media_root or "").lower()
-        return media_root.startswith("seri") or media_root.startswith("séri")
+        # Examine tous les segments du chemin (media_root + relative_category)
+        # pour gerer les arborescences imbriquees Videotheque/Series/...
+        segments: list[str] = []
+        if candidate.media_root:
+            segments.append(candidate.media_root)
+        if candidate.relative_category:
+            segments.extend(
+                s for s in candidate.relative_category.split("/") if s
+            )
+        for seg in segments:
+            normalized = seg.lower()
+            if (
+                normalized.startswith("seri")
+                or normalized.startswith("séri")
+                or normalized.startswith("anim")
+            ):
+                return True
+        return False
 
     def _check_movie(self, top: SearchResult) -> Optional[str]:
         if not top.source.startswith("tmdb"):
