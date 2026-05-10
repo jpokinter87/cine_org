@@ -35,6 +35,9 @@ from src.core.entities.media import Episode, Movie, Series
 from src.core.ports.api_clients import MediaDetails
 from src.core.ports.parser import IFilenameParser
 from src.core.value_objects.parsed_info import ParsedFilename
+from src.infrastructure.persistence.repositories.episode_repository import (
+    SQLModelEpisodeRepository,
+)
 from src.infrastructure.persistence.repositories.movie_repository import (
     SQLModelMovieRepository,
 )
@@ -47,11 +50,20 @@ from src.services.renamer import RenamerService
 
 
 @dataclass
+class _CachedMovie:
+    """Bundle Movie + symlink_path canonique pour le finalize idempotent."""
+
+    movie: Movie
+    symlink_path: Path
+
+
+@dataclass
 class _CachedSeries:
-    """Bundle Series + Episode synthétique pour le finalize idempotent."""
+    """Bundle Series + Episode synthétique + symlink_path pour finalize idempotent."""
 
     series: Series
     episode: Episode
+    symlink_path: Path
 
 
 class MigrationRawFinalizer:
@@ -80,6 +92,7 @@ class MigrationRawFinalizer:
         video_dir: Path,
         tvdb_client: Optional[TVDBClient] = None,
         series_repo: Optional[SQLModelSeriesRepository] = None,
+        episode_repo: Optional[SQLModelEpisodeRepository] = None,
         parser: Optional[IFilenameParser] = None,
     ) -> None:
         self._tmdb = tmdb_client
@@ -90,9 +103,10 @@ class MigrationRawFinalizer:
         self._video_dir = Path(video_dir)
         self._tvdb = tvdb_client
         self._series_repo = series_repo
+        self._episode_repo = episode_repo
         self._parser = parser
-        # Cache local item_id → Movie / Series pour idempotence prepare → finalize.
-        self._movie_cache: dict[str, Movie] = {}
+        # Cache local item_id → bundle pour idempotence prepare → finalize.
+        self._movie_cache: dict[str, _CachedMovie] = {}
         self._series_cache: dict[str, _CachedSeries] = {}
 
     # ---- RawItemFinalizer Protocol ---------------------------------------
@@ -106,10 +120,110 @@ class MigrationRawFinalizer:
         return None
 
     def finalize(self, item: MigrationItem, destination: Path) -> None:
-        """Insert VideoFile + create symlink + delete source. Étape 4b3."""
-        raise NotImplementedError(
-            "MigrationRawFinalizer.finalize sera livré en étape 4b3"
+        """Persiste les paths en DB, crée le symlink dans video/, supprime la source.
+
+        Idempotent : un appel répété sur un item déjà finalisé est silencieux
+        (les paths sont déjà à jour, le symlink existe, la source est absente).
+        Doit être appelé après que rsync + verify hash ont réussi.
+        """
+        if item.item_id in self._movie_cache:
+            self._finalize_movie(item, destination, self._movie_cache[item.item_id])
+        elif item.item_id in self._series_cache:
+            self._finalize_series(
+                item, destination, self._series_cache[item.item_id]
+            )
+        else:
+            raise RuntimeError(
+                f"prepare() doit être appelé avant finalize() pour {item.item_id}"
+            )
+
+    # ---- Films : finalize -------------------------------------------------
+
+    def _finalize_movie(
+        self,
+        item: MigrationItem,
+        destination: Path,
+        cached: _CachedMovie,
+    ) -> None:
+        if cached.movie.id is not None:
+            self._update_movie_paths(
+                int(cached.movie.id),
+                file_path=str(destination),
+                symlink_path=str(cached.symlink_path),
+            )
+        _create_symlink(cached.symlink_path, destination)
+        _delete_source(item.source_path)
+
+    def _update_movie_paths(
+        self, movie_id: int, *, file_path: str, symlink_path: str
+    ) -> None:
+        """Met à jour file_path et symlink_path sur MovieModel via la session.
+
+        Pattern repris de workflow.transfer_step._update_file_paths : l'entité
+        domaine Movie n'expose pas symlink_path, on passe par le SQLModel.
+        """
+        from src.infrastructure.persistence.models import MovieModel
+
+        session = self._movie_repo._session
+        model = session.get(MovieModel, movie_id)
+        if model is None:
+            return
+        model.file_path = file_path
+        model.symlink_path = symlink_path
+        session.add(model)
+        session.commit()
+
+    # ---- Séries : finalize ------------------------------------------------
+
+    def _finalize_series(
+        self,
+        item: MigrationItem,
+        destination: Path,
+        cached: _CachedSeries,
+    ) -> None:
+        if self._episode_repo is None:
+            raise RuntimeError(
+                "Le mode séries finalize requiert episode_repo sur MigrationRawFinalizer"
+            )
+        # 1. Insert/update Episode (synthétique en mémoire jusqu'ici).
+        saved_episode = self._upsert_episode_for_series(cached.episode)
+        # 2. Mettre à jour les paths (équivalent transfer_step._update_file_paths).
+        if saved_episode.id is not None:
+            self._update_episode_paths(
+                int(saved_episode.id),
+                file_path=str(destination),
+                symlink_path=str(cached.symlink_path),
+            )
+        _create_symlink(cached.symlink_path, destination)
+        _delete_source(item.source_path)
+
+    def _upsert_episode_for_series(self, episode: Episode) -> Episode:
+        """Cherche l'épisode existant en DB, sinon le crée (idempotent)."""
+        assert self._episode_repo is not None  # type narrow
+        if episode.series_id is None:
+            return self._episode_repo.save(episode)
+        existing = self._episode_repo.get_by_series(
+            str(episode.series_id),
+            episode.season_number,
+            episode.episode_number,
         )
+        if existing:
+            return existing[0]
+        return self._episode_repo.save(episode)
+
+    def _update_episode_paths(
+        self, episode_id: int, *, file_path: str, symlink_path: str
+    ) -> None:
+        from src.infrastructure.persistence.models import EpisodeModel
+
+        session = self._episode_repo._session  # type: ignore[union-attr]
+        model = session.get(EpisodeModel, episode_id)
+        if model is None:
+            return
+        model.file_path = file_path
+        model.symlink_path = symlink_path
+        session.add(model)
+        session.commit()
 
     # ---- Films ------------------------------------------------------------
 
@@ -126,15 +240,21 @@ class MigrationRawFinalizer:
             movie = self._build_movie_from_details(details)
             movie = self._movie_repo.save(movie)
 
-        # Cache pour finalize() (4b3) sans relookup.
-        self._movie_cache[item.item_id] = movie
-
         extension = item.source_path.suffix or ""
         directory = self._organizer.get_movie_destination(
             movie, self._storage_dir, self._video_dir
         )
         filename = self._renamer.generate_movie_filename(
             movie=movie, media_info=None, extension=extension
+        )
+        # Symlink path canonique côté video/.
+        video_dir = self._organizer.get_movie_video_destination(
+            movie, self._video_dir
+        )
+        symlink_path = video_dir / filename
+
+        self._movie_cache[item.item_id] = _CachedMovie(
+            movie=movie, symlink_path=symlink_path
         )
         return directory / filename
 
@@ -198,11 +318,6 @@ class MigrationRawFinalizer:
 
         episode = self._synthetic_episode(series, parsed)
 
-        # Cache pour finalize() (4b3).
-        self._series_cache[item.item_id] = _CachedSeries(
-            series=series, episode=episode
-        )
-
         extension = item.source_path.suffix or ""
         directory = self._organizer.get_series_destination(
             series, parsed.season, self._storage_dir, self._video_dir
@@ -212,6 +327,14 @@ class MigrationRawFinalizer:
             episode=episode,
             media_info=None,
             extension=extension,
+        )
+        video_dir = self._organizer.get_series_video_destination(
+            series, parsed.season, self._video_dir
+        )
+        symlink_path = video_dir / filename
+
+        self._series_cache[item.item_id] = _CachedSeries(
+            series=series, episode=episode, symlink_path=symlink_path
         )
         return directory / filename
 
@@ -296,3 +419,32 @@ class MigrationRawFinalizer:
             episode_number=parsed.episode or 0,
             title=parsed.episode_title or "",
         )
+
+
+# ---- Helpers module-level (réutilisables) --------------------------------
+
+
+def _create_symlink(symlink_path: Path, target: Path) -> None:
+    """Crée (ou remplace) le symlink pointant vers target.
+
+    Pattern aligné sur transferer._create_symlink_at : symlink absolu vers
+    `target.resolve()`. Idempotent : si un symlink existe déjà au même
+    emplacement, il est remplacé.
+    """
+    import os
+
+    symlink_path.parent.mkdir(parents=True, exist_ok=True)
+    if symlink_path.exists() or symlink_path.is_symlink():
+        symlink_path.unlink()
+    os.symlink(target.resolve(), symlink_path)
+
+
+def _delete_source(source: Optional[Path]) -> None:
+    """Supprime le fichier source physique. Idempotent (FileNotFoundError ignoré)."""
+    if source is None:
+        return
+    try:
+        source.unlink()
+    except FileNotFoundError:
+        # Reprise après crash : la source a déjà été supprimée — silencieux.
+        pass

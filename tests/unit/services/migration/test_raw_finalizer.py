@@ -93,6 +93,9 @@ def _make_finalizer(
     organizer.get_movie_destination.return_value = (
         storage_dir / "Films" / "Science-Fiction" / "A"
     )
+    organizer.get_movie_video_destination.return_value = (
+        video_dir / "Films" / "Science-Fiction" / "A"
+    )
 
     renamer = MagicMock()
     renamer.generate_movie_filename.return_value = "Avatar (2009).mkv"
@@ -150,15 +153,22 @@ def test_prepare_movie_not_in_db_fetches_tmdb_and_inserts():
 
 
 def test_prepare_movie_caches_entity_for_finalize():
-    """L'entité Movie est cachée pour l'étape finalize (idempotence)."""
+    """L'entité Movie + symlink_path canonique sont cachés pour finalize."""
     existing = Movie(id="42", tmdb_id=19995, title="Avatar", year=2009)
     finalizer = _make_finalizer(movie_in_db=existing)
+    finalizer._organizer.get_movie_video_destination.return_value = Path(
+        "/new_video/Films/Science-Fiction/A"
+    )
     item = _raw_movie_item(item_id="cache-key", tmdb_id=19995)
 
     finalizer.prepare(item)
 
     assert "cache-key" in finalizer._movie_cache
-    assert finalizer._movie_cache["cache-key"].id == "42"
+    cached = finalizer._movie_cache["cache-key"]
+    assert cached.movie.id == "42"
+    assert cached.symlink_path == Path(
+        "/new_video/Films/Science-Fiction/A/Avatar (2009).mkv"
+    )
 
 
 def test_prepare_returns_none_when_tmdb_id_missing():
@@ -192,11 +202,11 @@ def test_prepare_passes_correct_extension_to_renamer():
     assert kwargs["extension"] == ".mp4"
 
 
-def test_finalize_raises_not_implemented():
-    """finalize() sera livré en étape 4b3."""
+def test_finalize_without_prepare_raises():
+    """finalize() sans prepare() préalable → RuntimeError."""
     finalizer = _make_finalizer()
     item = _raw_movie_item()
-    with pytest.raises(NotImplementedError, match="4b3"):
+    with pytest.raises(RuntimeError, match="prepare"):
         finalizer.finalize(item, Path("/new/Avatar.mkv"))
 
 
@@ -289,10 +299,23 @@ def _make_series_finalizer(
     organizer.get_series_destination.return_value = (
         storage_dir / "Séries" / "L" / "Lost (2004)" / "Saison 01"
     )
+    organizer.get_series_video_destination.return_value = (
+        video_dir / "Séries" / "L" / "Lost (2004)" / "Saison 01"
+    )
 
     renamer = MagicMock()
     renamer.generate_series_filename.return_value = (
         "Lost (2004) - S01E01.mkv"
+    )
+
+    episode_repo = MagicMock()
+    episode_repo.get_by_series.return_value = []
+    episode_repo.save.side_effect = lambda e: type(e)(
+        id="11" if e.id is None else e.id,
+        series_id=e.series_id,
+        season_number=e.season_number,
+        episode_number=e.episode_number,
+        title=e.title,
     )
 
     return MigrationRawFinalizer(
@@ -300,6 +323,7 @@ def _make_series_finalizer(
         tvdb_client=tvdb,
         movie_repo=movie_repo,
         series_repo=series_repo,
+        episode_repo=episode_repo,
         organizer=organizer,
         renamer=renamer,
         parser=parser,
@@ -371,7 +395,7 @@ def test_prepare_series_returns_none_when_season_missing():
 
 
 def test_prepare_series_caches_for_finalize():
-    """Series + Episode synthétique cachés pour finalize() (idempotence)."""
+    """Series + Episode synthétique + symlink_path cachés pour finalize."""
     existing = Series(id="7", tvdb_id=73739, title="Lost", year=2004)
     finalizer = _make_series_finalizer(series_in_db=existing)
     item = _raw_series_item(item_id="cache-ser", tvdb_id=73739)
@@ -383,6 +407,9 @@ def test_prepare_series_caches_for_finalize():
     assert cached.series.id == "7"
     assert cached.episode.season_number == 1
     assert cached.episode.episode_number == 1
+    assert cached.symlink_path == Path(
+        "/new_video/Séries/L/Lost (2004)/Saison 01/Lost (2004) - S01E01.mkv"
+    )
 
 
 def test_prepare_series_routed_by_media_root_heuristic():
@@ -410,3 +437,232 @@ def test_prepare_series_without_repo_raises():
     item = _raw_series_item()
     with pytest.raises(RuntimeError, match="series_repo"):
         finalizer.prepare(item)
+
+
+# ---- finalize() films + séries (étape 4b3) ------------------------------
+
+
+def _setup_real_filesystem(tmp_path):
+    """Crée une arborescence réelle pour tester symlink + delete physiques."""
+    source = tmp_path / "old_nas" / "Films" / "Avatar (2009).mkv"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"AVATAR_BIN" * 100)
+
+    storage_dir = tmp_path / "new_storage"
+    video_dir = tmp_path / "new_video"
+    storage_dir.mkdir()
+    video_dir.mkdir()
+
+    destination = storage_dir / "Films" / "Science-Fiction" / "A" / "Avatar (2009).mkv"
+    destination.parent.mkdir(parents=True)
+    # Simule rsync : la destination existe et a le contenu source.
+    destination.write_bytes(source.read_bytes())
+
+    return {
+        "source": source,
+        "destination": destination,
+        "storage_dir": storage_dir,
+        "video_dir": video_dir,
+    }
+
+
+def test_finalize_movie_creates_symlink_updates_db_and_deletes_source(
+    tmp_path,
+):
+    """End-to-end finalize films : symlink + DB paths + suppression source."""
+    fs = _setup_real_filesystem(tmp_path)
+    existing = Movie(id="42", tmdb_id=19995, title="Avatar", year=2009)
+
+    finalizer = _make_finalizer(
+        movie_in_db=existing,
+        storage_dir=fs["storage_dir"],
+        video_dir=fs["video_dir"],
+    )
+    finalizer._organizer.get_movie_destination.return_value = (
+        fs["storage_dir"] / "Films" / "Science-Fiction" / "A"
+    )
+    finalizer._organizer.get_movie_video_destination.return_value = (
+        fs["video_dir"] / "Films" / "Science-Fiction" / "A"
+    )
+
+    # On ne teste pas la session DB ici : on patche _update_movie_paths
+    # pour vérifier l'appel sans dépendre d'une vraie DB.
+    finalizer._update_movie_paths = MagicMock()
+
+    item = _raw_movie_item(
+        item_id="m1", tmdb_id=19995, source=fs["source"]
+    )
+    finalizer.prepare(item)
+    finalizer.finalize(item, fs["destination"])
+
+    expected_symlink = (
+        fs["video_dir"] / "Films" / "Science-Fiction" / "A" / "Avatar (2009).mkv"
+    )
+    assert expected_symlink.is_symlink()
+    assert expected_symlink.resolve() == fs["destination"].resolve()
+    assert not fs["source"].exists()
+    finalizer._update_movie_paths.assert_called_once_with(
+        42,
+        file_path=str(fs["destination"]),
+        symlink_path=str(expected_symlink),
+    )
+
+
+def test_finalize_movie_idempotent_when_source_already_deleted(tmp_path):
+    """Reprise après crash : si la source est déjà absente, finalize est silencieux."""
+    fs = _setup_real_filesystem(tmp_path)
+    fs["source"].unlink()  # source déjà supprimée par un run précédent
+
+    existing = Movie(id="42", tmdb_id=19995, title="Avatar", year=2009)
+    finalizer = _make_finalizer(
+        movie_in_db=existing,
+        storage_dir=fs["storage_dir"],
+        video_dir=fs["video_dir"],
+    )
+    finalizer._organizer.get_movie_destination.return_value = (
+        fs["storage_dir"] / "Films" / "Science-Fiction" / "A"
+    )
+    finalizer._organizer.get_movie_video_destination.return_value = (
+        fs["video_dir"] / "Films" / "Science-Fiction" / "A"
+    )
+    finalizer._update_movie_paths = MagicMock()
+
+    item = _raw_movie_item(item_id="m2", tmdb_id=19995, source=fs["source"])
+    finalizer.prepare(item)
+    # Pas d'exception attendue.
+    finalizer.finalize(item, fs["destination"])
+
+    expected_symlink = (
+        fs["video_dir"] / "Films" / "Science-Fiction" / "A" / "Avatar (2009).mkv"
+    )
+    assert expected_symlink.is_symlink()
+
+
+def test_finalize_movie_replaces_existing_symlink(tmp_path):
+    """Si un symlink existe déjà au même path (reprise), il est remplacé."""
+    fs = _setup_real_filesystem(tmp_path)
+    expected_symlink = (
+        fs["video_dir"] / "Films" / "Science-Fiction" / "A" / "Avatar (2009).mkv"
+    )
+    expected_symlink.parent.mkdir(parents=True)
+    # Crée un symlink résiduel pointant ailleurs.
+    other_target = fs["storage_dir"] / "ailleurs.mkv"
+    other_target.write_bytes(b"x")
+    expected_symlink.symlink_to(other_target)
+
+    existing = Movie(id="42", tmdb_id=19995, title="Avatar", year=2009)
+    finalizer = _make_finalizer(
+        movie_in_db=existing,
+        storage_dir=fs["storage_dir"],
+        video_dir=fs["video_dir"],
+    )
+    finalizer._organizer.get_movie_destination.return_value = (
+        fs["storage_dir"] / "Films" / "Science-Fiction" / "A"
+    )
+    finalizer._organizer.get_movie_video_destination.return_value = (
+        fs["video_dir"] / "Films" / "Science-Fiction" / "A"
+    )
+    finalizer._update_movie_paths = MagicMock()
+
+    item = _raw_movie_item(item_id="m3", tmdb_id=19995, source=fs["source"])
+    finalizer.prepare(item)
+    finalizer.finalize(item, fs["destination"])
+
+    assert expected_symlink.resolve() == fs["destination"].resolve()
+
+
+def test_finalize_series_creates_episode_in_db_then_symlink(tmp_path):
+    """Finalize séries : episode_repo.save + update_episode_paths + symlink + delete."""
+    source = tmp_path / "old" / "Lost.S01E01.mkv"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"LOST_BIN")
+    storage_dir = tmp_path / "storage"
+    video_dir = tmp_path / "video"
+    storage_dir.mkdir()
+    video_dir.mkdir()
+    destination = (
+        storage_dir / "Séries" / "L" / "Lost (2004)" / "Saison 01"
+        / "Lost (2004) - S01E01.mkv"
+    )
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(source.read_bytes())
+
+    existing = Series(id="7", tvdb_id=73739, title="Lost", year=2004)
+    finalizer = _make_series_finalizer(
+        series_in_db=existing,
+        storage_dir=storage_dir,
+        video_dir=video_dir,
+    )
+    finalizer._organizer.get_series_destination.return_value = destination.parent
+    finalizer._organizer.get_series_video_destination.return_value = (
+        video_dir / "Séries" / "L" / "Lost (2004)" / "Saison 01"
+    )
+    finalizer._update_episode_paths = MagicMock()
+
+    item = _raw_series_item(item_id="s1", tvdb_id=73739, source=source)
+    finalizer.prepare(item)
+    finalizer.finalize(item, destination)
+
+    expected_symlink = (
+        video_dir / "Séries" / "L" / "Lost (2004)" / "Saison 01"
+        / "Lost (2004) - S01E01.mkv"
+    )
+    assert expected_symlink.is_symlink()
+    assert expected_symlink.resolve() == destination.resolve()
+    assert not source.exists()
+    finalizer._episode_repo.save.assert_called_once()
+    finalizer._update_episode_paths.assert_called_once()
+
+
+def test_finalize_series_reuses_existing_episode(tmp_path, monkeypatch):
+    """Si l'épisode existe déjà en DB → pas de save() supplémentaire."""
+    from src.core.entities.media import Episode
+
+    existing_series = Series(id="7", tvdb_id=73739, title="Lost", year=2004)
+    finalizer = _make_series_finalizer(
+        series_in_db=existing_series,
+        storage_dir=tmp_path / "storage",
+        video_dir=tmp_path / "video",
+    )
+    (tmp_path / "storage").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "video").mkdir(parents=True, exist_ok=True)
+    finalizer._organizer.get_series_destination.return_value = tmp_path / "storage"
+    finalizer._organizer.get_series_video_destination.return_value = tmp_path / "video"
+
+    existing_episode = Episode(
+        id="55", series_id="7", season_number=1, episode_number=1
+    )
+    finalizer._episode_repo.get_by_series.return_value = [existing_episode]
+    finalizer._update_episode_paths = MagicMock()
+
+    # Source physique réelle pour que _delete_source réussisse.
+    source = tmp_path / "src.mkv"
+    source.write_bytes(b"x")
+    item = _raw_series_item(item_id="s2", tvdb_id=73739, source=source)
+    destination = tmp_path / "storage" / "Lost (2004) - S01E01.mkv"
+    destination.write_bytes(b"x")
+
+    finalizer.prepare(item)
+    finalizer.finalize(item, destination)
+
+    # save n'est PAS appelé : l'épisode existe déjà.
+    finalizer._episode_repo.save.assert_not_called()
+    # update_episode_paths est appelé avec l'episode existant (id=55).
+    finalizer._update_episode_paths.assert_called_once_with(
+        55,
+        file_path=str(destination),
+        symlink_path=str(tmp_path / "video" / "Lost (2004) - S01E01.mkv"),
+    )
+
+
+def test_finalize_series_without_episode_repo_raises():
+    """Sans episode_repo, finalize séries → RuntimeError."""
+    finalizer = _make_series_finalizer()
+    finalizer._episode_repo = None  # désactive l'episode_repo
+    existing = Series(id="7", tvdb_id=73739, title="Lost", year=2004)
+    finalizer._series_repo.get_by_tvdb_id.return_value = existing
+
+    item = _raw_series_item(item_id="s3", tvdb_id=73739)
+    finalizer.prepare(item)
+    with pytest.raises(RuntimeError, match="episode_repo"):
+        finalizer.finalize(item, Path("/x.mkv"))
