@@ -69,6 +69,7 @@ from src.services.migration.scanner import (
 )
 from src.services.migration.state_store import MigrationStateStore
 from src.services.migration.transfer_executor import (
+    _DEFAULT_BANDWIDTH_STEPS_MBPS,
     MigrationTransferExecutor,
     RsyncRunner,
 )
@@ -251,7 +252,7 @@ def run_apply(
     plan_path: Path,
     state_store_path: Path,
     rsync_runner: Optional[RsyncRunner] = None,
-    bandwidth_steps_mbps: tuple[int, ...] = (25, 20, 15, 10, 5),
+    bandwidth_steps_mbps: tuple[int, ...] = _DEFAULT_BANDWIDTH_STEPS_MBPS,
     session: Optional[Session] = None,
     show_progress: bool = False,
 ) -> list[TransferOutcome]:
