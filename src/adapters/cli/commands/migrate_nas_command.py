@@ -367,6 +367,9 @@ def _execute_with_progress(
                     if bw == "0mbps":
                         return "rsync (no bwlimit)"
                     return f"rsync @ {bw}"
+                if phase.startswith("rsync_error:"):
+                    msg = phase.split(":", 1)[1][:80]
+                    return f"rsync ERROR: {msg}"
                 if phase == "verifying":
                     return "verifying hash"
                 if phase == "finalizing":

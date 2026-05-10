@@ -129,33 +129,29 @@ class _SubprocessRsyncRunner:
         on_progress: Optional[RsyncProgress] = None,
     ) -> RsyncResult:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        cmd = ["rsync", "-a", "--partial", "--inplace"]
+        cmd = ["rsync", "-a", "--partial", "--inplace", "--info=progress2"]
         if bwlimit_mbps > 0:
             cmd.append(f"--bwlimit={bwlimit_mbps}M")
-        cmd.extend(
-            [
-                "--info=progress2",
-                "--no-inc-recursive",  # progress2 plus précis sur fichier unique
-                # Force line buffering : sans ça, rsync bufferise progress2
-                # quand stdout n'est pas un TTY (notre cas avec subprocess.PIPE),
-                # ce qui fige la barre Rich pendant tout le transfert.
-                "--outbuf=L",
-                str(source),
-                str(destination),
-            ]
-        )
+        cmd.extend([str(source), str(destination)])
         try:
+            # stderr=STDOUT : merge stderr dans stdout pour éviter le
+            # blocage classique de Popen quand stderr remplit son buffer
+            # OS (~64 KB) sans qu'on le consomme. Les éventuels messages
+            # d'erreur rsync atterrissent dans le même flux que progress2 ;
+            # le parser regex ignore silencieusement les lignes non-progress.
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 bufsize=0,
             )
         except FileNotFoundError as exc:
             return RsyncResult(success=False, error=str(exc))
 
-        # Stream stdout, parser chaque \r ou \n comme une ligne potentielle.
+        # Stream stdout, parser chaque \r ou \n comme une ligne potentielle
+        # (rsync --info=progress2 émet du \r pour overwrite la même ligne).
         buffer = bytearray()
+        last_line = ""  # Conservée pour le diagnostic en cas d'échec
         assert process.stdout is not None
         while True:
             chunk = process.stdout.read(64)
@@ -163,31 +159,26 @@ class _SubprocessRsyncRunner:
                 break
             for byte in chunk:
                 if byte in (10, 13):  # \n or \r
-                    if buffer and on_progress is not None:
-                        _parse_and_emit_progress(
-                            buffer.decode("utf-8", errors="replace"),
-                            on_progress,
-                        )
+                    if buffer:
+                        decoded = buffer.decode("utf-8", errors="replace")
+                        last_line = decoded
+                        if on_progress is not None:
+                            _parse_and_emit_progress(decoded, on_progress)
                     buffer.clear()
                 else:
                     buffer.append(byte)
-        # Reste éventuel
-        if buffer and on_progress is not None:
-            _parse_and_emit_progress(
-                buffer.decode("utf-8", errors="replace"), on_progress
-            )
+        if buffer:
+            decoded = buffer.decode("utf-8", errors="replace")
+            last_line = decoded
+            if on_progress is not None:
+                _parse_and_emit_progress(decoded, on_progress)
 
         process.wait()
         if process.returncode == 0:
             return RsyncResult(success=True)
-        stderr_data = (
-            process.stderr.read().decode("utf-8", errors="replace").strip()
-            if process.stderr is not None
-            else ""
-        )
         return RsyncResult(
             success=False,
-            error=stderr_data or f"rsync rc={process.returncode}",
+            error=(last_line or "").strip() or f"rsync rc={process.returncode}",
         )
 
 
@@ -357,6 +348,11 @@ class MigrationTransferExecutor:
                 copied = True
                 break
             last_error = result.error
+            # Notifie l'erreur pour que l'utilisateur voie pourquoi on retente
+            # (au prochain palier) — utile pour debug.
+            if last_error:
+                truncated = last_error[:120].replace("\n", " ")
+                self._emit(item, f"rsync_error:{truncated}")
 
         if not copied:
             self._store.update_status(
