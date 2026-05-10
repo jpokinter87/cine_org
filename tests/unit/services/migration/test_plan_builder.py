@@ -14,10 +14,11 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.core.ports.api_clients import MediaDetails, SearchResult
 from src.services.migration.dataclasses import (
     Bucket,
     MatchInfo,
@@ -27,6 +28,7 @@ from src.services.migration.dataclasses import (
     MigrationStats,
     RatingDecision,
 )
+from src.services.migration.matching import MatchKind, MatchOutcome
 from src.services.migration.plan_builder import (
     MigrationPlanBuilder,
     deserialize_plan,
@@ -528,3 +530,250 @@ def test_deserialize_plan_without_match_field_defaults_to_empty():
     assert item.match.tmdb_id is None
     assert item.match.top_candidates == []
     assert item.is_symlink_source is True
+
+
+# ---- Mode raw : plan_builder + matcher + fetcher (étape 3) ---------------
+
+
+def _make_matched_outcome(
+    *, source: str = "tmdb", media_id: str = "19995", score: float = 95.0
+) -> MatchOutcome:
+    selected = SearchResult(
+        id=media_id,
+        title="Avatar",
+        year=2009,
+        score=score,
+        source=source,
+    )
+    other = SearchResult(
+        id="9999", title="Autre", year=2000, score=70.0, source=source
+    )
+    return MatchOutcome(
+        kind=MatchKind.MATCHED,
+        top_results=[selected, other],
+        selected=selected,
+    )
+
+
+def _make_ambiguous_outcome() -> MatchOutcome:
+    return MatchOutcome(
+        kind=MatchKind.AMBIGUOUS,
+        top_results=[
+            SearchResult(
+                id="1", title="Foo", year=2020, score=78.0, source="tmdb"
+            ),
+            SearchResult(
+                id="2", title="Foo Bis", year=2020, score=76.0, source="tmdb"
+            ),
+        ],
+        selected=None,
+    )
+
+
+def _make_no_results_outcome() -> MatchOutcome:
+    return MatchOutcome(kind=MatchKind.NO_RESULTS, top_results=[])
+
+
+def _make_raw_builder(
+    candidates: list[MigrationCandidate],
+    *,
+    outcome: MatchOutcome,
+    vote_average: float | None,
+    threshold: float = 6.0,
+) -> MigrationPlanBuilder:
+    """Builder en mode raw avec matcher + fetcher mockés."""
+    scanner = MagicMock()
+    scanner.scan.return_value = iter(candidates)
+
+    resolver = MagicMock()
+    resolver.resolve.return_value = RatingDecision()
+
+    planner = MagicMock()
+    planner.plan.return_value = None
+
+    matcher = MagicMock()
+    matcher.match = AsyncMock(return_value=outcome)
+
+    fetcher = MagicMock()
+    details = (
+        MediaDetails(id="19995", title="Avatar", vote_average=vote_average)
+        if vote_average is not None
+        else MediaDetails(id="19995", title="Avatar", vote_average=None)
+    )
+    fetcher.fetch = AsyncMock(return_value=details)
+
+    return MigrationPlanBuilder(
+        scanner=scanner,
+        rating_resolver=resolver,
+        destination_planner=planner,
+        threshold=threshold,
+        matcher=matcher,
+        details_fetcher=fetcher,
+        include_raw=True,
+    )
+
+
+def test_include_raw_requires_matcher_and_fetcher():
+    """include_raw=True sans matcher ou fetcher → ValueError au constructeur."""
+    scanner = MagicMock()
+    resolver = MagicMock()
+    planner = MagicMock()
+    with pytest.raises(ValueError, match="include_raw"):
+        MigrationPlanBuilder(
+            scanner=scanner,
+            rating_resolver=resolver,
+            destination_planner=planner,
+            include_raw=True,
+        )
+
+
+def test_raw_matched_with_high_rating_goes_to_migrate():
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=8.0
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    assert len(plan.items) == 1
+    item = plan.items[0]
+    assert item.bucket == Bucket.MIGRATE
+    assert item.is_symlink_source is False
+    assert item.rating.value == 8.0
+    assert item.rating.source == "tmdb"
+    assert item.match.tmdb_id == 19995
+    assert item.match.score == 95.0
+    assert plan.stats.to_migrate == 1
+
+
+def test_raw_matched_with_low_rating_goes_to_low_rated():
+    cand = _candidate("flop.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand],
+        outcome=_make_matched_outcome(),
+        vote_average=4.5,
+        threshold=6.0,
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    assert plan.items[0].bucket == Bucket.LOW_RATED
+    assert plan.stats.low_rated == 1
+    assert plan.stats.to_migrate == 0
+
+
+def test_raw_matched_without_vote_average_goes_to_unrated():
+    cand = _candidate("mystere.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=None
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    item = plan.items[0]
+    assert item.bucket == Bucket.UNRATED
+    assert item.rating.value is None
+    # Match info reste rempli même sans rating.
+    assert item.match.tmdb_id == 19995
+    assert plan.stats.unrated == 1
+
+
+def test_raw_ambiguous_goes_to_needs_validation():
+    cand = _candidate("ambigu.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_ambiguous_outcome(), vote_average=None
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    item = plan.items[0]
+    assert item.bucket == Bucket.NEEDS_VALIDATION
+    assert item.is_symlink_source is False
+    assert item.match.tmdb_id is None  # pas de selected
+    assert len(item.match.top_candidates) == 2
+    assert plan.stats.needs_validation == 1
+    # Pas de fetcher quand match ambigu (économie d'API).
+    builder._fetcher.fetch.assert_not_called()
+
+
+def test_raw_no_results_goes_to_needs_validation():
+    cand = _candidate("inconnu.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_no_results_outcome(), vote_average=None
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    item = plan.items[0]
+    assert item.bucket == Bucket.NEEDS_VALIDATION
+    assert item.match.top_candidates == []
+    assert plan.stats.needs_validation == 1
+
+
+def test_raw_broken_candidate_still_goes_to_broken_bucket():
+    """Les flags techniques (is_broken) priment toujours sur le matcher."""
+    cand = _candidate(
+        "missing.mkv", is_symlink=False, is_broken=True, target=None
+    )
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=8.0
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    # is_broken implique pas d'appel matcher → bucket NOT_SYMLINK fallback
+    # (chemin _build_symlink_item) qui regarde is_broken en premier.
+    assert plan.items[0].bucket == Bucket.BROKEN
+    builder._matcher.match.assert_not_called()
+
+
+def test_raw_matched_destination_is_none_during_plan():
+    """Mode raw : la destination canonique est calculée à l'apply, pas au plan."""
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=8.0
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    assert plan.items[0].bucket == Bucket.MIGRATE
+    assert plan.items[0].destination_path is None
+
+
+def test_write_review_csvs_writes_needs_validation_file(tmp_path):
+    cand = _candidate("ambigu.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_ambiguous_outcome(), vote_average=None
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    write_review_csvs(plan, tmp_path)
+
+    needs_csv = tmp_path / "needs_validation.csv"
+    assert needs_csv.exists()
+    with needs_csv.open(newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 1
+    assert rows[0]["symlink_path"].endswith("ambigu.mkv")
+    payload = json.loads(rows[0]["top_candidates_json"])
+    assert len(payload) == 2
+    assert payload[0]["title"] == "Foo"
+
+
+def test_serialize_plan_persists_match_info_for_raw_matched():
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=8.0
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    obj = json.loads(serialize_plan(plan))
+    item = obj["items"][0]
+    assert item["bucket"] == "migrate"
+    assert item["is_symlink_source"] is False
+    assert item["match"]["tmdb_id"] == 19995
+    assert item["match"]["score"] == 95.0
+    assert obj["stats"]["needs_validation"] == 0
+
+
+def test_legacy_mode_unchanged_when_include_raw_false():
+    """Garde-fou : un fichier physique en mode symlinks pur reste NOT_SYMLINK."""
+    cand = _candidate("physical.mkv", is_symlink=False)
+    builder = _make_builder([cand], {}, {})  # include_raw default False
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+    assert plan.items[0].bucket == Bucket.NOT_SYMLINK
+    assert plan.stats.not_symlink == 1
+    assert plan.stats.needs_validation == 0
