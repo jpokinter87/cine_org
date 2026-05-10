@@ -106,7 +106,7 @@ class MigrationMatcher:
             )
 
         top = scored[: self._max_top]
-        return self._classify(top)
+        return self._classify(top, query_year=parsed.year)
 
     async def _search_movie(self, parsed: ParsedFilename) -> list[SearchResult]:
         if not parsed.title:
@@ -125,7 +125,12 @@ class MigrationMatcher:
         merged.extend(tvdb_results)
         return merged
 
-    def _classify(self, top: list[SearchResult]) -> MatchOutcome:
+    def _classify(
+        self,
+        top: list[SearchResult],
+        *,
+        query_year: Optional[int] = None,
+    ) -> MatchOutcome:
         if not top:
             return MatchOutcome(kind=MatchKind.NO_RESULTS, top_results=[])
 
@@ -135,6 +140,20 @@ class MigrationMatcher:
 
         # Verifie l'ecart avec le runner-up.
         if len(top) >= 2 and (best.score - top[1].score) < self._gap:
+            # Tie-break par annee : si exactement un candidat (parmi ceux >= seuil)
+            # match query_year, on le retient. Sinon AMBIGUOUS.
+            if query_year is not None:
+                year_matched = [
+                    r
+                    for r in top
+                    if r.score >= self._threshold and r.year == query_year
+                ]
+                if len(year_matched) == 1:
+                    return MatchOutcome(
+                        kind=MatchKind.MATCHED,
+                        top_results=top,
+                        selected=year_matched[0],
+                    )
             return MatchOutcome(kind=MatchKind.AMBIGUOUS, top_results=top)
 
         return MatchOutcome(

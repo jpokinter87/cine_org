@@ -161,12 +161,12 @@ async def test_ambiguous_when_top_score_below_threshold():
 
 @pytest.mark.asyncio
 async def test_ambiguous_when_runner_up_too_close():
-    """Top1 ≥ 85 mais top2 trop proche (gap < 5) → AMBIGUOUS."""
+    """Top1 ≥ 85 mais top2 trop proche (gap < 5) ET année non discriminante → AMBIGUOUS."""
     matcher = _make_matcher(
         parsed=_parsed("Match", year=2020),
         tmdb_results=[
             _result("1", "Match", year=2020),
-            _result("2", "Match", year=2021),  # même titre, année voisine
+            _result("2", "Match", year=2020),  # même titre+année → pas de tie-break
         ],
         ambiguity_gap=5.0,
     )
@@ -174,7 +174,7 @@ async def test_ambiguous_when_runner_up_too_close():
 
     out = await matcher.match(cand)
 
-    # Les deux candidats vont scorer très haut et serré → ambigu.
+    # Les deux candidats vont scorer très haut et serré → ambigu (tie-break inutile).
     assert out.kind == MatchKind.AMBIGUOUS
     assert len(out.top_results) == 2
 
@@ -330,3 +330,79 @@ def test_candidates_to_dicts_omits_id_when_unparseable():
 
     assert "tmdb_id" in out[0]
     assert out[0]["tmdb_id"] is None
+
+
+# ---- Tie-break par année --------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_tiebreak_by_year_resolves_ambiguous_when_one_year_matches():
+    """Top1 et top2 scorent 100, mais un seul match l'année parsée → MATCHED."""
+    matcher = _make_matcher(
+        parsed=_parsed("The Leftovers", year=2014, media_type=MediaType.SERIES),
+        tmdb_tv_results=[
+            _result("4607", "The Leftovers", year=2014, source="tmdb_tv"),
+            _result("9999", "The Leftovers", year=2018, source="tmdb_tv"),
+        ],
+    )
+    cand = _candidate("The.Leftovers.2014.S03E01.mkv", media_root="Séries")
+
+    out = await matcher.match(cand)
+
+    assert out.kind == MatchKind.MATCHED
+    assert out.selected is not None
+    assert out.selected.id == "4607"
+    assert out.selected.year == 2014
+
+
+@pytest.mark.asyncio
+async def test_tiebreak_returns_ambiguous_when_multiple_year_matches():
+    """Si plusieurs candidats matchent la même année → AMBIGUOUS (pas de gain)."""
+    matcher = _make_matcher(
+        parsed=_parsed("Match", year=2020),
+        tmdb_results=[
+            _result("1", "Match", year=2020),
+            _result("2", "Match", year=2020),
+        ],
+    )
+    cand = _candidate("Match.2020.mkv")
+
+    out = await matcher.match(cand)
+
+    assert out.kind == MatchKind.AMBIGUOUS
+
+
+@pytest.mark.asyncio
+async def test_tiebreak_disabled_when_query_year_missing():
+    """Sans année parsée, on ne peut pas trier → AMBIGUOUS classique."""
+    matcher = _make_matcher(
+        parsed=_parsed("Match", year=None),
+        tmdb_results=[
+            _result("1", "Match", year=2020),
+            _result("2", "Match", year=2018),
+        ],
+    )
+    cand = _candidate("Match.mkv")
+
+    out = await matcher.match(cand)
+
+    assert out.kind == MatchKind.AMBIGUOUS
+
+
+@pytest.mark.asyncio
+async def test_tiebreak_ignores_candidates_below_threshold():
+    """Si un candidat <85 match l'année mais pas le top1 ≥85 → AMBIGUOUS (pas de promotion d'un mauvais match)."""
+    matcher = _make_matcher(
+        parsed=_parsed("Foo", year=2019),
+        tmdb_results=[
+            _result("1", "Foo", year=2020, score=0),  # top1 ~95% (titre exact)
+            _result("2", "Foo", year=2020, score=0),  # top2 ~95% (collision)
+            _result("3", "Random", year=2019, score=0),  # match année mais titre nul → score bas
+        ],
+    )
+    cand = _candidate("Foo.2019.mkv")
+
+    out = await matcher.match(cand)
+
+    # Top1 et Top2 trop serrés ET aucun avec score >=85 ne match 2019 → AMBIGUOUS
+    assert out.kind == MatchKind.AMBIGUOUS
