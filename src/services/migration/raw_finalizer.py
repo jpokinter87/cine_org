@@ -25,18 +25,33 @@ Approche film/serie :
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from src.adapters.api.tmdb_client import TMDBClient
-from src.core.entities.media import Movie
+from src.adapters.api.tvdb_client import TVDBClient
+from src.core.entities.media import Episode, Movie, Series
 from src.core.ports.api_clients import MediaDetails
+from src.core.ports.parser import IFilenameParser
+from src.core.value_objects.parsed_info import ParsedFilename
 from src.infrastructure.persistence.repositories.movie_repository import (
     SQLModelMovieRepository,
+)
+from src.infrastructure.persistence.repositories.series_repository import (
+    SQLModelSeriesRepository,
 )
 from src.services.migration.dataclasses import MigrationItem
 from src.services.organizer import OrganizerService
 from src.services.renamer import RenamerService
+
+
+@dataclass
+class _CachedSeries:
+    """Bundle Series + Episode synthétique pour le finalize idempotent."""
+
+    series: Series
+    episode: Episode
 
 
 class MigrationRawFinalizer:
@@ -63,6 +78,9 @@ class MigrationRawFinalizer:
         renamer: RenamerService,
         storage_dir: Path,
         video_dir: Path,
+        tvdb_client: Optional[TVDBClient] = None,
+        series_repo: Optional[SQLModelSeriesRepository] = None,
+        parser: Optional[IFilenameParser] = None,
     ) -> None:
         self._tmdb = tmdb_client
         self._movie_repo = movie_repo
@@ -70,20 +88,21 @@ class MigrationRawFinalizer:
         self._renamer = renamer
         self._storage_dir = Path(storage_dir)
         self._video_dir = Path(video_dir)
-        # Cache local item_id → Movie pour idempotence prepare → finalize.
+        self._tvdb = tvdb_client
+        self._series_repo = series_repo
+        self._parser = parser
+        # Cache local item_id → Movie / Series pour idempotence prepare → finalize.
         self._movie_cache: dict[str, Movie] = {}
+        self._series_cache: dict[str, _CachedSeries] = {}
 
     # ---- RawItemFinalizer Protocol ---------------------------------------
 
     def prepare(self, item: MigrationItem) -> Optional[Path]:
         """Calcule le chemin de destination canonique (insert DB si nécessaire)."""
-        if item.match.tmdb_id is not None and item.match.tvdb_id is None:
+        if self._is_series_item(item):
+            return self._prepare_series(item)
+        if item.match.tmdb_id is not None:
             return self._prepare_movie(item)
-        # Series support en 4b2.
-        if item.match.tvdb_id is not None or self._looks_like_series(item):
-            raise NotImplementedError(
-                "MigrationRawFinalizer.prepare ne supporte pas encore les séries (étape 4b2)"
-            )
         return None
 
     def finalize(self, item: MigrationItem, destination: Path) -> None:
@@ -148,9 +167,132 @@ class MigrationRawFinalizer:
             collection_name=details.collection_name,
         )
 
-    @staticmethod
-    def _looks_like_series(item: MigrationItem) -> bool:
+    # ---- Séries -----------------------------------------------------------
+
+    def _is_series_item(self, item: MigrationItem) -> bool:
+        """Vrai si l'item doit etre traite comme une serie (tvdb_id ou heuristique)."""
+        if item.match.tvdb_id is not None:
+            return True
         media_root = (item.media_root or "").lower()
-        return media_root.startswith("seri") or media_root.startswith(
-            "séri"
-        ) or media_root.startswith("anim")
+        return (
+            media_root.startswith("seri")
+            or media_root.startswith("séri")
+            or media_root.startswith("anim")
+        )
+
+    def _prepare_series(self, item: MigrationItem) -> Optional[Path]:
+        if self._series_repo is None or self._parser is None:
+            raise RuntimeError(
+                "Le mode séries requiert series_repo et parser sur MigrationRawFinalizer"
+            )
+        if item.source_path is None:
+            return None
+
+        parsed = self._parser.parse(item.source_path.name)
+        if parsed.season is None or parsed.episode is None:
+            return None  # Sans saison/épisode, pas de chemin canonique possible.
+
+        series = self._lookup_or_fetch_series(item)
+        if series is None:
+            return None
+
+        episode = self._synthetic_episode(series, parsed)
+
+        # Cache pour finalize() (4b3).
+        self._series_cache[item.item_id] = _CachedSeries(
+            series=series, episode=episode
+        )
+
+        extension = item.source_path.suffix or ""
+        directory = self._organizer.get_series_destination(
+            series, parsed.season, self._storage_dir, self._video_dir
+        )
+        filename = self._renamer.generate_series_filename(
+            series=series,
+            episode=episode,
+            media_info=None,
+            extension=extension,
+        )
+        return directory / filename
+
+    def _lookup_or_fetch_series(
+        self, item: MigrationItem
+    ) -> Optional[Series]:
+        """Lookup Series en DB par tmdb_id/tvdb_id ; sinon fetch + save."""
+        assert self._series_repo is not None  # type narrow
+
+        tvdb_id = item.match.tvdb_id
+        tmdb_id = item.match.tmdb_id
+
+        if tvdb_id is not None:
+            existing = self._series_repo.get_by_tvdb_id(tvdb_id)
+            if existing is not None:
+                return existing
+        if tmdb_id is not None:
+            existing = self._series_repo.get_by_tmdb_id(tmdb_id)
+            if existing is not None:
+                return existing
+
+        details = self._fetch_series_details(item)
+        if details is None:
+            return None
+
+        series = self._build_series_from_details(
+            details, tmdb_id=tmdb_id, tvdb_id=tvdb_id
+        )
+        return self._series_repo.save(series)
+
+    def _fetch_series_details(
+        self, item: MigrationItem
+    ) -> Optional[MediaDetails]:
+        """Fetch via TMDB (search_tv) ou TVDB selon source du match."""
+        # Préférer TVDB quand l'id TVDB est connu (catalogue plus exhaustif
+        # pour les séries anciennes), sinon retomber sur TMDB.
+        if item.match.tvdb_id is not None and self._tvdb is not None:
+            return asyncio.run(
+                self._tvdb.get_details(str(item.match.tvdb_id))
+            )
+        if item.match.tmdb_id is not None:
+            return asyncio.run(
+                self._tmdb.get_tv_details(str(item.match.tmdb_id))
+            )
+        return None
+
+    @staticmethod
+    def _build_series_from_details(
+        details: MediaDetails,
+        *,
+        tmdb_id: Optional[int],
+        tvdb_id: Optional[int],
+    ) -> Series:
+        return Series(
+            tmdb_id=tmdb_id,
+            tvdb_id=tvdb_id,
+            title=details.title,
+            original_title=details.original_title,
+            year=details.year,
+            genres=tuple(details.genres),
+            overview=details.overview,
+            poster_path=details.poster_url,
+            vote_average=details.vote_average,
+            vote_count=details.vote_count,
+            director=details.director,
+            cast=tuple(details.cast),
+        )
+
+    @staticmethod
+    def _synthetic_episode(
+        series: Series, parsed: ParsedFilename
+    ) -> Episode:
+        """Episode synthétique en mémoire (pas inseré DB).
+
+        Pattern réutilisé de destination_planner._synthetic_episode : pour la
+        migration on n'enrichit pas le titre des épisodes (déféré à
+        `enrich-episode-titles` post-transfert).
+        """
+        return Episode(
+            series_id=series.id,
+            season_number=parsed.season or 0,
+            episode_number=parsed.episode or 0,
+            title=parsed.episode_title or "",
+        )

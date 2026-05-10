@@ -12,8 +12,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.core.entities.media import Movie
+from src.core.entities.media import Movie, Series
 from src.core.ports.api_clients import MediaDetails
+from src.core.value_objects.parsed_info import MediaType, ParsedFilename
 from src.services.migration.dataclasses import (
     Bucket,
     MatchInfo,
@@ -191,27 +192,221 @@ def test_prepare_passes_correct_extension_to_renamer():
     assert kwargs["extension"] == ".mp4"
 
 
-def test_prepare_raises_not_implemented_for_series():
-    """Les séries ne sont pas encore supportées (étape 4b2)."""
-    finalizer = _make_finalizer()
-    item = _raw_movie_item(tmdb_id=None)
-    item.match.tvdb_id = 73739
-    with pytest.raises(NotImplementedError, match="séries"):
-        finalizer.prepare(item)
-
-
-def test_prepare_raises_not_implemented_for_series_root_without_id():
-    """media_root="Séries" + pas de tmdb_id → NotImplementedError (4b2)."""
-    finalizer = _make_finalizer()
-    item = _raw_movie_item(tmdb_id=None)
-    item.media_root = "Séries"
-    with pytest.raises(NotImplementedError, match="séries"):
-        finalizer.prepare(item)
-
-
 def test_finalize_raises_not_implemented():
     """finalize() sera livré en étape 4b3."""
     finalizer = _make_finalizer()
     item = _raw_movie_item()
     with pytest.raises(NotImplementedError, match="4b3"):
         finalizer.finalize(item, Path("/new/Avatar.mkv"))
+
+
+# ---- prepare() séries (étape 4b2) ----------------------------------------
+
+
+def _raw_series_item(
+    *,
+    item_id: str = "ser1",
+    tvdb_id: int | None = 73739,
+    tmdb_id: int | None = None,
+    source: Path = Path("/old/Séries/Lost.S01E01.mkv"),
+    media_root: str = "Séries",
+) -> MigrationItem:
+    return MigrationItem(
+        item_id=item_id,
+        bucket=Bucket.MIGRATE,
+        symlink_path=source,
+        source_path=source,
+        destination_path=None,
+        media_root=media_root,
+        relative_category="",
+        size_bytes=300_000_000,
+        rating=RatingDecision(value=8.0, source="tmdb"),
+        match=MatchInfo(tvdb_id=tvdb_id, tmdb_id=tmdb_id, score=92.0),
+        is_symlink_source=False,
+    )
+
+
+def _series_details(
+    *,
+    rid: str = "73739",
+    title: str = "Lost",
+    year: int = 2004,
+    genres: tuple[str, ...] = ("Drame", "Mystère"),
+) -> MediaDetails:
+    return MediaDetails(
+        id=rid,
+        title=title,
+        year=year,
+        genres=genres,
+        overview="Crash sur une île mystérieuse",
+        vote_average=8.3,
+        vote_count=5000,
+        is_tv=True,
+    )
+
+
+def _make_series_finalizer(
+    *,
+    series_in_db: Series | None = None,
+    fetched_details: MediaDetails | None = None,
+    parsed: ParsedFilename | None = None,
+    storage_dir: Path = Path("/new_storage"),
+    video_dir: Path = Path("/new_video"),
+) -> MigrationRawFinalizer:
+    tmdb = MagicMock()
+    tmdb.get_details = AsyncMock(return_value=None)
+    tmdb.get_tv_details = AsyncMock(return_value=fetched_details)
+
+    tvdb = MagicMock()
+    tvdb.get_details = AsyncMock(return_value=fetched_details)
+
+    movie_repo = MagicMock()
+    movie_repo.get_by_tmdb_id.return_value = None
+    movie_repo.save.side_effect = lambda m: m
+
+    series_repo = MagicMock()
+    series_repo.get_by_tvdb_id.return_value = series_in_db
+    series_repo.get_by_tmdb_id.return_value = series_in_db
+    series_repo.save.side_effect = lambda s: Series(
+        id="7" if s.id is None else s.id,
+        tvdb_id=s.tvdb_id,
+        tmdb_id=s.tmdb_id,
+        title=s.title,
+        year=s.year,
+        genres=s.genres,
+    )
+
+    parser = MagicMock()
+    parser.parse.return_value = parsed or ParsedFilename(
+        title="Lost",
+        year=2004,
+        media_type=MediaType.SERIES,
+        season=1,
+        episode=1,
+    )
+
+    organizer = MagicMock()
+    organizer.get_series_destination.return_value = (
+        storage_dir / "Séries" / "L" / "Lost (2004)" / "Saison 01"
+    )
+
+    renamer = MagicMock()
+    renamer.generate_series_filename.return_value = (
+        "Lost (2004) - S01E01.mkv"
+    )
+
+    return MigrationRawFinalizer(
+        tmdb_client=tmdb,
+        tvdb_client=tvdb,
+        movie_repo=movie_repo,
+        series_repo=series_repo,
+        organizer=organizer,
+        renamer=renamer,
+        parser=parser,
+        storage_dir=storage_dir,
+        video_dir=video_dir,
+    )
+
+
+def test_prepare_series_already_in_db_by_tvdb_id():
+    """Series déjà en DB → pas de fetch TVDB/TMDB."""
+    existing = Series(id="7", tvdb_id=73739, title="Lost", year=2004)
+    finalizer = _make_series_finalizer(series_in_db=existing)
+    item = _raw_series_item(tvdb_id=73739)
+
+    destination = finalizer.prepare(item)
+
+    assert destination == Path(
+        "/new_storage/Séries/L/Lost (2004)/Saison 01/Lost (2004) - S01E01.mkv"
+    )
+    finalizer._series_repo.get_by_tvdb_id.assert_called_once_with(73739)
+    finalizer._tvdb.get_details.assert_not_called()
+    finalizer._tmdb.get_tv_details.assert_not_called()
+    finalizer._series_repo.save.assert_not_called()
+
+
+def test_prepare_series_not_in_db_fetches_tvdb_and_inserts():
+    """Series absente → fetch TVDB (tvdb_id présent) + save."""
+    finalizer = _make_series_finalizer(
+        series_in_db=None, fetched_details=_series_details()
+    )
+    item = _raw_series_item(tvdb_id=73739)
+
+    destination = finalizer.prepare(item)
+
+    assert destination is not None
+    finalizer._tvdb.get_details.assert_called_once_with("73739")
+    finalizer._tmdb.get_tv_details.assert_not_called()
+    saved = finalizer._series_repo.save.call_args[0][0]
+    assert saved.tvdb_id == 73739
+    assert saved.title == "Lost"
+    assert saved.year == 2004
+    assert saved.genres == ("Drame", "Mystère")
+
+
+def test_prepare_series_falls_back_to_tmdb_when_no_tvdb_id():
+    """Pas de tvdb_id → fetch TMDB get_tv_details."""
+    finalizer = _make_series_finalizer(
+        series_in_db=None,
+        fetched_details=_series_details(rid="4607", title="Lost"),
+    )
+    item = _raw_series_item(tvdb_id=None, tmdb_id=4607)
+
+    finalizer.prepare(item)
+
+    finalizer._tmdb.get_tv_details.assert_called_once_with("4607")
+    finalizer._tvdb.get_details.assert_not_called()
+
+
+def test_prepare_series_returns_none_when_season_missing():
+    """Sans saison/épisode parsable → return None (pas de chemin canonique)."""
+    finalizer = _make_series_finalizer(
+        parsed=ParsedFilename(
+            title="Mystère", media_type=MediaType.SERIES, season=None, episode=None
+        )
+    )
+    item = _raw_series_item()
+
+    assert finalizer.prepare(item) is None
+
+
+def test_prepare_series_caches_for_finalize():
+    """Series + Episode synthétique cachés pour finalize() (idempotence)."""
+    existing = Series(id="7", tvdb_id=73739, title="Lost", year=2004)
+    finalizer = _make_series_finalizer(series_in_db=existing)
+    item = _raw_series_item(item_id="cache-ser", tvdb_id=73739)
+
+    finalizer.prepare(item)
+
+    assert "cache-ser" in finalizer._series_cache
+    cached = finalizer._series_cache["cache-ser"]
+    assert cached.series.id == "7"
+    assert cached.episode.season_number == 1
+    assert cached.episode.episode_number == 1
+
+
+def test_prepare_series_routed_by_media_root_heuristic():
+    """media_root='Séries' avec match TMDB 'tmdb' (pas tmdb_tv) → traité comme série."""
+    existing = Series(id="7", tmdb_id=4607, title="Lost", year=2004)
+    finalizer = _make_series_finalizer(series_in_db=existing)
+    item = _raw_series_item(
+        tvdb_id=None,
+        tmdb_id=4607,
+        media_root="Séries",
+    )
+
+    destination = finalizer.prepare(item)
+
+    assert destination is not None
+    finalizer._series_repo.get_by_tmdb_id.assert_called_with(4607)
+    # Pas de routage vers Movie.
+    finalizer._movie_repo.get_by_tmdb_id.assert_not_called()
+
+
+def test_prepare_series_without_repo_raises():
+    """Si le finalizer n'a pas series_repo configuré → RuntimeError."""
+    # Construit un finalizer "films-only" sans series_repo
+    finalizer = _make_finalizer()
+    item = _raw_series_item()
+    with pytest.raises(RuntimeError, match="series_repo"):
+        finalizer.prepare(item)
