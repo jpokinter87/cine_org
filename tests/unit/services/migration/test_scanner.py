@@ -177,3 +177,90 @@ def test_scanner_no_destination_root_no_already_on_destination_flag(layout):
     )
     cands = _by_name(list(scanner.scan(layout["source"])))
     assert cands["alreadyhere.mkv"].already_on_destination is False
+
+
+# ---- Filtrage par catégorie ----------------------------------------------
+
+
+def test_scanner_filters_by_default_category_prefixes(tmp_path):
+    """Par défaut, seuls Films/Séries/Animations sont scannés (Docs/Musique skip)."""
+    src = tmp_path / "videotheque"
+    (src / "Films" / "Drame").mkdir(parents=True)
+    (src / "Séries" / "L").mkdir(parents=True)
+    (src / "Animations" / "A").mkdir(parents=True)
+    (src / "Docs").mkdir(parents=True)
+    (src / "Musique").mkdir(parents=True)
+    (src / "TV").mkdir(parents=True)
+
+    (src / "Films" / "Drame" / "film.mkv").write_bytes(b"f")
+    (src / "Séries" / "L" / "lost.mkv").write_bytes(b"l")
+    (src / "Animations" / "A" / "anime.mkv").write_bytes(b"a")
+    (src / "Docs" / "doc.mkv").write_bytes(b"d")
+    (src / "Musique" / "clip.mkv").write_bytes(b"m")
+    (src / "TV" / "show.mkv").write_bytes(b"t")
+
+    scanner = MigrationScanner(video_extensions=VIDEO_EXTS)
+    names = sorted(c.symlink_path.name for c in scanner.scan(src))
+    assert names == ["anime.mkv", "film.mkv", "lost.mkv"]
+
+
+def test_scanner_default_filter_handles_accents_and_case(tmp_path):
+    """Match insensible aux accents + casse."""
+    src = tmp_path / "src"
+    (src / "Series" / "B").mkdir(parents=True)
+    (src / "ANIME" / "naruto").mkdir(parents=True)
+    (src / "FILMS").mkdir(parents=True)
+
+    (src / "Series" / "B" / "bb.mkv").write_bytes(b"x")
+    (src / "ANIME" / "naruto" / "ep1.mkv").write_bytes(b"x")
+    (src / "FILMS" / "matrix.mkv").write_bytes(b"x")
+
+    scanner = MigrationScanner(video_extensions=VIDEO_EXTS)
+    names = sorted(c.symlink_path.name for c in scanner.scan(src))
+    assert names == ["bb.mkv", "ep1.mkv", "matrix.mkv"]
+
+
+def test_scanner_disable_category_filter_with_none(tmp_path):
+    """category_prefixes=None désactive le filtrage (scan tout)."""
+    src = tmp_path / "src"
+    (src / "Docs").mkdir(parents=True)
+    (src / "Musique").mkdir(parents=True)
+    (src / "Docs" / "doc.mkv").write_bytes(b"x")
+    (src / "Musique" / "clip.mkv").write_bytes(b"x")
+
+    scanner = MigrationScanner(
+        video_extensions=VIDEO_EXTS, category_prefixes=None
+    )
+    names = sorted(c.symlink_path.name for c in scanner.scan(src))
+    assert names == ["clip.mkv", "doc.mkv"]
+
+
+def test_scanner_custom_category_prefixes(tmp_path):
+    """Whitelist custom : on peut cibler 'Concerts' uniquement."""
+    src = tmp_path / "src"
+    (src / "Concerts").mkdir(parents=True)
+    (src / "Films").mkdir(parents=True)
+    (src / "Concerts" / "live.mkv").write_bytes(b"x")
+    (src / "Films" / "matrix.mkv").write_bytes(b"x")
+
+    scanner = MigrationScanner(
+        video_extensions=VIDEO_EXTS, category_prefixes=("concert",)
+    )
+    names = [c.symlink_path.name for c in scanner.scan(src)]
+    assert names == ["live.mkv"]
+
+
+def test_scanner_filter_walks_into_intermediate_dirs(tmp_path):
+    """Le filtre accepte une catégorie à n'importe quelle profondeur (ex: Vidéothèque/Films)."""
+    src = tmp_path / "wd10-1"
+    deep = src / "Vidéothèque10" / "Films" / "Drame"
+    deep.mkdir(parents=True)
+    sibling = src / "Vidéothèque10" / "Docs"
+    sibling.mkdir(parents=True)
+
+    (deep / "film.mkv").write_bytes(b"x")
+    (sibling / "doc.mkv").write_bytes(b"x")
+
+    scanner = MigrationScanner(video_extensions=VIDEO_EXTS)
+    names = [c.symlink_path.name for c in scanner.scan(src)]
+    assert names == ["film.mkv"]

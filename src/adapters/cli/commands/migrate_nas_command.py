@@ -60,7 +60,10 @@ from src.services.migration.plan_builder import (
 )
 from src.services.migration.rating_resolver import MigrationRatingResolver
 from src.services.migration.raw_finalizer import MigrationRawFinalizer
-from src.services.migration.scanner import MigrationScanner
+from src.services.migration.scanner import (
+    DEFAULT_CATEGORY_PREFIXES,
+    MigrationScanner,
+)
 from src.services.migration.state_store import MigrationStateStore
 from src.services.migration.transfer_executor import (
     MigrationTransferExecutor,
@@ -93,6 +96,7 @@ def build_plan(
     imdb_cache_dir: Path = Path(".cache/imdb"),
     include_raw: bool = False,
     show_progress: bool = False,
+    category_prefixes: Optional[tuple[str, ...]] = DEFAULT_CATEGORY_PREFIXES,
 ) -> MigrationPlan:
     """
     Construit le plan, écrit le JSON dans `output_path` et (si fourni) les
@@ -112,6 +116,7 @@ def build_plan(
         video_extensions=VIDEO_EXTENSIONS,
         destination_root=destination_storage_dir,
         alternative_roots=alternative_roots or [],
+        category_prefixes=category_prefixes,
     )
     resolver = MigrationRatingResolver(
         session=session, parser=parser, imdb_importer=importer
@@ -356,6 +361,27 @@ def plan_command(
             ),
         ),
     ] = False,
+    category: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--category",
+            help=(
+                "Préfixe de répertoire à inclure (insensible à la casse/accents). "
+                "Multi : --category film --category seri. Défaut : film, seri, anim. "
+                "Permet d'ignorer Docs/, TV/, Musique/ etc. lors du scan."
+            ),
+        ),
+    ] = None,
+    all_categories: Annotated[
+        bool,
+        typer.Option(
+            "--all-categories",
+            help=(
+                "Désactive le filtrage par catégorie : scan toute l'arborescence "
+                "source sans whitelist. Inverse du défaut (Films/Séries/Animations)."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Construit le plan de migration (lecture seule)."""
     container = Container()
@@ -366,10 +392,21 @@ def plan_command(
     session = next(get_session())
 
     mode_label = "[green]symlinks + raw[/green]" if include_raw else "symlinks"
+
+    if all_categories:
+        category_prefixes: Optional[tuple[str, ...]] = None
+        category_label = "[red]toutes catégories (filtrage désactivé)[/red]"
+    else:
+        category_prefixes = (
+            tuple(category) if category else DEFAULT_CATEGORY_PREFIXES
+        )
+        category_label = ", ".join(category_prefixes)
+
     console.print(
         f"[bold cyan]Construction du plan[/bold cyan] "
         f"depuis [yellow]{source}[/yellow] "
-        f"(seuil note ≥ [magenta]{threshold}[/magenta], mode {mode_label})"
+        f"(seuil note ≥ [magenta]{threshold}[/magenta], mode {mode_label}, "
+        f"catégories : [dim]{category_label}[/dim])"
     )
 
     plan = build_plan(
@@ -383,6 +420,7 @@ def plan_command(
         alternative_roots=list(alt_root) if alt_root else None,
         include_raw=include_raw,
         show_progress=True,
+        category_prefixes=category_prefixes,
     )
 
     _display_plan_summary(plan, output, csv_dir)

@@ -20,11 +20,24 @@ Utilisation :
 from __future__ import annotations
 
 import os
+import unicodedata
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Optional
 
 from src.services.migration.dataclasses import MigrationCandidate
+
+
+# Préfixes par défaut pour limiter le scan aux répertoires de vidéothèque
+# pertinents (Films, Séries/Series, Animations/Animes). Insensible à la casse
+# et aux accents — match si un segment du chemin commence par un de ces préfixes.
+DEFAULT_CATEGORY_PREFIXES: tuple[str, ...] = ("film", "seri", "anim")
+
+
+def _normalize_segment(value: str) -> str:
+    """Normalise un segment de chemin pour comparaison : strip accents + lowercase."""
+    nfkd = unicodedata.normalize("NFKD", value)
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).lower().strip()
 
 
 class MigrationScanner:
@@ -45,6 +58,7 @@ class MigrationScanner:
         video_extensions: Iterable[str],
         destination_root: Optional[Path] = None,
         alternative_roots: Optional[Iterable[Path]] = None,
+        category_prefixes: Optional[Iterable[str]] = DEFAULT_CATEGORY_PREFIXES,
     ) -> None:
         self._video_extensions = frozenset(e.lower() for e in video_extensions)
         self._destination_root = (
@@ -52,6 +66,12 @@ class MigrationScanner:
         )
         self._alternative_roots = (
             [Path(r) for r in alternative_roots] if alternative_roots else []
+        )
+        # category_prefixes=None désactive le filtrage (scan tout).
+        self._category_prefixes: Optional[tuple[str, ...]] = (
+            tuple(_normalize_segment(p) for p in category_prefixes)
+            if category_prefixes is not None
+            else None
         )
         # Cache des index alt_root -> {filename: full_path} pour éviter de
         # re-scanner les disques de secours à chaque lien cassé.
@@ -62,6 +82,11 @@ class MigrationScanner:
         Itère sur tous les fichiers vidéo sous `root` et produit un candidat
         par entrée. Les fichiers d'extension non vidéo sont silencieusement
         ignorés (cas typique : fichiers .nfo, .txt, posters, etc.).
+
+        Si `category_prefixes` est défini, seuls les fichiers dont au moins
+        un segment de chemin commence par un de ces préfixes (insensible à
+        la casse et aux accents) sont produits. Permet d'ignorer Docs/, TV/,
+        Musique/, etc. quand on scanne la racine d'une vidéothèque mixte.
         """
         root = Path(root)
         for dirpath, _, filenames in os.walk(root, followlinks=False):
@@ -69,7 +94,26 @@ class MigrationScanner:
                 full = Path(dirpath) / name
                 if full.suffix.lower() not in self._video_extensions:
                     continue
+                if not self._matches_category(full, root):
+                    continue
                 yield self._classify(full, root)
+
+    def _matches_category(self, path: Path, root: Path) -> bool:
+        """Vérifie qu'au moins un segment relatif matche la whitelist."""
+        if self._category_prefixes is None:
+            return True
+        try:
+            relative = path.relative_to(root)
+        except ValueError:
+            return True  # Hors source_root : on ne devrait pas arriver ici.
+        for segment in relative.parts[:-1]:  # Exclut le filename lui-même.
+            normalized = _normalize_segment(segment)
+            if any(
+                normalized.startswith(prefix)
+                for prefix in self._category_prefixes
+            ):
+                return True
+        return False
 
     def _classify(self, path: Path, root: Path) -> MigrationCandidate:
         media_root, relative_category = self._extract_categories(path, root)
