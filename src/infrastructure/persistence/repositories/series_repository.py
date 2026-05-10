@@ -112,6 +112,14 @@ class SQLModelSeriesRepository(ISeriesRepository):
             return self._to_entity(model)
         return None
 
+    def get_by_tmdb_id(self, tmdb_id: int) -> Optional[Series]:
+        """Recupere une serie par son ID TMDB."""
+        statement = select(SeriesModel).where(SeriesModel.tmdb_id == tmdb_id)
+        model = self._session.exec(statement).first()
+        if model:
+            return self._to_entity(model)
+        return None
+
     def search_by_title(self, title: str, year: Optional[int] = None) -> list[Series]:
         """Recherche des series par titre, avec filtrage optionnel par annee."""
         statement = select(SeriesModel).where(SeriesModel.title.contains(title))
