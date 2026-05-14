@@ -6390,6 +6390,12 @@ details[open] > .maint-issue-toggle::before {
 .reassociate-select-btn:hover {
     opacity: 0.85;
 }
+/* Carte de l'association actuelle : relance l'enrichissement (note TMDB/IMDb) */
+.reassociate-refresh-btn {
+    color: var(--accent-amber);
+    background: transparent;
+    border: 1px solid var(--accent-amber);
+}
 
 /* ── Reassociate Confirm Dialog ── */
 .reassociate-confirm-overlay {

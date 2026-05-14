@@ -1166,8 +1166,10 @@ Lorsqu'un film ou une série est mal identifié par TMDB, le bouton **Corriger**
    - Score de correspondance (badge vert/orange/rouge)
    - Popularité TMDB
    - Synopsis abrégé
-3. **Sélection** — Cliquer sur « Associer » pour remplacer l'association TMDB
-4. Les métadonnées (titre, synopsis, genres, notes, jaquette) sont automatiquement mises à jour
+3. **Sélection** — Cliquer sur « Sélectionner » pour remplacer l'association TMDB
+4. Les métadonnées (titre, synopsis, genres, note TMDB **et note IMDb**, jaquette) sont automatiquement mises à jour
+
+> **Rafraîchir une association déjà correcte** — La carte marquée « Association actuelle » expose un bouton **Rafraîchir les données** : il relance l'enrichissement sur le même `tmdb_id` (note TMDB, `imdb_id` et note IMDb du cache local) sans changer l'association. Utile quand un film/série correctement associé n'a pas de note — typiquement importé avant que l'enrichissement des notes n'existe.
 
 ### Lecteur vidéo intégré
 

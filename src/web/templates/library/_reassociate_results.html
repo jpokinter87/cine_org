@@ -51,19 +51,18 @@
         <div class="reassociate-card-overview">{{ c.overview[:150] }}{% if c.overview|length > 150 %}…{% endif %}</div>
         {% endif %}
 
-        {% if not c.is_current %}
         <form class="reassociate-card-action">
             <button
                 type="button"
-                class="reassociate-select-btn"
+                class="reassociate-select-btn{% if c.is_current %} reassociate-refresh-btn{% endif %}"
                 data-title="{{ c.title }}"
                 data-year="{{ c.year or '' }}"
                 data-tmdb-id="{{ c.tmdb_id }}"
+                {% if c.is_current %}data-refresh="1"{% endif %}
             >
-                Sélectionner
+                {% if c.is_current %}Rafraîchir les données{% else %}Sélectionner{% endif %}
             </button>
         </form>
-        {% endif %}
     </div>
 </div>
 {% endfor %}
@@ -73,7 +72,7 @@
     <div class="reassociate-confirm-dialog">
         <h3 class="reassociate-confirm-title">Ré-associer ce titre ?</h3>
         <p class="reassociate-confirm-text">
-            Associer avec <strong id="reassociate-confirm-name"></strong>
+            <span id="reassociate-confirm-prefix">Associer avec</span> <strong id="reassociate-confirm-name"></strong>
         </p>
         <div class="reassociate-confirm-actions">
             <button type="button" class="reassociate-confirm-cancel" onclick="hideReassociateConfirm()">Annuler</button>
@@ -92,7 +91,12 @@ document.querySelectorAll('.reassociate-select-btn').forEach(function(btn) {
         var title = this.getAttribute('data-title');
         var year = this.getAttribute('data-year');
         var tmdbId = this.getAttribute('data-tmdb-id');
+        var isRefresh = this.getAttribute('data-refresh') === '1';
         var label = title + (year ? ' (' + year + ')' : '');
+        document.querySelector('.reassociate-confirm-title').textContent =
+            isRefresh ? 'Rafraîchir les données ?' : 'Ré-associer ce titre ?';
+        document.getElementById('reassociate-confirm-prefix').textContent =
+            isRefresh ? 'Recharger les métadonnées TMDB de' : 'Associer avec';
         document.getElementById('reassociate-confirm-name').textContent = '« ' + label + ' »';
         var okBtn = document.getElementById('reassociate-confirm-ok-btn');
         okBtn.setAttribute('hx-vals', JSON.stringify({tmdb_id: tmdbId}));
