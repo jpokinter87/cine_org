@@ -16,7 +16,6 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from src.adapters.parsing.guessit_parser import GuessitFilenameParser
 from src.infrastructure.persistence.models import (
-    IMDbRatingModel,
     MovieModel,
     SeriesModel,
 )
@@ -164,7 +163,8 @@ def test_personal_weight_configurable(session, parser, importer):
     """Avec un poids personnel de 1 (au lieu de 2), personal=5 → 5.0 et imdb=7.9 gagne."""
     m = MovieModel(tmdb_id=14, title="Wall-E", year=2008,
                    imdb_rating=7.9, personal_rating=5)
-    session.add(m); session.commit()
+    session.add(m)
+    session.commit()
     resolver = MigrationRatingResolver(session, parser, importer, personal_weight=1)
     decision = resolver.resolve(_candidate("Wall-E (2008) FR x265 1080p.mkv"))
     assert decision.source == "imdb"
@@ -174,7 +174,8 @@ def test_personal_weight_configurable(session, parser, importer):
 def test_search_partial_title(session, parser, importer):
     """Si l'exact échoue, on retombe sur LIKE %parsed_title% (DB englobe le titre parsé)."""
     m = MovieModel(tmdb_id=15, title="Le Seigneur des anneaux", year=2001, imdb_rating=8.8)
-    session.add(m); session.commit()
+    session.add(m)
+    session.commit()
     resolver = MigrationRatingResolver(session, parser, importer)
     # parsed.title sera "Seigneur Des Anneaux" → LIKE matche "Le Seigneur des anneaux"
     decision = resolver.resolve(_candidate("Seigneur des anneaux (2001) FR x265 1080p.mkv"))
