@@ -29,6 +29,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from sqlmodel import Session
+
 from src.adapters.api.tmdb_client import TMDBClient
 from src.adapters.api.tvdb_client import TVDBClient
 from src.core.entities.media import Episode, Movie, Series
@@ -79,6 +81,11 @@ class MigrationRawFinalizer:
         renamer: RenamerService pour le nom canonique.
         storage_dir: Racine storage du nouveau NAS.
         video_dir: Racine video/ du nouveau NAS.
+        session: Session SQLModel pour la mise à jour des paths (file_path,
+            symlink_path) sur MovieModel/EpisodeModel — colonnes absentes des
+            entités domaine. Doit être la même que celle utilisée par les
+            repos passés en arguments. Si None (rétrocompat), tombe en
+            fallback sur l'attribut privé `_session` du repo concerné.
     """
 
     def __init__(
@@ -94,6 +101,7 @@ class MigrationRawFinalizer:
         series_repo: Optional[SQLModelSeriesRepository] = None,
         episode_repo: Optional[SQLModelEpisodeRepository] = None,
         parser: Optional[IFilenameParser] = None,
+        session: Optional[Session] = None,
     ) -> None:
         self._tmdb = tmdb_client
         self._movie_repo = movie_repo
@@ -105,9 +113,20 @@ class MigrationRawFinalizer:
         self._series_repo = series_repo
         self._episode_repo = episode_repo
         self._parser = parser
+        self._session = session
         # Cache local item_id → bundle pour idempotence prepare → finalize.
         self._movie_cache: dict[str, _CachedMovie] = {}
         self._series_cache: dict[str, _CachedSeries] = {}
+
+    def _get_session(self, repo: object) -> Session:
+        """Retourne la session injectée si dispo, sinon celle du repo (legacy)."""
+        if self._session is not None:
+            return self._session
+        # Rétrocompat : avant l'injection explicite, on tapait dans `_session`
+        # du repo. Conservé pour ne pas casser les tests existants qui
+        # construisent le finalizer sans session. Les nouveaux call sites
+        # devraient toujours passer `session=`.
+        return repo._session  # type: ignore[attr-defined]
 
     # ---- RawItemFinalizer Protocol ---------------------------------------
 
@@ -159,12 +178,13 @@ class MigrationRawFinalizer:
     ) -> None:
         """Met à jour file_path et symlink_path sur MovieModel via la session.
 
-        Pattern repris de workflow.transfer_step._update_file_paths : l'entité
-        domaine Movie n'expose pas symlink_path, on passe par le SQLModel.
+        L'entité domaine Movie n'expose pas symlink_path : on passe par le
+        SQLModel directement. Session injectée si disponible, sinon fallback
+        sur celle du repo (cf. _get_session).
         """
         from src.infrastructure.persistence.models import MovieModel
 
-        session = self._movie_repo._session
+        session = self._get_session(self._movie_repo)
         model = session.get(MovieModel, movie_id)
         if model is None:
             return
@@ -216,7 +236,8 @@ class MigrationRawFinalizer:
     ) -> None:
         from src.infrastructure.persistence.models import EpisodeModel
 
-        session = self._episode_repo._session  # type: ignore[union-attr]
+        assert self._episode_repo is not None
+        session = self._get_session(self._episode_repo)
         model = session.get(EpisodeModel, episode_id)
         if model is None:
             return
