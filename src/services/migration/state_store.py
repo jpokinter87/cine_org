@@ -16,7 +16,7 @@ Reprise : `pending_items()` exclut les items en `COMMITTED` mais conserve les
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -211,4 +211,4 @@ class MigrationStateStore:
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now(timezone.utc).isoformat()

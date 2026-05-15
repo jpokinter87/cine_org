@@ -23,7 +23,6 @@ from src.services.matcher import MatcherService
 from src.services.migration.dataclasses import MigrationCandidate
 from src.services.migration.matching import (
     MatchKind,
-    MatchOutcome,
     MigrationMatcher,
     _truncate_title_at_first_number,
     candidates_to_dicts,

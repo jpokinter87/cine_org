@@ -27,6 +27,7 @@ from src.core.ports.api_clients import SearchResult
 from src.core.ports.parser import IFilenameParser
 from src.core.value_objects.parsed_info import MediaType, ParsedFilename
 from src.services.matcher import MatcherService
+from src.services.migration._helpers import safe_int
 from src.services.migration.dataclasses import MigrationCandidate
 
 
@@ -259,20 +260,13 @@ def candidates_to_dicts(
         }
         # Le mappage id → tmdb_id/tvdb_id depend de la source.
         if r.source.startswith("tmdb"):
-            entry["tmdb_id"] = _safe_int(r.id)
+            entry["tmdb_id"] = safe_int(r.id)
         elif r.source == "tvdb":
-            entry["tvdb_id"] = _safe_int(r.id)
+            entry["tvdb_id"] = safe_int(r.id)
         if r.original_title and r.original_title != r.title:
             entry["original_title"] = r.original_title
         out.append(entry)
     return out
-
-
-def _safe_int(value: str) -> Optional[int]:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
 
 
 # Pattern : un mot constitué uniquement de 1 à 3 chiffres, entouré d'espaces

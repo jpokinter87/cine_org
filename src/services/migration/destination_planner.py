@@ -27,9 +27,9 @@ from typing import Optional
 
 from sqlmodel import Session
 
-from src.core.entities.media import Episode, Movie, Series
+from src.core.entities.media import Episode, Series
 from src.core.ports.parser import IFilenameParser
-from src.core.value_objects.parsed_info import MediaType, ParsedFilename
+from src.core.value_objects.parsed_info import ParsedFilename
 from src.infrastructure.persistence.repositories.episode_repository import (
     SQLModelEpisodeRepository,
 )

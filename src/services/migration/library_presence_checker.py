@@ -27,6 +27,7 @@ from src.infrastructure.persistence.repositories.movie_repository import (
 from src.infrastructure.persistence.repositories.series_repository import (
     SQLModelSeriesRepository,
 )
+from src.services.migration._helpers import safe_int
 from src.services.migration.dataclasses import MigrationCandidate
 from src.services.migration.matching import MatchOutcome
 
@@ -86,7 +87,7 @@ class LibraryPresenceChecker:
     def _check_movie(self, top: SearchResult) -> Optional[str]:
         if not top.source.startswith("tmdb"):
             return None
-        tmdb_id = self._safe_int(top.id)
+        tmdb_id = safe_int(top.id)
         if tmdb_id is None:
             return None
         movie = self._movie_repo.get_by_tmdb_id(tmdb_id)
@@ -97,7 +98,7 @@ class LibraryPresenceChecker:
     def _check_series(self, top: SearchResult, parsed) -> Optional[str]:
         if parsed.season is None or parsed.episode is None:
             return None
-        ext_id = self._safe_int(top.id)
+        ext_id = safe_int(top.id)
         if ext_id is None:
             return None
         series = None
@@ -114,10 +115,3 @@ class LibraryPresenceChecker:
             if ep.file_path:
                 return ep.file_path
         return None
-
-    @staticmethod
-    def _safe_int(value: str) -> Optional[int]:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return None
