@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Annotated, Any, Optional
 
 import typer
+from rich.markup import escape as rich_escape
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -259,15 +260,14 @@ _PHASES_FR: tuple[str, ...] = (
 
 def _canonical_phase(emit_phase: str) -> Optional[str]:
     """Mappe un event émis par transfer_executor sur l'une des 5 phases
-    canoniques affichées (ou None pour les events hors séquence : start,
-    failed_*, rsync_error:* — ces derniers conservent la phase précédente
-    pour ne pas casser le highlight)."""
-    if emit_phase in (
-        "preparing",
-        "hashing_source",
-        "hashing_existing",
-        "checking_existing",
-    ):
+    canoniques affichées (ou None pour `start` qui conserve la phase
+    précédente pour ne pas casser le highlight).
+
+    Phases émises par MigrationTransferExecutor : start, preparing,
+    hashing_source, hashing_existing, copying_attempt_N, retry_pause_Ns,
+    verifying, finalizing, committed.
+    """
+    if emit_phase in ("preparing", "hashing_source", "hashing_existing"):
         return "préparation"
     if emit_phase.startswith("copying_") or emit_phase.startswith(
         "retry_pause_"
@@ -427,8 +427,6 @@ def _execute_with_progress(
                     return "hash source (xxh3_64) — peut prendre du temps"
                 if phase == "hashing_existing":
                     return "hash dest (vérif reprise)"
-                if phase == "checking_existing":
-                    return "vérif existant"
                 if phase.startswith("copying_attempt_"):
                     n = phase.rsplit("_", 1)[1]
                     return f"copie (essai {n})"
@@ -436,7 +434,7 @@ def _execute_with_progress(
                     secs = phase.removeprefix("retry_pause_").rstrip("s")
                     return f"pause {secs}s avant nouvel essai"
                 if phase.startswith("rsync_error:"):
-                    msg = phase.split(":", 1)[1][:80]
+                    msg = phase.removeprefix("rsync_error:")[:80]
                     return f"ERREUR rsync : {msg}"
                 if phase == "verifying":
                     return "vérification hash"
@@ -454,14 +452,15 @@ def _execute_with_progress(
 
             def on_event(item, phase: str) -> None:
                 size_mb = (item.size_bytes or 0) / (1024**2)
-                short = item.symlink_path.name[:55]
+                # rich_escape protège contre les filenames type
+                # "Movie [1080p][x265].mkv" qui casseraient le markup Rich.
+                short = rich_escape(item.symlink_path.name[:55])
                 if phase == "start":
-                    # Activer la sous-barre fichier sur l'item en cours.
                     progress.update(
                         file_task,
                         total=max(item.size_bytes or 1, 1),
                         completed=0,
-                        description=f"\\[file] {short}",
+                        description=f"[file] {short}",
                         visible=True,
                     )
                 _refresh_phase_task(phase)
@@ -478,36 +477,23 @@ def _execute_with_progress(
                     )
                     progress.update(file_task, visible=False)
                     return
-                if phase.startswith("failed"):
-                    counters["failed"] += 1
-                    current_phase["label"] = "failed"
-                    progress.update(
-                        task,
-                        advance=1,
-                        description=f"[red]✗[/red] {short}",
-                    )
-                    progress.update(file_task, visible=False)
-                    return
                 current_phase["label"] = _phase_label_from_emit(phase)
+                label = rich_escape(current_phase["label"])
                 progress.update(
                     task,
-                    description=(
-                        f"[{current_phase['label']}] "
-                        f"{short} ({size_mb:.0f} MB)"
-                    ).replace("[", "\\[", 1),
+                    description=f"\\[{label}] {short} ({size_mb:.0f} MB)",
                 )
 
             def on_rsync_progress(
                 item, bytes_done: int, percent: int, speed: str
             ) -> None:
                 """Mise a jour live pendant le rsync (via --info=progress2)."""
-                short = item.symlink_path.name[:50]
-                # Sous-barre : avancée en octets (donne ETA précis du fichier).
+                short = rich_escape(item.symlink_path.name[:50])
+                speed_safe = rich_escape(speed)
                 progress.update(file_task, completed=bytes_done)
-                # Barre globale : description sans %/MB (deja sur file_task).
                 progress.update(
                     task,
-                    description=f"\\[rsync {speed:>10s}] {short}",
+                    description=f"\\[rsync {speed_safe:>10s}] {short}",
                 )
 
             executor = MigrationTransferExecutor(
@@ -522,14 +508,18 @@ def _execute_with_progress(
                 verify_hash=verify_hash,
             )
             outcomes = executor.execute_all()
-            # Capture les FAILED qui n'ont pas émis "failed_*" (status update direct).
-            for o in outcomes:
-                if o.status in (
+            # Recompute le compteur d'échecs depuis les outcomes — l'executor
+            # n'émet pas d'event "failed_*" : on l'extrait en post-traitement.
+            counters["failed"] = sum(
+                1
+                for o in outcomes
+                if o.status
+                in (
                     TransferStatus.FAILED_COPY,
                     TransferStatus.FAILED_VERIFY,
                     TransferStatus.FAILED_OTHER,
-                ) and counters["failed"] == 0:
-                    counters["failed"] += 1
+                )
+            )
             return outcomes
     finally:
         loguru_logger.enable("src")
@@ -557,6 +547,7 @@ def _build_raw_finalizer(
         parser=GuessitFilenameParser(),
         storage_dir=Path(config.storage_dir),
         video_dir=Path(config.video_dir),
+        session=session,
     )
 
 
