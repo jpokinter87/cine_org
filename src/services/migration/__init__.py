@@ -4,7 +4,12 @@ Service de migration depuis d'anciens NAS vers le nouveau NAS.
 Ce service prend en charge le transfert controle de fichiers video situes
 sur des volumes externes (anciens NAS, disques USB) vers la zone de
 stockage principale, en filtrant selon une note minimale combinee
-(IMDb / TMDB / personnelle) et en garantissant l'integrite via xxhash.
+(IMDb / TMDB / personnelle).
+
+L'intégrité contenu-à-contenu est garantie par le rolling checksum MD5
+interne de rsync pendant le transfert. Le hash xxh3_64 échantillonné
+(`hash_service.compute_file_hash`) sert au skip rapide en reprise (taille
++ 1 Mo tête + 1 Mo queue) — voir `transfer_executor.py` pour le détail.
 
 Le flux est en deux phases strictement separees :
 

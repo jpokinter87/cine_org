@@ -4,13 +4,13 @@ Exécuteur de transferts pour la migration NAS.
 Pour chaque MigrationItem du bucket MIGRATE non encore COMMITTED dans le
 state store :
 
-1. Calcule le hash xxh3_64 de la source.
+1. Calcule le hash xxh3_64 (échantillonné) de la source.
 2. Si la destination existe déjà avec le même hash (reprise d'une session
    interrompue), saute directement à la finalisation.
-3. Sinon lance rsync avec retry sur paliers de bande passante décroissants
-   (par défaut 25 → 20 → 15 → 10 → 5 MB/s).
-4. Vérifie le hash xxh3_64 de la destination. En cas de mismatch, supprime
-   la destination et marque FAILED_VERIFY (la source reste intacte).
+3. Sinon lance rsync avec retry après pause (par défaut 3 essais espacés
+   de 30 s) — `--inplace --partial` reprend où le précédent s'est arrêté.
+4. Vérifie le hash xxh3_64 (échantillonné) de la destination. En cas de
+   mismatch, supprime la destination et marque FAILED_VERIFY (source intacte).
 5. Si VERIFIED : finalisation selon le mode :
    - Mode symlinks (`is_symlink_source=True`) : swap atomique du symlink
      (os.rename via os.replace) vers la nouvelle destination. Source intacte.
@@ -18,6 +18,25 @@ state store :
      qui insere le VideoFile en DB, cree le symlink dans video/ canonique,
      et supprime la source physique apres verify.
 6. Marque COMMITTED.
+
+⚠️  Limites du hash xxh3_64
+---------------------------
+`compute_file_hash` (dans `src/infrastructure/persistence/hash_service.py`)
+est un hash **échantillonné** : 1 Mo en tête + 1 Mo en queue + taille du
+fichier (pas le contenu complet). Sa fonction principale est la **détection
+de doublons rapide**, pas la garantie d'intégrité bit-à-bit.
+
+Conséquence pour la migration : un flip de bit dans la partie centrale d'un
+fichier multi-Go passerait inaperçu pour ce hash. Le vrai filet de sécurité
+est le **checksum rolling MD5 interne de rsync** (calculé bloc par bloc
+pendant le transfert), qui valide réellement le contenu intégral. Le hash
+xxh3_64 échantillonné reste utile pour :
+- détecter une corruption catastrophique (taille différente, header altéré),
+- accélérer la reprise (skip si destination identique d'une session précédente).
+
+Pour un transfert réseau fiable + filesystem journalisé, c'est suffisant en
+pratique. Pour des transferts entre disques peu fiables, envisager d'ajouter
+une vérification SHA-256 streaming complète post-transfert.
 
 Important : rsync est invoqué SANS `--remove-source-files`. En mode symlinks,
 la source reste intacte. En mode raw, la suppression source explicite est
@@ -33,6 +52,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Protocol
+
+from loguru import logger
 
 from src.infrastructure.persistence.hash_service import compute_file_hash
 from src.services.migration.dataclasses import (
@@ -184,30 +205,42 @@ class _SubprocessRsyncRunner:
 
         # Stream stdout, parser chaque \r ou \n comme une ligne potentielle
         # (rsync --info=progress2 émet du \r pour overwrite la même ligne).
+        # try/finally garantit qu'un Ctrl-C ne laisse pas de processus rsync
+        # zombie : --inplace peut laisser un fichier partiel sur disque, le
+        # prochain run reprendra via la branche "destination existe".
         buffer = bytearray()
         last_line = ""  # Conservée pour le diagnostic en cas d'échec
         assert process.stdout is not None
-        while True:
-            chunk = process.stdout.read(64)
-            if not chunk:
-                break
-            for byte in chunk:
-                if byte in (10, 13):  # \n or \r
-                    if buffer:
-                        decoded = buffer.decode("utf-8", errors="replace")
-                        last_line = decoded
-                        if rsync_cb is not None:
-                            _parse_and_emit_progress(decoded, rsync_cb)
-                    buffer.clear()
-                else:
-                    buffer.append(byte)
-        if buffer:
-            decoded = buffer.decode("utf-8", errors="replace")
-            last_line = decoded
-            if rsync_cb is not None:
-                _parse_and_emit_progress(decoded, rsync_cb)
+        try:
+            while True:
+                chunk = process.stdout.read(64)
+                if not chunk:
+                    break
+                for byte in chunk:
+                    if byte in (10, 13):  # \n or \r
+                        if buffer:
+                            decoded = buffer.decode("utf-8", errors="replace")
+                            last_line = decoded
+                            if rsync_cb is not None:
+                                _parse_and_emit_progress(decoded, rsync_cb)
+                        buffer.clear()
+                    else:
+                        buffer.append(byte)
+            if buffer:
+                decoded = buffer.decode("utf-8", errors="replace")
+                last_line = decoded
+                if rsync_cb is not None:
+                    _parse_and_emit_progress(decoded, rsync_cb)
 
-        process.wait()
+            process.wait()
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
         if process.returncode == 0:
             return RsyncResult(success=True)
         return RsyncResult(
@@ -232,8 +265,8 @@ def _parse_and_emit_progress(line: str, on_progress: RsyncProgress) -> None:
     speed = match.group(3)
     try:
         on_progress(bytes_done, percent, speed)
-    except Exception:  # noqa: BLE001 — UI ne doit jamais casser le transfert
-        pass
+    except Exception as exc:  # noqa: BLE001 — UI ne doit jamais casser le transfert
+        logger.warning("Callback rsync progress a levé une exception : {}", exc)
 
 
 class MigrationTransferExecutor:
@@ -289,8 +322,12 @@ class MigrationTransferExecutor:
         if self._on_event is not None:
             try:
                 self._on_event(item, phase)
-            except Exception:  # noqa: BLE001 — UI ne doit jamais casser le transfert
-                pass
+            except Exception as exc:  # noqa: BLE001 — UI ne doit jamais casser le transfert
+                logger.warning(
+                    "Callback on_event(phase={!r}) a levé une exception : {}",
+                    phase,
+                    exc,
+                )
 
     def execute_all(self) -> list[TransferOutcome]:
         """Itère sur les items pending (non COMMITTED) du plan et les transfère."""
@@ -402,8 +439,11 @@ class MigrationTransferExecutor:
             if self._on_rsync_progress is not None:
                 try:
                     self._on_rsync_progress(item, bytes_done, percent, speed)
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Callback on_rsync_progress a levé une exception : {}",
+                        exc,
+                    )
 
         for attempt in range(1, self._max_retries + 1):
             self._store.update_status(item.item_id, TransferStatus.COPYING)

@@ -544,3 +544,61 @@ def test_symlink_mode_unchanged_when_no_finalizer_provided(layout, store):
     # Le symlink a bien été swappé vers la nouvelle destination.
     assert layout["symlink"].is_symlink()
     assert layout["symlink"].resolve() == layout["destination"].resolve()
+
+
+# ---- Mode --fast : verify_hash=False -------------------------------------
+
+
+def test_fast_mode_skips_source_and_dest_hashing(layout, store):
+    """Mode --fast : aucun hash n'est calculé, on fait confiance à rsync."""
+    item = _migrate_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    # hash_fn qui lève si appelé : prouve qu'il n'est jamais invoqué.
+    def _hash_must_not_be_called(_path):
+        raise AssertionError("hash_fn ne doit pas être appelé en mode --fast")
+
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+    executor = MigrationTransferExecutor(
+        plan=plan,
+        state_store=store,
+        rsync_runner=rsync,
+        verify_hash=False,
+        hash_fn=_hash_must_not_be_called,
+    )
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.COMMITTED
+    # source_hash et destination_hash restent vides (pas de verify)
+    assert outcome.source_hash == ""
+    assert outcome.destination_hash == ""
+    # Mais le fichier est bien copié et le symlink swappé
+    assert layout["destination"].exists()
+    assert layout["symlink"].resolve() == layout["destination"].resolve()
+
+
+def test_fast_mode_resume_skips_when_destination_size_matches(layout, store):
+    """Mode --fast : si destination existe avec la même taille, on saute rsync."""
+    item = _migrate_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    # Pré-remplit la destination avec un fichier de MÊME taille (contenu peu importe
+    # en mode --fast, c'est la taille qui sert d'indicateur de reprise).
+    layout["destination"].parent.mkdir(parents=True, exist_ok=True)
+    source_size = layout["source_file"].stat().st_size
+    layout["destination"].write_bytes(b"X" * source_size)
+
+    rsync = FakeRsync([])  # ne doit pas être appelé
+    executor = MigrationTransferExecutor(
+        plan=plan,
+        state_store=store,
+        rsync_runner=rsync,
+        verify_hash=False,
+    )
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.COMMITTED
+    assert rsync.calls == []  # reprise sans nouveau transfert
+    assert layout["symlink"].resolve() == layout["destination"].resolve()
