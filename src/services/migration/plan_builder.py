@@ -15,13 +15,14 @@ import asyncio
 import csv
 import json
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional, Protocol
 
 import xxhash
 
 from src.core.ports.api_clients import MediaDetails
+from src.services.migration._helpers import safe_int
 from src.services.migration.dataclasses import (
     Bucket,
     MatchInfo,
@@ -161,11 +162,11 @@ class MigrationPlanBuilder:
             if on_progress is not None:
                 on_progress(item, stats)
 
-        _demote_movie_tmdb_collisions(items, stats)
+        stats = _demote_movie_tmdb_collisions(items, stats)
 
         return MigrationPlan(
             version=_PLAN_VERSION,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(timezone.utc),
             source_root=Path(source_root),
             destination_root=Path(destination_root),
             threshold=self._threshold,
@@ -321,19 +322,12 @@ def _rating_from_details(details: Optional[MediaDetails]) -> RatingDecision:
 
 def _match_info_from(selected, top_dicts: list[dict[str, Any]]) -> MatchInfo:
     info = MatchInfo(score=selected.score, top_candidates=top_dicts)
-    media_id = _safe_int(selected.id)
+    media_id = safe_int(selected.id)
     if selected.source.startswith("tmdb"):
         info.tmdb_id = media_id
     elif selected.source == "tvdb":
         info.tvdb_id = media_id
     return info
-
-
-def _safe_int(value: str) -> Optional[int]:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _compute_item_id(symlink_path: Path) -> str:
@@ -366,15 +360,19 @@ def _accumulate_stats(stats: MigrationStats, item: MigrationItem) -> None:
 
 def _demote_movie_tmdb_collisions(
     items: list[MigrationItem], stats: MigrationStats
-) -> None:
+) -> MigrationStats:
     """Bascule en NEEDS_VALIDATION les items MIGRATE raw-film qui partagent
-    leur tmdb_id avec un autre item MIGRATE.
+    leur tmdb_id avec un autre item MIGRATE, puis recalcule les stats.
 
     Cas typique : multi-parts (4 fichiers source → même tmdb_id → même
     destination canonique). Sans cette détection, raw_finalizer génère le
     même filename pour les N items et rsync --inplace écrase silencieusement
     chaque commit précédent. Les épisodes de série ne sont pas concernés
     (pipeline série upsert par season+episode, pas de collision possible).
+
+    Recalcule l'intégralité des stats post-démotion plutôt qu'un décrément
+    incrémental : single source of truth, stats et items ne peuvent pas
+    diverger même si un futur contributeur ajoute un autre passage.
     """
     by_tmdb: dict[int, list[MigrationItem]] = {}
     for it in items:
@@ -398,10 +396,13 @@ def _demote_movie_tmdb_collisions(
             it.bucket = Bucket.NEEDS_VALIDATION
             if tag not in it.tags:
                 it.tags.append(tag)
-            stats.to_migrate -= 1
-            if it.size_bytes:
-                stats.total_size_bytes -= it.size_bytes
-            stats.needs_validation += 1
+
+    # Recompute from scratch — préserve total_symlinks (compteur en amont
+    # des buckets) puis ré-accumule chaque item.
+    rebuilt = MigrationStats(total_symlinks=stats.total_symlinks)
+    for it in items:
+        _accumulate_stats(rebuilt, it)
+    return rebuilt
 
 
 # ---- Sérialisation JSON ---------------------------------------------------
@@ -591,7 +592,9 @@ def _item_to_csv_row(item: MigrationItem) -> dict[str, Any]:
         "relative_category": item.relative_category,
         "size_bytes": item.size_bytes if item.size_bytes is not None else "",
         "rating_value": (
-            item.rating.value if item.rating.value is not None else ""
+            f"{item.rating.value:.2f}"
+            if item.rating.value is not None
+            else ""
         ),
         "rating_source": item.rating.source or "",
         "title_match": item.rating.title_match or "",

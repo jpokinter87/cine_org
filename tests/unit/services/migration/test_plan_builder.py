@@ -24,7 +24,6 @@ from src.services.migration.dataclasses import (
     MatchInfo,
     MigrationCandidate,
     MigrationItem,
-    MigrationPlan,
     MigrationStats,
     RatingDecision,
 )
@@ -356,7 +355,7 @@ def test_write_review_csvs_creates_three_files(tmp_path):
         rows = list(csv.DictReader(f))
     assert len(rows) == 1
     assert rows[0]["symlink_path"].endswith("nul.mkv")
-    assert rows[0]["rating_value"] == "4.0"
+    assert rows[0]["rating_value"] == "4.00"
     assert rows[0]["rating_source"] == "imdb"
     assert rows[0]["title_match"] == "Nul"
 
@@ -769,6 +768,37 @@ def test_raw_single_movie_match_unchanged_by_collision_check():
 
     assert plan.items[0].bucket == Bucket.MIGRATE
     assert plan.items[0].tags == []
+
+
+def test_raw_series_episodes_with_same_tmdb_id_not_demoted():
+    """Garde-fou inverse : deux épisodes d'une même série partagent toujours
+    le même tmdb_id (parent série) mais le pipeline série upsert par
+    season+episode — pas de collision filename possible. Ils doivent rester
+    MIGRATE, contrairement aux films multi-parts. Couverture explicite de
+    `_demote_movie_tmdb_collisions` qui exclut les media_root commençant
+    par 'seri'/'séri'/'anim'."""
+    cands = [
+        _candidate(
+            f"Got.S01E0{i}.mkv",
+            media_root="Séries",
+            relative_category="G",
+            is_symlink=False,
+        )
+        for i in range(1, 4)
+    ]
+    builder = _make_raw_builder(
+        cands,
+        outcome=_make_matched_outcome(),
+        vote_average=9.0,
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    assert len(plan.items) == 3
+    for item in plan.items:
+        assert item.bucket == Bucket.MIGRATE
+        assert all(not t.startswith("collision_tmdb:") for t in item.tags)
+    assert plan.stats.to_migrate == 3
+    assert plan.stats.needs_validation == 0
 
 
 def test_write_review_csvs_writes_needs_validation_file(tmp_path):
