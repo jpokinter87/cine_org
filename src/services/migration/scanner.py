@@ -178,6 +178,14 @@ class MigrationScanner:
                 return candidate
 
         # Fallback : chercher par nom de fichier dans les roots alternatifs.
+        # Fast-path : essai direct alt_root/<basename> avant le walk indexant
+        # toute l'arborescence — évite des millions de stat() quand le fichier
+        # est exactement à la racine de l'alt_root.
+        for alt in self._alternative_roots:
+            shortcut = alt / candidate.name
+            if shortcut.exists():
+                return shortcut
+        # Sinon walk complet (mis en cache pour les appels suivants).
         for alt in self._alternative_roots:
             index = self._index_for(alt)
             found = index.get(candidate.name)
