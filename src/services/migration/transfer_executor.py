@@ -565,6 +565,12 @@ class MigrationTransferExecutor:
 
         self._store.update_status(item.item_id, TransferStatus.COMMITTED)
         self._emit(item, "committed")
+
+        # Post-commit cleanup : honor tag delete_source_after_commit
+        # (posé par run_apply depuis Decision.delete_source_after).
+        if "delete_source_after_commit" in item.tags:
+            self._post_commit_delete_source(item)
+
         outcome = self._store.get_outcome(item.item_id)
         assert outcome is not None
         return outcome
@@ -576,6 +582,27 @@ class MigrationTransferExecutor:
         if existing is not None:
             return existing
         return TransferOutcome(item_id=item_id, status=fallback_status)
+
+    def _post_commit_delete_source(self, item: MigrationItem) -> None:
+        """Supprime la source physique après COMMITTED (low_rated [d]).
+
+        Idempotent (FileNotFoundError ignoré). Logue toujours.
+        """
+        if item.source_path is None:
+            return
+        try:
+            item.source_path.unlink()
+            logger.info(
+                "Source supprimée post-commit (delete_source_after_commit) : {}",
+                item.source_path,
+            )
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            logger.warning(
+                "Échec suppression source post-commit pour {} : {}",
+                item.source_path, exc,
+            )
 
     @staticmethod
     def _safe_size(path: Path) -> int:

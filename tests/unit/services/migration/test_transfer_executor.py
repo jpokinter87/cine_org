@@ -602,3 +602,41 @@ def test_fast_mode_resume_skips_when_destination_size_matches(layout, store):
     assert outcome.status == TransferStatus.COMMITTED
     assert rsync.calls == []  # reprise sans nouveau transfert
     assert layout["symlink"].resolve() == layout["destination"].resolve()
+
+
+# ---- Tag delete_source_after_commit --------------------------------------
+
+
+def test_delete_source_after_commit_tag_removes_source_post_commit(
+    layout, store, tmp_path
+):
+    """Tag 'delete_source_after_commit' → source supprimée après COMMITTED."""
+    item = _migrate_item(layout)
+    item.tags = ["delete_source_after_commit"]
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync,
+    )
+    outcome = executor.execute_one(item)
+    assert outcome.status == TransferStatus.COMMITTED
+    # Source supprimée
+    assert not layout["source_file"].exists()
+    # Mais destination intacte
+    assert layout["destination"].exists()
+
+
+def test_no_tag_keeps_source_intact(layout, store):
+    """Sans tag, comportement standard : source intacte."""
+    item = _migrate_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync,
+    )
+    executor.execute_one(item)
+    assert layout["source_file"].exists()  # intacte (mode symlinks default)
