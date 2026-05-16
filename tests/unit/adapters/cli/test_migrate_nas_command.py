@@ -435,3 +435,75 @@ def test_run_apply_ignores_skipped_items(layout, tmp_path):
     )
     assert outcomes == []
     assert rsync.calls == []
+
+
+# ---- _apply_decisions_to_plan : contrat de tags -------------------------
+
+
+def test_apply_decisions_to_plan_appends_tags_for_delete_and_duplicate_action():
+    """Verrouille le contrat de tags consommé par Tasks 17/18.
+
+    - `delete_source_after=True` → tag 'delete_source_after_commit'
+    - `duplicate_action=REPLACE_DEST` → tag 'duplicate_action:replace_dest'
+    """
+    from datetime import datetime, timezone
+
+    from src.adapters.cli.commands.migrate_nas_command.orchestrators import (
+        _apply_decisions_to_plan,
+    )
+    from src.services.migration.dataclasses import (
+        MatchInfo,
+        MigrationItem,
+        MigrationPlan,
+        MigrationStats,
+        RatingDecision,
+    )
+    from src.services.migration.decisions import (
+        Decision,
+        DecisionStatus,
+        DuplicateAction,
+    )
+
+    item = MigrationItem(
+        item_id="lr_d",
+        bucket=Bucket.LOW_RATED,
+        symlink_path=Path("/old/foo.mkv"),
+        source_path=Path("/old/foo.mkv"),
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=1000,
+        rating=RatingDecision(value=4.0),
+        match=MatchInfo(),
+        is_symlink_source=False,
+        tags=[],
+    )
+    plan = MigrationPlan(
+        version=1,
+        source_root=Path("/s"),
+        destination_root=Path("/d"),
+        threshold=6.0,
+        stats=MigrationStats(),
+        items=[item],
+    )
+    decisions = {
+        "lr_d": Decision(
+            item_id="lr_d",
+            bucket_origin="low_rated",
+            decision=DecisionStatus.APPROVED,
+            chosen_tmdb_id=42,
+            duplicate_action=DuplicateAction.REPLACE_DEST,
+            delete_source_after=True,
+            decided_at=datetime.now(timezone.utc),
+            decided_via="cli",
+        ),
+    }
+
+    _apply_decisions_to_plan(plan, decisions)
+
+    assert len(plan.items) == 1
+    assert plan.items[0].bucket == Bucket.MIGRATE
+    assert plan.items[0].match.tmdb_id == 42
+    # Les 2 tags du contrat handoff sont posés
+    assert "delete_source_after_commit" in plan.items[0].tags
+    assert "duplicate_action:replace_dest" in plan.items[0].tags
