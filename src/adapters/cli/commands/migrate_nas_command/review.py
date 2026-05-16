@@ -142,10 +142,10 @@ def _handle_needs_validation(
     (re-affiche la même carte — typiquement après search).
     """
     candidates = item.match.top_candidates[:5]
-    valid_keys = ["a", "r", "k", "q", "s"]
+    valid_keys = ["a", "r", "k", "q", "s", "w"]
     valid_keys.extend(str(i) for i in range(1, len(candidates) + 1))
     answer = Prompt.ask(
-        "[a]ccept top  [1-N] pick  [s]earch  [r]eject  [k]eep skip  [q]uit",
+        "[a]ccept top  [1-N] pick  [s]earch  [r]eject  [k]eep skip  [w]eb defer  [q]uit",
         choices=valid_keys,
         default="a",
         show_choices=False,
@@ -153,6 +153,13 @@ def _handle_needs_validation(
 
     if answer == "q":
         return "quit"
+    if answer == "w":
+        service.decide(
+            item_id=item.item_id,
+            decision=DecisionStatus.DEFERRED_TO_WEB,
+            decided_via="cli",
+        )
+        return "continue"
     if answer == "k":
         service.decide(
             item_id=item.item_id,
@@ -240,13 +247,20 @@ def _handle_unrated(
     Retourne 'continue', 'quit'.
     """
     answer = Prompt.ask(
-        "[m]igrate-anyway  [k]eep skip  [q]uit",
-        choices=["m", "k", "q"],
+        "[m]igrate-anyway  [k]eep skip  [w]eb defer  [q]uit",
+        choices=["m", "k", "w", "q"],
         default="k",
         show_choices=False,
     )
     if answer == "q":
         return "quit"
+    if answer == "w":
+        service.decide(
+            item_id=item.item_id,
+            decision=DecisionStatus.DEFERRED_TO_WEB,
+            decided_via="cli",
+        )
+        return "continue"
     if answer == "k":
         service.decide(
             item_id=item.item_id,
@@ -282,13 +296,20 @@ def _handle_low_rated(
     Retourne 'continue', 'quit' ou 'redraw'.
     """
     answer = Prompt.ask(
-        "[m]igrate-anyway  [d]elete-source-after  [k]eep skip  [q]uit",
-        choices=["m", "d", "k", "q"],
+        "[m]igrate-anyway  [d]elete-source-after  [k]eep skip  [w]eb defer  [q]uit",
+        choices=["m", "d", "k", "w", "q"],
         default="k",
         show_choices=False,
     )
     if answer == "q":
         return "quit"
+    if answer == "w":
+        service.decide(
+            item_id=item.item_id,
+            decision=DecisionStatus.DEFERRED_TO_WEB,
+            decided_via="cli",
+        )
+        return "continue"
     if answer == "k":
         service.decide(
             item_id=item.item_id,
@@ -351,13 +372,20 @@ def _handle_already_in_library(
         reco = None
 
     answer = Prompt.ask(
-        "[a]ccept reco  [k]eep dest  [r]eplace dest  [d]elete source  [q]uit",
-        choices=["a", "k", "r", "d", "q"],
+        "[a]ccept reco  [k]eep dest  [r]eplace dest  [d]elete source  [w]eb defer  [q]uit",
+        choices=["a", "k", "r", "d", "w", "q"],
         default="k",
         show_choices=False,
     )
     if answer == "q":
         return "quit"
+    if answer == "w":
+        service.decide(
+            item_id=item.item_id,
+            decision=DecisionStatus.DEFERRED_TO_WEB,
+            decided_via="cli",
+        )
+        return "continue"
 
     duplicate_action: Optional[DuplicateAction] = None
     if answer == "k":

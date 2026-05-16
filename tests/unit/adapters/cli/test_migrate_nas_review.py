@@ -752,3 +752,20 @@ def test_review_loop_already_in_library_accept_reco_unavailable_redraws(
     assert d.decision == DecisionStatus.APPROVED
     assert d.duplicate_action == DuplicateAction.KEEP_DEST
     store.close()
+
+
+def test_review_loop_defer_to_web(tmp_path):
+    """User tape 'w' → décision DEFERRED_TO_WEB."""
+    plan_path, item = _write_plan_with_nv(tmp_path)
+    state_path = tmp_path / "s.sqlite"
+    runner = CliRunner()
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="w\n",
+    )
+    assert result.exit_code == 0
+    store = MigrationStateStore(state_path)
+    d = store.get_decision(item.item_id)
+    assert d.decision == DecisionStatus.DEFERRED_TO_WEB
+    store.close()
