@@ -1,8 +1,9 @@
 """Tests pour MigrationReviewService — orchestrateur de la review."""
 
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -200,3 +201,53 @@ def test_summary_combines_pending_and_decided(store):
     assert summary["pending"] == 2
     assert summary["approved"] == 1
     assert summary["total_review_buckets"] == 3
+
+
+def test_search_tmdb_movies_uses_tmdb_client_and_matcher(store):
+    from src.core.ports.api_clients import SearchResult
+
+    plan = _plan([])
+    fake_tmdb = MagicMock()
+    raw_results = [
+        SearchResult(id="1", title="Foo", year=2020, score=0, source="tmdb"),
+        SearchResult(id="2", title="Bar", year=2021, score=0, source="tmdb"),
+    ]
+    # tmdb_client.search est async — utilise AsyncMock
+    fake_tmdb.search = AsyncMock(return_value=raw_results)
+    fake_matcher = MagicMock()
+    scored = [
+        SearchResult(id="1", title="Foo", year=2020, score=92.0, source="tmdb"),
+        SearchResult(id="2", title="Bar", year=2021, score=58.0, source="tmdb"),
+    ]
+    fake_matcher.score_results = MagicMock(return_value=scored)
+
+    service = MigrationReviewService(
+        plan=plan, state_store=store,
+        tmdb_client=fake_tmdb, tvdb_client=MagicMock(),
+        matcher=fake_matcher, duplicate_detector=MagicMock(),
+    )
+    results = asyncio.run(
+        service.search_tmdb(query="Foo", is_series=False, year=None)
+    )
+    assert len(results) == 2
+    assert results[0].score == 92.0
+    fake_tmdb.search.assert_called_once_with("Foo", year=None)
+    fake_matcher.score_results.assert_called_once_with(
+        raw_results, query_title="Foo", query_year=None, is_series=False
+    )
+
+
+def test_search_tmdb_series_uses_search_tv(store):
+    plan = _plan([])
+    fake_tmdb = MagicMock()
+    fake_tmdb.search_tv = AsyncMock(return_value=[])
+    fake_matcher = MagicMock()
+    fake_matcher.score_results = MagicMock(return_value=[])
+
+    service = MigrationReviewService(
+        plan=plan, state_store=store,
+        tmdb_client=fake_tmdb, tvdb_client=MagicMock(),
+        matcher=fake_matcher, duplicate_detector=MagicMock(),
+    )
+    asyncio.run(service.search_tmdb(query="GoT", is_series=True, year=2011))
+    fake_tmdb.search_tv.assert_called_once_with("GoT", year=2011)

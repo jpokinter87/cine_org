@@ -140,6 +140,28 @@ class MigrationReviewService:
             )
         return out
 
+    async def search_tmdb(
+        self,
+        *,
+        query: str,
+        is_series: bool,
+        year: Optional[int] = None,
+    ):
+        """Recherche TMDB live + scoring. Retourne list[SearchResult] scorée.
+
+        Pour les films : `tmdb_client.search(query, year)`.
+        Pour les séries : `tmdb_client.search_tv(query, year)`.
+        Pas de fallback TVDB ici — l'utilisateur peut chercher par ID
+        externe via `validation_service.search_by_external_id` si besoin.
+        """
+        if is_series:
+            raw = await self._tmdb.search_tv(query, year=year)
+        else:
+            raw = await self._tmdb.search(query, year=year)
+        return self._matcher.score_results(
+            raw, query_title=query, query_year=year, is_series=is_series
+        )
+
     def _find_item(self, item_id: str) -> MigrationItem:
         for it in self._plan.items:
             if it.item_id == item_id:
