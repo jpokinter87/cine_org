@@ -33,6 +33,10 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Réparation des symlinks cassés](#réparation-des-symlinks-cassés)
   - [Consolidation des fichiers externes](#consolidation-des-fichiers-externes)
   - [Migration depuis anciens NAS](#migration-depuis-anciens-nas)
+    - [Mode raw (`--include-raw`)](#mode-raw---include-raw)
+    - [migrate-nas review — Review interactive des items en attente](#migrate-nas-review--review-interactive-des-items-en-attente)
+    - [migrate-nas apply (étendu)](#migrate-nas-apply-étendu)
+    - [Page web `/migration/review`](#page-web-migrationreview)
   - [Purge des hardlinks](#purge-des-hardlinks)
 - [Format de nommage](#format-de-nommage)
 - [Interface web](#interface-web)
@@ -967,6 +971,52 @@ Les items `NEEDS_VALIDATION` sont écrits dans `needs_validation.csv` avec leurs
 - En mode symlinks : `apply` n'efface jamais la source.
 - En mode raw : la source est supprimée **uniquement** après verify hash xxh3_64. En cas de mismatch, la destination est supprimée et la source reste intacte — `FAILED_VERIFY` dans le state store.
 - Le state store SQLite est reprenable dans les deux modes : un crash mid-flight ne perd pas de données.
+
+#### `migrate-nas review` — Review interactive des items en attente
+
+Après `migrate-nas plan`, les items qui n'atterrissent pas dans le bucket
+MIGRATE (4 buckets : needs_validation, unrated, low_rated, already_in_library)
+sont en attente d'arbitrage. La commande `review` ouvre une boucle CLI
+interactive pour décider par item.
+
+```bash
+uv run python -m src.main migrate-nas review migration/plan.json
+uv run python -m src.main migrate-nas review migration/plan.json --bucket needs_validation
+uv run python -m src.main migrate-nas review migration/plan.json --restart  # ignore decisions précédentes
+```
+
+**Actions par bucket :**
+
+| Bucket | Touches | Description |
+|---|---|---|
+| **needs_validation** | a / 1-5 / s / r / k / w / q | accept top, pick N, search TMDB live, reject, keep skip, web defer, quit |
+| **unrated** | m / k / w / q | migrate-anyway, keep skip, web, quit |
+| **low_rated** | m / d / k / w / q | migrate-anyway, **delete-source-after-commit (avec confirmation)**, keep skip, web, quit |
+| **already_in_library** | a / k / r / d / w / q | accept reco DuplicateDetector, keep dest, replace dest, delete source, web, quit |
+
+Les décisions sont persistées dans `<plan>.state.sqlite` (table `migration_decisions`).
+Reprenable via `--resume` (par défaut). Les items deferred-to-web sont arbitrés sur
+la page `/migration/review?plan=<chemin>`.
+
+#### `migrate-nas apply` (étendu)
+
+Désormais, `apply` consulte les décisions review en plus du bucket MIGRATE.
+Les items APPROVED des 4 buckets review sont hydratés (`item.match.tmdb_id`
+remplacé par la décision) et transférés via `raw_finalizer`.
+
+```bash
+# Workflow complet
+uv run python -m src.main migrate-nas plan --source /media/wd10-1 --output migration/plan.json --csv-dir migration/review --include-raw
+uv run python -m src.main migrate-nas review migration/plan.json
+uv run python -m src.main migrate-nas apply migration/plan.json
+```
+
+#### Page web `/migration/review`
+
+Pour les items difficiles (besoin de comparaison visuelle), la page web propose :
+- Liste filtrable (par bucket, par statut décision)
+- Overlay détail avec poster TMDB + 5 candidats + recherche live
+- Pour `already_in_library` : comparaison qualité côte-à-côte
 
 ### Purge des hardlinks
 
