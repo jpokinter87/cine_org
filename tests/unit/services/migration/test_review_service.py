@@ -251,3 +251,44 @@ def test_search_tmdb_series_uses_search_tv(store):
     )
     asyncio.run(service.search_tmdb(query="GoT", is_series=True, year=2011))
     fake_tmdb.search_tv.assert_called_once_with("GoT", year=2011)
+
+
+def test_duplicate_recommendation_uses_compare_quality(store, tmp_path):
+    """already_in_library : compare source NAS vs file en DB via DuplicateDetector."""
+    from src.services.duplicate_detector import QualityComparison
+
+    # Création de 2 fichiers réels (le service ouvre les paths pour mediainfo)
+    src = tmp_path / "source.mkv"
+    src.write_bytes(b"\x00" * 1024)
+    dst = tmp_path / "dest.mkv"
+    dst.write_bytes(b"\x00" * 2048)
+
+    item = _item("ail-1", Bucket.ALREADY_IN_LIBRARY,
+                 source_path=src,
+                 tags=[f"existing:{dst}"])
+    plan = _plan([item])
+
+    fake_dd = MagicMock()
+    fake_dd.compare_quality = MagicMock(
+        return_value=QualityComparison(
+            recommended="new",
+            existing_score=80.0,
+            new_score=92.0,
+            existing_breakdown={},
+            new_breakdown={},
+        )
+    )
+
+    service = MigrationReviewService(
+        plan=plan, state_store=store,
+        tmdb_client=MagicMock(), tvdb_client=MagicMock(),
+        matcher=MagicMock(), duplicate_detector=fake_dd,
+    )
+    reco = service.duplicate_recommendation(item)
+    assert reco.recommended == "new"  # source NAS gagne
+    assert fake_dd.compare_quality.called
+    # Vérifie que les ExistingFileInfo passés ont les bons chemins
+    call_args = fake_dd.compare_quality.call_args
+    existing_files, new_file = call_args.args
+    assert new_file.path == src
+    assert existing_files[0].path == dst

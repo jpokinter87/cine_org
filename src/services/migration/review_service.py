@@ -36,6 +36,52 @@ REVIEW_BUCKETS: frozenset[Bucket] = frozenset({
 })
 
 
+def _build_existing_file_info(path):
+    """Construit un ExistingFileInfo minimaliste pour compare_quality.
+
+    Réutilise pymediainfo via le pattern existant (cf duplicate_detector).
+    Si mediainfo échoue, retourne un info avec juste path + size.
+    """
+    from src.services.duplicate_detector import ExistingFileInfo
+
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = 0
+    info = ExistingFileInfo(
+        path=path,
+        size_bytes=size,
+        resolution=None,
+        video_codec=None,
+        audio_codec=None,
+        video_bitrate_kbps=None,
+        audio_bitrate_kbps=None,
+        duration_seconds=None,
+    )
+    # Best-effort enrichment via mediainfo (optionnel — compare_quality
+    # tolère les champs None et tombe sur la taille comme proxy).
+    try:
+        from pymediainfo import MediaInfo
+
+        mi = MediaInfo.parse(str(path))
+        for track in mi.tracks:
+            if track.track_type == "Video" and info.resolution is None:
+                if track.height:
+                    info.resolution = f"{track.height}p"
+                info.video_codec = track.codec_id or track.format
+                if track.bit_rate:
+                    info.video_bitrate_kbps = int(track.bit_rate) // 1000
+                if track.duration:
+                    info.duration_seconds = int(track.duration) // 1000
+            if track.track_type == "Audio" and info.audio_codec is None:
+                info.audio_codec = track.codec_id or track.format
+                if track.bit_rate:
+                    info.audio_bitrate_kbps = int(track.bit_rate) // 1000
+    except Exception:  # noqa: BLE001 — mediainfo optionnel, fallback taille
+        pass
+    return info
+
+
 class MigrationReviewService:
     """Service métier de la review interactive (4 buckets non-MIGRATE)."""
 
@@ -163,6 +209,36 @@ class MigrationReviewService:
             raw = await self._tmdb.search(query, year=year)
         return self._matcher.score_results(
             raw, query_title=query, query_year=year, is_series=is_series
+        )
+
+    def duplicate_recommendation(self, item: MigrationItem):
+        """Pour un item already_in_library : score qualité source vs dest.
+
+        Lit le tag `existing:<path>` posé par le plan_builder. Délègue le
+        scoring au DuplicateDetector existant via `compare_quality`.
+        Retourne un `QualityComparison` (recommended="new"|"old", scores,
+        breakdowns pour affichage).
+        """
+        from pathlib import Path
+
+        existing_path: Optional[Path] = None
+        for tag in item.tags:
+            if tag.startswith("existing:"):
+                existing_path = Path(tag.split(":", 1)[1])
+                break
+        if existing_path is None:
+            raise ValueError(
+                f"item {item.item_id} sans tag 'existing:' — pas un doublon"
+            )
+        if item.source_path is None:
+            raise ValueError(f"item {item.item_id} sans source_path")
+
+        # Construit les ExistingFileInfo via mediainfo extraction
+        # (réutilise les helpers internes — voir _build_existing_file_info).
+        new_info = _build_existing_file_info(item.source_path)
+        existing_info = _build_existing_file_info(existing_path)
+        return self._duplicate_detector.compare_quality(
+            [existing_info], new_info
         )
 
     def _find_item(self, item_id: str) -> MigrationItem:
