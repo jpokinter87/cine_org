@@ -123,6 +123,9 @@ def review_command(
             _print_summary(service, plan_path, state_path)
             return
         for idx, item in enumerate(items, start=1):
+            # Saute les items déjà décidés en cours de session (ex. bulk-accept)
+            if store.get_decision(item.item_id) is not None:
+                continue
             while True:
                 render_review_card(console, item, position=(idx, total))
                 if item.bucket == Bucket.NEEDS_VALIDATION:
@@ -165,6 +168,53 @@ def _build_review_service(
         matcher=MatcherService(),
         duplicate_detector=DuplicateDetector(),
     )
+
+
+def _collision_tmdb_id(item: MigrationItem) -> Optional[str]:
+    """Retourne l'id de collision_tmdb tag si présent, sinon None."""
+    for tag in item.tags:
+        if tag.startswith("collision_tmdb:"):
+            return tag.split(":", 1)[1]
+    return None
+
+
+def _items_in_collision_group(plan, group_id: str) -> list:
+    """Retourne tous les items du plan partageant ce collision_tmdb id."""
+    return [
+        it for it in plan.items
+        if f"collision_tmdb:{group_id}" in it.tags
+    ]
+
+
+def _maybe_bulk_accept_collision(
+    service: MigrationReviewService,
+    item: MigrationItem,
+    chosen: dict,
+) -> bool:
+    """Si l'item fait partie d'un groupe collision_tmdb, propose accept en masse.
+
+    Retourne True si bulk-accept appliqué (caller doit alors continue), False
+    si user a refusé (caller fait le single-accept normal).
+    """
+    group_id = _collision_tmdb_id(item)
+    if group_id is None:
+        return False
+    siblings = _items_in_collision_group(service._plan, group_id)
+    if len(siblings) < 2:
+        return False
+    if not Confirm.ask(
+        f"[cyan]🔗 Multi-parts détecté ({len(siblings)} items, "
+        f"tag collision_tmdb:{group_id}). Accepter pour les {len(siblings)} ?"
+        f"[/cyan]",
+        default=True,
+    ):
+        return False
+    base_title = chosen.get("title", "Untitled")
+    for n, sibling in enumerate(siblings, start=1):
+        sibling_chosen = dict(chosen)
+        sibling_chosen["title"] = f"{base_title} - Part {n}"
+        _persist_approved(service, sibling, sibling_chosen)
+    return True
 
 
 def _handle_needs_validation(
@@ -220,6 +270,8 @@ def _handle_needs_validation(
     if chosen is None:
         console.print("[red]Pas de candidat — utilise 's'earch ou 'k'eep skip.[/red]")
         return "redraw"
+    if _maybe_bulk_accept_collision(service, item, chosen):
+        return "continue"
     _persist_approved(service, item, chosen)
     return "continue"
 

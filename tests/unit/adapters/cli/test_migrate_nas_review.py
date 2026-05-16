@@ -825,3 +825,55 @@ def test_review_summary_empty_plan_no_apply_message(tmp_path):
     # Le résumé s'affiche mais pas le call-to-action apply (rien à apply)
     assert "Tous les items ont une décision" not in out
     assert "migrate-nas apply" not in out
+
+
+def test_review_collision_tmdb_offers_bulk_accept(tmp_path):
+    """4 items collision_tmdb:X → premier item propose 'Accepter pour les 4 ?'.
+
+    Si user accepte (Y), les 4 reçoivent décisions APPROVED avec titres
+    suffixés Part 1 / Part 2 / etc.
+    """
+    items = [
+        MigrationItem(
+            item_id=f"f{i}",
+            bucket=Bucket.NEEDS_VALIDATION,
+            symlink_path=Path(f"/old/La.Flor.partie {i}.mkv"),
+            source_path=Path(f"/old/La.Flor.partie {i}.mkv"),
+            destination_path=None,
+            media_root="Films",
+            relative_category="",
+            size_bytes=1000,
+            rating=RatingDecision(),
+            match=MatchInfo(top_candidates=[
+                {"title": "La Flor", "year": 2018, "score": 100.0,
+                 "tmdb_id": 423778, "source": "tmdb"}
+            ]),
+            is_symlink_source=False,
+            tags=["collision_tmdb:423778"],
+        )
+        for i in range(1, 5)
+    ]
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"), destination_root=Path("/d"),
+        threshold=6.0, stats=MigrationStats(), items=items,
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    # 'a' au 1er → prompt bulk → 'y'
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="a\ny\n",
+    )
+    assert result.exit_code == 0, result.output
+    store = MigrationStateStore(state_path)
+    for i in range(1, 5):
+        d = store.get_decision(f"f{i}")
+        assert d is not None, f"item f{i} sans décision"
+        assert d.decision == DecisionStatus.APPROVED
+        assert d.chosen_tmdb_id == 423778
+        assert "Part" in d.chosen_title  # suffix auto
+    store.close()
