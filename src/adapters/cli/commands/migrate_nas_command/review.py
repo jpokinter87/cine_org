@@ -114,9 +114,10 @@ def render_review_card(
     elif item.bucket == Bucket.UNRATED:
         body_lines.append("[yellow]Note absente — décider de migrer.[/yellow]")
     elif item.bucket == Bucket.LOW_RATED:
-        rating = item.rating.value
+        rating_value = item.rating.value
+        rating_str = f"{rating_value:.1f}" if rating_value is not None else "?"
         body_lines.append(
-            f"[yellow]Note {rating} (< seuil) — décider de migrer.[/yellow]"
+            f"[yellow]Note {rating_str} (< seuil) — décider de migrer.[/yellow]"
         )
     elif item.bucket == Bucket.ALREADY_IN_LIBRARY:
         existing = next(

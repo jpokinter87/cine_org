@@ -99,3 +99,38 @@ def test_render_review_card_needs_validation_shows_top_candidates():
     assert "Détour mortel" in out
     assert "42/140" in out  # position
     assert "needs_validation" in out
+
+
+def test_render_review_card_low_rated_formats_rating_one_decimal():
+    """LOW_RATED : la note est formatée à 1 décimale, ou '?' si None."""
+    from src.services.migration.dataclasses import RatingDecision
+
+    def _make(rating_value):
+        return MigrationItem(
+            item_id="lr1",
+            bucket=Bucket.LOW_RATED,
+            symlink_path=Path("/old/MovieX.mkv"),
+            source_path=Path("/old/MovieX.mkv"),
+            destination_path=None,
+            media_root="Films",
+            relative_category="",
+            size_bytes=10_000,
+            rating=RatingDecision(value=rating_value),
+            match=MatchInfo(),
+            is_symlink_source=False,
+        )
+
+    # Note présente : formatée à 1 décimale
+    buf = StringIO()
+    console = Console(file=buf, width=100, force_terminal=False)
+    render_review_card(console, _make(5.7345), position=(1, 1))
+    out = buf.getvalue()
+    assert "Note 5.7" in out
+    assert "< seuil" in out
+
+    # Note None : tombé sur "?"
+    buf = StringIO()
+    console = Console(file=buf, width=100, force_terminal=False)
+    render_review_card(console, _make(None), position=(1, 1))
+    out = buf.getvalue()
+    assert "Note ?" in out
