@@ -1,8 +1,19 @@
 """Tests pour la commande CLI `migrate-nas review`."""
 
+from io import StringIO
+from pathlib import Path
+
+from rich.console import Console
 from typer.testing import CliRunner
 
 from src.adapters.cli.commands.migrate_nas_command import migrate_nas_app
+from src.adapters.cli.commands.migrate_nas_command.review import render_review_card
+from src.services.migration.dataclasses import (
+    Bucket,
+    MatchInfo,
+    MigrationItem,
+    RatingDecision,
+)
 
 
 def test_review_command_help():
@@ -40,3 +51,51 @@ def test_review_command_invalid_bucket_returns_usage_error(tmp_path):
     # typer.BadParameter writes the message to stderr (mix_stderr default true)
     # so it lands in result.output / result.stdout
     assert "Bucket invalide" in result.output or "Bucket invalide" in result.stderr
+
+
+def _nv_item() -> MigrationItem:
+    return MigrationItem(
+        item_id="nv1",
+        bucket=Bucket.NEEDS_VALIDATION,
+        symlink_path=Path("/old/Wrong.mkv"),
+        source_path=Path("/old/Wrong.mkv"),
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=1_500_000_000,
+        rating=RatingDecision(),
+        match=MatchInfo(
+            top_candidates=[
+                {
+                    "title": "Wrong",
+                    "year": 2012,
+                    "score": 67.0,
+                    "source": "tmdb",
+                    "tmdb_id": 83186,
+                },
+                {
+                    "title": "Détour mortel",
+                    "year": 2003,
+                    "score": 44.67,
+                    "source": "tmdb",
+                    "tmdb_id": 9902,
+                },
+            ]
+        ),
+        is_symlink_source=False,
+    )
+
+
+def test_render_review_card_needs_validation_shows_top_candidates():
+    """render_review_card affiche les candidats TMDB pour un item needs_validation."""
+    item = _nv_item()
+    buf = StringIO()
+    console = Console(file=buf, width=100, force_terminal=False)
+    render_review_card(console, item, position=(42, 140))
+    out = buf.getvalue()
+    assert "Wrong.mkv" in out
+    assert "Wrong" in out and "2012" in out
+    assert "67" in out  # score top
+    assert "Détour mortel" in out
+    assert "42/140" in out  # position
+    assert "needs_validation" in out
