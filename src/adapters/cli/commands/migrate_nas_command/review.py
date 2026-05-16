@@ -26,7 +26,10 @@ from src.services.matcher import MatcherService
 from src.services.migration.dataclasses import Bucket, MigrationItem
 from src.services.migration.decisions import DecisionStatus, DuplicateAction
 from src.services.migration.plan_builder import deserialize_plan
-from src.services.migration.review_service import MigrationReviewService
+from src.services.migration.review_service import (
+    MigrationReviewService,
+    REVIEW_BUCKETS,
+)
 from src.services.migration.state_store import MigrationStateStore
 
 
@@ -179,10 +182,15 @@ def _collision_tmdb_id(item: MigrationItem) -> Optional[str]:
 
 
 def _items_in_collision_group(plan, group_id: str) -> list:
-    """Retourne tous les items du plan partageant ce collision_tmdb id."""
+    """Retourne tous les items du plan partageant ce collision_tmdb id.
+
+    Filtré sur REVIEW_BUCKETS : les items qui ont déjà été promus en MIGRATE
+    (ou tombés en BROKEN/etc.) ne doivent pas recevoir de décision review.
+    """
     return [
         it for it in plan.items
         if f"collision_tmdb:{group_id}" in it.tags
+        and it.bucket in REVIEW_BUCKETS
     ]
 
 

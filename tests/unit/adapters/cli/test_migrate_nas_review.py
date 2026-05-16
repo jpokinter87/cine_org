@@ -877,3 +877,61 @@ def test_review_collision_tmdb_offers_bulk_accept(tmp_path):
         assert d.chosen_tmdb_id == 423778
         assert "Part" in d.chosen_title  # suffix auto
     store.close()
+
+
+def test_review_collision_tmdb_user_declines_bulk_only_decides_current(tmp_path):
+    """Si user refuse bulk-accept (n), seul l'item courant est décidé en single.
+
+    Les autres siblings restent dans iter_pending et seront présentés ensuite.
+    On termine avec 'q' pour éviter de boucler dans le test.
+    """
+    items = [
+        MigrationItem(
+            item_id=f"f{i}",
+            bucket=Bucket.NEEDS_VALIDATION,
+            symlink_path=Path(f"/old/Movie.partie {i}.mkv"),
+            source_path=Path(f"/old/Movie.partie {i}.mkv"),
+            destination_path=None,
+            media_root="Films",
+            relative_category="",
+            size_bytes=1000,
+            rating=RatingDecision(),
+            match=MatchInfo(top_candidates=[
+                {"title": "Movie", "year": 2020, "score": 100.0,
+                 "tmdb_id": 12345, "source": "tmdb"}
+            ]),
+            is_symlink_source=False,
+            tags=["collision_tmdb:12345"],
+        )
+        for i in range(1, 4)  # 3 siblings
+    ]
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"), destination_root=Path("/d"),
+        threshold=6.0, stats=MigrationStats(), items=items,
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    # f1 : 'a' → bulk prompt → 'n' (refuse) → single-accept f1 seulement
+    # f2 : 'q' (sortie pour éviter de continuer)
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="a\nn\nq\n",
+    )
+    assert result.exit_code == 0, result.output
+
+    store = MigrationStateStore(state_path)
+    # f1 : single-accept appliqué
+    d1 = store.get_decision("f1")
+    assert d1 is not None
+    assert d1.decision == DecisionStatus.APPROVED
+    assert d1.chosen_tmdb_id == 12345
+    # Pas de suffixe "Part" (single-accept, pas bulk)
+    assert "Part" not in (d1.chosen_title or "")
+    # f2 / f3 : pas encore décidés (q a quitté avant)
+    assert store.get_decision("f2") is None
+    assert store.get_decision("f3") is None
+    store.close()
