@@ -19,6 +19,7 @@ from src.adapters.cli.commands.migrate_nas_command.orchestrators import (
     run_apply,
     run_status,
 )
+from src.adapters.cli.commands.migrate_nas_command.review import review_command
 from src.adapters.cli.validation import console
 from src.container import Container
 from src.services.migration.dataclasses import (
@@ -241,6 +242,9 @@ def status_command(
         console.print(
             "[dim]Aucun state store actif — la migration n'a pas encore commencé.[/dim]"
         )
+
+
+migrate_nas_app.command("review")(review_command)
 
 
 def _display_plan_summary(
