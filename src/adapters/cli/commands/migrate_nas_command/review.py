@@ -30,6 +30,38 @@ from src.services.migration.review_service import MigrationReviewService
 from src.services.migration.state_store import MigrationStateStore
 
 
+def _print_summary(
+    service: MigrationReviewService,
+    plan_path: Path,
+    state_path: Path,
+) -> None:
+    """Affiche le résumé final + URL web si items deferred."""
+    summary = service.summary()
+    console.print()
+    console.print("─" * 60)
+    console.print("[bold]Session review terminée[/bold]")
+    console.print(f"  Total review buckets : {summary['total_review_buckets']}")
+    console.print(f"  [green]✓[/green] Approuvés : {summary.get('approved', 0)}")
+    console.print(f"  [yellow]⊘[/yellow] Skippés  : {summary.get('skipped', 0)}")
+    console.print(f"  [red]✗[/red] Rejetés   : {summary.get('rejected', 0)}")
+    deferred = summary.get("deferred_to_web", 0)
+    if deferred:
+        console.print(
+            f"  [cyan]↗[/cyan] Déférés web : {deferred}"
+            f"\n      → http://localhost:8000/migration/review?plan={plan_path}"
+        )
+    pending = summary.get("pending", 0)
+    if pending:
+        console.print(f"  [dim]En attente : {pending} (--resume pour reprendre)[/dim]")
+    else:
+        console.print(
+            "[green]Tous les items ont une décision.[/green] "
+            f"Lance [bold]migrate-nas apply {plan_path}[/bold] pour transférer "
+            "les approuvés."
+        )
+    console.print("─" * 60)
+
+
 def review_command(
     plan_path: Annotated[
         Path,
@@ -88,6 +120,7 @@ def review_command(
         total = len(items)
         if total == 0:
             console.print("[yellow]Aucun item en attente — rien à reviewer.[/yellow]")
+            _print_summary(service, plan_path, state_path)
             return
         for idx, item in enumerate(items, start=1):
             while True:
@@ -107,10 +140,12 @@ def review_command(
                     result = "continue"
                 if result == "quit":
                     console.print("\n[cyan]Sortie demandée.[/cyan]")
+                    _print_summary(service, plan_path, state_path)
                     return
                 if result == "continue":
                     break
                 # "redraw" → re-affiche le même item
+        _print_summary(service, plan_path, state_path)
     finally:
         store.close()
 

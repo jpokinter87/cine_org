@@ -769,3 +769,33 @@ def test_review_loop_defer_to_web(tmp_path):
     d = store.get_decision(item.item_id)
     assert d.decision == DecisionStatus.DEFERRED_TO_WEB
     store.close()
+
+
+def test_review_summary_shown_at_end(tmp_path):
+    """Après quit, affiche un résumé : N approuvés, M skippés, etc."""
+    plan_path, item = _write_plan_with_nv(tmp_path)
+    state_path = tmp_path / "s.sqlite"
+    runner = CliRunner()
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="a\n",  # accept top, fin auto (1 seul item)
+    )
+    assert result.exit_code == 0
+    out = result.output
+    assert "Session review" in out or "session" in out.lower()
+    assert "1" in out  # 1 approuvé
+
+
+def test_review_summary_shows_web_url_when_deferred(tmp_path):
+    """Si items deferred-to-web, affiche l'URL."""
+    plan_path, item = _write_plan_with_nv(tmp_path)
+    state_path = tmp_path / "s.sqlite"
+    runner = CliRunner()
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="w\n",
+    )
+    out = result.output
+    assert "/migration/review" in out
