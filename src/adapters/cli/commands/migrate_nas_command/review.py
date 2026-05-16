@@ -138,10 +138,10 @@ def _handle_needs_validation(
     (re-affiche la même carte — typiquement après search).
     """
     candidates = item.match.top_candidates[:5]
-    valid_keys = ["a", "r", "k", "q"]
+    valid_keys = ["a", "r", "k", "q", "s"]
     valid_keys.extend(str(i) for i in range(1, len(candidates) + 1))
     answer = Prompt.ask(
-        "[a]ccept top  [1-N] pick  [r]eject  [k]eep skip  [q]uit",
+        "[a]ccept top  [1-N] pick  [s]earch  [r]eject  [k]eep skip  [q]uit",
         choices=valid_keys,
         default="a",
         show_choices=False,
@@ -165,6 +165,8 @@ def _handle_needs_validation(
             decided_via="cli",
         )
         return "continue"
+    if answer == "s":
+        return _handle_search_then_pick(service, item)
     if answer == "a":
         chosen = candidates[0] if candidates else None
     else:  # "1".."5"
@@ -172,7 +174,62 @@ def _handle_needs_validation(
     if chosen is None:
         console.print("[red]Pas de candidat — utilise 's'earch ou 'k'eep skip.[/red]")
         return "redraw"
+    _persist_approved(service, item, chosen)
+    return "continue"
 
+
+def _handle_search_then_pick(
+    service: MigrationReviewService,
+    item: MigrationItem,
+) -> str:
+    """Prompt nouveau titre, lance search TMDB, présente résultats, capture choix."""
+    import asyncio
+
+    query = Prompt.ask("Nouveau titre")
+    if not query.strip():
+        console.print("[yellow]Recherche annulée.[/yellow]")
+        return "redraw"
+
+    is_series = (item.media_root or "").lower().startswith(
+        ("seri", "séri", "anim")
+    )
+    results = asyncio.run(
+        service.search_tmdb(query=query.strip(), is_series=is_series)
+    )
+    if not results:
+        console.print("[red]Aucun résultat TMDB.[/red]")
+        return "redraw"
+
+    console.print("[bold]Résultats TMDB :[/bold]")
+    for i, r in enumerate(results[:5], start=1):
+        console.print(f"  {i}. {r.title:<40} ({r.year}) score {r.score:.0f}")
+
+    pick = Prompt.ask(
+        "Choisir [1-N] ou 'b' pour revenir",
+        choices=[*[str(i) for i in range(1, min(5, len(results)) + 1)], "b"],
+        default="b",
+    )
+    if pick == "b":
+        return "redraw"
+
+    chosen_result = results[int(pick) - 1]
+    chosen = {
+        "title": chosen_result.title,
+        "year": chosen_result.year,
+        "score": chosen_result.score,
+        "tmdb_id": int(chosen_result.id) if chosen_result.id.isdigit() else None,
+        "tvdb_id": None,
+    }
+    _persist_approved(service, item, chosen)
+    return "continue"
+
+
+def _persist_approved(
+    service: MigrationReviewService,
+    item: MigrationItem,
+    chosen: dict,
+) -> None:
+    """Persiste une décision APPROVED pour un item avec le candidat choisi."""
     service.decide(
         item_id=item.item_id,
         decision=DecisionStatus.APPROVED,
@@ -183,7 +240,6 @@ def _handle_needs_validation(
         chosen_score=chosen.get("score"),
         decided_via="cli",
     )
-    return "continue"
 
 
 def render_review_card(

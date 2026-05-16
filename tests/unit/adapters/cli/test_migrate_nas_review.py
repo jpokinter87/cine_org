@@ -286,3 +286,40 @@ def test_review_command_closes_store_when_build_service_fails(tmp_path, monkeypa
     # test sert surtout de smoke pour le chemin finally).
     store = MigrationStateStore(state_path)
     store.close()
+
+
+def test_review_loop_search_replaces_candidates(tmp_path, monkeypatch):
+    """User tape 's' → prompt "Wrong Turn" → search live → choisir nouveau candidat."""
+    from src.core.ports.api_clients import SearchResult
+    from src.services.migration.state_store import MigrationStateStore
+
+    plan_path, item = _write_plan_with_nv(tmp_path)
+    state_path = tmp_path / "s.sqlite"
+
+    # Patch ReviewService.search_tmdb pour retourner un nouveau candidat
+    new_results = [
+        SearchResult(id="9902", title="Détour mortel", year=2003,
+                     score=98.0, source="tmdb"),
+    ]
+
+    async def fake_search(*args, **kwargs):
+        return new_results
+
+    monkeypatch.setattr(
+        "src.services.migration.review_service.MigrationReviewService.search_tmdb",
+        fake_search,
+    )
+
+    runner = CliRunner()
+    # Inputs : 's' → "Wrong Turn" → '1' (choisir 1er résultat search)
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="s\nWrong Turn\n1\n",
+    )
+    assert result.exit_code == 0, result.output
+    store = MigrationStateStore(state_path)
+    decision = store.get_decision(item.item_id)
+    assert decision.chosen_tmdb_id == 9902
+    assert decision.chosen_title == "Détour mortel"
+    store.close()
