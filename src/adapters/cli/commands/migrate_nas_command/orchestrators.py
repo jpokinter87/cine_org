@@ -52,6 +52,7 @@ from src.services.migration.scanner import (
     DEFAULT_CATEGORY_PREFIXES,
     MigrationScanner,
 )
+from src.services.migration.decisions import DecisionStatus
 from src.services.migration.state_store import MigrationStateStore
 from src.services.migration.transfer_executor import (
     _DEFAULT_MAX_RETRIES,
@@ -158,6 +159,43 @@ def build_plan(
     return plan
 
 
+def _apply_decisions_to_plan(plan: MigrationPlan, decisions: dict) -> None:
+    """Mute le plan en place : items APPROVED en review-buckets → MIGRATE.
+
+    Hydrate `item.match.tmdb_id` / `tvdb_id` depuis la décision pour que
+    raw_finalizer puisse calculer la destination canonique. Items
+    SKIPPED/REJECTED/DEFERRED_TO_WEB sont retirés du plan.
+    """
+    review_buckets = {
+        Bucket.NEEDS_VALIDATION, Bucket.UNRATED,
+        Bucket.LOW_RATED, Bucket.ALREADY_IN_LIBRARY,
+    }
+    enhanced = []
+    for item in plan.items:
+        if item.bucket == Bucket.MIGRATE:
+            enhanced.append(item)
+            continue
+        if item.bucket not in review_buckets:
+            enhanced.append(item)  # BROKEN, ALREADY_ON_DESTINATION, etc.
+            continue
+        decision = decisions.get(item.item_id)
+        if decision is None or decision.decision != DecisionStatus.APPROVED:
+            continue  # pending / skipped / rejected / deferred → drop
+        # Hydrate match si la décision contient des choix
+        if decision.chosen_tmdb_id is not None:
+            item.match.tmdb_id = decision.chosen_tmdb_id
+        if decision.chosen_tvdb_id is not None:
+            item.match.tvdb_id = decision.chosen_tvdb_id
+        item.bucket = Bucket.MIGRATE
+        # Tag décisions spéciales pour raw_finalizer / post-commit hooks
+        if decision.delete_source_after:
+            item.tags.append("delete_source_after_commit")
+        if decision.duplicate_action:
+            item.tags.append(f"duplicate_action:{decision.duplicate_action.value}")
+        enhanced.append(item)
+    plan.items = enhanced
+
+
 def run_apply(
     *,
     plan_path: Path,
@@ -185,6 +223,11 @@ def run_apply(
     """
     plan = deserialize_plan(plan_path.read_text(encoding="utf-8"))
     store = MigrationStateStore(state_store_path)
+
+    # Hydrate les approuvés review en MIGRATE virtuels
+    decisions = store.load_decisions()
+    _apply_decisions_to_plan(plan, decisions)
+
     raw_finalizer = None
     has_raw_items = any(
         not item.is_symlink_source for item in plan.items

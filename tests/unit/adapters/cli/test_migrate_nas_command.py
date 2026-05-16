@@ -294,3 +294,144 @@ def test_run_status_without_state_store_reports_plan_only(
     assert summary["plan"]["total"] == 2
     # Aucune ligne dans le state store → progress vide
     assert summary["progress"] == {}
+
+
+# ---- run_apply : hydratation décisions review ---------------------------
+
+
+def test_run_apply_promotes_approved_review_items_to_migrate(
+    layout, tmp_path
+):
+    """Un item NEEDS_VALIDATION avec décision APPROVED doit être transféré.
+
+    Hydrate item.match depuis la décision avant de passer à raw_finalizer.
+    """
+    from datetime import datetime, timezone
+    from unittest.mock import MagicMock, patch
+
+    from src.services.migration.dataclasses import (
+        MatchInfo,
+        MigrationItem,
+        MigrationPlan,
+        MigrationStats,
+        RatingDecision,
+    )
+    from src.services.migration.decisions import Decision, DecisionStatus
+    from src.services.migration.plan_builder import serialize_plan
+
+    # Item raw NEEDS_VALIDATION (pas de tmdb_id résolu au plan-time)
+    src = layout["avatar_target"]
+    dest = layout["destination_storage"] / "Films" / "SF" / "X" / "Avatar.mkv"
+    item = MigrationItem(
+        item_id="nv1",
+        bucket=Bucket.NEEDS_VALIDATION,
+        symlink_path=src,
+        source_path=src,
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=src.stat().st_size,
+        rating=RatingDecision(),
+        match=MatchInfo(top_candidates=[]),
+        is_symlink_source=False,
+    )
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"),
+        destination_root=layout["destination_storage"],
+        threshold=6.0, stats=MigrationStats(), items=[item],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+
+    state_path = tmp_path / "plan.json.state.sqlite"
+    store = MigrationStateStore(state_path)
+    store.save_decision(
+        Decision(
+            item_id="nv1",
+            bucket_origin="needs_validation",
+            decision=DecisionStatus.APPROVED,
+            chosen_tmdb_id=19995,
+            chosen_title="Avatar",
+            chosen_year=2009,
+            chosen_score=95.0,
+            decided_at=datetime.now(timezone.utc),
+            decided_via="cli",
+        )
+    )
+    store.close()
+
+    # Lance apply avec FakeRsync + faux raw_finalizer
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+    fake_finalizer = MagicMock()
+    fake_finalizer.prepare = MagicMock(return_value=dest)
+    fake_finalizer.finalize = MagicMock()
+
+    # Patch _build_raw_finalizer pour injecter le fake
+    with patch(
+        "src.adapters.cli.commands.migrate_nas_command.orchestrators._build_raw_finalizer",
+        return_value=fake_finalizer,
+    ):
+        outcomes = run_apply(
+            plan_path=plan_path,
+            state_store_path=state_path,
+            rsync_runner=rsync,
+        )
+
+    # L'item a bien été transféré (decision approved → MIGRATE virtuel)
+    assert len(outcomes) == 1
+    fake_finalizer.prepare.assert_called_once()
+    # Le match a été hydraté depuis la décision
+    item_passed = fake_finalizer.prepare.call_args.args[0]
+    assert item_passed.match.tmdb_id == 19995
+
+
+def test_run_apply_ignores_skipped_items(layout, tmp_path):
+    """Un item SKIPPED ne doit PAS être transféré."""
+    from datetime import datetime, timezone
+
+    from src.services.migration.dataclasses import (
+        MatchInfo,
+        MigrationItem,
+        MigrationPlan,
+        MigrationStats,
+        RatingDecision,
+    )
+    from src.services.migration.decisions import Decision, DecisionStatus
+    from src.services.migration.plan_builder import serialize_plan
+
+    item = MigrationItem(
+        item_id="nv2",
+        bucket=Bucket.NEEDS_VALIDATION,
+        symlink_path=layout["avatar_target"],
+        source_path=layout["avatar_target"],
+        destination_path=None,
+        media_root="Films", relative_category="",
+        size_bytes=1000, rating=RatingDecision(),
+        match=MatchInfo(), is_symlink_source=False,
+    )
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"),
+        destination_root=layout["destination_storage"],
+        threshold=6.0, stats=MigrationStats(), items=[item],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "plan.json.state.sqlite"
+    store = MigrationStateStore(state_path)
+    store.save_decision(
+        Decision(
+            item_id="nv2", bucket_origin="needs_validation",
+            decision=DecisionStatus.SKIPPED,
+            decided_at=datetime.now(timezone.utc), decided_via="cli",
+        )
+    )
+    store.close()
+
+    rsync = FakeRsync([])  # ne doit pas être appelé
+    outcomes = run_apply(
+        plan_path=plan_path,
+        state_store_path=state_path,
+        rsync_runner=rsync,
+    )
+    assert outcomes == []
+    assert rsync.calls == []
