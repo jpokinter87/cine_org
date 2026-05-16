@@ -1085,3 +1085,117 @@ def test_review_skip_cascades_series_via_nested_path(tmp_path):
         assert d is not None, f"e{i} sans décision"
         assert d.decision == DecisionStatus.SKIPPED
     store.close()
+
+
+# ---------------------------------------------------------------------------
+# Tests helpers _default_search_query et pré-remplissage prompt [s]earch
+# ---------------------------------------------------------------------------
+
+
+def test_default_search_query_for_movie_uses_guessit_title_and_year():
+    """Film : titre parsé par guessit + année."""
+    from src.adapters.cli.commands.migrate_nas_command.review import (
+        _default_search_query,
+    )
+
+    item = MigrationItem(
+        item_id="m1",
+        bucket=Bucket.NEEDS_VALIDATION,
+        symlink_path=Path(
+            "/media/nas/Films/Olivier.Et.Le.Dragon.Vert.1983.Truefrench.x264.mkv"
+        ),
+        source_path=Path("/media/nas/Films/Olivier.Et.Le.Dragon.Vert.1983.mkv"),
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=1000,
+        rating=RatingDecision(),
+        match=MatchInfo(),
+        is_symlink_source=False,
+    )
+    default = _default_search_query(item)
+    assert "Olivier" in default
+    assert "Dragon" in default
+    assert "1983" in default
+
+
+def test_default_search_query_for_series_uses_parent_dir():
+    """Série : nom du dossier parent sans ' Saison N' (pas le titre d'épisode)."""
+    from src.adapters.cli.commands.migrate_nas_command.review import (
+        _default_search_query,
+    )
+
+    item = MigrationItem(
+        item_id="e1",
+        bucket=Bucket.NEEDS_VALIDATION,
+        symlink_path=Path(
+            "/media/nas/Animations/SOS Créatures Saison 1/S01E50 - Crunch.mkv"
+        ),
+        source_path=Path("/media/nas/Animations/SOS Créatures Saison 1/S01E50.mkv"),
+        destination_path=None,
+        media_root="Vidéothèque10",
+        relative_category="",
+        size_bytes=1000,
+        rating=RatingDecision(),
+        match=MatchInfo(),
+        is_symlink_source=False,
+    )
+    default = _default_search_query(item)
+    assert default == "SOS Créatures"
+
+
+def test_review_search_action_prefills_default_query(tmp_path, monkeypatch):
+    """Le prompt 'Nouveau titre' est pré-rempli — Enter accepte le défaut."""
+    from src.core.ports.api_clients import SearchResult
+
+    item = MigrationItem(
+        item_id="m_pref",
+        bucket=Bucket.NEEDS_VALIDATION,
+        symlink_path=Path("/media/nas/Films/Movie.Test.2020.BluRay.x264.mkv"),
+        source_path=Path("/media/nas/Films/Movie.Test.2020.BluRay.x264.mkv"),
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=1000,
+        rating=RatingDecision(),
+        match=MatchInfo(top_candidates=[]),
+        is_symlink_source=False,
+    )
+    plan = MigrationPlan(
+        version=1,
+        source_root=Path("/s"),
+        destination_root=Path("/d"),
+        threshold=6.0,
+        stats=MigrationStats(),
+        items=[item],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    # Capture le query utilisé pour search_tmdb
+    captured = {}
+
+    async def fake_search(self, *, query, is_series, year=None):
+        captured["query"] = query
+        return [
+            SearchResult(id="1", title="Movie Test", year=2020,
+                         score=95.0, source="tmdb"),
+        ]
+
+    monkeypatch.setattr(
+        "src.services.migration.review_service.MigrationReviewService.search_tmdb",
+        fake_search,
+    )
+
+    runner = CliRunner()
+    # 's' → Enter (accepte le défaut) → '1' (choisir 1er résultat)
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="s\n\n1\n",
+    )
+    assert result.exit_code == 0, result.output
+    # Le query envoyé à TMDB est bien le défaut (titre parsé)
+    assert "Movie Test" in captured["query"]
+    assert "2020" in captured["query"]

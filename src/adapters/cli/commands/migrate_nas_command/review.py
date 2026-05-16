@@ -226,6 +226,59 @@ def _maybe_bulk_accept_collision(
     return True
 
 
+def _is_series_item(item: MigrationItem) -> bool:
+    """True si l'item est probablement un épisode de série.
+
+    Détecte de 2 façons :
+    - via `item.media_root` (scanner a identifié la catégorie)
+    - via le chemin (NAS nested : /…/Animations/… ou /…/Séries/…)
+    """
+    if item.symlink_path is None:
+        return False
+    media_root_lower = (item.media_root or "").lower()
+    if media_root_lower.startswith(("seri", "séri", "anim")):
+        return True
+    path_str_lower = str(item.symlink_path).lower()
+    return any(
+        f"/{cat}/" in path_str_lower
+        for cat in ("animations", "animation", "séries", "series")
+    )
+
+
+def _default_search_query(item: MigrationItem) -> str:
+    """Calcule un titre par défaut pour pré-remplir le prompt de recherche.
+
+    - Pour les séries : nom du dossier parent (avec ' Saison N' retiré).
+      Évite que guessit renvoie le titre d'épisode plutôt que celui de la série.
+    - Pour les films : titre parsé par guessit depuis le nom de fichier,
+      avec année si disponible.
+    - Fallback : nom de fichier sans extension.
+    """
+    import re as _re
+
+    from guessit import guessit
+
+    if item.symlink_path is None:
+        return ""
+
+    if _is_series_item(item):
+        parent_name = item.symlink_path.parent.name
+        series = _re.sub(r"\s*[Ss]aison\s+\d+\s*$", "", parent_name).strip()
+        if series:
+            return series
+        # Pas de "Saison N" parsable → fallback guessit
+
+    try:
+        parsed = guessit(item.symlink_path.name, {"type": "movie"})
+        title = parsed.get("title")
+        year = parsed.get("year")
+        if title:
+            return f"{title} {year}" if year else str(title)
+    except Exception:  # noqa: BLE001 — guessit best-effort
+        pass
+    return item.symlink_path.stem
+
+
 def _series_group_key(item: MigrationItem) -> Optional[str]:
     """Retourne une clé identifiant la série pour la cascade, ou None.
 
@@ -238,23 +291,10 @@ def _series_group_key(item: MigrationItem) -> Optional[str]:
     le suffixe ' Saison N' du dossier parent. Toutes les saisons d'une
     même série partagent ainsi la même clé.
     """
-    if item.symlink_path is None:
+    if not _is_series_item(item):
         return None
 
-    # Détection 1 : media_root explicite
-    media_root_lower = (item.media_root or "").lower()
-    is_series_root = media_root_lower.startswith(("seri", "séri", "anim"))
-
-    # Détection 2 : segment de chemin (NAS avec wrapper top-level)
-    path_str_lower = str(item.symlink_path).lower()
-    is_series_path = any(
-        f"/{cat}/" in path_str_lower
-        for cat in ("animations", "animation", "séries", "series")
-    )
-
-    if not (is_series_root or is_series_path):
-        return None
-
+    assert item.symlink_path is not None  # garanti par _is_series_item
     parent = item.symlink_path.parent
     parent_name = parent.name
     # Retire suffixe " Saison N" pour clusteriser toutes les saisons
@@ -402,14 +442,13 @@ def _handle_search_then_pick(
     """Prompt nouveau titre, lance search TMDB, présente résultats, capture choix."""
     import asyncio
 
-    query = Prompt.ask("Nouveau titre")
+    default_query = _default_search_query(item)
+    query = Prompt.ask("Nouveau titre", default=default_query)
     if not query.strip():
         console.print("[yellow]Recherche annulée.[/yellow]")
         return "redraw"
 
-    is_series = (item.media_root or "").lower().startswith(
-        ("seri", "séri", "anim")
-    )
+    is_series = _is_series_item(item)
     results = asyncio.run(
         service.search_tmdb(query=query.strip(), is_series=is_series)
     )
