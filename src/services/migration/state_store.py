@@ -18,7 +18,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from src.services.migration.dataclasses import (
     Bucket,
@@ -26,6 +26,9 @@ from src.services.migration.dataclasses import (
     TransferOutcome,
     TransferStatus,
 )
+
+if TYPE_CHECKING:
+    from src.services.migration.decisions import Decision, DecisionStatus
 
 
 _SCHEMA = """
@@ -227,7 +230,7 @@ class MigrationStateStore:
 
     # ---- Décisions de review (phase 44.1) -------------------------------
 
-    def save_decision(self, decision) -> None:
+    def save_decision(self, decision: "Decision") -> None:
         """Persiste (insert or replace) une décision review.
 
         Idempotent : ré-décider le même item_id écrase la décision précédente.
@@ -253,13 +256,13 @@ class MigrationStateStore:
                 decision.duplicate_action.value if decision.duplicate_action else None,
                 int(decision.delete_source_after),
                 decision.reason,
-                decision.decided_at.isoformat(),
+                _as_utc_iso(decision.decided_at),
                 decision.decided_via,
             ),
         )
         self._conn.commit()
 
-    def get_decision(self, item_id: str):
+    def get_decision(self, item_id: str) -> Optional["Decision"]:
         """Retourne la décision pour cet item_id, ou None si absente."""
         row = self._conn.execute(
             """
@@ -275,7 +278,7 @@ class MigrationStateStore:
             return None
         return _row_to_decision(row)
 
-    def load_decisions(self) -> dict:
+    def load_decisions(self) -> dict[str, "Decision"]:
         """Retourne toutes les décisions sous forme {item_id: Decision}."""
         rows = self._conn.execute(
             """
@@ -288,7 +291,7 @@ class MigrationStateStore:
         ).fetchall()
         return {r["item_id"]: _row_to_decision(r) for r in rows}
 
-    def decision_summary(self) -> dict:
+    def decision_summary(self) -> dict["DecisionStatus", int]:
         """Retourne {DecisionStatus: count} pour la table decisions."""
         from src.services.migration.decisions import DecisionStatus
 
@@ -331,3 +334,12 @@ def _row_to_decision(row):
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _as_utc_iso(dt: datetime) -> str:
+    """Force tz-aware UTC puis sérialise en ISO 8601."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat()

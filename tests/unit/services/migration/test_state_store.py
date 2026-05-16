@@ -348,3 +348,29 @@ def test_save_decision_with_delete_source_after(tmp_path):
     )
     loaded = store.get_decision("low-1")
     assert loaded.delete_source_after is True
+
+
+def test_save_decision_round_trips_decided_at_as_utc(tmp_path):
+    store = MigrationStateStore(tmp_path / "s.sqlite")
+    original = datetime(2026, 5, 15, 12, 30, 0, tzinfo=timezone.utc)
+    store.save_decision(_decision("rt-1", decided_at=original))
+    loaded = store.get_decision("rt-1")
+    assert loaded.decided_at == original
+    assert loaded.decided_at.tzinfo is not None  # tz-aware
+
+
+def test_save_decision_naive_datetime_is_coerced_to_utc(tmp_path):
+    store = MigrationStateStore(tmp_path / "s.sqlite")
+    naive = datetime(2026, 5, 15, 12, 30, 0)  # pas de tzinfo
+    store.save_decision(_decision("naive-1", decided_at=naive))
+    loaded = store.get_decision("naive-1")
+    # naïf doit être traité comme UTC, donc round-trip tz-aware UTC
+    assert loaded.decided_at.tzinfo is not None
+    assert loaded.decided_at == naive.replace(tzinfo=timezone.utc)
+
+
+def test_save_decision_delete_source_after_false_round_trips(tmp_path):
+    store = MigrationStateStore(tmp_path / "s.sqlite")
+    store.save_decision(_decision("low-2", delete_source_after=False))
+    loaded = store.get_decision("low-2")
+    assert loaded.delete_source_after is False
