@@ -1,0 +1,20 @@
+# Hooks Git pre-commit pour CineOrg.
+#
+# Installation locale (une fois par clone) :
+#   uv run pre-commit install
+#
+# Exécution manuelle sur tout le repo :
+#   uv run pre-commit run --all-files
+#
+# Désactivation ponctuelle d'un commit :
+#   git commit --no-verify
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.13
+    hooks:
+      - id: ruff
+        args: [--fix]
+        # Note : ruff-format intentionnellement omis pour l'instant
+        # (reformaterait 163 fichiers d'un coup). Activable plus tard
+        # via un commit dédié de formatage.
