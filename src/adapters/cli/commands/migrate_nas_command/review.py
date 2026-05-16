@@ -94,11 +94,13 @@ def review_command(
                 render_review_card(console, item, position=(idx, total))
                 if item.bucket == Bucket.NEEDS_VALIDATION:
                     result = _handle_needs_validation(service, item)
+                elif item.bucket == Bucket.UNRATED:
+                    result = _handle_unrated(service, item)
                 else:
-                    # Tasks 12-14 : autres buckets
+                    # Tasks 12-13 : low_rated, already_in_library
                     console.print(
                         f"[yellow]Bucket {item.bucket.value} pas encore "
-                        "supporté — Tasks 12-14.[/yellow]"
+                        "supporté — Tasks 12-13.[/yellow]"
                     )
                     result = "continue"
                 if result == "quit":
@@ -219,6 +221,48 @@ def _handle_search_then_pick(
         "score": chosen_result.score,
         "tmdb_id": int(chosen_result.id) if chosen_result.id.isdigit() else None,
         "tvdb_id": None,
+    }
+    _persist_approved(service, item, chosen)
+    return "continue"
+
+
+def _handle_unrated(
+    service: MigrationReviewService,
+    item: MigrationItem,
+) -> str:
+    """Prompt + dispatch action pour un item unrated (note absente).
+
+    Options : [m]igrate-anyway (APPROVED via match du plan), [k]eep skip,
+    [q]uit.
+
+    Retourne 'continue', 'quit'.
+    """
+    answer = Prompt.ask(
+        "[m]igrate-anyway  [k]eep skip  [q]uit",
+        choices=["m", "k", "q"],
+        default="k",
+        show_choices=False,
+    )
+    if answer == "q":
+        return "quit"
+    if answer == "k":
+        service.decide(
+            item_id=item.item_id,
+            decision=DecisionStatus.SKIPPED,
+            decided_via="cli",
+        )
+        return "continue"
+    # "m" → APPROVED avec le match déjà identifié au plan-time
+    chosen = {
+        "tmdb_id": item.match.tmdb_id,
+        "tvdb_id": item.match.tvdb_id,
+        "title": item.match.top_candidates[0].get("title")
+        if item.match.top_candidates
+        else None,
+        "year": item.match.top_candidates[0].get("year")
+        if item.match.top_candidates
+        else None,
+        "score": item.match.score,
     }
     _persist_approved(service, item, chosen)
     return "continue"

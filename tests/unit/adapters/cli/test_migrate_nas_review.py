@@ -323,3 +323,56 @@ def test_review_loop_search_replaces_candidates(tmp_path, monkeypatch):
     assert decision.chosen_tmdb_id == 9902
     assert decision.chosen_title == "Détour mortel"
     store.close()
+
+
+def test_review_loop_unrated_migrate_anyway(tmp_path):
+    """unrated + 'm' → décision APPROVED avec match déjà connu."""
+    item = MigrationItem(
+        item_id="u1",
+        bucket=Bucket.UNRATED,
+        symlink_path=Path("/old/Untitled.mkv"),
+        source_path=Path("/old/Untitled.mkv"),
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=1000,
+        rating=RatingDecision(),
+        match=MatchInfo(
+            tmdb_id=12345,
+            score=88.0,
+            top_candidates=[
+                {
+                    "title": "Some film",
+                    "year": 2020,
+                    "score": 88.0,
+                    "tmdb_id": 12345,
+                    "source": "tmdb",
+                }
+            ],
+        ),
+        is_symlink_source=False,
+    )
+    plan = MigrationPlan(
+        version=1,
+        source_root=Path("/s"),
+        destination_root=Path("/d"),
+        threshold=6.0,
+        stats=MigrationStats(),
+        items=[item],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="m\n",
+    )
+    assert result.exit_code == 0, result.output
+    store = MigrationStateStore(state_path)
+    d = store.get_decision("u1")
+    assert d.decision == DecisionStatus.APPROVED
+    assert d.chosen_tmdb_id == 12345  # repris du match existant
+    store.close()
