@@ -229,23 +229,37 @@ def _maybe_bulk_accept_collision(
 def _series_group_key(item: MigrationItem) -> Optional[str]:
     """Retourne une clé identifiant la série pour la cascade, ou None.
 
-    Pour les items dans Séries/Animations, regroupe par nom de série en
-    retirant le suffixe ' Saison N' du dossier parent. Toutes les saisons
-    d'une même série partagent ainsi la même clé.
+    Détecte une série de 2 façons :
+    - via `item.media_root` (cas simple : scanner a identifié la catégorie)
+    - via le chemin (cas nested : NAS avec wrapper top-level, ex.
+      /media/wd10-1/Vidéothèque10/Animations/...)
 
-    Retourne None pour les films (media_root ne commence pas par "seri"/"séri"/"anim").
+    Pour les items détectés série, regroupe par nom de série en retirant
+    le suffixe ' Saison N' du dossier parent. Toutes les saisons d'une
+    même série partagent ainsi la même clé.
     """
-    media_root_lower = (item.media_root or "").lower()
-    if not media_root_lower.startswith(("seri", "séri", "anim")):
-        return None
     if item.symlink_path is None:
         return None
+
+    # Détection 1 : media_root explicite
+    media_root_lower = (item.media_root or "").lower()
+    is_series_root = media_root_lower.startswith(("seri", "séri", "anim"))
+
+    # Détection 2 : segment de chemin (NAS avec wrapper top-level)
+    path_str_lower = str(item.symlink_path).lower()
+    is_series_path = any(
+        f"/{cat}/" in path_str_lower
+        for cat in ("animations", "animation", "séries", "series")
+    )
+
+    if not (is_series_root or is_series_path):
+        return None
+
     parent = item.symlink_path.parent
     parent_name = parent.name
-    # Retire le suffixe " Saison N" pour clusteriser toutes les saisons
+    # Retire suffixe " Saison N" pour clusteriser toutes les saisons
     series_name = re.sub(r"\s*[Ss]aison\s+\d+\s*$", "", parent_name).strip()
     if not series_name:
-        # Cas : parent_name vide après strip (ex. "Saison 1" tout court)
         return str(parent.parent)
     return str(parent.parent / series_name)
 

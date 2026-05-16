@@ -1035,3 +1035,53 @@ def test_review_skip_no_cascade_for_movies(tmp_path):
     store = MigrationStateStore(state_path)
     assert store.get_decision("m1").decision == DecisionStatus.SKIPPED
     store.close()
+
+
+def test_review_skip_cascades_series_via_nested_path(tmp_path):
+    """Détection série via chemin nested (media_root = wrapper top-level)."""
+    items = [
+        MigrationItem(
+            item_id=f"e{i}",
+            bucket=Bucket.NEEDS_VALIDATION,
+            # NAS réel : /media/wd10-1/Vidéothèque10/Animations/...
+            symlink_path=Path(
+                f"/media/wd10-1/Vidéothèque10/Animations/"
+                f"SOS Créatures Saison 1/S01E{i:02d}.mkv"
+            ),
+            source_path=Path(
+                f"/media/wd10-1/Vidéothèque10/Animations/"
+                f"SOS Créatures Saison 1/S01E{i:02d}.mkv"
+            ),
+            destination_path=None,
+            # media_root = wrapper, PAS "Animations"
+            media_root="Vidéothèque10",
+            relative_category="",
+            size_bytes=1000,
+            rating=RatingDecision(),
+            match=MatchInfo(top_candidates=[]),
+            is_symlink_source=False,
+        )
+        for i in range(1, 5)  # 4 épisodes
+    ]
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"), destination_root=Path("/d"),
+        threshold=6.0, stats=MigrationStats(), items=items,
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    # 'k' sur e1 → prompt cascade détecté via chemin nested → 'y' → tous skip
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="k\ny\n",
+    )
+    assert result.exit_code == 0, result.output
+    store = MigrationStateStore(state_path)
+    for i in range(1, 5):
+        d = store.get_decision(f"e{i}")
+        assert d is not None, f"e{i} sans décision"
+        assert d.decision == DecisionStatus.SKIPPED
+    store.close()
