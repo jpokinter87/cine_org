@@ -76,3 +76,72 @@ class MigrationReviewService:
             if item.item_id in decided_ids:
                 continue
             yield item
+
+    def decide(
+        self,
+        *,
+        item_id: str,
+        decision,  # DecisionStatus
+        decided_via: str,
+        chosen_tmdb_id: Optional[int] = None,
+        chosen_tvdb_id: Optional[int] = None,
+        chosen_title: Optional[str] = None,
+        chosen_year: Optional[int] = None,
+        chosen_score: Optional[float] = None,
+        duplicate_action=None,  # DuplicateAction
+        delete_source_after: bool = False,
+        reason: Optional[str] = None,
+    ) -> None:
+        """Persiste une décision sur un item du plan.
+
+        Auto-rempli `bucket_origin` depuis le bucket actuel de l'item
+        (informationnel pour audit). Idempotent.
+        """
+        from datetime import datetime, timezone
+
+        from src.services.migration.decisions import Decision
+
+        item = self._find_item(item_id)
+        self._store.save_decision(
+            Decision(
+                item_id=item_id,
+                bucket_origin=item.bucket.value,
+                decision=decision,
+                chosen_tmdb_id=chosen_tmdb_id,
+                chosen_tvdb_id=chosen_tvdb_id,
+                chosen_title=chosen_title,
+                chosen_year=chosen_year,
+                chosen_score=chosen_score,
+                duplicate_action=duplicate_action,
+                delete_source_after=delete_source_after,
+                reason=reason,
+                decided_at=datetime.now(timezone.utc),
+                decided_via=decided_via,
+            )
+        )
+
+    def summary(self) -> dict[str, int]:
+        """Retourne le récap : pending vs décidés (par status)."""
+        from src.services.migration.decisions import DecisionStatus
+
+        review_items = [
+            it for it in self._plan.items if it.bucket in REVIEW_BUCKETS
+        ]
+        decisions = self._store.load_decisions()
+        decided_ids = set(decisions.keys())
+        pending = sum(1 for it in review_items if it.item_id not in decided_ids)
+        out: dict[str, int] = {
+            "total_review_buckets": len(review_items),
+            "pending": pending,
+        }
+        for status in DecisionStatus:
+            out[status.value] = sum(
+                1 for d in decisions.values() if d.decision == status
+            )
+        return out
+
+    def _find_item(self, item_id: str) -> MigrationItem:
+        for it in self._plan.items:
+            if it.item_id == item_id:
+                return it
+        raise KeyError(f"unknown item_id: {item_id}")

@@ -141,3 +141,62 @@ def test_iter_pending_no_resume_yields_all(store):
     )
     pending = list(service.iter_pending(resume=False))
     assert [it.item_id for it in pending] == ["nv1"]
+
+
+def test_decide_persists_via_state_store(store):
+    plan = _plan([_item("nv1", Bucket.NEEDS_VALIDATION)])
+    service = MigrationReviewService(
+        plan=plan, state_store=store,
+        tmdb_client=MagicMock(), tvdb_client=MagicMock(),
+        matcher=MagicMock(), duplicate_detector=MagicMock(),
+    )
+    service.decide(
+        item_id="nv1",
+        decision=DecisionStatus.APPROVED,
+        chosen_tmdb_id=19995,
+        chosen_title="Avatar",
+        chosen_year=2009,
+        chosen_score=95.0,
+        decided_via="cli",
+    )
+    loaded = store.get_decision("nv1")
+    assert loaded.chosen_tmdb_id == 19995
+    assert loaded.bucket_origin == "needs_validation"  # auto-rempli depuis l'item
+
+
+def test_decide_unknown_item_id_raises(store):
+    plan = _plan([_item("nv1", Bucket.NEEDS_VALIDATION)])
+    service = MigrationReviewService(
+        plan=plan, state_store=store,
+        tmdb_client=MagicMock(), tvdb_client=MagicMock(),
+        matcher=MagicMock(), duplicate_detector=MagicMock(),
+    )
+    with pytest.raises(KeyError, match="unknown"):
+        service.decide(
+            item_id="unknown",
+            decision=DecisionStatus.SKIPPED,
+            decided_via="cli",
+        )
+
+
+def test_summary_combines_pending_and_decided(store):
+    plan = _plan([
+        _item("nv1", Bucket.NEEDS_VALIDATION),
+        _item("nv2", Bucket.NEEDS_VALIDATION),
+        _item("u1", Bucket.UNRATED),
+    ])
+    service = MigrationReviewService(
+        plan=plan, state_store=store,
+        tmdb_client=MagicMock(), tvdb_client=MagicMock(),
+        matcher=MagicMock(), duplicate_detector=MagicMock(),
+    )
+    service.decide(
+        item_id="nv1",
+        decision=DecisionStatus.APPROVED,
+        chosen_tmdb_id=1,
+        decided_via="cli",
+    )
+    summary = service.summary()
+    assert summary["pending"] == 2
+    assert summary["approved"] == 1
+    assert summary["total_review_buckets"] == 3
