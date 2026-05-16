@@ -24,7 +24,7 @@ from src.container import Container
 from src.services.duplicate_detector import DuplicateDetector
 from src.services.matcher import MatcherService
 from src.services.migration.dataclasses import Bucket, MigrationItem
-from src.services.migration.decisions import DecisionStatus
+from src.services.migration.decisions import DecisionStatus, DuplicateAction
 from src.services.migration.plan_builder import deserialize_plan
 from src.services.migration.review_service import MigrationReviewService
 from src.services.migration.state_store import MigrationStateStore
@@ -98,11 +98,11 @@ def review_command(
                     result = _handle_unrated(service, item)
                 elif item.bucket == Bucket.LOW_RATED:
                     result = _handle_low_rated(service, item)
+                elif item.bucket == Bucket.ALREADY_IN_LIBRARY:
+                    result = _handle_already_in_library(service, item)
                 else:
-                    # Task 13 : already_in_library
                     console.print(
-                        f"[yellow]Bucket {item.bucket.value} pas encore "
-                        "supporté — Task 13.[/yellow]"
+                        f"[yellow]Bucket {item.bucket.value} non géré (inattendu).[/yellow]"
                     )
                     result = "continue"
                 if result == "quit":
@@ -317,6 +317,66 @@ def _handle_low_rated(
         chosen_year=top.get("year"),
         chosen_score=top.get("score") or item.match.score,
         delete_source_after=delete_source,
+        decided_via="cli",
+    )
+    return "continue"
+
+
+def _handle_already_in_library(service, item) -> str:
+    """already_in_library : compare source vs dest, propose action."""
+    try:
+        reco = service.duplicate_recommendation(item)
+        reco_label = "source NAS" if reco.recommended == "new" else "dest existante"
+        console.print(
+            f"[bold cyan]Reco DuplicateDetector :[/bold cyan] "
+            f"garder {reco_label} "
+            f"(scores : new={reco.new_score:.0f} existing={reco.existing_score:.0f})"
+        )
+    except Exception as e:  # noqa: BLE001 — reco non bloquante
+        console.print(f"[yellow]Reco indisponible : {e}[/yellow]")
+        reco = None
+
+    answer = Prompt.ask(
+        "[a]ccept reco  [k]eep dest  [r]eplace dest  [d]elete source  [q]uit",
+        choices=["a", "k", "r", "d", "q"],
+        default="k",
+        show_choices=False,
+    )
+    if answer == "q":
+        return "quit"
+
+    duplicate_action: Optional[DuplicateAction] = None
+    if answer == "k":
+        duplicate_action = DuplicateAction.KEEP_DEST
+    elif answer == "r":
+        if not Confirm.ask(
+            "[red]Écraser la version existante en DB ?[/red]", default=False
+        ):
+            return "redraw"
+        duplicate_action = DuplicateAction.REPLACE_DEST
+    elif answer == "d":
+        if not Confirm.ask(
+            "[red]Supprimer la source NAS (garder la DB) ?[/red]",
+            default=False,
+        ):
+            return "redraw"
+        duplicate_action = DuplicateAction.DELETE_SOURCE
+    elif answer == "a":
+        if reco is None:
+            console.print("[red]Pas de reco — choisir manuellement.[/red]")
+            return "redraw"
+        duplicate_action = (
+            DuplicateAction.REPLACE_DEST
+            if reco.recommended == "new"
+            else DuplicateAction.KEEP_DEST
+        )
+
+    service.decide(
+        item_id=item.item_id,
+        decision=DecisionStatus.APPROVED,
+        duplicate_action=duplicate_action,
+        chosen_tmdb_id=item.match.tmdb_id,
+        chosen_tvdb_id=item.match.tvdb_id,
         decided_via="cli",
     )
     return "continue"

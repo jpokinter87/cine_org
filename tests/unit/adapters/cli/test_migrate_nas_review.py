@@ -587,3 +587,48 @@ def test_review_loop_low_rated_delete_then_cancel_then_skip(tmp_path):
     assert d.decision == DecisionStatus.SKIPPED
     assert d.delete_source_after is False
     store.close()
+
+
+def test_review_loop_already_in_library_keep_dest(tmp_path):
+    """already_in_library + 'k' → APPROVED + duplicate_action=keep_dest."""
+    from src.services.migration.decisions import DuplicateAction
+
+    src_file = tmp_path / "src.mkv"
+    src_file.write_bytes(b"\x00" * 1024)
+    dest_file = tmp_path / "dst.mkv"
+    dest_file.write_bytes(b"\x00" * 2048)
+
+    item = MigrationItem(
+        item_id="ail1",
+        bucket=Bucket.ALREADY_IN_LIBRARY,
+        symlink_path=src_file,
+        source_path=src_file,
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=1024,
+        rating=RatingDecision(),
+        match=MatchInfo(tmdb_id=42),
+        is_symlink_source=False,
+        tags=[f"existing:{dest_file}"],
+    )
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"), destination_root=Path("/d"),
+        threshold=6.0, stats=MigrationStats(), items=[item],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="k\n",
+    )
+    assert result.exit_code == 0, result.output
+    store = MigrationStateStore(state_path)
+    d = store.get_decision("ail1")
+    assert d.decision == DecisionStatus.APPROVED
+    assert d.duplicate_action == DuplicateAction.KEEP_DEST
+    store.close()
