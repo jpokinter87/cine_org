@@ -94,3 +94,38 @@ def test_review_list_renders_includes_pending_count(client_with_plan):
     assert response.status_code == 200
     # 1 NV item, pas de décision → pending=1
     assert "En attente : 1" in response.text
+
+
+def test_review_detail_returns_overlay_fragment(client_with_plan):
+    client, plan_path, _ = client_with_plan
+    response = client.get(
+        "/migration/review/nv1", params={"plan": str(plan_path)}
+    )
+    assert response.status_code == 200
+    assert "Wrong.mkv" in response.text
+    # Fragment HTMX (pas la page complète)
+    assert "<html" not in response.text.lower()
+
+
+def test_review_decide_post_persists(client_with_plan):
+    from src.services.migration.state_store import MigrationStateStore
+    from src.services.migration.decisions import DecisionStatus
+
+    client, plan_path, state_path = client_with_plan
+    response = client.post(
+        "/migration/review/nv1/decide",
+        params={"plan": str(plan_path)},
+        data={
+            "decision": "approved",
+            "chosen_tmdb_id": "83186",
+            "chosen_title": "Wrong",
+            "chosen_year": "2012",
+            "chosen_score": "67.0",
+        },
+    )
+    assert response.status_code == 200
+    store = MigrationStateStore(state_path)
+    d = store.get_decision("nv1")
+    assert d.decision == DecisionStatus.APPROVED
+    assert d.decided_via == "web"
+    store.close()

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Form, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse
 
 from src.services.duplicate_detector import DuplicateDetector
 from src.services.matcher import MatcherService
+from src.services.migration.decisions import DecisionStatus, DuplicateAction
 from src.services.migration.plan_builder import deserialize_plan
 from src.services.migration.review_service import MigrationReviewService
 from src.services.migration.state_store import MigrationStateStore
@@ -75,3 +78,124 @@ async def review_list(
             "summary": summary,
         },
     )
+
+
+def _find_item(plan, item_id):
+    """Retourne l'item correspondant à item_id, ou None si absent."""
+    for it in plan.items:
+        if it.item_id == item_id:
+            return it
+    return None
+
+
+@router.get("/review/{item_id}")
+async def review_detail(
+    request: Request,
+    item_id: str,
+    plan: str = Query(...),
+):
+    """Fragment HTMX détail d'un item."""
+    plan_path = _validate_plan_path(plan)
+    container = request.app.state.container
+    state_path = plan_path.with_suffix(plan_path.suffix + ".state.sqlite")
+    store = MigrationStateStore(state_path)
+    try:
+        service = _build_service(plan_path, store, container)
+        item = _find_item(service._plan, item_id)
+        if item is None:
+            return HTMLResponse("<p>Item non trouvé</p>", status_code=404)
+        # Pour already_in_library : compute reco
+        reco = None
+        if item.bucket.value == "already_in_library":
+            try:
+                reco = service.duplicate_recommendation(item)
+            except Exception:  # noqa: BLE001 — reco non bloquante
+                pass
+        return templates.TemplateResponse(
+            request,
+            "migration/_review_detail.html",
+            {
+                "item": item,
+                "plan_path": plan,
+                "reco": reco,
+            },
+        )
+    finally:
+        store.close()
+
+
+@router.post("/review/{item_id}/decide")
+async def review_decide(
+    request: Request,
+    item_id: str,
+    plan: str = Query(...),
+    decision: str = Form(...),
+    chosen_tmdb_id: Optional[str] = Form(None),
+    chosen_tvdb_id: Optional[str] = Form(None),
+    chosen_title: Optional[str] = Form(None),
+    chosen_year: Optional[str] = Form(None),
+    chosen_score: Optional[str] = Form(None),
+    duplicate_action: Optional[str] = Form(None),
+    delete_source_after: bool = Form(False),
+    reason: Optional[str] = Form(None),
+):
+    """POST décision depuis le web."""
+    plan_path = _validate_plan_path(plan)
+    container = request.app.state.container
+    state_path = plan_path.with_suffix(plan_path.suffix + ".state.sqlite")
+    store = MigrationStateStore(state_path)
+    try:
+        service = _build_service(plan_path, store, container)
+        service.decide(
+            item_id=item_id,
+            decision=DecisionStatus(decision),
+            chosen_tmdb_id=int(chosen_tmdb_id) if chosen_tmdb_id else None,
+            chosen_tvdb_id=int(chosen_tvdb_id) if chosen_tvdb_id else None,
+            chosen_title=chosen_title,
+            chosen_year=int(chosen_year) if chosen_year else None,
+            chosen_score=float(chosen_score) if chosen_score else None,
+            duplicate_action=DuplicateAction(duplicate_action)
+            if duplicate_action else None,
+            delete_source_after=delete_source_after,
+            reason=reason,
+            decided_via="web",
+        )
+        return HTMLResponse(
+            f'<div class="review-card review-card--decided">'
+            f'  ✓ Décision enregistrée pour {item_id}'
+            f'</div>'
+        )
+    finally:
+        store.close()
+
+
+@router.get("/review/{item_id}/search")
+async def review_search(
+    request: Request,
+    item_id: str,
+    plan: str = Query(...),
+    q: str = Query(""),
+):
+    """Recherche TMDB live depuis le web (fragment HTMX)."""
+    if not q.strip():
+        return HTMLResponse('<p class="dim">Saisissez un titre</p>')
+    plan_path = _validate_plan_path(plan)
+    container = request.app.state.container
+    state_path = plan_path.with_suffix(plan_path.suffix + ".state.sqlite")
+    store = MigrationStateStore(state_path)
+    try:
+        service = _build_service(plan_path, store, container)
+        item = _find_item(service._plan, item_id)
+        if item is None:
+            return HTMLResponse('<p>Item non trouvé</p>', status_code=404)
+        is_series = (item.media_root or "").lower().startswith(
+            ("seri", "séri", "anim")
+        )
+        results = await service.search_tmdb(query=q.strip(), is_series=is_series)
+        return templates.TemplateResponse(
+            request,
+            "migration/_search_results.html",
+            {"item": item, "results": results, "plan_path": plan},
+        )
+    finally:
+        store.close()

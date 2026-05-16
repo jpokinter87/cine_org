@@ -1,0 +1,20 @@
+<ul class="search-results-list">
+  {% if results %}
+    {% for r in results %}
+      <li class="search-result">
+        <strong>{{ r.title }}</strong>
+        {% if r.year %}({{ r.year }}){% endif %}
+        — score {{ "%.0f"|format(r.score) }}%
+        <button class="btn btn--sm btn--approve"
+                hx-post="/migration/review/{{ item.item_id }}/decide?plan={{ plan_path | urlencode }}"
+                hx-target="#review-{{ item.item_id }}"
+                hx-swap="outerHTML"
+                hx-vals='{"decision": "approved", "chosen_tmdb_id": "{{ r.tmdb_id }}", "chosen_title": "{{ r.title }}", "chosen_year": "{{ r.year }}", "chosen_score": "{{ r.score }}"}'>
+          Sélectionner
+        </button>
+      </li>
+    {% endfor %}
+  {% else %}
+    <li class="dim">Aucun résultat trouvé pour cette recherche.</li>
+  {% endif %}
+</ul>
