@@ -57,7 +57,14 @@ def review_command(
     state_path = state_store or plan_path.with_suffix(
         plan_path.suffix + ".state.sqlite"
     )
-    bucket_filter = Bucket(bucket) if bucket else None
+    try:
+        bucket_filter = Bucket(bucket) if bucket else None
+    except ValueError as e:
+        valid = ", ".join(b.value for b in Bucket)
+        raise typer.BadParameter(
+            f"Bucket invalide : '{bucket}'. Valeurs autorisées : {valid}",
+            param_hint="--bucket",
+        ) from e
     console.print(
         f"[bold cyan]Review[/bold cyan] depuis [yellow]{plan_path}[/yellow] "
         f"(state: [dim]{state_path}[/dim], "
