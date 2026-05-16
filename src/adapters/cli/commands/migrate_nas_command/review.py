@@ -81,8 +81,9 @@ def review_command(
         f"bucket: {bucket_filter.value if bucket_filter else 'tous'}, "
         f"resume: {resume})"
     )
-    service, store = _build_review_service(plan_path, state_path)
+    store = MigrationStateStore(state_path)
     try:
+        service = _build_review_service(plan_path, store)
         items = list(service.iter_pending(bucket=bucket_filter, resume=resume))
         total = len(items)
         if total == 0:
@@ -111,13 +112,13 @@ def review_command(
 
 
 def _build_review_service(
-    plan_path: Path, state_path: Path
-) -> tuple[MigrationReviewService, MigrationStateStore]:
-    """Câble le ReviewService depuis le container. Retourne (service, store)."""
+    plan_path: Path,
+    store: MigrationStateStore,
+) -> MigrationReviewService:
+    """Câble le ReviewService depuis le container (le store est fourni)."""
     plan = deserialize_plan(plan_path.read_text(encoding="utf-8"))
-    store = MigrationStateStore(state_path)
     container = Container()
-    service = MigrationReviewService(
+    return MigrationReviewService(
         plan=plan,
         state_store=store,
         tmdb_client=container.tmdb_client(),
@@ -125,7 +126,6 @@ def _build_review_service(
         matcher=MatcherService(),
         duplicate_detector=DuplicateDetector(),
     )
-    return service, store
 
 
 def _handle_needs_validation(

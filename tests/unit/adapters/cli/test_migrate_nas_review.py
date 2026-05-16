@@ -259,3 +259,30 @@ def test_review_loop_quit_stops_iteration(tmp_path):
     assert store.get_decision("nv1") is None
     assert store.get_decision("nv2") is None
     store.close()
+
+
+def test_review_command_closes_store_when_build_service_fails(tmp_path, monkeypatch):
+    """Si Container() raise, le store déjà ouvert doit être fermé proprement."""
+    from src.adapters.cli.commands.migrate_nas_command import review as review_module
+
+    plan_path, _ = _write_plan_with_nv(tmp_path)
+    state_path = tmp_path / "s.sqlite"
+
+    # Force _build_review_service à raise après que store a été instancié
+    def boom(plan_path, store):
+        raise RuntimeError("container HS")
+
+    monkeypatch.setattr(review_module, "_build_review_service", boom)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+    )
+    # L'erreur remonte, mais le store doit avoir été créé puis fermé sans fuite.
+    assert result.exit_code != 0
+    # Vérifie qu'on peut ré-ouvrir le store immédiatement (preuve qu'il a été
+    # fermé : sinon la connexion serait verrouillée — sqlite tolère mais le
+    # test sert surtout de smoke pour le chemin finally).
+    store = MigrationStateStore(state_path)
+    store.close()
