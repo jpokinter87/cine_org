@@ -10,6 +10,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
 ## Table des matières
 
 - [Installation](#installation)
+  - [Setup développement](#setup-développement)
 - [Configuration](#configuration)
 - [Architecture](#architecture)
   - [Modèle de stockage dual](#modèle-de-stockage-dual)
@@ -68,6 +69,25 @@ uv sync
 # Vérifier l'installation
 uv run cineorg --help
 ```
+
+### Setup développement
+
+Pour contribuer au projet, installer les deps de dev et activer le hook
+pre-commit (ruff lint sur les fichiers staged à chaque `git commit`) :
+
+```bash
+# Installe pytest, ruff, pre-commit, etc.
+uv sync --extra dev
+
+# Active le hook git localement (une seule fois par clone)
+uv run pre-commit install
+
+# (Optionnel) Vérifier le lint sur tout le repo
+uv run pre-commit run --all-files
+```
+
+Le hook rejette les commits qui introduisent des erreurs ruff. Pour
+bypasser ponctuellement : `git commit --no-verify`.
 
 ## Configuration
 
