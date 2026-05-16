@@ -53,7 +53,7 @@ def _print_summary(
     pending = summary.get("pending", 0)
     if pending:
         console.print(f"  [dim]En attente : {pending} (--resume pour reprendre)[/dim]")
-    else:
+    elif summary.get("total_review_buckets", 0) > 0:
         console.print(
             "[green]Tous les items ont une décision.[/green] "
             f"Lance [bold]migrate-nas apply {plan_path}[/bold] pour transférer "

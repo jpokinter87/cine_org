@@ -784,7 +784,7 @@ def test_review_summary_shown_at_end(tmp_path):
     assert result.exit_code == 0
     out = result.output
     assert "Session review" in out or "session" in out.lower()
-    assert "1" in out  # 1 approuvé
+    assert "Approuvés : 1" in out
 
 
 def test_review_summary_shows_web_url_when_deferred(tmp_path):
@@ -799,3 +799,29 @@ def test_review_summary_shows_web_url_when_deferred(tmp_path):
     )
     out = result.output
     assert "/migration/review" in out
+
+
+def test_review_summary_empty_plan_no_apply_message(tmp_path):
+    """Plan vide : ne pas suggérer 'migrate-nas apply' (rien à apply)."""
+    from src.services.migration.dataclasses import MigrationPlan, MigrationStats
+    from src.services.migration.plan_builder import serialize_plan
+
+    empty_plan = MigrationPlan(
+        version=1, source_root=Path("/s"), destination_root=Path("/d"),
+        threshold=6.0, stats=MigrationStats(), items=[],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(empty_plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+    )
+    assert result.exit_code == 0
+    out = result.output
+    assert "Aucun item en attente" in out
+    # Le résumé s'affiche mais pas le call-to-action apply (rien à apply)
+    assert "Tous les items ont une décision" not in out
+    assert "migrate-nas apply" not in out
