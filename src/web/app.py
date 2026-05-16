@@ -21,6 +21,7 @@ from .routes.quality import router as quality_router
 from .routes.transfer import router as transfer_router
 from .routes.validation import router as validation_router
 from .routes.workflow import router as workflow_router
+from .routes.migration import router as migration_router
 
 _WEB_DIR = Path(__file__).parent
 
@@ -49,3 +50,4 @@ app.include_router(quality_router)
 app.include_router(duplicates_router)
 app.include_router(config_router)
 app.include_router(maintenance_router)
+app.include_router(migration_router)

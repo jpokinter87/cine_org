@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Migration NAS — Review{% endblock %}
+{% block content %}
+<div class="container">
+  <h1>Migration NAS — Review</h1>
+  <p class="dim">Plan : <code>{{ plan_path }}</code></p>
+
+  <div class="summary">
+    <span>En attente : {{ summary.pending }}</span>
+    <span>Approuvés : {{ summary.approved | default(0) }}</span>
+    <span>Ignorés : {{ summary.skipped | default(0) }}</span>
+    <span>Différés : {{ summary.deferred_to_web | default(0) }}</span>
+  </div>
+
+  <div class="review-list">
+    {% for item in items %}
+      {% include "migration/_review_card.html" %}
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
