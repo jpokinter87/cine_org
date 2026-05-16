@@ -935,3 +935,103 @@ def test_review_collision_tmdb_user_declines_bulk_only_decides_current(tmp_path)
     assert store.get_decision("f2") is None
     assert store.get_decision("f3") is None
     store.close()
+
+
+def test_review_skip_cascades_to_series_siblings(tmp_path):
+    """k sur 1 épisode + Y confirmation → tous les épisodes de la série SKIPPED."""
+    items = [
+        MigrationItem(
+            item_id=f"e{i}",
+            bucket=Bucket.NEEDS_VALIDATION,
+            symlink_path=Path(
+                f"/media/nas/Animations/SOS Créatures Saison 1/S01E{i:02d}.mkv"
+            ),
+            source_path=Path(
+                f"/media/nas/Animations/SOS Créatures Saison 1/S01E{i:02d}.mkv"
+            ),
+            destination_path=None,
+            media_root="Animations",
+            relative_category="",
+            size_bytes=1000,
+            rating=RatingDecision(),
+            match=MatchInfo(
+                top_candidates=[
+                    {
+                        "title": f"Random{i}",
+                        "year": 2020,
+                        "score": 50.0,
+                        "tmdb_id": 1000 + i,
+                        "source": "tmdb",
+                    }
+                ]
+            ),
+            is_symlink_source=False,
+        )
+        for i in range(1, 6)  # 5 épisodes
+    ]
+    plan = MigrationPlan(
+        version=1,
+        source_root=Path("/s"),
+        destination_root=Path("/d"),
+        threshold=6.0,
+        stats=MigrationStats(),
+        items=items,
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    # 'k' sur e1 → prompt cascade → 'y' → tous skip
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="k\ny\n",
+    )
+    assert result.exit_code == 0, result.output
+    store = MigrationStateStore(state_path)
+    for i in range(1, 6):
+        d = store.get_decision(f"e{i}")
+        assert d is not None, f"e{i} sans décision"
+        assert d.decision == DecisionStatus.SKIPPED
+    store.close()
+
+
+def test_review_skip_no_cascade_for_movies(tmp_path):
+    """Films (pas dans Séries/Animations) → pas de prompt cascade."""
+    item = MigrationItem(
+        item_id="m1",
+        bucket=Bucket.NEEDS_VALIDATION,
+        symlink_path=Path("/media/nas/Films/Movie.mkv"),
+        source_path=Path("/media/nas/Films/Movie.mkv"),
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=1000,
+        rating=RatingDecision(),
+        match=MatchInfo(top_candidates=[]),
+        is_symlink_source=False,
+    )
+    plan = MigrationPlan(
+        version=1,
+        source_root=Path("/s"),
+        destination_root=Path("/d"),
+        threshold=6.0,
+        stats=MigrationStats(),
+        items=[item],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    # 'k' → pas de prompt cascade (1 seul input suffit)
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="k\n",
+    )
+    assert result.exit_code == 0, result.output
+    store = MigrationStateStore(state_path)
+    assert store.get_decision("m1").decision == DecisionStatus.SKIPPED
+    store.close()

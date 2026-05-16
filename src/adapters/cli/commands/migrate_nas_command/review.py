@@ -11,6 +11,7 @@ Reprise via --resume (skippe les items déjà décidés).
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -225,6 +226,97 @@ def _maybe_bulk_accept_collision(
     return True
 
 
+def _series_group_key(item: MigrationItem) -> Optional[str]:
+    """Retourne une clé identifiant la série pour la cascade, ou None.
+
+    Pour les items dans Séries/Animations, regroupe par nom de série en
+    retirant le suffixe ' Saison N' du dossier parent. Toutes les saisons
+    d'une même série partagent ainsi la même clé.
+
+    Retourne None pour les films (media_root ne commence pas par "seri"/"séri"/"anim").
+    """
+    media_root_lower = (item.media_root or "").lower()
+    if not media_root_lower.startswith(("seri", "séri", "anim")):
+        return None
+    if item.symlink_path is None:
+        return None
+    parent = item.symlink_path.parent
+    parent_name = parent.name
+    # Retire le suffixe " Saison N" pour clusteriser toutes les saisons
+    series_name = re.sub(r"\s*[Ss]aison\s+\d+\s*$", "", parent_name).strip()
+    if not series_name:
+        # Cas : parent_name vide après strip (ex. "Saison 1" tout court)
+        return str(parent.parent)
+    return str(parent.parent / series_name)
+
+
+def _items_in_series_group(
+    plan,
+    group_key: str,
+    *,
+    excluding_id: Optional[str] = None,
+) -> list:
+    """Retourne tous les items du plan dans la même série, hors excluding_id.
+
+    Filtre sur REVIEW_BUCKETS : les items MIGRATE/BROKEN ne reçoivent pas
+    de décision review.
+    """
+    out = []
+    for it in plan.items:
+        if it.bucket not in REVIEW_BUCKETS:
+            continue
+        if excluding_id is not None and it.item_id == excluding_id:
+            continue
+        if _series_group_key(it) == group_key:
+            out.append(it)
+    return out
+
+
+def _maybe_cascade_series_decision(
+    service: MigrationReviewService,
+    item: MigrationItem,
+    decision_status: DecisionStatus,
+    *,
+    reason: Optional[str] = None,
+) -> None:
+    """Si l'item fait partie d'une série, propose de propager une décision
+    uniforme (skip/reject/web) à tous les épisodes encore en attente.
+
+    Ne s'applique qu'aux statuts SKIPPED / REJECTED / DEFERRED_TO_WEB —
+    pas aux APPROVED (qui ont des chosen_* spécifiques à l'item).
+    """
+    group_key = _series_group_key(item)
+    if group_key is None:
+        return
+    siblings = _items_in_series_group(
+        service._plan, group_key, excluding_id=item.item_id
+    )
+    # Exclut les siblings déjà décidés (en cours de session ou sessions précédentes)
+    decided_ids = set(service._store.load_decisions().keys())
+    pending_siblings = [s for s in siblings if s.item_id not in decided_ids]
+    if len(pending_siblings) == 0:
+        return
+    label_map = {
+        DecisionStatus.SKIPPED: "skip",
+        DecisionStatus.REJECTED: "reject",
+        DecisionStatus.DEFERRED_TO_WEB: "defer to web",
+    }
+    action_label = label_map.get(decision_status, decision_status.value)
+    if not Confirm.ask(
+        f"[cyan]📺 Série détectée ({len(pending_siblings)} autres épisodes en attente). "
+        f"Appliquer aussi '{action_label}' à toute la série ?[/cyan]",
+        default=True,
+    ):
+        return
+    for sibling in pending_siblings:
+        service.decide(
+            item_id=sibling.item_id,
+            decision=decision_status,
+            reason=reason,
+            decided_via="cli",
+        )
+
+
 def _handle_needs_validation(
     service: MigrationReviewService,
     item: MigrationItem,
@@ -252,6 +344,7 @@ def _handle_needs_validation(
             decision=DecisionStatus.DEFERRED_TO_WEB,
             decided_via="cli",
         )
+        _maybe_cascade_series_decision(service, item, DecisionStatus.DEFERRED_TO_WEB)
         return "continue"
     if answer == "k":
         service.decide(
@@ -259,6 +352,7 @@ def _handle_needs_validation(
             decision=DecisionStatus.SKIPPED,
             decided_via="cli",
         )
+        _maybe_cascade_series_decision(service, item, DecisionStatus.SKIPPED)
         return "continue"
     if answer == "r":
         reason = Prompt.ask("Raison du rejet (optionnelle)", default="")
@@ -267,6 +361,9 @@ def _handle_needs_validation(
             decision=DecisionStatus.REJECTED,
             reason=reason or None,
             decided_via="cli",
+        )
+        _maybe_cascade_series_decision(
+            service, item, DecisionStatus.REJECTED, reason=reason or None
         )
         return "continue"
     if answer == "s":
@@ -355,6 +452,7 @@ def _handle_unrated(
             decision=DecisionStatus.DEFERRED_TO_WEB,
             decided_via="cli",
         )
+        _maybe_cascade_series_decision(service, item, DecisionStatus.DEFERRED_TO_WEB)
         return "continue"
     if answer == "k":
         service.decide(
@@ -362,6 +460,7 @@ def _handle_unrated(
             decision=DecisionStatus.SKIPPED,
             decided_via="cli",
         )
+        _maybe_cascade_series_decision(service, item, DecisionStatus.SKIPPED)
         return "continue"
     # "m" → APPROVED avec le match déjà identifié au plan-time
     chosen = {
@@ -404,6 +503,7 @@ def _handle_low_rated(
             decision=DecisionStatus.DEFERRED_TO_WEB,
             decided_via="cli",
         )
+        _maybe_cascade_series_decision(service, item, DecisionStatus.DEFERRED_TO_WEB)
         return "continue"
     if answer == "k":
         service.decide(
@@ -411,6 +511,7 @@ def _handle_low_rated(
             decision=DecisionStatus.SKIPPED,
             decided_via="cli",
         )
+        _maybe_cascade_series_decision(service, item, DecisionStatus.SKIPPED)
         return "continue"
     delete_source = False
     if answer == "d":
@@ -480,6 +581,7 @@ def _handle_already_in_library(
             decision=DecisionStatus.DEFERRED_TO_WEB,
             decided_via="cli",
         )
+        _maybe_cascade_series_decision(service, item, DecisionStatus.DEFERRED_TO_WEB)
         return "continue"
 
     duplicate_action: Optional[DuplicateAction] = None
