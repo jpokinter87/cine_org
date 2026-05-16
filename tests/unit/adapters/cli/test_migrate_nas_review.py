@@ -492,3 +492,98 @@ def test_review_loop_low_rated_delete_source_after(tmp_path):
     assert d.decision == DecisionStatus.APPROVED
     assert d.delete_source_after is True
     store.close()
+
+
+def test_review_loop_low_rated_migrate_anyway_no_delete(tmp_path):
+    """low_rated + 'm' → APPROVED + delete_source_after=False (pas de suppression)."""
+    item = MigrationItem(
+        item_id="lr_m",
+        bucket=Bucket.LOW_RATED,
+        symlink_path=Path("/old/MigrateAnyway.mkv"),
+        source_path=Path("/old/MigrateAnyway.mkv"),
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=1000,
+        rating=RatingDecision(value=4.0, source="imdb"),
+        match=MatchInfo(
+            tmdb_id=42,
+            score=92.0,
+            top_candidates=[
+                {"title": "Mediocre Movie", "year": 2015, "score": 92.0,
+                 "tmdb_id": 42, "source": "tmdb"}
+            ],
+        ),
+        is_symlink_source=False,
+    )
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"), destination_root=Path("/d"),
+        threshold=6.0, stats=MigrationStats(), items=[item],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="m\n",
+    )
+    assert result.exit_code == 0, result.output
+    store = MigrationStateStore(state_path)
+    d = store.get_decision("lr_m")
+    assert d.decision == DecisionStatus.APPROVED
+    assert d.chosen_tmdb_id == 42
+    assert d.delete_source_after is False
+    store.close()
+
+
+def test_review_loop_low_rated_delete_then_cancel_then_skip(tmp_path):
+    """low_rated + 'd' + 'n' (annule) → carte redessinée → 'k' (skip).
+
+    Garantit que le garde-fou Confirm.ask refuse bien la destruction quand
+    l'utilisateur tape 'n', et que le redraw permet ensuite de choisir 'k'.
+    """
+    item = MigrationItem(
+        item_id="lr_cancel",
+        bucket=Bucket.LOW_RATED,
+        symlink_path=Path("/old/Cancel.mkv"),
+        source_path=Path("/old/Cancel.mkv"),
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=1000,
+        rating=RatingDecision(value=2.0, source="imdb"),
+        match=MatchInfo(
+            tmdb_id=7,
+            score=88.0,
+            top_candidates=[
+                {"title": "Awful", "year": 2018, "score": 88.0,
+                 "tmdb_id": 7, "source": "tmdb"}
+            ],
+        ),
+        is_symlink_source=False,
+    )
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"), destination_root=Path("/d"),
+        threshold=6.0, stats=MigrationStats(), items=[item],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    # 'd' → Confirm prompt → 'n' (annule) → redraw → 'k' (skip)
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="d\nn\nk\n",
+    )
+    assert result.exit_code == 0, result.output
+    store = MigrationStateStore(state_path)
+    d = store.get_decision("lr_cancel")
+    # Après annulation puis skip : décision SKIPPED, pas APPROVED
+    assert d.decision == DecisionStatus.SKIPPED
+    assert d.delete_source_after is False
+    store.close()
