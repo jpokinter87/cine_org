@@ -12,6 +12,7 @@ informatifs et n'ont pas vocation à être transférés).
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,11 @@ from src.services.migration.dataclasses import (
     MigrationStats,
     RatingDecision,
     TransferStatus,
+)
+from src.services.migration.decisions import (
+    Decision,
+    DecisionStatus,
+    DuplicateAction,
 )
 from src.services.migration.state_store import MigrationStateStore
 
@@ -253,3 +259,92 @@ def test_state_persists_across_store_instances(tmp_path):
 
     store2 = MigrationStateStore(db_path)
     assert store2.get_status("a") == TransferStatus.COMMITTED
+
+
+# ---- Décisions de review (phase 44.1) -----------------------------------
+
+
+def _decision(item_id: str = "abc", **overrides) -> Decision:
+    base = dict(
+        item_id=item_id,
+        bucket_origin="needs_validation",
+        decision=DecisionStatus.APPROVED,
+        chosen_tmdb_id=19995,
+        chosen_title="Avatar",
+        chosen_year=2009,
+        chosen_score=95.0,
+        decided_at=datetime.now(timezone.utc),
+        decided_via="cli",
+    )
+    base.update(overrides)
+    return Decision(**base)
+
+
+def test_save_decision_persists(tmp_path):
+    store = MigrationStateStore(tmp_path / "s.sqlite")
+    store.save_decision(_decision("item-1"))
+    loaded = store.get_decision("item-1")
+    assert loaded is not None
+    assert loaded.chosen_tmdb_id == 19995
+    assert loaded.decision == DecisionStatus.APPROVED
+
+
+def test_save_decision_idempotent_overwrites(tmp_path):
+    store = MigrationStateStore(tmp_path / "s.sqlite")
+    store.save_decision(_decision("item-1"))
+    store.save_decision(
+        _decision("item-1", decision=DecisionStatus.SKIPPED, chosen_tmdb_id=None)
+    )
+    loaded = store.get_decision("item-1")
+    assert loaded.decision == DecisionStatus.SKIPPED
+    assert loaded.chosen_tmdb_id is None
+
+
+def test_get_decision_returns_none_when_absent(tmp_path):
+    store = MigrationStateStore(tmp_path / "s.sqlite")
+    assert store.get_decision("missing") is None
+
+
+def test_load_decisions_returns_dict_keyed_by_item_id(tmp_path):
+    store = MigrationStateStore(tmp_path / "s.sqlite")
+    store.save_decision(_decision("a"))
+    store.save_decision(_decision("b", decision=DecisionStatus.SKIPPED))
+    decisions = store.load_decisions()
+    assert set(decisions.keys()) == {"a", "b"}
+    assert decisions["b"].decision == DecisionStatus.SKIPPED
+
+
+def test_decision_summary_groups_by_status(tmp_path):
+    store = MigrationStateStore(tmp_path / "s.sqlite")
+    store.save_decision(_decision("a", decision=DecisionStatus.APPROVED))
+    store.save_decision(_decision("b", decision=DecisionStatus.APPROVED))
+    store.save_decision(_decision("c", decision=DecisionStatus.SKIPPED))
+    summary = store.decision_summary()
+    assert summary[DecisionStatus.APPROVED] == 2
+    assert summary[DecisionStatus.SKIPPED] == 1
+
+
+def test_save_decision_with_duplicate_action(tmp_path):
+    store = MigrationStateStore(tmp_path / "s.sqlite")
+    store.save_decision(
+        _decision(
+            "dup-1",
+            bucket_origin="already_in_library",
+            duplicate_action=DuplicateAction.REPLACE_DEST,
+        )
+    )
+    loaded = store.get_decision("dup-1")
+    assert loaded.duplicate_action == DuplicateAction.REPLACE_DEST
+
+
+def test_save_decision_with_delete_source_after(tmp_path):
+    store = MigrationStateStore(tmp_path / "s.sqlite")
+    store.save_decision(
+        _decision(
+            "low-1",
+            bucket_origin="low_rated",
+            delete_source_after=True,
+        )
+    )
+    loaded = store.get_decision("low-1")
+    assert loaded.delete_source_after is True

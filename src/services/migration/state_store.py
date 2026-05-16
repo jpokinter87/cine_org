@@ -40,6 +40,22 @@ CREATE TABLE IF NOT EXISTS migration_items (
     error_message TEXT,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS migration_decisions (
+    item_id TEXT PRIMARY KEY,
+    bucket_origin TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    chosen_tmdb_id INTEGER,
+    chosen_tvdb_id INTEGER,
+    chosen_title TEXT,
+    chosen_year INTEGER,
+    chosen_score REAL,
+    duplicate_action TEXT,
+    delete_source_after INTEGER NOT NULL DEFAULT 0,
+    reason TEXT,
+    decided_at TEXT NOT NULL,
+    decided_via TEXT NOT NULL
+);
 """
 
 
@@ -56,7 +72,7 @@ class MigrationStateStore:
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(self._db_path)
         self._conn.row_factory = sqlite3.Row
-        self._conn.execute(_SCHEMA)
+        self._conn.executescript(_SCHEMA)
         self._conn.commit()
 
     # ---- Lifecycle ------------------------------------------------------
@@ -208,6 +224,109 @@ class MigrationStateStore:
                 params,
             )
         self._conn.commit()
+
+    # ---- Décisions de review (phase 44.1) -------------------------------
+
+    def save_decision(self, decision) -> None:
+        """Persiste (insert or replace) une décision review.
+
+        Idempotent : ré-décider le même item_id écrase la décision précédente.
+        """
+        self._conn.execute(
+            """
+            INSERT OR REPLACE INTO migration_decisions
+                (item_id, bucket_origin, decision, chosen_tmdb_id,
+                 chosen_tvdb_id, chosen_title, chosen_year, chosen_score,
+                 duplicate_action, delete_source_after, reason,
+                 decided_at, decided_via)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                decision.item_id,
+                decision.bucket_origin,
+                decision.decision.value,
+                decision.chosen_tmdb_id,
+                decision.chosen_tvdb_id,
+                decision.chosen_title,
+                decision.chosen_year,
+                decision.chosen_score,
+                decision.duplicate_action.value if decision.duplicate_action else None,
+                int(decision.delete_source_after),
+                decision.reason,
+                decision.decided_at.isoformat(),
+                decision.decided_via,
+            ),
+        )
+        self._conn.commit()
+
+    def get_decision(self, item_id: str):
+        """Retourne la décision pour cet item_id, ou None si absente."""
+        row = self._conn.execute(
+            """
+            SELECT item_id, bucket_origin, decision, chosen_tmdb_id,
+                   chosen_tvdb_id, chosen_title, chosen_year, chosen_score,
+                   duplicate_action, delete_source_after, reason,
+                   decided_at, decided_via
+            FROM migration_decisions WHERE item_id = ?
+            """,
+            (item_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return _row_to_decision(row)
+
+    def load_decisions(self) -> dict:
+        """Retourne toutes les décisions sous forme {item_id: Decision}."""
+        rows = self._conn.execute(
+            """
+            SELECT item_id, bucket_origin, decision, chosen_tmdb_id,
+                   chosen_tvdb_id, chosen_title, chosen_year, chosen_score,
+                   duplicate_action, delete_source_after, reason,
+                   decided_at, decided_via
+            FROM migration_decisions
+            """
+        ).fetchall()
+        return {r["item_id"]: _row_to_decision(r) for r in rows}
+
+    def decision_summary(self) -> dict:
+        """Retourne {DecisionStatus: count} pour la table decisions."""
+        from src.services.migration.decisions import DecisionStatus
+
+        rows = self._conn.execute(
+            "SELECT decision, COUNT(*) AS n FROM migration_decisions GROUP BY decision"
+        ).fetchall()
+        return {DecisionStatus(r["decision"]): r["n"] for r in rows}
+
+
+def _row_to_decision(row):
+    """Reconstruit une Decision depuis une row sqlite3.Row."""
+    from datetime import datetime
+
+    from src.services.migration.decisions import (
+        Decision,
+        DecisionStatus,
+        DuplicateAction,
+    )
+
+    return Decision(
+        item_id=row["item_id"],
+        bucket_origin=row["bucket_origin"],
+        decision=DecisionStatus(row["decision"]),
+        chosen_tmdb_id=row["chosen_tmdb_id"],
+        chosen_tvdb_id=row["chosen_tvdb_id"],
+        chosen_title=row["chosen_title"],
+        chosen_year=row["chosen_year"],
+        chosen_score=row["chosen_score"],
+        duplicate_action=(
+            DuplicateAction(row["duplicate_action"])
+            if row["duplicate_action"]
+            else None
+        ),
+        delete_source_after=bool(row["delete_source_after"]),
+        reason=row["reason"],
+        decided_at=datetime.fromisoformat(row["decided_at"]),
+        decided_via=row["decided_via"],
+    )
 
 
 def _now_iso() -> str:
