@@ -632,3 +632,123 @@ def test_review_loop_already_in_library_keep_dest(tmp_path):
     assert d.decision == DecisionStatus.APPROVED
     assert d.duplicate_action == DuplicateAction.KEEP_DEST
     store.close()
+
+
+def test_review_loop_already_in_library_accept_reco_new_replaces_dest(
+    tmp_path, monkeypatch
+):
+    """already_in_library + 'a' avec reco='new' → APPROVED + duplicate_action=REPLACE_DEST."""
+    from src.services.migration.decisions import DuplicateAction
+    from src.services.duplicate_detector import QualityComparison
+
+    src_file = tmp_path / "src.mkv"
+    src_file.write_bytes(b"\x00" * 1024)
+    dest_file = tmp_path / "dst.mkv"
+    dest_file.write_bytes(b"\x00" * 2048)
+
+    item = MigrationItem(
+        item_id="ail_a_new",
+        bucket=Bucket.ALREADY_IN_LIBRARY,
+        symlink_path=src_file,
+        source_path=src_file,
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=1024,
+        rating=RatingDecision(),
+        match=MatchInfo(tmdb_id=42),
+        is_symlink_source=False,
+        tags=[f"existing:{dest_file}"],
+    )
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"), destination_root=Path("/d"),
+        threshold=6.0, stats=MigrationStats(), items=[item],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    # Force la reco à "new" (source NAS gagne) → l'action 'a' doit donner REPLACE_DEST
+    def fake_reco(self, item):
+        return QualityComparison(
+            existing_score=70.0,
+            new_score=92.0,
+            recommended="new",
+            existing_breakdown={},
+            new_breakdown={},
+        )
+
+    monkeypatch.setattr(
+        "src.services.migration.review_service.MigrationReviewService.duplicate_recommendation",
+        fake_reco,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="a\n",
+    )
+    assert result.exit_code == 0, result.output
+    store = MigrationStateStore(state_path)
+    d = store.get_decision("ail_a_new")
+    assert d.decision == DecisionStatus.APPROVED
+    assert d.duplicate_action == DuplicateAction.REPLACE_DEST
+    store.close()
+
+
+def test_review_loop_already_in_library_accept_reco_unavailable_redraws(
+    tmp_path, monkeypatch
+):
+    """already_in_library + 'a' alors que la reco a échoué → redraw (pas de décision)."""
+    src_file = tmp_path / "src.mkv"
+    src_file.write_bytes(b"\x00" * 1024)
+    dest_file = tmp_path / "dst.mkv"
+    dest_file.write_bytes(b"\x00" * 2048)
+
+    item = MigrationItem(
+        item_id="ail_a_none",
+        bucket=Bucket.ALREADY_IN_LIBRARY,
+        symlink_path=src_file,
+        source_path=src_file,
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=1024,
+        rating=RatingDecision(),
+        match=MatchInfo(tmdb_id=42),
+        is_symlink_source=False,
+        tags=[f"existing:{dest_file}"],
+    )
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"), destination_root=Path("/d"),
+        threshold=6.0, stats=MigrationStats(), items=[item],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    # Force la reco à lever → reco=None côté handler
+    def boom(self, item):
+        raise RuntimeError("mediainfo HS")
+
+    monkeypatch.setattr(
+        "src.services.migration.review_service.MigrationReviewService.duplicate_recommendation",
+        boom,
+    )
+
+    runner = CliRunner()
+    # 'a' → reco=None → redraw → 'k' (skip vers KEEP_DEST pour terminer proprement)
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="a\nk\n",
+    )
+    assert result.exit_code == 0, result.output
+    store = MigrationStateStore(state_path)
+    d = store.get_decision("ail_a_none")
+    # Après redraw + k : décision APPROVED avec KEEP_DEST
+    from src.services.migration.decisions import DuplicateAction
+    assert d.decision == DecisionStatus.APPROVED
+    assert d.duplicate_action == DuplicateAction.KEEP_DEST
+    store.close()

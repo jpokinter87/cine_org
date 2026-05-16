@@ -322,8 +322,22 @@ def _handle_low_rated(
     return "continue"
 
 
-def _handle_already_in_library(service, item) -> str:
-    """already_in_library : compare source vs dest, propose action."""
+def _handle_already_in_library(
+    service: MigrationReviewService,
+    item: MigrationItem,
+) -> str:
+    """already_in_library : compare source NAS vs dest existante, propose action.
+
+    Affiche la reco du DuplicateDetector (best-effort — exception capturée
+    si reco indisponible), puis prompte :
+      - [a]ccept reco : applique la recommandation (REPLACE si "new", KEEP sinon)
+      - [k]eep dest : garde la version existante en DB
+      - [r]eplace dest : écrase la dest (confirmation explicite requise)
+      - [d]elete source : supprime la source NAS (confirmation explicite requise)
+      - [q]uit : sortie de la loop
+
+    Retourne 'continue' / 'quit' / 'redraw' (cf _handle_needs_validation).
+    """
     try:
         reco = service.duplicate_recommendation(item)
         reco_label = "source NAS" if reco.recommended == "new" else "dest existante"
