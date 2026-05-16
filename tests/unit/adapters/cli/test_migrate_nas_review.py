@@ -12,8 +12,13 @@ from src.services.migration.dataclasses import (
     Bucket,
     MatchInfo,
     MigrationItem,
+    MigrationPlan,
+    MigrationStats,
     RatingDecision,
 )
+from src.services.migration.decisions import DecisionStatus
+from src.services.migration.plan_builder import serialize_plan
+from src.services.migration.state_store import MigrationStateStore
 
 
 def test_review_command_help():
@@ -26,17 +31,24 @@ def test_review_command_help():
     assert "--resume" in result.stdout
 
 
-def test_review_command_runs_stub(tmp_path):
-    """Le stub s'exécute sans lever d'exception pour un plan inexistant.
+def test_review_command_runs_no_pending(tmp_path):
+    """La loop s'exécute sans lever d'exception pour un plan vide (0 items)."""
+    from src.services.migration.plan_builder import serialize_plan
 
-    Le stub ne lit pas encore le plan (Task 9 le fera) — il imprime juste
-    la ligne de statut et le message stub. Donc un path arbitraire suffit.
-    """
+    plan_obj = MigrationPlan(
+        version=1,
+        source_root=Path("/src"),
+        destination_root=Path("/dst"),
+        threshold=6.0,
+        stats=MigrationStats(),
+        items=[],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan_obj))
     runner = CliRunner()
-    plan = tmp_path / "plan.json"
-    result = runner.invoke(migrate_nas_app, ["review", str(plan)])
+    result = runner.invoke(migrate_nas_app, ["review", str(plan_path)])
     assert result.exit_code == 0
-    assert "Pas encore implémenté" in result.stdout
+    assert "Aucun item" in result.output
 
 
 def test_review_command_invalid_bucket_returns_usage_error(tmp_path):
@@ -134,3 +146,116 @@ def test_render_review_card_low_rated_formats_rating_one_decimal():
     render_review_card(console, _make(None), position=(1, 1))
     out = buf.getvalue()
     assert "Note ?" in out
+
+
+# ---------------------------------------------------------------------------
+# Tests de la loop interactive (Task 9)
+# ---------------------------------------------------------------------------
+
+
+def _write_plan_with_nv(tmp_path):
+    """Crée un plan minimal avec 1 item needs_validation, retourne paths."""
+    item = _nv_item()
+    plan = MigrationPlan(
+        version=1,
+        source_root=Path("/src"),
+        destination_root=Path("/dst"),
+        threshold=6.0,
+        stats=MigrationStats(),
+        items=[item],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    return plan_path, item
+
+
+def test_review_loop_accept_top_persists_decision(tmp_path):
+    """User tape 'a' → décision approved avec match du top candidate."""
+    plan_path, item = _write_plan_with_nv(tmp_path)
+    state_path = tmp_path / "s.sqlite"
+    runner = CliRunner()
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="a\n",  # accept top
+    )
+    assert result.exit_code == 0, result.output
+    store = MigrationStateStore(state_path)
+    decision = store.get_decision(item.item_id)
+    assert decision is not None
+    assert decision.decision == DecisionStatus.APPROVED
+    assert decision.chosen_tmdb_id == 83186  # top candidate id
+    assert decision.chosen_score == 67.0
+    store.close()
+
+
+def test_review_loop_pick_candidate_by_number(tmp_path):
+    """User tape '2' → décision approved avec match du 2e candidate."""
+    plan_path, item = _write_plan_with_nv(tmp_path)
+    state_path = tmp_path / "s.sqlite"
+    runner = CliRunner()
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="2\n",
+    )
+    assert result.exit_code == 0
+    store = MigrationStateStore(state_path)
+    decision = store.get_decision(item.item_id)
+    assert decision.chosen_tmdb_id == 9902  # 2e candidate (Détour mortel)
+    store.close()
+
+
+def test_review_loop_skip_persists_skipped(tmp_path):
+    """User tape 'k' → décision SKIPPED persistée."""
+    plan_path, item = _write_plan_with_nv(tmp_path)
+    state_path = tmp_path / "s.sqlite"
+    runner = CliRunner()
+    runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="k\n",
+    )
+    store = MigrationStateStore(state_path)
+    assert store.get_decision(item.item_id).decision == DecisionStatus.SKIPPED
+    store.close()
+
+
+def test_review_loop_quit_stops_iteration(tmp_path):
+    """Avec 2 items, taper 'q' au 1er ne décide rien."""
+    items = [_nv_item(), _nv_item()]
+    items[1] = MigrationItem(
+        item_id="nv2",
+        bucket=Bucket.NEEDS_VALIDATION,
+        symlink_path=Path("/old/Other.mkv"),
+        source_path=Path("/old/Other.mkv"),
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=1000,
+        rating=RatingDecision(),
+        match=MatchInfo(top_candidates=[]),
+        is_symlink_source=False,
+    )
+    plan = MigrationPlan(
+        version=1,
+        source_root=Path("/src"),
+        destination_root=Path("/dst"),
+        threshold=6.0,
+        stats=MigrationStats(),
+        items=items,
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="q\n",
+    )
+    store = MigrationStateStore(state_path)
+    assert store.get_decision("nv1") is None
+    assert store.get_decision("nv2") is None
+    store.close()

@@ -17,9 +17,17 @@ from typing import Annotated, Optional
 import typer
 from rich.console import Console
 from rich.panel import Panel
+from rich.prompt import Prompt
 
 from src.adapters.cli.validation import console
+from src.container import Container
+from src.services.duplicate_detector import DuplicateDetector
+from src.services.matcher import MatcherService
 from src.services.migration.dataclasses import Bucket, MigrationItem
+from src.services.migration.decisions import DecisionStatus
+from src.services.migration.plan_builder import deserialize_plan
+from src.services.migration.review_service import MigrationReviewService
+from src.services.migration.state_store import MigrationStateStore
 
 
 def review_command(
@@ -73,8 +81,109 @@ def review_command(
         f"bucket: {bucket_filter.value if bucket_filter else 'tous'}, "
         f"resume: {resume})"
     )
-    # TODO Task 9 : interactive loop
-    console.print("[yellow]Pas encore implémenté — Task 9 fournit la loop.[/yellow]")
+    service, store = _build_review_service(plan_path, state_path)
+    try:
+        items = list(service.iter_pending(bucket=bucket_filter, resume=resume))
+        total = len(items)
+        if total == 0:
+            console.print("[yellow]Aucun item en attente — rien à reviewer.[/yellow]")
+            return
+        for idx, item in enumerate(items, start=1):
+            while True:
+                render_review_card(console, item, position=(idx, total))
+                if item.bucket == Bucket.NEEDS_VALIDATION:
+                    result = _handle_needs_validation(service, item)
+                else:
+                    # Tasks 12-14 : autres buckets
+                    console.print(
+                        f"[yellow]Bucket {item.bucket.value} pas encore "
+                        "supporté — Tasks 12-14.[/yellow]"
+                    )
+                    result = "continue"
+                if result == "quit":
+                    console.print("\n[cyan]Sortie demandée.[/cyan]")
+                    return
+                if result == "continue":
+                    break
+                # "redraw" → re-affiche le même item
+    finally:
+        store.close()
+
+
+def _build_review_service(
+    plan_path: Path, state_path: Path
+) -> tuple[MigrationReviewService, MigrationStateStore]:
+    """Câble le ReviewService depuis le container. Retourne (service, store)."""
+    plan = deserialize_plan(plan_path.read_text(encoding="utf-8"))
+    store = MigrationStateStore(state_path)
+    container = Container()
+    service = MigrationReviewService(
+        plan=plan,
+        state_store=store,
+        tmdb_client=container.tmdb_client(),
+        tvdb_client=container.tvdb_client(),
+        matcher=MatcherService(),
+        duplicate_detector=DuplicateDetector(),
+    )
+    return service, store
+
+
+def _handle_needs_validation(
+    service: MigrationReviewService,
+    item: MigrationItem,
+) -> str:
+    """Prompt + dispatch action pour un item needs_validation.
+
+    Retourne 'continue' (item suivant), 'quit' (sortie loop), ou 'redraw'
+    (re-affiche la même carte — typiquement après search).
+    """
+    candidates = item.match.top_candidates[:5]
+    valid_keys = ["a", "r", "k", "q"]
+    valid_keys.extend(str(i) for i in range(1, len(candidates) + 1))
+    answer = Prompt.ask(
+        "[a]ccept top  [1-N] pick  [r]eject  [k]eep skip  [q]uit",
+        choices=valid_keys,
+        default="a",
+        show_choices=False,
+    )
+
+    if answer == "q":
+        return "quit"
+    if answer == "k":
+        service.decide(
+            item_id=item.item_id,
+            decision=DecisionStatus.SKIPPED,
+            decided_via="cli",
+        )
+        return "continue"
+    if answer == "r":
+        reason = Prompt.ask("Raison du rejet (optionnelle)", default="")
+        service.decide(
+            item_id=item.item_id,
+            decision=DecisionStatus.REJECTED,
+            reason=reason or None,
+            decided_via="cli",
+        )
+        return "continue"
+    if answer == "a":
+        chosen = candidates[0] if candidates else None
+    else:  # "1".."5"
+        chosen = candidates[int(answer) - 1]
+    if chosen is None:
+        console.print("[red]Pas de candidat — utilise 's'earch ou 'k'eep skip.[/red]")
+        return "redraw"
+
+    service.decide(
+        item_id=item.item_id,
+        decision=DecisionStatus.APPROVED,
+        chosen_tmdb_id=chosen.get("tmdb_id"),
+        chosen_tvdb_id=chosen.get("tvdb_id"),
+        chosen_title=chosen.get("title"),
+        chosen_year=chosen.get("year"),
+        chosen_score=chosen.get("score"),
+        decided_via="cli",
+    )
+    return "continue"
 
 
 def render_review_card(
