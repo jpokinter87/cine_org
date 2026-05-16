@@ -25,7 +25,7 @@ from src.container import Container
 from src.services.duplicate_detector import DuplicateDetector
 from src.services.matcher import MatcherService
 from src.services.migration.dataclasses import Bucket, MigrationItem
-from src.services.migration.decisions import DecisionStatus, DuplicateAction
+from src.services.migration.decisions import DecisionStatus
 from src.services.migration.plan_builder import deserialize_plan
 from src.services.migration.review_service import (
     MigrationReviewService,
@@ -179,6 +179,14 @@ def _collision_tmdb_id(item: MigrationItem) -> Optional[str]:
     for tag in item.tags:
         if tag.startswith("collision_tmdb:"):
             return tag.split(":", 1)[1]
+    return None
+
+
+def _existing_path_from_tag(item: MigrationItem) -> Optional[Path]:
+    """Extrait le chemin de la version DB depuis le tag existing:<path>."""
+    for tag in item.tags:
+        if tag.startswith("existing:"):
+            return Path(tag.split(":", 1)[1])
     return None
 
 
@@ -600,11 +608,14 @@ def _handle_already_in_library(
 
     Affiche la reco du DuplicateDetector (best-effort — exception capturée
     si reco indisponible), puis prompte :
-      - [a]ccept reco : applique la recommandation (REPLACE si "new", KEEP sinon)
-      - [k]eep dest : garde la version existante en DB
-      - [r]eplace dest : écrase la dest (confirmation explicite requise)
-      - [d]elete source : supprime la source NAS (confirmation explicite requise)
+      - [a]ccept reco : applique la recommandation intelligemment
+      - [k]eep dest : garde la version existante, acquitte le doublon (SKIPPED)
+      - [r]eplace dest : non implémenté, affiche avertissement
+      - [d]elete source : supprime physiquement la source + persiste SKIPPED
       - [q]uit : sortie de la loop
+
+    Les actions agissent immédiatement et persistent SKIPPED (jamais APPROVED)
+    pour que `apply` ignore ces items sans tenter de les transférer.
 
     Retourne 'continue' / 'quit' / 'redraw' (cf _handle_needs_validation).
     """
@@ -637,41 +648,94 @@ def _handle_already_in_library(
         _maybe_cascade_series_decision(service, item, DecisionStatus.DEFERRED_TO_WEB)
         return "continue"
 
-    duplicate_action: Optional[DuplicateAction] = None
     if answer == "k":
-        duplicate_action = DuplicateAction.KEEP_DEST
+        # No-op : on garde la version DB, la source reste intacte (doublon
+        # acquitté mais non supprimé). Persiste comme SKIPPED pour que
+        # apply ignore l'item.
+        service.decide(
+            item_id=item.item_id,
+            decision=DecisionStatus.SKIPPED,
+            reason="doublon — version DB conservée, source laissée intacte",
+            decided_via="cli",
+        )
+        return "continue"
+
     elif answer == "r":
-        if not Confirm.ask(
-            "[red]Écraser la version existante en DB ?[/red]", default=False
-        ):
-            return "redraw"
-        duplicate_action = DuplicateAction.REPLACE_DEST
+        console.print(
+            "[yellow]⚠️  [r]eplace dest n'est pas encore implémenté côté apply.[/yellow]\n"
+            "    Pour remplacer manuellement : supprime la dest existante, puis\n"
+            "    relance plan + review + apply sur la source seule."
+        )
+        return "redraw"
+
     elif answer == "d":
+        # Affiche explicitement les 2 chemins pour lever toute ambiguïté
+        existing = _existing_path_from_tag(item)
+        console.print(
+            f"  [yellow]À SUPPRIMER  :[/yellow] {item.source_path}\n"
+            f"  [green]À CONSERVER :[/green] {existing or '(version DB déjà en place)'}"
+        )
         if not Confirm.ask(
-            "[red]Supprimer la source NAS (garder la DB) ?[/red]",
+            "[bold red]Confirmer la suppression du fichier source ?[/bold red]",
             default=False,
         ):
             return "redraw"
-        duplicate_action = DuplicateAction.DELETE_SOURCE
+        try:
+            if item.source_path and item.source_path.exists():
+                item.source_path.unlink()
+                console.print(f"[green]✓ Supprimé :[/green] {item.source_path}")
+            else:
+                console.print(f"[yellow]Source déjà absente :[/yellow] {item.source_path}")
+        except OSError as exc:
+            console.print(f"[red]✗ Échec suppression : {exc}[/red]")
+            return "redraw"
+        service.decide(
+            item_id=item.item_id,
+            decision=DecisionStatus.SKIPPED,
+            reason="doublon — source supprimée immédiatement",
+            decided_via="cli",
+        )
+        return "continue"
+
     elif answer == "a":
         if reco is None:
             console.print("[red]Pas de reco — choisir manuellement.[/red]")
             return "redraw"
-        duplicate_action = (
-            DuplicateAction.REPLACE_DEST
-            if reco.recommended == "new"
-            else DuplicateAction.KEEP_DEST
+        if reco.recommended == "new":
+            # Source meilleure → on devrait écraser dest, mais pas implémenté.
+            # Suggère [r] qui guidera l'user.
+            console.print(
+                "[yellow]Reco suggère 'replace dest' — utilise [r] (manuel).[/yellow]"
+            )
+            return "redraw"
+        # reco.recommended == "old" → dest meilleure → équivalent à [d]elete source
+        console.print("[cyan]Reco : dest existante est meilleure — équivalent à [d]elete source.[/cyan]")
+        existing = _existing_path_from_tag(item)
+        console.print(
+            f"  [yellow]À SUPPRIMER  :[/yellow] {item.source_path}\n"
+            f"  [green]À CONSERVER :[/green] {existing or '(version DB déjà en place)'}"
         )
+        if not Confirm.ask(
+            "[bold red]Confirmer la suppression du fichier source ?[/bold red]",
+            default=False,
+        ):
+            return "redraw"
+        try:
+            if item.source_path and item.source_path.exists():
+                item.source_path.unlink()
+                console.print(f"[green]✓ Supprimé :[/green] {item.source_path}")
+        except OSError as exc:
+            console.print(f"[red]✗ Échec suppression : {exc}[/red]")
+            return "redraw"
+        service.decide(
+            item_id=item.item_id,
+            decision=DecisionStatus.SKIPPED,
+            reason="doublon — accept reco (dest meilleure) — source supprimée",
+            decided_via="cli",
+        )
+        return "continue"
 
-    service.decide(
-        item_id=item.item_id,
-        decision=DecisionStatus.APPROVED,
-        duplicate_action=duplicate_action,
-        chosen_tmdb_id=item.match.tmdb_id,
-        chosen_tvdb_id=item.match.tvdb_id,
-        decided_via="cli",
-    )
-    return "continue"
+    return "redraw"  # branche inattendue, ne devrait jamais être atteinte
 
 
 def _persist_approved(

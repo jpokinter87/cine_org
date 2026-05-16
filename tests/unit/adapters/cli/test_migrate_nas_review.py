@@ -590,9 +590,7 @@ def test_review_loop_low_rated_delete_then_cancel_then_skip(tmp_path):
 
 
 def test_review_loop_already_in_library_keep_dest(tmp_path):
-    """already_in_library + 'k' → APPROVED + duplicate_action=keep_dest."""
-    from src.services.migration.decisions import DuplicateAction
-
+    """already_in_library + 'k' → SKIPPED (doublon acquitté, source intacte)."""
     src_file = tmp_path / "src.mkv"
     src_file.write_bytes(b"\x00" * 1024)
     dest_file = tmp_path / "dst.mkv"
@@ -629,16 +627,17 @@ def test_review_loop_already_in_library_keep_dest(tmp_path):
     assert result.exit_code == 0, result.output
     store = MigrationStateStore(state_path)
     d = store.get_decision("ail1")
-    assert d.decision == DecisionStatus.APPROVED
-    assert d.duplicate_action == DuplicateAction.KEEP_DEST
+    assert d.decision == DecisionStatus.SKIPPED
+    assert "doublon" in (d.reason or "").lower()
+    # Source non supprimée (keep = laisser intacte)
+    assert src_file.exists()
     store.close()
 
 
-def test_review_loop_already_in_library_accept_reco_new_replaces_dest(
+def test_review_loop_already_in_library_accept_reco_new_warns(
     tmp_path, monkeypatch
 ):
-    """already_in_library + 'a' avec reco='new' → APPROVED + duplicate_action=REPLACE_DEST."""
-    from src.services.migration.decisions import DuplicateAction
+    """'a' avec reco=new → message warn + redraw → user peut alors taper 'k' pour skip."""
     from src.services.duplicate_detector import QualityComparison
 
     src_file = tmp_path / "src.mkv"
@@ -668,7 +667,7 @@ def test_review_loop_already_in_library_accept_reco_new_replaces_dest(
     plan_path.write_text(serialize_plan(plan))
     state_path = tmp_path / "s.sqlite"
 
-    # Force la reco à "new" (source NAS gagne) → l'action 'a' doit donner REPLACE_DEST
+    # Force la reco à "new" (source NAS gagne) → 'a' doit afficher avertissement + redraw
     def fake_reco(self, item):
         return QualityComparison(
             existing_score=70.0,
@@ -684,16 +683,19 @@ def test_review_loop_already_in_library_accept_reco_new_replaces_dest(
     )
 
     runner = CliRunner()
+    # 'a' → warn + redraw → 'k' (skip pour terminer)
     result = runner.invoke(
         migrate_nas_app,
         ["review", str(plan_path), "--state-store", str(state_path)],
-        input="a\n",
+        input="a\nk\n",
     )
     assert result.exit_code == 0, result.output
+    # L'avertissement doit apparaître
+    assert "replace dest" in result.output.lower() or "replace" in result.output.lower()
     store = MigrationStateStore(state_path)
     d = store.get_decision("ail_a_new")
-    assert d.decision == DecisionStatus.APPROVED
-    assert d.duplicate_action == DuplicateAction.REPLACE_DEST
+    # Après redraw + k : décision SKIPPED
+    assert d.decision == DecisionStatus.SKIPPED
     store.close()
 
 
@@ -738,7 +740,7 @@ def test_review_loop_already_in_library_accept_reco_unavailable_redraws(
     )
 
     runner = CliRunner()
-    # 'a' → reco=None → redraw → 'k' (skip vers KEEP_DEST pour terminer proprement)
+    # 'a' → reco=None → redraw → 'k' (skip pour terminer proprement)
     result = runner.invoke(
         migrate_nas_app,
         ["review", str(plan_path), "--state-store", str(state_path)],
@@ -747,10 +749,9 @@ def test_review_loop_already_in_library_accept_reco_unavailable_redraws(
     assert result.exit_code == 0, result.output
     store = MigrationStateStore(state_path)
     d = store.get_decision("ail_a_none")
-    # Après redraw + k : décision APPROVED avec KEEP_DEST
-    from src.services.migration.decisions import DuplicateAction
-    assert d.decision == DecisionStatus.APPROVED
-    assert d.duplicate_action == DuplicateAction.KEEP_DEST
+    # Après redraw + k : décision SKIPPED
+    assert d.decision == DecisionStatus.SKIPPED
+    assert "doublon" in (d.reason or "").lower()
     store.close()
 
 
@@ -1199,3 +1200,99 @@ def test_review_search_action_prefills_default_query(tmp_path, monkeypatch):
     # Le query envoyé à TMDB est bien le défaut (titre parsé)
     assert "Movie Test" in captured["query"]
     assert "2020" in captured["query"]
+
+
+def test_review_loop_ail_delete_source_actually_deletes_file(tmp_path):
+    """[d]elete source supprime physiquement le fichier source + persiste SKIPPED."""
+    src_file = tmp_path / "src.mkv"
+    src_file.write_bytes(b"DUPLICATE_CONTENT")
+    dest_file = tmp_path / "dst.mkv"
+    dest_file.write_bytes(b"DEST_VERSION")
+
+    item = MigrationItem(
+        item_id="ail_del",
+        bucket=Bucket.ALREADY_IN_LIBRARY,
+        symlink_path=src_file,
+        source_path=src_file,
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=src_file.stat().st_size,
+        rating=RatingDecision(),
+        match=MatchInfo(tmdb_id=42),
+        is_symlink_source=False,
+        tags=[f"existing:{dest_file}"],
+    )
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"), destination_root=Path("/d"),
+        threshold=6.0, stats=MigrationStats(), items=[item],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    # 'd' → Confirm prompt → 'y' (confirme suppression)
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="d\ny\n",
+    )
+    assert result.exit_code == 0, result.output
+    # Source supprimée
+    assert not src_file.exists()
+    # Dest intacte
+    assert dest_file.exists()
+    # Décision SKIPPED avec reason
+    store = MigrationStateStore(state_path)
+    d = store.get_decision("ail_del")
+    assert d.decision == DecisionStatus.SKIPPED
+    assert "supprim" in (d.reason or "").lower()
+    store.close()
+
+
+def test_review_loop_ail_delete_source_cancel_keeps_file(tmp_path):
+    """[d]elete source + 'n' (annule) → fichier intact, retour au prompt."""
+    src_file = tmp_path / "src.mkv"
+    src_file.write_bytes(b"DUPLICATE_CONTENT")
+    dest_file = tmp_path / "dst.mkv"
+    dest_file.write_bytes(b"DEST_VERSION")
+
+    item = MigrationItem(
+        item_id="ail_cancel",
+        bucket=Bucket.ALREADY_IN_LIBRARY,
+        symlink_path=src_file,
+        source_path=src_file,
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=src_file.stat().st_size,
+        rating=RatingDecision(),
+        match=MatchInfo(tmdb_id=42),
+        is_symlink_source=False,
+        tags=[f"existing:{dest_file}"],
+    )
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"), destination_root=Path("/d"),
+        threshold=6.0, stats=MigrationStats(), items=[item],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    # 'd' → 'n' (annule) → redraw → 'k' (skip pour terminer)
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="d\nn\nk\n",
+    )
+    assert result.exit_code == 0, result.output
+    # Fichiers intacts
+    assert src_file.exists()
+    assert dest_file.exists()
+    # Décision finale : SKIPPED (via le 'k' qui suit le redraw)
+    store = MigrationStateStore(state_path)
+    d = store.get_decision("ail_cancel")
+    assert d.decision == DecisionStatus.SKIPPED
+    store.close()
