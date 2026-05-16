@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from src.services.duplicate_detector import DuplicateDetector
 from src.services.matcher import MatcherService
@@ -17,14 +17,27 @@ from src.web.deps import templates
 router = APIRouter(prefix="/migration", tags=["migration"])
 
 
+def _validate_plan_path(plan: str) -> Path:
+    """Valide le paramètre plan : chemin existant, suffixe .json."""
+    plan_path = Path(plan).resolve()
+    if not plan_path.exists():
+        raise HTTPException(status_code=400, detail=f"Plan introuvable : {plan}")
+    if plan_path.suffix.lower() != ".json":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Plan doit être un fichier .json : {plan}",
+        )
+    return plan_path
+
+
 def _build_service(
-    plan_path: Path, container
-) -> tuple[MigrationReviewService, MigrationStateStore]:
-    """Câble MigrationReviewService depuis le container + le chemin du plan."""
+    plan_path: Path,
+    store: MigrationStateStore,
+    container,
+) -> MigrationReviewService:
+    """Câble MigrationReviewService depuis container + plan + store déjà ouvert."""
     plan = deserialize_plan(plan_path.read_text(encoding="utf-8"))
-    state_path = plan_path.with_suffix(plan_path.suffix + ".state.sqlite")
-    store = MigrationStateStore(state_path)
-    service = MigrationReviewService(
+    return MigrationReviewService(
         plan=plan,
         state_store=store,
         tmdb_client=container.tmdb_client(),
@@ -32,19 +45,20 @@ def _build_service(
         matcher=MatcherService(),
         duplicate_detector=DuplicateDetector(),
     )
-    return service, store
 
 
 @router.get("/review")
 async def review_list(
     request: Request,
-    plan: str = Query(..., description="Chemin absolu du plan.json"),
+    plan: str = Query(..., description="Path absolu du plan.json"),
 ):
-    """Liste des items en attente de décision (4 buckets de review)."""
-    plan_path = Path(plan)
+    """Liste des items en attente de décision (4 buckets review)."""
+    plan_path = _validate_plan_path(plan)
     container = request.app.state.container
-    service, store = _build_service(plan_path, container)
+    state_path = plan_path.with_suffix(plan_path.suffix + ".state.sqlite")
+    store = MigrationStateStore(state_path)
     try:
+        service = _build_service(plan_path, store, container)
         items = list(service.iter_pending(resume=False))
         decisions = store.load_decisions()
         summary = service.summary()

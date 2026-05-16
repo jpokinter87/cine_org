@@ -61,3 +61,36 @@ def test_review_list_renders(client_with_plan):
     assert response.status_code == 200
     assert "Wrong.mkv" in response.text
     assert "needs_validation" in response.text.lower()
+
+
+def test_review_list_validates_plan_path_missing(client_with_plan, tmp_path):
+    """Plan inexistant → 400 (pas un traceback)."""
+    client, _, _ = client_with_plan
+    response = client.get(
+        "/migration/review",
+        params={"plan": str(tmp_path / "does_not_exist.json")},
+    )
+    assert response.status_code == 400
+
+
+def test_review_list_validates_plan_path_wrong_suffix(client_with_plan, tmp_path):
+    """Plan avec mauvais suffixe → 400."""
+    client, _, _ = client_with_plan
+    bad_plan = tmp_path / "etc.txt"
+    bad_plan.write_text("nope")
+    response = client.get(
+        "/migration/review",
+        params={"plan": str(bad_plan)},
+    )
+    assert response.status_code == 400
+
+
+def test_review_list_renders_includes_pending_count(client_with_plan):
+    """Vérifie que le résumé pending=1 apparaît dans le rendu."""
+    client, plan_path, _ = client_with_plan
+    response = client.get(
+        "/migration/review", params={"plan": str(plan_path)}
+    )
+    assert response.status_code == 200
+    # 1 NV item, pas de décision → pending=1
+    assert "En attente : 1" in response.text

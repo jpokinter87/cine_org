@@ -12,7 +12,7 @@
     {% elif item.bucket.value == "already_in_library" %}
       <p>Doublon — déjà présent en bibliothèque</p>
     {% endif %}
-    <button hx-get="/migration/review/{{ item.item_id }}?plan={{ plan_path }}"
+    <button hx-get="/migration/review/{{ item.item_id }}?plan={{ plan_path | urlencode }}"
             hx-target="#review-{{ item.item_id }}"
             hx-swap="outerHTML">
       Voir détail
