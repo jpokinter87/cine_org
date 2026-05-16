@@ -322,6 +322,12 @@ def render_review_card(
             )
     elif item.bucket == Bucket.UNRATED:
         body_lines.append("[yellow]Note absente — décider de migrer.[/yellow]")
+        if item.match.top_candidates:
+            c = item.match.top_candidates[0]
+            body_lines.append(
+                f"  Match plan : {c.get('title', '?')} ({c.get('year', '?')}) "
+                f"score {c.get('score', 0):.0f}"
+            )
     elif item.bucket == Bucket.LOW_RATED:
         rating_value = item.rating.value
         rating_str = f"{rating_value:.1f}" if rating_value is not None else "?"

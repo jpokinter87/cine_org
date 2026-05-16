@@ -325,6 +325,39 @@ def test_review_loop_search_replaces_candidates(tmp_path, monkeypatch):
     store.close()
 
 
+def test_render_review_card_unrated_shows_plan_time_match():
+    """UNRATED : la carte affiche le match plan pour que l'utilisateur sache ce qu'il valide."""
+    item = MigrationItem(
+        item_id="u_card",
+        bucket=Bucket.UNRATED,
+        symlink_path=Path("/old/Foo.mkv"),
+        source_path=Path("/old/Foo.mkv"),
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=1000,
+        rating=RatingDecision(),
+        match=MatchInfo(
+            tmdb_id=12345,
+            score=88.0,
+            top_candidates=[
+                {"title": "Some Film", "year": 2020, "score": 88.0,
+                 "tmdb_id": 12345, "source": "tmdb"},
+            ],
+        ),
+        is_symlink_source=False,
+    )
+    buf = StringIO()
+    console = Console(file=buf, width=100, force_terminal=False)
+    render_review_card(console, item, position=(1, 1))
+    out = buf.getvalue()
+    assert "Note absente" in out
+    assert "Match plan" in out
+    assert "Some Film" in out
+    assert "2020" in out
+    assert "88" in out  # score
+
+
 def test_review_loop_unrated_migrate_anyway(tmp_path):
     """unrated + 'm' → décision APPROVED avec match déjà connu."""
     item = MigrationItem(
@@ -375,4 +408,46 @@ def test_review_loop_unrated_migrate_anyway(tmp_path):
     d = store.get_decision("u1")
     assert d.decision == DecisionStatus.APPROVED
     assert d.chosen_tmdb_id == 12345  # repris du match existant
+    store.close()
+
+
+def test_review_loop_unrated_keep_skip_persists_skipped(tmp_path):
+    """unrated + 'k' → décision SKIPPED."""
+    from src.services.migration.dataclasses import (
+        MigrationPlan,
+        MigrationStats,
+    )
+    from src.services.migration.plan_builder import serialize_plan
+
+    item = MigrationItem(
+        item_id="u_skip",
+        bucket=Bucket.UNRATED,
+        symlink_path=Path("/old/X.mkv"),
+        source_path=Path("/old/X.mkv"),
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=1000,
+        rating=RatingDecision(),
+        match=MatchInfo(),
+        is_symlink_source=False,
+    )
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"), destination_root=Path("/d"),
+        threshold=6.0, stats=MigrationStats(), items=[item],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="k\n",
+    )
+    assert result.exit_code == 0, result.output
+    store = MigrationStateStore(state_path)
+    d = store.get_decision("u_skip")
+    assert d.decision == DecisionStatus.SKIPPED
     store.close()
