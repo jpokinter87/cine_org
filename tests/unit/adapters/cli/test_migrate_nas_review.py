@@ -451,3 +451,44 @@ def test_review_loop_unrated_keep_skip_persists_skipped(tmp_path):
     d = store.get_decision("u_skip")
     assert d.decision == DecisionStatus.SKIPPED
     store.close()
+
+
+def test_review_loop_low_rated_delete_source_after(tmp_path):
+    """low_rated + 'd' → APPROVED + delete_source_after=True."""
+    item = MigrationItem(
+        item_id="lr1",
+        bucket=Bucket.LOW_RATED,
+        symlink_path=Path("/old/Bad.mkv"),
+        source_path=Path("/old/Bad.mkv"),
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=1000,
+        rating=RatingDecision(value=3.5, source="imdb"),
+        match=MatchInfo(tmdb_id=99, top_candidates=[
+            {"title": "Bad", "year": 2010, "score": 100.0, "tmdb_id": 99,
+             "source": "tmdb"}
+        ]),
+        is_symlink_source=False,
+    )
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"), destination_root=Path("/d"),
+        threshold=6.0, stats=MigrationStats(), items=[item],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    # 'd' → "Confirmer suppression source ? > y"
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="d\ny\n",
+    )
+    assert result.exit_code == 0, result.output
+    store = MigrationStateStore(state_path)
+    d = store.get_decision("lr1")
+    assert d.decision == DecisionStatus.APPROVED
+    assert d.delete_source_after is True
+    store.close()

@@ -17,7 +17,7 @@ from typing import Annotated, Optional
 import typer
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Prompt
+from rich.prompt import Confirm, Prompt
 
 from src.adapters.cli.validation import console
 from src.container import Container
@@ -96,11 +96,13 @@ def review_command(
                     result = _handle_needs_validation(service, item)
                 elif item.bucket == Bucket.UNRATED:
                     result = _handle_unrated(service, item)
+                elif item.bucket == Bucket.LOW_RATED:
+                    result = _handle_low_rated(service, item)
                 else:
-                    # Tasks 12-13 : low_rated, already_in_library
+                    # Task 13 : already_in_library
                     console.print(
                         f"[yellow]Bucket {item.bucket.value} pas encore "
-                        "supporté — Tasks 12-13.[/yellow]"
+                        "supporté — Task 13.[/yellow]"
                     )
                     result = "continue"
                 if result == "quit":
@@ -265,6 +267,58 @@ def _handle_unrated(
         "score": item.match.score,
     }
     _persist_approved(service, item, chosen)
+    return "continue"
+
+
+def _handle_low_rated(
+    service: MigrationReviewService,
+    item: MigrationItem,
+) -> str:
+    """Prompt + dispatch action pour un item low_rated (note sous le seuil).
+
+    Options : [m]igrate-anyway (APPROVED), [d]elete-source-after (APPROVED +
+    suppression source post-commit), [k]eep skip, [q]uit.
+
+    Retourne 'continue', 'quit' ou 'redraw'.
+    """
+    answer = Prompt.ask(
+        "[m]igrate-anyway  [d]elete-source-after  [k]eep skip  [q]uit",
+        choices=["m", "d", "k", "q"],
+        default="k",
+        show_choices=False,
+    )
+    if answer == "q":
+        return "quit"
+    if answer == "k":
+        service.decide(
+            item_id=item.item_id,
+            decision=DecisionStatus.SKIPPED,
+            decided_via="cli",
+        )
+        return "continue"
+    delete_source = False
+    if answer == "d":
+        # Garde-fou : confirmation explicite avant suppression source
+        if not Confirm.ask(
+            "[red]Supprimer la source APRÈS commit transfert réussi ?[/red]",
+            default=False,
+        ):
+            console.print("[yellow]Suppression annulée.[/yellow]")
+            return "redraw"
+        delete_source = True
+    # Match repris du plan (identique à la logique unrated)
+    top = item.match.top_candidates[0] if item.match.top_candidates else {}
+    service.decide(
+        item_id=item.item_id,
+        decision=DecisionStatus.APPROVED,
+        chosen_tmdb_id=top.get("tmdb_id") or item.match.tmdb_id,
+        chosen_tvdb_id=top.get("tvdb_id") or item.match.tvdb_id,
+        chosen_title=top.get("title"),
+        chosen_year=top.get("year"),
+        chosen_score=top.get("score") or item.match.score,
+        delete_source_after=delete_source,
+        decided_via="cli",
+    )
     return "continue"
 
 
