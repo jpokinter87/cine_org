@@ -584,9 +584,12 @@ class MigrationTransferExecutor:
         return TransferOutcome(item_id=item_id, status=fallback_status)
 
     def _post_commit_delete_source(self, item: MigrationItem) -> None:
-        """Supprime la source physique après COMMITTED (low_rated [d]).
+        """Supprime la source physique après COMMITTED.
 
-        Idempotent (FileNotFoundError ignoré). Logue toujours.
+        Honore le tag `delete_source_after_commit` posé par
+        `_apply_decisions_to_plan` depuis `Decision.delete_source_after`.
+        Idempotent (FileNotFoundError ignoré). Logue toujours, n'échoue jamais
+        le transfert (OSError → warning).
         """
         if item.source_path is None:
             return

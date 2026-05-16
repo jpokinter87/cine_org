@@ -640,3 +640,59 @@ def test_no_tag_keeps_source_intact(layout, store):
     )
     executor.execute_one(item)
     assert layout["source_file"].exists()  # intacte (mode symlinks default)
+
+
+def test_delete_source_after_commit_tag_handles_missing_source_path(
+    layout, store, monkeypatch
+):
+    """Tag posé mais source_path=None → no-op (pas de crash, COMMITTED ok)."""
+    item = _migrate_item(layout)
+    item.tags = ["delete_source_after_commit"]
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync,
+    )
+    # Intercepte le post-commit hook pour forcer source_path=None avant
+    # l'appel réel, simulant un item raw dont la source a déjà été résolue.
+    original_helper = executor._post_commit_delete_source
+
+    def _wrapped(it):
+        it.source_path = None  # simule item raw / source déjà résolue ailleurs
+        return original_helper(it)
+
+    monkeypatch.setattr(executor, "_post_commit_delete_source", _wrapped)
+
+    outcome = executor.execute_one(item)
+    assert outcome.status == TransferStatus.COMMITTED
+    # Pas de crash, destination intacte
+    assert layout["destination"].exists()
+
+
+def test_delete_source_after_commit_tag_idempotent_if_already_deleted(
+    layout, store, monkeypatch
+):
+    """Tag posé mais source déjà absente → FileNotFoundError ignoré, COMMITTED ok."""
+    item = _migrate_item(layout)
+    item.tags = ["delete_source_after_commit"]
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync,
+    )
+    original_helper = executor._post_commit_delete_source
+
+    def _wrapped(it):
+        # Simule une suppression concurrente : on retire la source
+        # JUSTE avant que le helper tente l'unlink.
+        if it.source_path is not None and it.source_path.exists():
+            it.source_path.unlink()
+        return original_helper(it)
+
+    monkeypatch.setattr(executor, "_post_commit_delete_source", _wrapped)
+    outcome = executor.execute_one(item)
+    assert outcome.status == TransferStatus.COMMITTED
