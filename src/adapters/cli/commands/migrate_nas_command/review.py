@@ -238,7 +238,7 @@ def _handle_needs_validation(
     valid_keys = ["a", "r", "k", "q", "s", "w"]
     valid_keys.extend(str(i) for i in range(1, len(candidates) + 1))
     answer = Prompt.ask(
-        "[a]ccept top  [1-N] pick  [s]earch  [r]eject  [k]eep skip  [w]eb defer  [q]uit",
+        "\\[a]ccept top  \\[1-N] pick  \\[s]earch  \\[r]eject  \\[k]eep skip  \\[w]eb defer  \\[q]uit",
         choices=valid_keys,
         default="a",
         show_choices=False,
@@ -311,7 +311,7 @@ def _handle_search_then_pick(
         console.print(f"  {i}. {r.title:<40} ({r.year}) score {r.score:.0f}")
 
     pick = Prompt.ask(
-        "Choisir [1-N] ou 'b' pour revenir",
+        "Choisir \\[1-N] ou 'b' pour revenir",
         choices=[*[str(i) for i in range(1, min(5, len(results)) + 1)], "b"],
         default="b",
     )
@@ -342,7 +342,7 @@ def _handle_unrated(
     Retourne 'continue', 'quit'.
     """
     answer = Prompt.ask(
-        "[m]igrate-anyway  [k]eep skip  [w]eb defer  [q]uit",
+        "\\[m]igrate-anyway  \\[k]eep skip  \\[w]eb defer  \\[q]uit",
         choices=["m", "k", "w", "q"],
         default="k",
         show_choices=False,
@@ -391,7 +391,7 @@ def _handle_low_rated(
     Retourne 'continue', 'quit' ou 'redraw'.
     """
     answer = Prompt.ask(
-        "[m]igrate-anyway  [d]elete-source-after  [k]eep skip  [w]eb defer  [q]uit",
+        "\\[m]igrate-anyway  \\[d]elete-source-after  \\[k]eep skip  \\[w]eb defer  \\[q]uit",
         choices=["m", "d", "k", "w", "q"],
         default="k",
         show_choices=False,
@@ -467,7 +467,7 @@ def _handle_already_in_library(
         reco = None
 
     answer = Prompt.ask(
-        "[a]ccept reco  [k]eep dest  [r]eplace dest  [d]elete source  [w]eb defer  [q]uit",
+        "\\[a]ccept reco  \\[k]eep dest  \\[r]eplace dest  \\[d]elete source  \\[w]eb defer  \\[q]uit",
         choices=["a", "k", "r", "d", "w", "q"],
         default="k",
         show_choices=False,
