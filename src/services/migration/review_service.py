@@ -14,7 +14,10 @@ passent par la table migration_decisions.
 
 from __future__ import annotations
 
-from typing import Iterator, Optional
+from typing import TYPE_CHECKING, Iterator, Optional
+
+if TYPE_CHECKING:
+    from src.core.ports.api_clients import SearchResult
 
 from src.services.migration.dataclasses import (
     Bucket,
@@ -146,7 +149,7 @@ class MigrationReviewService:
         query: str,
         is_series: bool,
         year: Optional[int] = None,
-    ):
+    ) -> list["SearchResult"]:
         """Recherche TMDB live + scoring. Retourne list[SearchResult] scorée.
 
         Pour les films : `tmdb_client.search(query, year)`.
