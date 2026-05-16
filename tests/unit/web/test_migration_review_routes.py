@@ -129,3 +129,39 @@ def test_review_decide_post_persists(client_with_plan):
     assert d.decision == DecisionStatus.APPROVED
     assert d.decided_via == "web"
     store.close()
+
+
+def test_review_decide_unknown_item_returns_404(client_with_plan):
+    """POST sur un item_id inexistant → 404, pas 500."""
+    client, plan_path, _ = client_with_plan
+    response = client.post(
+        "/migration/review/unknown_id/decide",
+        params={"plan": str(plan_path)},
+        data={"decision": "skipped"},
+    )
+    assert response.status_code == 404
+
+
+def test_review_decide_invalid_decision_value_returns_400(client_with_plan):
+    """POST avec decision=garbage → 400, pas 500."""
+    client, plan_path, _ = client_with_plan
+    response = client.post(
+        "/migration/review/nv1/decide",
+        params={"plan": str(plan_path)},
+        data={"decision": "garbage_value"},
+    )
+    assert response.status_code == 400
+
+
+def test_review_decide_invalid_tmdb_id_returns_400(client_with_plan):
+    """POST avec chosen_tmdb_id non numérique → 400, pas 500."""
+    client, plan_path, _ = client_with_plan
+    response = client.post(
+        "/migration/review/nv1/decide",
+        params={"plan": str(plan_path)},
+        data={
+            "decision": "approved",
+            "chosen_tmdb_id": "not_a_number",
+        },
+    )
+    assert response.status_code == 400

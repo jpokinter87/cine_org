@@ -146,16 +146,28 @@ async def review_decide(
     store = MigrationStateStore(state_path)
     try:
         service = _build_service(plan_path, store, container)
+        if _find_item(service._plan, item_id) is None:
+            return HTMLResponse("<p>Item non trouvé</p>", status_code=404)
+        try:
+            decision_enum = DecisionStatus(decision)
+            duplicate_action_enum = (
+                DuplicateAction(duplicate_action) if duplicate_action else None
+            )
+            tmdb_id_int = int(chosen_tmdb_id) if chosen_tmdb_id else None
+            tvdb_id_int = int(chosen_tvdb_id) if chosen_tvdb_id else None
+            year_int = int(chosen_year) if chosen_year else None
+            score_float = float(chosen_score) if chosen_score else None
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         service.decide(
             item_id=item_id,
-            decision=DecisionStatus(decision),
-            chosen_tmdb_id=int(chosen_tmdb_id) if chosen_tmdb_id else None,
-            chosen_tvdb_id=int(chosen_tvdb_id) if chosen_tvdb_id else None,
+            decision=decision_enum,
+            chosen_tmdb_id=tmdb_id_int,
+            chosen_tvdb_id=tvdb_id_int,
             chosen_title=chosen_title,
-            chosen_year=int(chosen_year) if chosen_year else None,
-            chosen_score=float(chosen_score) if chosen_score else None,
-            duplicate_action=DuplicateAction(duplicate_action)
-            if duplicate_action else None,
+            chosen_year=year_int,
+            chosen_score=score_float,
+            duplicate_action=duplicate_action_enum,
             delete_source_after=delete_source_after,
             reason=reason,
             decided_via="web",
