@@ -25,6 +25,7 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Optional
 
+from src.core.ports.parser import IMediaInfoExtractor
 from src.services.migration.dataclasses import MigrationCandidate
 
 
@@ -59,6 +60,7 @@ class MigrationScanner:
         destination_root: Optional[Path] = None,
         alternative_roots: Optional[Iterable[Path]] = None,
         category_prefixes: Optional[Iterable[str]] = DEFAULT_CATEGORY_PREFIXES,
+        media_info_extractor: Optional[IMediaInfoExtractor] = None,
     ) -> None:
         self._video_extensions = frozenset(e.lower() for e in video_extensions)
         self._destination_root = (
@@ -76,6 +78,30 @@ class MigrationScanner:
         # Cache des index alt_root -> {filename: full_path} pour éviter de
         # re-scanner les disques de secours à chaque lien cassé.
         self._alt_index_cache: dict[Path, dict[str, Path]] = {}
+        # Extracteur mediainfo (optionnel). Quand fourni, le scanner extrait
+        # la durée + codecs sur la cible résolue. Utilisé par le matcher
+        # mode raw pour discriminer les films homonymes via la durée TMDB.
+        self._media_info_extractor = media_info_extractor
+
+    def count_files(self, root: Path) -> int:
+        """Compte rapidement les fichiers vidéo matchant les filtres, sans
+        extraire les métadonnées ni résoudre les symlinks.
+
+        Utile pour prédimensionner une barre de progression sans payer le
+        coût (potentiellement long) de mediainfo sur des milliers de
+        fichiers vidéo. La sémantique de filtrage est identique à `scan()`.
+        """
+        root = Path(root)
+        n = 0
+        for dirpath, _, filenames in os.walk(root, followlinks=False):
+            for name in filenames:
+                full = Path(dirpath) / name
+                if full.suffix.lower() not in self._video_extensions:
+                    continue
+                if not self._matches_category(full, root):
+                    continue
+                n += 1
+        return n
 
     def scan(self, root: Path) -> Iterator[MigrationCandidate]:
         """
@@ -134,6 +160,7 @@ class MigrationScanner:
                 is_broken=False,
                 already_on_destination=False,
                 is_symlink=False,
+                media_info=self._extract_media_info(path),
             )
 
         # Symlink : tenter de résoudre la cible.
@@ -160,7 +187,21 @@ class MigrationScanner:
             is_broken=is_broken,
             already_on_destination=already_on_destination,
             is_symlink=True,
+            media_info=self._extract_media_info(target),
         )
+
+    def _extract_media_info(self, target: Optional[Path]):
+        """Extrait mediainfo sur la cible si un extracteur est configuré.
+
+        Retourne None silencieusement quand : aucun extracteur configuré,
+        target absente ou inexistante. Les erreurs d'extraction sont
+        captées par l'extracteur lui-même (qui retourne None).
+        """
+        if self._media_info_extractor is None:
+            return None
+        if target is None or not target.exists():
+            return None
+        return self._media_info_extractor.extract(target)
 
     def _resolve_target(self, symlink: Path) -> Optional[Path]:
         """Suit le symlink, puis fallback sur la recherche dans alternative_roots."""

@@ -12,7 +12,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.core.value_objects.media_info import MediaInfo
 
 
 class Bucket(str, Enum):
@@ -67,6 +70,11 @@ class MigrationCandidate:
     is_broken: bool = False
     already_on_destination: bool = False
     is_symlink: bool = True  # False si le scanner a trouvé un fichier physique au lieu d'un lien
+    # Métadonnées techniques extraites par mediainfo (durée surtout, utilisée
+    # par le matcher pour discriminer les films homonymes via la formule
+    # 50/25/25 + tri par écart de durée TMDB). None tant que l'extracteur
+    # n'est pas branché (mode symlinks pur).
+    media_info: Optional["MediaInfo"] = None
 
 
 @dataclass

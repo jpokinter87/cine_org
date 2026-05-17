@@ -227,7 +227,9 @@ def _build_with_progress(
     loguru_logger.disable("src")
     try:
         console.print("[dim]Comptage initial des fichiers vidéo…[/dim]")
-        total = sum(1 for _ in scanner.scan(source_root))
+        # `count_files` fait un walk pur sans extraction mediainfo ni
+        # résolution de symlinks — sinon le comptage paye 2x le coût total.
+        total = scanner.count_files(source_root)
         console.print(
             f"[dim]{total} fichier(s) vidéo détecté(s) — démarrage du plan.[/dim]"
         )

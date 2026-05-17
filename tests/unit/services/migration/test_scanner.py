@@ -249,6 +249,114 @@ def test_scanner_custom_category_prefixes(tmp_path):
     assert names == ["live.mkv"]
 
 
+# ---- Extraction mediainfo (durée pour le matcher mode raw) ----------------
+
+
+def _fake_extractor(per_path_duration: dict):
+    """Construit un IMediaInfoExtractor mock qui retourne une MediaInfo
+    avec la duration_seconds définie pour chaque path connu."""
+    from unittest.mock import MagicMock
+
+    from src.core.value_objects.media_info import MediaInfo
+
+    def _extract(p):
+        if p in per_path_duration:
+            return MediaInfo(duration_seconds=per_path_duration[p])
+        return None
+
+    extractor = MagicMock()
+    extractor.extract.side_effect = _extract
+    return extractor
+
+
+def test_scanner_populates_media_info_for_physical_file(layout):
+    """Avec un extracteur fourni, un fichier physique reçoit son media_info."""
+    target = layout["source"] / "Films" / "Action" / "physical.mkv"
+    extractor = _fake_extractor({target: 7200})
+
+    scanner = MigrationScanner(
+        video_extensions=VIDEO_EXTS,
+        destination_root=layout["new_nas"],
+        media_info_extractor=extractor,
+    )
+    cands = _by_name(list(scanner.scan(layout["source"])))
+
+    c = cands["physical.mkv"]
+    assert c.media_info is not None
+    assert c.media_info.duration_seconds == 7200
+    extractor.extract.assert_any_call(target)
+
+
+def test_scanner_populates_media_info_for_valid_symlink_target(layout):
+    """Pour un symlink valide, l'extraction porte sur la cible résolue."""
+    target = layout["old_nas"] / "matrix.mkv"
+    extractor = _fake_extractor({target: 8400})
+
+    scanner = MigrationScanner(
+        video_extensions=VIDEO_EXTS,
+        destination_root=layout["new_nas"],
+        media_info_extractor=extractor,
+    )
+    cands = _by_name(list(scanner.scan(layout["source"])))
+
+    c = cands["matrix.mkv"]
+    assert c.media_info is not None
+    assert c.media_info.duration_seconds == 8400
+
+
+def test_scanner_skips_extraction_when_no_extractor(layout):
+    """Sans extracteur fourni (backward compat), media_info reste None."""
+    scanner = MigrationScanner(
+        video_extensions=VIDEO_EXTS, destination_root=layout["new_nas"]
+    )
+    cands = _by_name(list(scanner.scan(layout["source"])))
+
+    assert all(c.media_info is None for c in cands.values())
+
+
+def test_count_files_does_not_call_extractor(layout):
+    """count_files() ne doit jamais déclencher l'extracteur mediainfo
+    (sinon le pré-comptage doublerait le coût total du plan)."""
+    extractor = _fake_extractor({})
+
+    scanner = MigrationScanner(
+        video_extensions=VIDEO_EXTS,
+        destination_root=layout["new_nas"],
+        media_info_extractor=extractor,
+    )
+
+    n = scanner.count_files(layout["source"])
+
+    # Mêmes filtres que scan() : on compte tous les fichiers vidéo sous
+    # la racine, peu importe symlink/physique/cible cassée.
+    expected = sum(1 for _ in scanner.scan(layout["source"]))
+    # Reset des appels accumulés par scan() ci-dessus.
+    # On vérifie que count_files seul n'a rien extrait.
+    extractor.extract.reset_mock()
+    scanner.count_files(layout["source"])
+    extractor.extract.assert_not_called()
+    assert n == expected
+
+
+def test_scanner_skips_extraction_when_target_missing(layout):
+    """Symlink brisé sans alternative → pas d'extraction tentée."""
+    extractor = _fake_extractor({})
+
+    scanner = MigrationScanner(
+        video_extensions=VIDEO_EXTS,
+        destination_root=layout["new_nas"],
+        media_info_extractor=extractor,
+    )
+    cands = _by_name(list(scanner.scan(layout["source"])))
+
+    c = cands["missing.mkv"]
+    assert c.media_info is None
+    # On ne doit pas avoir appelé extract avec None ni avec une target inexistante.
+    for call in extractor.extract.call_args_list:
+        assert call.args[0] is not None
+        assert call.args[0].exists()
+
+
 def test_scanner_filter_walks_into_intermediate_dirs(tmp_path):
     """Le filtre accepte une catégorie à n'importe quelle profondeur (ex: Vidéothèque/Films)."""
     src = tmp_path / "wd10-1"
