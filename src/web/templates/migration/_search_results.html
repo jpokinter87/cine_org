@@ -9,7 +9,7 @@
                 hx-post="/migration/review/{{ item.item_id }}/decide?plan={{ plan_path | urlencode }}"
                 hx-target="#review-{{ item.item_id }}"
                 hx-swap="outerHTML"
-                hx-vals='{"decision": "approved", "chosen_tmdb_id": "{{ r.tmdb_id }}", "chosen_title": "{{ r.title }}", "chosen_year": "{{ r.year }}", "chosen_score": "{{ r.score }}"}'>
+                hx-vals='{"decision": "approved", {% if r.source == "tvdb" %}"chosen_tvdb_id": "{{ r.id }}"{% else %}"chosen_tmdb_id": "{{ r.id }}"{% endif %}, "chosen_title": "{{ r.title }}", "chosen_year": "{{ r.year }}", "chosen_score": "{{ r.score }}"}'>
           Sélectionner
         </button>
       </li>

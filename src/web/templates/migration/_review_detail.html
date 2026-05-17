@@ -15,11 +15,12 @@
         {% for c in item.match.top_candidates %}
           <li>
             <strong>{{ c.title }}</strong> ({{ c.year }}) — score {{ "%.0f"|format(c.score) }}%
+            <span class="dim">[{{ c.source }}]</span>
             <button class="btn btn--sm btn--approve"
                     hx-post="/migration/review/{{ item.item_id }}/decide?plan={{ plan_path | urlencode }}"
                     hx-target="#review-{{ item.item_id }}"
                     hx-swap="outerHTML"
-                    hx-vals='{"decision": "approved", "chosen_tmdb_id": "{{ c.tmdb_id }}", "chosen_title": "{{ c.title }}", "chosen_year": "{{ c.year }}", "chosen_score": "{{ c.score }}"}'>
+                    hx-vals='{"decision": "approved", {% if c.tmdb_id %}"chosen_tmdb_id": "{{ c.tmdb_id }}"{% elif c.tvdb_id %}"chosen_tvdb_id": "{{ c.tvdb_id }}"{% endif %}, "chosen_title": "{{ c.title }}", "chosen_year": "{{ c.year }}", "chosen_score": "{{ c.score }}"}'>
               Approuver
             </button>
           </li>
