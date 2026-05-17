@@ -12,8 +12,8 @@ See: .paul/PROJECT.md (updated 2026-04-04)
 Milestone: v2.1 Lecteurs Externes & Intégrations
 Phase: 43 of 4 (Correctifs Bibliothèque) — ✅ Complete
 Plan: 43-01 ✓ livré & commité (952f95c), 43-02 ✓ livré (à commiter)
-Status: Phase 43 complète — mode symlinks mergé (PR #1 squash 8e7ec1c) + mode raw livré + apply prod terminé sur /media/wd10-1 (12/12 MIGRATE OK). À démarrer phase 41 (Jellyfin) pour clôturer v2.1. Reste à traiter sur wd10-1 : 117 NEEDS_VALIDATION, 17 unrated, 11 already_in_library, 6 low_rated.
-Last activity: 2026-05-10 (soir) — Apply MIGRATE bouclé (12/12 commits OK : Marius, Kaili, Nobody's Fool, Les Valseuses, Her, Zillion, Jeux d'enfants, Iron Lady, YAO, Juliet Naked, Paul à Quebec, Bande de Charlie). Incident La Flor (4 parties écrasées par collision tmdb_id) → 2 garde-fous TDD + refonte rsync (retries simples + retrait `-a`) + UX apply en français. 27 commits sur feat/migrate-nas-raw-mode (dont 2 nouveaux 8610943 + e4dc1e1 ce soir). 1387 tests verts (165 migration).
+Status: Phase 43 complète — mode symlinks mergé (PR #1 squash 8e7ec1c) + mode raw livré + apply prod terminé sur /media/wd10-1 (12/12 MIGRATE OK). Deux fils en attente : (A) correctif réassociation livré & commité 856c0e7 ; (B) migration NAS — buckets wd10-1 à traiter puis PR, puis phase 41 Jellyfin. Reste à traiter sur wd10-1 : 117 NEEDS_VALIDATION, 17 unrated, 11 already_in_library, 6 low_rated.
+Last activity: 2026-05-15 — Analyse trou de notes (28/6739 items réellement sans note) + 4 commandes d'enrichissement (14 imdb_ids, 53 notes IMDb films, 117 séries enrichies). Correctif réassociation TMDB commité (856c0e7) : bouton « Rafraîchir les données » sur la carte association actuelle + backfill imdb_rating/imdb_votes dans les handlers apply (helper _lookup_imdb_rating). 5 tests TDD (la réassociation n'en avait aucun). 1393 tests verts. Migration NAS intouchée — next-actions du 2026-05-10 toujours valides.
 
 Progress:
 - v2.1: [████████░░] 75% (3/4 phases complètes — Phases 40, 42, 43 ✓)
@@ -139,6 +139,8 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Migration NAS — stratégie retry simplifiée : 3 essais identiques avec pause 30s entre (au lieu de cascade dégressive 0→50→25→10→5 MB/s). Les échecs observés sont transitoires (timeout NFS, fsync long), pas des saturations de débit
 - Migration NAS — wrapper progress UI : utilise `dest.stat().st_size` (taille réelle persistée via --inplace) au lieu du compteur volatile de `--info=progress2` qui repart à 0 à chaque retry
 - Migration NAS — UX apply en français : 5 phases canoniques (préparation → copie → vérification → finalisation → commit), phase courante en rouge gras dans une ligne dédiée Rich
+- Réassociation TMDB — bouton « Rafraîchir les données » sur la carte « Association actuelle » : relance l'apply sur le même tmdb_id. Avant, aucun moyen de relancer une association correcte mais incomplète sans choisir volontairement une fausse association
+- Réassociation TMDB — handlers apply (films + séries) backfillent imdb_rating/imdb_votes via helper _lookup_imdb_rating (cache IMDb local), même pont TMDB→IMDb que batch_builder/series_enricher. Note héritée purgée si le nouvel imdb_id est hors cache
 
 ### Deferred Issues
 - README.md à réécrire de fond en comble : nouvelles commandes, structure répertoires attendue, architecture, configuration
@@ -161,7 +163,8 @@ PLAN ──▶ APPLY ──▶ UNIFY
 - Vérifier si le bug subdivision a causé des dégâts dans des sessions antérieures (pré-existait depuis phase 35)
 - Réassociation TMDB : les données techniques (résolution, codecs, langue) ne sont pas re-peuplées après correction — cartouches qualité absents sur jaquette et fiche détaillée. Le code ne touche pas ces champs mais ils n'étaient probablement jamais remplis pour les films importés. Enrichir depuis VideoFileModel ou mediainfo lors de la réassociation.
 - "En cours de lecture" (reprise de position) : faisable pour mpv local/remote via IPC socket, partiellement faisable pour DuneHD via polling `command=status` (fragile). Candidat Phase 42 post-Jellyfin. Analyse faisabilité produite en fin de session 2026-04-14 (chat uniquement, pas de doc créé).
-- ~15 séries non trouvées sur TMDB par enrich-series (homonymes ambigus : Yellowstone, Monster, Sirens, Poldark, Prey, Fiasco, Platonic…) — à matcher manuellement via la fiche web si on veut leurs notes
+- 14 séries homonymes sans tmdb_id (enrich-series → NOT_FOUND, matcher strict refuse de deviner) : Fiasco (2024), L'Espion aux deux visages (2016), Les Détectoristes (2014, ×2 — aussi un doublon DB), Monster (2017), Platonic (2023), Poldark (2015), Prey (2014), Racines (2016), Reykjavik 112 (2025), Sirens (2025), Stonehouse (2023), Surface (2025), The Sticky (2024), Yellowstone (2018) → réassociation manuelle via le bouton « Corriger » de chaque fiche
+- 13 items réellement sans note (9 films + 4 séries) : making-ofs, Macbeth 2016 (opéra), STEINS;GATE #23 (special), documentaires, sorties 2025 — TMDB à 0 vote + absents du cache IMDb local. Irréductible sauf `imdb import` (rafraîchit le dataset) ou attente que TMDB/IMDb les notent
 - Garde-fou anti-homonymes pas encore appliqué côté matching initial du workflow (matching_step.py). Cas plus rare car validation manuelle filtre déjà, mais à envisager si récurrent.
 - Service systemd : sudo demande mot de passe lors de deploy.sh — configurer NOPASSWD pour `systemctl restart cineorg` afin que le déploiement aille au bout sans intervention
 - Vérifier sur disque s'il reste un dossier `Flashback` sans année dans video/ et storage/ après les consolidations (devrait avoir été nettoyé par le script)
@@ -174,9 +177,11 @@ PLAN ──▶ APPLY ──▶ UNIFY
 None.
 
 ### Git State
-Branche courante : feat/migrate-nas-raw-mode (27 commits en avance sur master, dont 2 nouveaux de cette session non encore poussés)
-Last commit: e4dc1e1 refactor(migration): rsync simplifié + UX apply en français
-Stack récente (mode raw + UX apply, du plus récent au plus ancien) :
+Branche courante : feat/migrate-nas-raw-mode (~29 commits en avance sur master, dont **4 non poussés** sur origin)
+Last commit: 856c0e7 fix(reassociate): bouton Rafraîchir + backfill note IMDb sur apply
+Stack récente (du plus récent au plus ancien) :
+  - 856c0e7 fix(reassociate): bouton Rafraîchir + backfill note IMDb sur apply [non pushé — cette session]
+  - f1095a4 docs(paul): handoff fin de session + maj STATE [non pushé]
   - e4dc1e1 refactor(migration): rsync simplifié + UX apply en français [non pushé]
   - 8610943 fix(migration): garde-fous anti-écrasement (raw_finalizer + collision tmdb) [non pushé]
   - c8c14af feat(migration): flag --fast
@@ -218,30 +223,27 @@ Service systemd : tourne encore sur les commits d'avant le déploiement 2026-05-
 
 ## Session Continuity
 
-Last session: 2026-05-10 (soir — apply MIGRATE bouclé + 2 patches refonte rsync + UX phases)
-Stopped at: 12/12 MIGRATE de /media/wd10-1 transférés OK (Marius, Kaili, Nobody's Fool, Les Valseuses, Her, Zillion, Jeux d'enfants, Iron Lady, YAO, Juliet Naked, Paul à Quebec, Bande de Charlie). 4 Flor parties exclues (perte partielle suite incident écrasement). Fixes livrés et committés (8610943 + e4dc1e1) mais pas encore poussés sur origin.
+Last session: 2026-05-15 (analyse trou de notes + enrichissement + correctif réassociation)
+Stopped at: Correctif réassociation TMDB livré, testé et commité (856c0e7) sur feat/migrate-nas-raw-mode. Migration NAS intouchée — toujours en pause depuis le 2026-05-10. Deux fils indépendants en attente.
 Next action:
-  1. Push des 2 nouveaux commits sur origin/feat/migrate-nas-raw-mode
-  2. Traiter les autres buckets sur /media/wd10-1 :
+  **Fil A — réassociation (quasi clos)** : optionnellement push + test manuel du bouton « Rafraîchir » sur la fiche Detectorists.
+  **Fil B — migration NAS (prioritaire, en attente depuis le 2026-05-10)** :
+  1. `git push origin feat/migrate-nas-raw-mode` (pousse les 4 commits non poussés)
+  2. Traiter les buckets sur /media/wd10-1 :
      - already_in_library.csv (11 items, ~28 GB) → supprimer sources
      - needs_validation.csv (117 items) → mv vers downloads + cineorg process
-     - low_rated.csv (6 items) + unrated.csv (17 items) → triage manuel
-  3. Optionnel : créer commande `cineorg migrate-nas cleanup-buckets` pour automatiser
-  4. Une fois /media/wd10-1 vide → ouvrir PR feat/migrate-nas-raw-mode vers master
+     - low_rated.csv (6) + unrated.csv (17) → triage manuel
+  3. Optionnel : créer `cineorg migrate-nas cleanup-buckets`
+  4. /media/wd10-1 vidé → ouvrir PR feat/migrate-nas-raw-mode vers master
   5. PR mergée → `/paul:plan` pour phase 41 Jellyfin (clôt v2.1)
-Resume file: .paul/HANDOFF-2026-05-10-soir.md
+Resume file: .paul/HANDOFF-2026-05-15.md
 Resume context:
-- Apply MIGRATE 12/12 OK après 4 itérations (la 1ère a écrasé La Flor, la 2e a fail-cosmetic 8/10 sur perms NFS, la 3e+4e ont fini propre)
-- Fixes livrés ce soir :
-  - Garde-fou raw_finalizer : refuse si Movie.file_path pointe sur fichier existant (filet runtime)
-  - Détection collision tmdb intra-plan : N items même tmdb_id → NEEDS_VALIDATION (filet plan time)
-  - Refonte rsync : retire `-a` (cause rc=23 NFS), 3 retries identiques avec pause 30s (au lieu de cascade dégressive)
-  - Wrapper progress : taille réelle dest via stat (plus de reset visuel sur retry)
-  - UX apply : phases en français + ligne dédiée avec phase courante en rouge gras
-- 165 tests migration (vs 161), 1387 globaux, zéro régression
-- 4 items Flor en failed_other dans state store (exclus). Movie id 5818 supprimé en DB. Fichier physique partie 1 (renommé La Flor (2019).mkv) supprimé du NAS.
-- Plan.json patché : 4 Flor parties basculées en bucket needs_validation (+tag collision_tmdb:423778)
-Git strategy: feat/migrate-nas-raw-mode — push les 2 nouveaux commits puis ouvrir PR vers master une fois /media/wd10-1 traité intégralement
+- Trou de notes analysé : 28/6739 items réellement sans note (~0,4 %), cluster en page 1 (imports récents). Entrée déjà couverte par batch_builder.
+- Enrichissement lancé sur cineorg.db : enrich-imdb-ids (14 imdb_ids), imdb sync --target all (53 notes IMDb films), enrich-series (117 séries). Bucket « zéro note » 28 → 27.
+- Correctif réassociation 856c0e7 : la réassociation séries existait déjà ; 2 bugs corrigés — bouton « Rafraîchir les données » sur la carte association actuelle + backfill imdb_rating/imdb_votes dans les handlers apply (helper _lookup_imdb_rating). 5 tests TDD, 1393 verts.
+- Reste 27 items sans note : 14 séries homonymes (réassociation manuelle) + 13 réellement non notés (irréductible).
+- Migration NAS : aucune action cette session. État inchangé depuis HANDOFF-2026-05-10-soir.md (12/12 MIGRATE OK, 4 Flor en failed_other, buckets wd10-1 à traiter).
+Git strategy: feat/migrate-nas-raw-mode — 4 commits non poussés (dont 856c0e7 réassociation, sur la même branche par choix utilisateur). Push puis PR vers master une fois /media/wd10-1 traité.
 
 ---
 *STATE.md — Updated after every significant action*
