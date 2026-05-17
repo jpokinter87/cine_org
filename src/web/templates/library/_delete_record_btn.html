@@ -1,0 +1,88 @@
+{# Partial : bouton "Supprimer la fiche" + overlay de confirmation.
+   Variables attendues : entity_type ("movie"|"series"), entity_id, entity_label.
+   À inclure dans une page détail. La fiche est envoyée en corbeille via
+   /library/delete-batch (les fichiers storage ne sont pas touchés). #}
+
+<button type="button" class="delete-record-btn" id="delete-record-btn"
+        title="Supprimer cette fiche de la base (les fichiers storage sont conservés)">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+    Supprimer la fiche
+</button>
+
+<div class="delete-overlay" id="delete-record-overlay">
+    <div class="delete-dialog">
+        <div class="delete-dialog-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        </div>
+        <h3 class="delete-dialog-title">Supprimer la fiche « {{ entity_label }} » ?</h3>
+        <p class="delete-dialog-text">La fiche est déplacée dans la corbeille. Le symlink vidéo associé est supprimé mais le fichier storage est conservé (restauration possible depuis /maintenance/trash).</p>
+        {% if entity_type == 'series' %}
+        <div class="delete-dialog-warning">Tous les épisodes de cette série seront également déplacés dans la corbeille.</div>
+        {% endif %}
+        <div class="delete-dialog-actions">
+            <button type="button" class="reject-dialog-cancel" id="delete-record-cancel">Annuler</button>
+            <button type="button" class="reject-dialog-confirm" id="delete-record-confirm">Confirmer la suppression</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var btn = document.getElementById('delete-record-btn');
+    var overlay = document.getElementById('delete-record-overlay');
+    var cancelBtn = document.getElementById('delete-record-cancel');
+    var confirmBtn = document.getElementById('delete-record-confirm');
+    if (!btn || !overlay) return;
+
+    btn.addEventListener('click', function () { overlay.classList.add('active'); });
+    overlay.addEventListener('click', function (e) {
+        if (e.target === overlay) overlay.classList.remove('active');
+    });
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function () {
+            overlay.classList.remove('active');
+        });
+    }
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') overlay.classList.remove('active');
+    });
+
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', function () {
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Suppression...';
+            fetch('/library/delete-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    items: [{ type: '{{ entity_type }}', id: {{ entity_id }} }]
+                })
+            })
+                .then(function (res) {
+                    if (res.status === 403) {
+                        return res.json().then(function (data) {
+                            alert(data.error || 'Accès refusé.');
+                            throw new Error('forbidden');
+                        });
+                    }
+                    return res.json();
+                })
+                .then(function (data) {
+                    if (data && data.deleted) {
+                        window.location.href = '/library/';
+                    } else {
+                        throw new Error('not_deleted');
+                    }
+                })
+                .catch(function (err) {
+                    if (err.message !== 'forbidden') {
+                        alert('Erreur lors de la suppression.');
+                    }
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Confirmer la suppression';
+                    overlay.classList.remove('active');
+                });
+        });
+    }
+})();
+</script>

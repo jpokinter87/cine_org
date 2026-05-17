@@ -962,6 +962,28 @@ uv run cineorg reclassify-shorts --no-dry-run
 
 **Vue bibliothèque** : la page `/library/collections` liste à la fois les collections TMDB officielles et les collections locales (badge orange « Locale » sur la carte). Cliquer sur une collection locale ouvre `/library/collections/local/{id}` qui présente la même grille de films que pour une saga TMDB.
 
+### Suppression d'une fiche obsolète
+
+Quand deux fiches DB pointent vers le même film (ex. une complète avec son fichier + une incomplète sans `file_path`, ou une fiche dont le fichier a été déplacé manuellement), on veut souvent supprimer la fiche en trop sans toucher au fichier physique.
+
+**Depuis l'UI** : sur la page détail d'un film ou d'une série (accessible depuis la machine maître uniquement, c'est-à-dire `127.0.0.1`/`localhost`), un bouton rouge discret « Supprimer la fiche » à côté de « Corriger » et « Éditer » envoie la fiche en corbeille via `/library/delete-batch`. Le symlink vidéo associé est supprimé mais le fichier storage est conservé. Pour une série, tous les épisodes sont également déplacés.
+
+**Restauration** : depuis `/maintenance/trash` tant que la corbeille n'a pas été vidée.
+
+### Scan des fichiers manquants
+
+La commande `cineorg check-missing-files` balaye la base de données pour détecter les fiches dont le `file_path` ne pointe plus sur un fichier existant. Utile quand des fichiers ont été supprimés/déplacés manuellement et qu'on tombe sur le bouton « Visionner » qui indique fichier absent.
+
+```bash
+# Dry-run par défaut : liste les fiches orphelines sans rien modifier
+uv run cineorg check-missing-files
+
+# Envoyer les fiches détectées en corbeille (réversible via /maintenance/trash)
+uv run cineorg check-missing-files --prune
+```
+
+Le scan couvre `MovieModel` et `EpisodeModel`. Les fiches sans `file_path` (incomplètes) sont ignorées : elles ne sont pas « orphelines », simplement non-rattachées à un fichier — utiliser le bouton « Supprimer la fiche » sur la page détail pour les nettoyer.
+
 ### Migration depuis anciens NAS
 
 La sous-commande `migrate-nas` migre des fichiers vidéo depuis d'anciens volumes (vieux NAS, disques USB) vers le nouveau NAS, en filtrant par note minimale combinée IMDb / TMDB / personnelle. Elle préserve la source (pas de `--remove-source-files`), vérifie l'intégrité xxh3_64 source/destination après chaque copie, et swappe atomiquement les symlinks vers la nouvelle destination.

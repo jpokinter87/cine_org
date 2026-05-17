@@ -9534,6 +9534,28 @@ details[open] > .maint-issue-toggle::before {
     background: var(--accent-amber-dim);
 }
 
+/* Bouton « Supprimer la fiche » : même gabarit que .edit-metadata-btn,
+   accent rouge sombre discret pour signaler l'action destructive. */
+.delete-record-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.7rem;
+    font-family: 'DM Sans', sans-serif;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.delete-record-btn:hover {
+    color: #ef4444; /* red-500 */
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+}
+
 /* Badge discret "✎ modifié" sur le poster ou inline */
 .override-badge {
     display: inline-flex;

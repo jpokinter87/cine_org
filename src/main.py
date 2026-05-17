@@ -36,6 +36,7 @@ from .adapters.cli.commands import (
     populate_movies,
     populate_series,
     process,
+    check_missing_files,
     collections_app,
     purge_hardlinks,
     reclassify_shorts,
@@ -127,6 +128,7 @@ app.command(name="check-duplicates")(check_duplicates)
 app.command(name="purge-hardlinks")(purge_hardlinks)
 app.command(name="rename-canonical")(rename_canonical)
 app.command(name="reclassify-shorts")(reclassify_shorts)
+app.command(name="check-missing-files")(check_missing_files)
 
 # Monter validate_app comme sous-commande
 app.add_typer(validate_app, name="validate")
