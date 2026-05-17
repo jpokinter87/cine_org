@@ -249,6 +249,40 @@ def test_scanner_custom_category_prefixes(tmp_path):
     assert names == ["live.mkv"]
 
 
+def test_scanner_filter_ignores_inner_dirs_matching_prefix(tmp_path):
+    """Régression : ne PAS matcher un sous-dossier dont le nom commence par
+    un préfixe whitelist quand son premier ancêtre n'est pas une catégorie.
+
+    Cas réel observé : `Vidéothèque/ISX/Divers/SeriousImages/Part 1.mp4`
+    était inclus car "SeriousImages" commence par "seri" → faux positif.
+    Le filtre doit s'appliquer UNIQUEMENT au premier segment (média_root),
+    pas à un sous-dossier arbitraire."""
+    src = tmp_path / "src"
+    (src / "ISX" / "Divers" / "SeriousImages").mkdir(parents=True)
+    (src / "ISX" / "Divers" / "SeriousImages" / "Part 1.mp4").write_bytes(b"x")
+    (src / "Animations" / "Studio").mkdir(parents=True)
+    (src / "Animations" / "Studio" / "anim.mkv").write_bytes(b"x")
+
+    scanner = MigrationScanner(video_extensions=VIDEO_EXTS)
+    names = sorted(c.symlink_path.name for c in scanner.scan(src))
+    # Seul anim.mkv (Animations/...) doit ressortir. Part 1.mp4 est sous
+    # ISX/ → catégorie non whitelistée, malgré le sous-dossier SeriousImages.
+    assert names == ["anim.mkv"]
+
+
+def test_scanner_filter_skips_files_at_root(tmp_path):
+    """Un fichier directement à la racine (pas de catégorie) est ignoré."""
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "orphan.mkv").write_bytes(b"x")
+    (src / "Films").mkdir()
+    (src / "Films" / "movie.mkv").write_bytes(b"x")
+
+    scanner = MigrationScanner(video_extensions=VIDEO_EXTS)
+    names = sorted(c.symlink_path.name for c in scanner.scan(src))
+    assert names == ["movie.mkv"]
+
+
 # ---- Extraction mediainfo (durée pour le matcher mode raw) ----------------
 
 
@@ -357,17 +391,26 @@ def test_scanner_skips_extraction_when_target_missing(layout):
         assert call.args[0].exists()
 
 
-def test_scanner_filter_walks_into_intermediate_dirs(tmp_path):
-    """Le filtre accepte une catégorie à n'importe quelle profondeur (ex: Vidéothèque/Films)."""
+def test_scanner_filter_strict_first_segment_only(tmp_path):
+    """Le filtre n'accepte la catégorie qu'au niveau 1 (média_root).
+
+    Si l'utilisateur scanne le parent d'une vidéothèque NAS
+    (ex: `--source /media/wd10-1` au lieu de `/media/wd10-1/Vidéothèque10`),
+    AUCUN fichier n'est inclus — `media_root` vaudrait `Vidéothèque10`,
+    qui n'est pas dans la whitelist. C'est intentionnel : la sémantique
+    stricte évite les faux positifs où un sous-dossier profond matche
+    accidentellement un préfixe (ex: `ISX/Divers/SeriousImages/`).
+    Pour ce cas, pointer `--source` directement sur la racine NAS."""
     src = tmp_path / "wd10-1"
     deep = src / "Vidéothèque10" / "Films" / "Drame"
     deep.mkdir(parents=True)
-    sibling = src / "Vidéothèque10" / "Docs"
-    sibling.mkdir(parents=True)
-
     (deep / "film.mkv").write_bytes(b"x")
-    (sibling / "doc.mkv").write_bytes(b"x")
 
     scanner = MigrationScanner(video_extensions=VIDEO_EXTS)
     names = [c.symlink_path.name for c in scanner.scan(src)]
+    # Vidéothèque10 (média_root) ne matche pas film/seri/anim → 0 résultat.
+    assert names == []
+
+    # Sémantique correcte : pointer une couche plus profond.
+    names = [c.symlink_path.name for c in scanner.scan(src / "Vidéothèque10")]
     assert names == ["film.mkv"]

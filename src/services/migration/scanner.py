@@ -125,21 +125,28 @@ class MigrationScanner:
                 yield self._classify(full, root)
 
     def _matches_category(self, path: Path, root: Path) -> bool:
-        """Vérifie qu'au moins un segment relatif matche la whitelist."""
+        """Vérifie que le média_root (1er segment sous root) matche la whitelist.
+
+        Ne teste que le premier segment du chemin relatif — sinon un
+        sous-dossier dont le nom commence par un préfixe (ex: "SeriousImages"
+        sous "ISX/Divers/") faisait passer le fichier en faux positif. La
+        whitelist s'applique aux *catégories de premier niveau* (Films,
+        Séries, Animations), pas à un nom arbitraire profond dans l'arbre.
+        """
         if self._category_prefixes is None:
             return True
         try:
             relative = path.relative_to(root)
         except ValueError:
             return True  # Hors source_root : on ne devrait pas arriver ici.
-        for segment in relative.parts[:-1]:  # Exclut le filename lui-même.
-            normalized = _normalize_segment(segment)
-            if any(
-                normalized.startswith(prefix)
-                for prefix in self._category_prefixes
-            ):
-                return True
-        return False
+        if len(relative.parts) < 2:
+            # Fichier directement à la racine : pas de catégorie → ignoré.
+            return False
+        media_root_segment = _normalize_segment(relative.parts[0])
+        return any(
+            media_root_segment.startswith(prefix)
+            for prefix in self._category_prefixes
+        )
 
     def _classify(self, path: Path, root: Path) -> MigrationCandidate:
         media_root, relative_category = self._extract_categories(path, root)
