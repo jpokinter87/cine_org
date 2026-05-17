@@ -31,12 +31,13 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from sqlmodel import Session
 
 from src.adapters.api.tmdb_client import TMDBClient
 from src.adapters.api.tvdb_client import TVDBClient
+from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
 from src.core.entities.media import Episode, Movie, Series
 from src.core.ports.api_clients import MediaDetails
 from src.core.ports.parser import IFilenameParser
@@ -50,9 +51,24 @@ from src.infrastructure.persistence.repositories.movie_repository import (
 from src.infrastructure.persistence.repositories.series_repository import (
     SQLModelSeriesRepository,
 )
+from src.services.migration._helpers import is_series_like
 from src.services.migration.dataclasses import MigrationItem
 from src.services.organizer import OrganizerService
 from src.services.renamer import RenamerService
+
+
+@dataclass
+class _RatingBundle:
+    """Notes externes récupérées pendant le fetch (TMDB external_ids + cache IMDb).
+
+    Utilisé par les preparers pour transporter les valeurs entre le fetch et
+    le builder d'entité (Movie/Series). Toutes les valeurs sont optionnelles —
+    un fetch raté laisse l'entité sans note (comportement résilient).
+    """
+
+    imdb_id: Optional[str] = None
+    imdb_rating: Optional[float] = None
+    imdb_votes: Optional[int] = None
 
 
 @dataclass
@@ -95,6 +111,7 @@ class _MoviePreparer:
         renamer: RenamerService,
         storage_dir: Path,
         video_dir: Path,
+        imdb_importer: Optional[IMDbDatasetImporter] = None,
     ) -> None:
         self._tmdb = tmdb_client
         self._movie_repo = movie_repo
@@ -102,10 +119,9 @@ class _MoviePreparer:
         self._renamer = renamer
         self._storage_dir = storage_dir
         self._video_dir = video_dir
+        self._imdb_importer = imdb_importer
 
-    def prepare(
-        self, item: MigrationItem
-    ) -> Optional[tuple[Path, _CachedMovie]]:
+    def prepare(self, item: MigrationItem) -> Optional[tuple[Path, _CachedMovie]]:
         tmdb_id = item.match.tmdb_id
         if tmdb_id is None or item.source_path is None:
             return None
@@ -121,9 +137,7 @@ class _MoviePreparer:
         filename = self._renamer.generate_movie_filename(
             movie=movie, media_info=None, extension=extension
         )
-        video_dir = self._organizer.get_movie_video_destination(
-            movie, self._video_dir
-        )
+        video_dir = self._organizer.get_movie_video_destination(movie, self._video_dir)
         symlink_path = video_dir / filename
 
         return directory / filename, _CachedMovie(
@@ -133,10 +147,13 @@ class _MoviePreparer:
     def _lookup_or_create(self, tmdb_id: int) -> Optional[Movie]:
         movie = self._movie_repo.get_by_tmdb_id(tmdb_id)
         if movie is None:
-            details = _fetch_movie_details(self._tmdb, tmdb_id)
-            if details is None:
+            bundle = _fetch_movie_details_with_ratings(
+                self._tmdb, tmdb_id, self._imdb_importer
+            )
+            if bundle is None:
                 return None
-            movie = _build_movie_from_details(details)
+            details, ratings = bundle
+            movie = _build_movie_from_details(details, ratings=ratings)
             return self._movie_repo.save(movie)
         if movie.file_path and Path(movie.file_path).exists():
             # Garde-fou anti-écrasement : un Movie déjà associé à un fichier
@@ -177,6 +194,7 @@ class _SeriesPreparer:
         renamer: RenamerService,
         storage_dir: Path,
         video_dir: Path,
+        imdb_importer: Optional[IMDbDatasetImporter] = None,
     ) -> None:
         self._tmdb = tmdb_client
         self._tvdb = tvdb_client
@@ -186,10 +204,9 @@ class _SeriesPreparer:
         self._renamer = renamer
         self._storage_dir = storage_dir
         self._video_dir = video_dir
+        self._imdb_importer = imdb_importer
 
-    def prepare(
-        self, item: MigrationItem
-    ) -> Optional[tuple[Path, _CachedSeries]]:
+    def prepare(self, item: MigrationItem) -> Optional[tuple[Path, _CachedSeries]]:
         if item.source_path is None:
             return None
 
@@ -236,28 +253,116 @@ class _SeriesPreparer:
             if existing is not None:
                 return existing
 
-        details = self._fetch_details(item)
-        if details is None:
+        bundle = self._fetch_details_with_ratings(item)
+        if bundle is None:
             return None
+        details, ratings, resolved_tmdb_id = bundle
+
+        # Quand on bridge depuis TVDB, on récupère aussi le tmdb_id côté TMDB
+        # (utile pour les enrichissements futurs et pour rester aligné avec
+        # le workflow principal). Si on était déjà arrivé via TMDB, on garde
+        # l'id d'origine.
+        final_tmdb_id = tmdb_id if tmdb_id is not None else resolved_tmdb_id
 
         series = _build_series_from_details(
-            details, tmdb_id=tmdb_id, tvdb_id=tvdb_id
+            details,
+            tmdb_id=final_tmdb_id,
+            tvdb_id=tvdb_id,
+            ratings=ratings,
         )
         return self._series_repo.save(series)
 
-    def _fetch_details(self, item: MigrationItem) -> Optional[MediaDetails]:
-        """Fetch via TVDB si tvdb_id connu + client dispo, sinon TMDB."""
-        # Préférer TVDB quand l'id TVDB est connu (catalogue plus exhaustif
-        # pour les séries anciennes), sinon retomber sur TMDB.
-        if item.match.tvdb_id is not None and self._tvdb is not None:
-            return asyncio.run(
-                self._tvdb.get_details(str(item.match.tvdb_id))
-            )
-        if item.match.tmdb_id is not None:
-            return asyncio.run(
-                self._tmdb.get_tv_details(str(item.match.tmdb_id))
-            )
+    def _fetch_details_with_ratings(
+        self, item: MigrationItem
+    ) -> Optional[tuple[MediaDetails, _RatingBundle, Optional[int]]]:
+        """Fetch détails + external_ids + IMDb rating en une seule run async.
+
+        Stratégie séries (alignée sur DefaultDetailsFetcher.fetch en matching) :
+
+        * Si tvdb_id présent : on bridge via `tmdb.find_by_tvdb_id` pour
+          récupérer `vote_average` (TVDB v3 ne l'expose pas) + `imdb_id` via
+          `get_tv_external_ids`. Si TMDB ignore le tvdb_id, on retombe sur
+          `tvdb.get_details` (legacy, série sans note).
+        * Sinon (tmdb_id présent) : `tmdb.get_tv_details` + `get_tv_external_ids`.
+
+        L'IMDb rating est ensuite lu depuis le cache local (importer optionnel —
+        si absent, l'entité reste sans imdb_rating mais le transfert continue).
+
+        Returns:
+            Tuple `(details, ratings, tmdb_id_resolved)` ou None si rien trouvé.
+            `tmdb_id_resolved` = id TMDB inféré depuis `details.id` quand on a
+            bridgé depuis TVDB (sert à peupler `series.tmdb_id`).
+        """
+        tvdb_id = item.match.tvdb_id
+        tmdb_id = item.match.tmdb_id
+
+        if tvdb_id is not None:
+            return self._fetch_via_tvdb_bridge(tvdb_id)
+        if tmdb_id is not None:
+            return self._fetch_via_tmdb(tmdb_id)
         return None
+
+    def _fetch_via_tvdb_bridge(
+        self, tvdb_id: int
+    ) -> Optional[tuple[MediaDetails, _RatingBundle, Optional[int]]]:
+        tvdb_id_str = str(tvdb_id)
+
+        async def _bundle() -> tuple[
+            Optional[MediaDetails], Optional[str], Optional[int]
+        ]:
+            details = await self._tmdb.find_by_tvdb_id(tvdb_id_str)
+            if details is None:
+                return None, None, None
+            tmdb_id_resolved: Optional[int] = None
+            try:
+                tmdb_id_resolved = int(details.id) if details.id else None
+            except (TypeError, ValueError):
+                tmdb_id_resolved = None
+            imdb_id: Optional[str] = None
+            if details.id:
+                ext = await self._tmdb.get_tv_external_ids(str(details.id))
+                if ext:
+                    imdb_id = ext.get("imdb_id") or None
+            return details, imdb_id, tmdb_id_resolved
+
+        details, imdb_id, tmdb_id_resolved = _run_async_isolated(_bundle, self._tmdb)
+
+        if details is None:
+            # Fallback legacy : TMDB ignore ce tvdb_id, on prend TVDB brut
+            # (sans note — comportement préservé pour ne rien dégrader).
+            if self._tvdb is None:
+                return None
+            tvdb_details = _run_async_isolated(
+                lambda: self._tvdb.get_details(tvdb_id_str),
+                self._tvdb,
+            )
+            if tvdb_details is None:
+                return None
+            return tvdb_details, _RatingBundle(), None
+
+        ratings = _resolve_imdb_rating(imdb_id, self._imdb_importer)
+        return details, ratings, tmdb_id_resolved
+
+    def _fetch_via_tmdb(
+        self, tmdb_id: int
+    ) -> Optional[tuple[MediaDetails, _RatingBundle, Optional[int]]]:
+        tmdb_id_str = str(tmdb_id)
+
+        async def _bundle() -> tuple[Optional[MediaDetails], Optional[str]]:
+            details = await self._tmdb.get_tv_details(tmdb_id_str)
+            if details is None:
+                return None, None
+            imdb_id: Optional[str] = None
+            ext = await self._tmdb.get_tv_external_ids(tmdb_id_str)
+            if ext:
+                imdb_id = ext.get("imdb_id") or None
+            return details, imdb_id
+
+        details, imdb_id = _run_async_isolated(_bundle, self._tmdb)
+        if details is None:
+            return None
+        ratings = _resolve_imdb_rating(imdb_id, self._imdb_importer)
+        return details, ratings, None
 
 
 # ============================================================================
@@ -304,6 +409,7 @@ class MigrationRawFinalizer:
         episode_repo: Optional[SQLModelEpisodeRepository] = None,
         parser: Optional[IFilenameParser] = None,
         session: Optional[Session] = None,
+        imdb_importer: Optional[IMDbDatasetImporter] = None,
     ) -> None:
         self._tmdb = tmdb_client
         self._movie_repo = movie_repo
@@ -316,6 +422,7 @@ class MigrationRawFinalizer:
         self._episode_repo = episode_repo
         self._parser = parser
         self._session = session
+        self._imdb_importer = imdb_importer
         # Cache local item_id → bundle pour idempotence prepare → finalize.
         self._movie_cache: dict[str, _CachedMovie] = {}
         self._series_cache: dict[str, _CachedSeries] = {}
@@ -337,16 +444,24 @@ class MigrationRawFinalizer:
 
         Délègue à `_MoviePreparer`/`_SeriesPreparer` selon le type d'item, puis
         stocke le bundle retourné dans le cache local pour `finalize`.
+
+        Fallback film : si la route série échoue (parse saison/épisode
+        impossible, série introuvable) ET qu'on a un tmdb_id, retombe sur
+        la route film. Couvre les films mal classés en série par le
+        heuristique `media_root`-based (ex. film dans `Animations/`).
         """
         if self._is_series_item(item):
-            return self._dispatch_series_prepare(item)
+            result = self._dispatch_series_prepare(item)
+            if result is not None:
+                return result
+            if item.match.tmdb_id is not None:
+                return self._dispatch_movie_prepare(item)
+            return None
         if item.match.tmdb_id is not None:
             return self._dispatch_movie_prepare(item)
         return None
 
-    def _dispatch_movie_prepare(
-        self, item: MigrationItem
-    ) -> Optional[Path]:
+    def _dispatch_movie_prepare(self, item: MigrationItem) -> Optional[Path]:
         preparer = _MoviePreparer(
             tmdb_client=self._tmdb,
             movie_repo=self._movie_repo,
@@ -354,6 +469,7 @@ class MigrationRawFinalizer:
             renamer=self._renamer,
             storage_dir=self._storage_dir,
             video_dir=self._video_dir,
+            imdb_importer=self._imdb_importer,
         )
         result = preparer.prepare(item)
         if result is None:
@@ -362,9 +478,7 @@ class MigrationRawFinalizer:
         self._movie_cache[item.item_id] = cached
         return destination
 
-    def _dispatch_series_prepare(
-        self, item: MigrationItem
-    ) -> Optional[Path]:
+    def _dispatch_series_prepare(self, item: MigrationItem) -> Optional[Path]:
         if self._series_repo is None or self._parser is None:
             raise RuntimeError(
                 "Le mode séries requiert series_repo et parser sur MigrationRawFinalizer"
@@ -378,6 +492,7 @@ class MigrationRawFinalizer:
             renamer=self._renamer,
             storage_dir=self._storage_dir,
             video_dir=self._video_dir,
+            imdb_importer=self._imdb_importer,
         )
         result = preparer.prepare(item)
         if result is None:
@@ -398,9 +513,7 @@ class MigrationRawFinalizer:
         if item.item_id in self._movie_cache:
             self._finalize_movie(item, destination, self._movie_cache[item.item_id])
         elif item.item_id in self._series_cache:
-            self._finalize_series(
-                item, destination, self._series_cache[item.item_id]
-            )
+            self._finalize_series(item, destination, self._series_cache[item.item_id])
         else:
             raise RuntimeError(
                 f"prepare() doit être appelé avant finalize() pour {item.item_id}"
@@ -499,15 +612,15 @@ class MigrationRawFinalizer:
     # ---- Helpers de routing ----------------------------------------------
 
     def _is_series_item(self, item: MigrationItem) -> bool:
-        """Vrai si l'item doit etre traite comme une serie (tvdb_id ou heuristique)."""
+        """Vrai si l'item doit etre traite comme une serie (tvdb_id ou heuristique).
+
+        Heuristique chemin : inclut `source_path` ET `symlink_path` car le
+        scanner peut produire un `media_root` non-catégoriel quand `source_root`
+        pointe au-dessus de Séries/Films/Animations (cas NAS nested).
+        """
         if item.match.tvdb_id is not None:
             return True
-        media_root = (item.media_root or "").lower()
-        return (
-            media_root.startswith("seri")
-            or media_root.startswith("séri")
-            or media_root.startswith("anim")
-        )
+        return is_series_like(item.media_root, item.source_path, item.symlink_path)
 
 
 # ============================================================================
@@ -518,17 +631,113 @@ class MigrationRawFinalizer:
 def _fetch_movie_details(
     tmdb_client: TMDBClient, tmdb_id: int
 ) -> Optional[MediaDetails]:
-    """Récupère les détails TMDB film (synchrone via asyncio.run)."""
-    return asyncio.run(tmdb_client.get_details(str(tmdb_id)))
+    """Récupère les détails TMDB film (synchrone via asyncio.run isolé).
+
+    Conservé pour rétrocompat des tests qui importent directement cette
+    fonction. Le code de production passe par
+    `_fetch_movie_details_with_ratings` pour aussi récupérer imdb_*.
+    """
+    tmdb_id_str = str(tmdb_id)
+    return _run_async_isolated(
+        lambda: tmdb_client.get_details(tmdb_id_str),
+        tmdb_client,
+    )
 
 
-def _build_movie_from_details(details: MediaDetails) -> Movie:
+def _fetch_movie_details_with_ratings(
+    tmdb_client: TMDBClient,
+    tmdb_id: int,
+    imdb_importer: Optional[IMDbDatasetImporter],
+) -> Optional[tuple[MediaDetails, _RatingBundle]]:
+    """Fetch détails TMDB + external_ids (imdb_id) + IMDb rating.
+
+    Bundle les 2 appels TMDB dans un seul asyncio.run pour amortir le coût
+    d'init du client httpx (cf. `_run_async_isolated`). Le rating IMDb est
+    résolu en synchrone après — la lookup DB locale est très rapide.
+    """
+    tmdb_id_str = str(tmdb_id)
+
+    async def _bundle() -> tuple[Optional[MediaDetails], Optional[str]]:
+        details = await tmdb_client.get_details(tmdb_id_str)
+        if details is None:
+            return None, None
+        imdb_id: Optional[str] = None
+        ext = await tmdb_client.get_external_ids(tmdb_id_str)
+        if ext:
+            imdb_id = ext.get("imdb_id") or None
+        return details, imdb_id
+
+    details, imdb_id = _run_async_isolated(_bundle, tmdb_client)
+    if details is None:
+        return None
+    ratings = _resolve_imdb_rating(imdb_id, imdb_importer)
+    return details, ratings
+
+
+def _resolve_imdb_rating(
+    imdb_id: Optional[str], imdb_importer: Optional[IMDbDatasetImporter]
+) -> _RatingBundle:
+    """Lookup `imdb_rating`/`imdb_votes` dans le cache local IMDb.
+
+    Renvoie un bundle avec uniquement `imdb_id` (sans rating) si le cache
+    est absent ou ne connaît pas cet imdb_id — l'entité reste utilisable,
+    le transfert n'est pas bloqué.
+    """
+    bundle = _RatingBundle(imdb_id=imdb_id)
+    if imdb_id is None or imdb_importer is None:
+        return bundle
+    try:
+        rating_data = imdb_importer.get_rating(imdb_id)
+    except Exception:
+        return bundle
+    if rating_data:
+        bundle.imdb_rating, bundle.imdb_votes = rating_data
+    return bundle
+
+
+def _run_async_isolated(
+    coro_factory: Callable[[], Awaitable[Any]],
+    *clients: Any,
+) -> Any:
+    """Lance `coro_factory()` dans asyncio.run() en isolant les clients httpx.
+
+    Pourquoi : un `httpx.AsyncClient` singleton (Container) garde des
+    références internes (connection pool, transports) à la 1ère event loop
+    dans laquelle il a été utilisé. Chaque `asyncio.run()` crée une loop
+    éphémère puis la ferme. Au 2e `asyncio.run()`, httpx tente de réutiliser
+    une connexion du pool dont les ressources internes pointent vers la
+    loop fermée → `RuntimeError: Event loop is closed`.
+
+    Solution : avant `asyncio.run()`, reset `_client = None` sur chaque
+    client passé (force la recréation paresseuse dans la nouvelle loop) ;
+    après, `aclose()` proprement et reset à nouveau pour le prochain appel.
+    """
+    for c in clients:
+        c._client = None
+
+    async def _wrap() -> Any:
+        try:
+            return await coro_factory()
+        finally:
+            for c in clients:
+                client = getattr(c, "_client", None)
+                if client is not None and not getattr(client, "is_closed", False):
+                    await client.aclose()
+                c._client = None
+
+    return asyncio.run(_wrap())
+
+
+def _build_movie_from_details(
+    details: MediaDetails, *, ratings: Optional[_RatingBundle] = None
+) -> Movie:
     """Construit un Movie minimal depuis les details TMDB.
 
     Les champs techniques (résolution, codecs, languages, file_size_bytes)
     ne sont PAS remplis ici : ils relèvent de l'enrichissement post-transfert
     (commande `enrich-tech`).
     """
+    ratings = ratings or _RatingBundle()
     return Movie(
         tmdb_id=int(details.id) if details.id else None,
         title=details.title,
@@ -540,6 +749,9 @@ def _build_movie_from_details(details: MediaDetails) -> Movie:
         poster_path=details.poster_url,
         vote_average=details.vote_average,
         vote_count=details.vote_count,
+        imdb_id=ratings.imdb_id,
+        imdb_rating=ratings.imdb_rating,
+        imdb_votes=ratings.imdb_votes,
         director=details.director,
         cast=tuple(details.cast),
         collection_id=details.collection_id,
@@ -552,7 +764,9 @@ def _build_series_from_details(
     *,
     tmdb_id: Optional[int],
     tvdb_id: Optional[int],
+    ratings: Optional[_RatingBundle] = None,
 ) -> Series:
+    ratings = ratings or _RatingBundle()
     return Series(
         tmdb_id=tmdb_id,
         tvdb_id=tvdb_id,
@@ -564,6 +778,9 @@ def _build_series_from_details(
         poster_path=details.poster_url,
         vote_average=details.vote_average,
         vote_count=details.vote_count,
+        imdb_id=ratings.imdb_id,
+        imdb_rating=ratings.imdb_rating,
+        imdb_votes=ratings.imdb_votes,
         director=details.director,
         cast=tuple(details.cast),
     )

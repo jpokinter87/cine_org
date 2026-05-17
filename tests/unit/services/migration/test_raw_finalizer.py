@@ -77,6 +77,9 @@ def _make_finalizer(
     """Construit un finalizer avec deps mockées."""
     tmdb = MagicMock()
     tmdb.get_details = AsyncMock(return_value=fetched_details)
+    # Par défaut : pas d'imdb_id retourné, pas d'enrichissement IMDb. Les
+    # tests qui valident l'enrichissement surchargent ces mocks.
+    tmdb.get_external_ids = AsyncMock(return_value=None)
 
     movie_repo = MagicMock()
     movie_repo.get_by_tmdb_id.return_value = movie_in_db
@@ -121,9 +124,7 @@ def test_prepare_movie_already_in_db_returns_canonical_destination():
 
     destination = finalizer.prepare(item)
 
-    assert destination == Path(
-        "/new_storage/Films/Science-Fiction/A/Avatar (2009).mkv"
-    )
+    assert destination == Path("/new_storage/Films/Science-Fiction/A/Avatar (2009).mkv")
     finalizer._movie_repo.get_by_tmdb_id.assert_called_once_with(19995)
     finalizer._tmdb.get_details.assert_not_called()
     finalizer._movie_repo.save.assert_not_called()
@@ -133,16 +134,12 @@ def test_prepare_movie_already_in_db_returns_canonical_destination():
 
 def test_prepare_movie_not_in_db_fetches_tmdb_and_inserts():
     """Movie absent en DB → fetch TMDB + save + destination canonique."""
-    finalizer = _make_finalizer(
-        movie_in_db=None, fetched_details=_media_details()
-    )
+    finalizer = _make_finalizer(movie_in_db=None, fetched_details=_media_details())
     item = _raw_movie_item(tmdb_id=19995)
 
     destination = finalizer.prepare(item)
 
-    assert destination == Path(
-        "/new_storage/Films/Science-Fiction/A/Avatar (2009).mkv"
-    )
+    assert destination == Path("/new_storage/Films/Science-Fiction/A/Avatar (2009).mkv")
     finalizer._tmdb.get_details.assert_called_once_with("19995")
     # save reçoit un Movie construit depuis les details
     save_call = finalizer._movie_repo.save.call_args[0][0]
@@ -192,9 +189,7 @@ def test_prepare_passes_correct_extension_to_renamer():
     """L'extension du fichier source est propagée au renamer."""
     existing = Movie(id="42", tmdb_id=19995, title="Avatar", year=2009)
     finalizer = _make_finalizer(movie_in_db=existing)
-    item = _raw_movie_item(
-        tmdb_id=19995, source=Path("/old/Films/Avatar.mp4")
-    )
+    item = _raw_movie_item(tmdb_id=19995, source=Path("/old/Films/Avatar.mp4"))
 
     finalizer.prepare(item)
 
@@ -257,9 +252,7 @@ def test_prepare_movie_proceeds_when_existing_movie_file_path_missing(
 
     destination = finalizer.prepare(item)
 
-    assert destination == Path(
-        "/new_storage/Films/Science-Fiction/A/Avatar (2009).mkv"
-    )
+    assert destination == Path("/new_storage/Films/Science-Fiction/A/Avatar (2009).mkv")
 
 
 # ---- prepare() séries (étape 4b2) ----------------------------------------
@@ -318,6 +311,10 @@ def _make_series_finalizer(
     tmdb = MagicMock()
     tmdb.get_details = AsyncMock(return_value=None)
     tmdb.get_tv_details = AsyncMock(return_value=fetched_details)
+    # Bridge TVDB -> TMDB désactivé par défaut (renvoie None). Les tests
+    # qui valident l'enrichissement IMDb surchargent ces mocks.
+    tmdb.find_by_tvdb_id = AsyncMock(return_value=None)
+    tmdb.get_tv_external_ids = AsyncMock(return_value=None)
 
     tvdb = MagicMock()
     tvdb.get_details = AsyncMock(return_value=fetched_details)
@@ -356,9 +353,7 @@ def _make_series_finalizer(
     )
 
     renamer = MagicMock()
-    renamer.generate_series_filename.return_value = (
-        "Lost (2004) - S01E01.mkv"
-    )
+    renamer.generate_series_filename.return_value = "Lost (2004) - S01E01.mkv"
 
     episode_repo = MagicMock()
     episode_repo.get_by_series.return_value = []
@@ -401,16 +396,21 @@ def test_prepare_series_already_in_db_by_tvdb_id():
     finalizer._series_repo.save.assert_not_called()
 
 
-def test_prepare_series_not_in_db_fetches_tvdb_and_inserts():
-    """Series absente → fetch TVDB (tvdb_id présent) + save."""
+def test_prepare_series_not_in_db_falls_back_to_tvdb_when_no_bridge():
+    """Series absente, TMDB ignore le tvdb_id : fallback sur TVDB brut + save.
+
+    Comportement legacy préservé pour les œuvres absentes du catalogue TMDB
+    (la série est créée sans note, le transfert continue)."""
     finalizer = _make_series_finalizer(
         series_in_db=None, fetched_details=_series_details()
     )
+    # Bridge TMDB inactif par défaut → fallback TVDB.
     item = _raw_series_item(tvdb_id=73739)
 
     destination = finalizer.prepare(item)
 
     assert destination is not None
+    finalizer._tmdb.find_by_tvdb_id.assert_called_once_with("73739")
     finalizer._tvdb.get_details.assert_called_once_with("73739")
     finalizer._tmdb.get_tv_details.assert_not_called()
     saved = finalizer._series_repo.save.call_args[0][0]
@@ -541,9 +541,7 @@ def test_finalize_movie_creates_symlink_updates_db_and_deletes_source(
     # pour vérifier l'appel sans dépendre d'une vraie DB.
     finalizer._update_movie_paths = MagicMock()
 
-    item = _raw_movie_item(
-        item_id="m1", tmdb_id=19995, source=fs["source"]
-    )
+    item = _raw_movie_item(item_id="m1", tmdb_id=19995, source=fs["source"])
     finalizer.prepare(item)
     finalizer.finalize(item, fs["destination"])
 
@@ -633,7 +631,11 @@ def test_finalize_series_creates_episode_in_db_then_symlink(tmp_path):
     storage_dir.mkdir()
     video_dir.mkdir()
     destination = (
-        storage_dir / "Séries" / "L" / "Lost (2004)" / "Saison 01"
+        storage_dir
+        / "Séries"
+        / "L"
+        / "Lost (2004)"
+        / "Saison 01"
         / "Lost (2004) - S01E01.mkv"
     )
     destination.parent.mkdir(parents=True)
@@ -656,7 +658,11 @@ def test_finalize_series_creates_episode_in_db_then_symlink(tmp_path):
     finalizer.finalize(item, destination)
 
     expected_symlink = (
-        video_dir / "Séries" / "L" / "Lost (2004)" / "Saison 01"
+        video_dir
+        / "Séries"
+        / "L"
+        / "Lost (2004)"
+        / "Saison 01"
         / "Lost (2004) - S01E01.mkv"
     )
     assert expected_symlink.is_symlink()
@@ -718,3 +724,336 @@ def test_finalize_series_without_episode_repo_raises():
     finalizer.prepare(item)
     with pytest.raises(RuntimeError, match="episode_repo"):
         finalizer.finalize(item, Path("/x.mkv"))
+
+
+# ---- Régression : isolation asyncio.run() entre fetches ------------------
+
+
+class _FakeLoopBoundClient:
+    """Stub reproduisant le bug 'Event loop is closed' de httpx.AsyncClient.
+
+    En production, le client httpx (Singleton du Container) est rattaché à
+    la 1ère event loop qui l'utilise via son pool de connexions. Quand
+    `asyncio.run()` ferme cette loop, les ressources internes (transports,
+    sockets) deviennent invalides. Au 2e `asyncio.run()` httpx tente de
+    réutiliser une connexion morte → RuntimeError.
+
+    Ce fake reproduit le comportement : `_client` est instancié à la 1ère
+    requête dans la loop courante. Si on est rappelé dans une AUTRE loop
+    sans que `_client` ait été reset à None, on lève l'exception.
+    """
+
+    def __init__(self, details_to_return):
+        self._client = None
+        self._loop_id = None
+        self._details = details_to_return
+        self.call_count = 0
+
+    async def _ensure_client_for_loop(self):
+        import asyncio
+
+        current_loop_id = id(asyncio.get_running_loop())
+        if self._client is None:
+            # Instanciation paresseuse dans la loop courante.
+            self._client = MagicMock()
+            self._client.is_closed = False
+            self._client.aclose = AsyncMock()
+            self._loop_id = current_loop_id
+        elif self._loop_id != current_loop_id:
+            raise RuntimeError("Event loop is closed")
+
+    async def get_details(self, media_id):
+        self.call_count += 1
+        await self._ensure_client_for_loop()
+        return self._details
+
+    async def get_tv_details(self, tv_id):
+        self.call_count += 1
+        await self._ensure_client_for_loop()
+        return self._details
+
+    async def find_by_tvdb_id(self, tvdb_id):
+        await self._ensure_client_for_loop()
+        # Renvoie None par défaut : déclenche le fallback TVDB legacy.
+        return None
+
+    async def get_external_ids(self, media_id):
+        await self._ensure_client_for_loop()
+        return None
+
+    async def get_tv_external_ids(self, tv_id):
+        await self._ensure_client_for_loop()
+        return None
+
+
+def test_fetch_movie_details_isolates_httpx_client_across_asyncio_run():
+    """Régression : sans isolation entre asyncio.run() successifs, le client
+    httpx singleton garde des refs à la loop précédente fermée. Le helper
+    doit forcer une recréation à chaque appel pour éviter
+    'Event loop is closed'.
+
+    Reproduction du bug observé en production sur `migrate-nas apply` où
+    plusieurs items raw consécutifs déclenchaient des fetchs TMDB/TVDB
+    séparés (un asyncio.run() par item) et tombaient en alternance
+    OK / Event loop is closed / OK / ...
+    """
+    from src.services.migration.raw_finalizer import _fetch_movie_details
+
+    fake_tmdb = _FakeLoopBoundClient(
+        details_to_return=_media_details(tmdb_id="19995", title="Avatar")
+    )
+
+    # 1er appel : crée le "client httpx" dans une loop L1 (qui se fermera).
+    result1 = _fetch_movie_details(fake_tmdb, 19995)
+    assert result1 is not None
+    assert result1.title == "Avatar"
+
+    # 2e appel : sans isolation, lèverait 'Event loop is closed' car le
+    # client garde une réf à L1 fermée.
+    result2 = _fetch_movie_details(fake_tmdb, 19995)
+    assert result2 is not None
+
+    # 3e + 4e : confirmer la robustesse (pas juste un coup de chance).
+    assert _fetch_movie_details(fake_tmdb, 19995) is not None
+    assert _fetch_movie_details(fake_tmdb, 19995) is not None
+    assert fake_tmdb.call_count == 4
+
+
+def test_series_fetch_details_isolates_httpx_client_across_asyncio_run():
+    """Idem pour la route séries via tmdb.get_tv_details (cas Exhibit A
+    dans la session apply qui a déclenché ce bug)."""
+    from src.services.migration.raw_finalizer import _SeriesPreparer
+
+    fake_tmdb = _FakeLoopBoundClient(
+        details_to_return=_series_details(rid="90725", title="Exhibit A")
+    )
+    fake_tvdb = _FakeLoopBoundClient(details_to_return=None)
+
+    preparer = _SeriesPreparer(
+        tmdb_client=fake_tmdb,
+        tvdb_client=fake_tvdb,
+        series_repo=MagicMock(),
+        parser=MagicMock(),
+        organizer=MagicMock(),
+        renamer=MagicMock(),
+        storage_dir=Path("/x"),
+        video_dir=Path("/y"),
+    )
+
+    item = _raw_series_item(tvdb_id=None, tmdb_id=90725)
+
+    # 4 fetchs consécutifs (mêmes que E01..E04 en prod) — tous doivent
+    # passer, pas d'alternance OK/Event loop is closed.
+    for _ in range(4):
+        bundle = preparer._fetch_details_with_ratings(item)
+        assert bundle is not None
+        details, _ratings, _resolved = bundle
+        assert details.title == "Exhibit A"
+    assert fake_tmdb.call_count == 4
+
+
+# ---- Régression : heuristique série robuste au NAS nested ---------------
+
+
+def test_prepare_routes_as_series_when_media_root_is_nas_parent():
+    """Régression : si le scanner pointe au-dessus de Séries/Films (cas NAS
+    nested), `media_root` vaut le nom du NAS (ex. 'Vidéothèque10') au lieu
+    de 'Séries'. La détection doit alors retomber sur l'inspection du
+    chemin (`source_path` / `symlink_path`) pour identifier les épisodes.
+
+    Sans ce fix, un épisode d'Exhibit A dans `.../Vidéothèque10/Séries/...`
+    était routé en film → fetch TMDB d'un id série → None silencieux →
+    'destination_path manquant'.
+    """
+    existing = Series(id="7", tmdb_id=90725, title="Exhibit A", year=2019)
+    finalizer = _make_series_finalizer(series_in_db=existing)
+    item = _raw_series_item(
+        tvdb_id=None,
+        tmdb_id=90725,
+        media_root="Vidéothèque10",  # scanner pointé au-dessus de Séries/
+        source=Path(
+            "/media/wd/Vidéothèque10/Séries/Exhibit.A.S01/"
+            "Exhibit.A.S01E01.DOC.MULTi.1080p.NF.WEB.x264-NEO.mkv"
+        ),
+    )
+
+    destination = finalizer.prepare(item)
+
+    assert destination is not None
+    # Route série : on a touché series_repo, PAS movie_repo.
+    finalizer._series_repo.get_by_tmdb_id.assert_called_with(90725)
+    finalizer._movie_repo.get_by_tmdb_id.assert_not_called()
+
+
+# ---- Régression : fallback film quand Animations classée série ----------
+
+
+def test_prepare_falls_back_to_movie_when_anim_misclassified_as_series():
+    """Un film dans Animations/ est classé série par _is_series_item via
+    le heuristique 'anim'. Si la route série échoue (parse saison/épisode
+    impossible) ET qu'on a un tmdb_id, fallback vers la route film.
+
+    Régression du bug observé sur '[Elecman] Harmony [BDRIP][...].mkv'
+    qui finissait en 'destination_path manquant' silencieux.
+    """
+    finalizer = _make_series_finalizer(
+        # parser ne trouve pas saison/épisode → route série retourne None
+        parsed=ParsedFilename(
+            title="Harmony",
+            media_type=MediaType.MOVIE,
+            season=None,
+            episode=None,
+        ),
+    )
+    # Branche movie : Movie déjà en DB pour court-circuiter le fetch TMDB.
+    finalizer._movie_repo.get_by_tmdb_id.return_value = Movie(
+        id="99", tmdb_id=460168, title="Harmony", year=2015
+    )
+    finalizer._organizer.get_movie_destination.return_value = Path(
+        "/new_storage/Films/Animation/Adultes/H"
+    )
+    finalizer._organizer.get_movie_video_destination.return_value = Path(
+        "/new_video/Films/Animation/Adultes/H"
+    )
+    finalizer._renamer.generate_movie_filename.return_value = "Harmony (2015).mkv"
+
+    # Item avec media_root='Animations' (déclenche _is_series_item) + tmdb_id.
+    item = _raw_series_item(
+        tvdb_id=None,
+        tmdb_id=460168,
+        media_root="Animations",
+        source=Path("/old/Animations/Harmony.mkv"),
+    )
+
+    destination = finalizer.prepare(item)
+
+    assert destination == Path(
+        "/new_storage/Films/Animation/Adultes/H/Harmony (2015).mkv"
+    )
+    finalizer._movie_repo.get_by_tmdb_id.assert_called_with(460168)
+
+
+# ---- Régression : enrichissement notes IMDb/TMDB sur fetch initial ------
+
+
+class _FakeImdbImporter:
+    """Stub IMDbDatasetImporter.get_rating pour les tests d'enrichissement."""
+
+    def __init__(self, ratings: dict[str, tuple[float, int]] | None = None) -> None:
+        self._ratings = ratings or {}
+        self.calls: list[str] = []
+
+    def get_rating(self, imdb_id: str):
+        self.calls.append(imdb_id)
+        return self._ratings.get(imdb_id)
+
+
+def test_prepare_movie_fetches_imdb_id_and_rating_when_importer_present():
+    """Le workflow principal peuple imdb_id/imdb_rating/imdb_votes via
+    get_external_ids + cache IMDb local. Le finalizer raw doit faire pareil
+    sinon les films migrés se retrouvent sans note.
+    """
+    finalizer = _make_finalizer(movie_in_db=None, fetched_details=_media_details())
+    finalizer._tmdb.get_external_ids = AsyncMock(return_value={"imdb_id": "tt0499549"})
+    finalizer._imdb_importer = _FakeImdbImporter(
+        ratings={"tt0499549": (7.9, 1_350_000)}
+    )
+
+    item = _raw_movie_item(tmdb_id=19995)
+    finalizer.prepare(item)
+
+    saved = finalizer._movie_repo.save.call_args[0][0]
+    assert saved.imdb_id == "tt0499549"
+    assert saved.imdb_rating == 7.9
+    assert saved.imdb_votes == 1_350_000
+    # vote_average TMDB déjà couvert par le test existant.
+    assert saved.vote_average == 8.0
+
+
+def test_prepare_movie_handles_missing_external_ids_gracefully():
+    """Si TMDB external_ids échoue ou retourne None, on ne casse pas le
+    transfert : imdb_* restent None, le Movie est sauvegardé quand même."""
+    finalizer = _make_finalizer(movie_in_db=None, fetched_details=_media_details())
+    finalizer._tmdb.get_external_ids = AsyncMock(return_value=None)
+    finalizer._imdb_importer = _FakeImdbImporter()
+
+    item = _raw_movie_item(tmdb_id=19995)
+    destination = finalizer.prepare(item)
+
+    assert destination is not None
+    saved = finalizer._movie_repo.save.call_args[0][0]
+    assert saved.imdb_id is None
+    assert saved.imdb_rating is None
+    assert saved.imdb_votes is None
+
+
+def test_prepare_series_via_tvdb_bridges_tmdb_for_vote_average_and_imdb():
+    """Régression du bug `/media/wd10-2` : une série matchée par tvdb_id
+    arrivait sans vote_average (TVDB v3 ne l'expose pas) ni imdb_rating
+    (jamais cherché). Le finalizer doit traverser via TMDB
+    `find_by_tvdb_id` pour récupérer vote_average + tmdb_id, puis
+    `get_tv_external_ids` pour imdb_id, puis le cache IMDb local."""
+    finalizer = _make_series_finalizer(series_in_db=None)
+    # Le bridge TMDB renvoie un MediaDetails avec id=tmdb_id réel + vote_avg.
+    bridged = _series_details(rid="4607", title="Lost", year=2004)
+    finalizer._tmdb.find_by_tvdb_id = AsyncMock(return_value=bridged)
+    finalizer._tmdb.get_tv_external_ids = AsyncMock(
+        return_value={"imdb_id": "tt0411008"}
+    )
+    finalizer._imdb_importer = _FakeImdbImporter(ratings={"tt0411008": (8.3, 540_000)})
+
+    item = _raw_series_item(tvdb_id=73739)
+    finalizer.prepare(item)
+
+    saved = finalizer._series_repo.save.call_args[0][0]
+    assert saved.tvdb_id == 73739
+    assert saved.tmdb_id == 4607  # bridgé depuis MediaDetails.id
+    assert saved.vote_average == 8.3
+    assert saved.imdb_id == "tt0411008"
+    assert saved.imdb_rating == 8.3
+    assert saved.imdb_votes == 540_000
+
+
+def test_prepare_series_via_tvdb_falls_back_to_tvdb_when_bridge_fails():
+    """Si TMDB ne connaît pas le tvdb_id (œuvre absente du catalogue), on
+    retombe sur les détails TVDB bruts comme avant — la série est
+    créée sans note (UNRATED legacy) mais le transfert continue."""
+    finalizer = _make_series_finalizer(
+        series_in_db=None,
+        fetched_details=_series_details(),  # tvdb.get_details renverra ça
+    )
+    finalizer._tmdb.find_by_tvdb_id = AsyncMock(return_value=None)
+    finalizer._tmdb.get_tv_external_ids = AsyncMock(return_value=None)
+    finalizer._imdb_importer = _FakeImdbImporter()
+
+    item = _raw_series_item(tvdb_id=73739)
+    destination = finalizer.prepare(item)
+
+    assert destination is not None
+    finalizer._tvdb.get_details.assert_called_once_with("73739")
+    saved = finalizer._series_repo.save.call_args[0][0]
+    assert saved.tvdb_id == 73739
+    assert saved.imdb_id is None
+
+
+def test_prepare_series_via_tmdb_enriches_imdb_rating():
+    """Pour une série matchée par tmdb_id (sans tvdb_id), on récupère
+    aussi imdb_id via get_tv_external_ids + cache IMDb local."""
+    finalizer = _make_series_finalizer(
+        series_in_db=None,
+        fetched_details=_series_details(rid="4607"),
+    )
+    finalizer._tmdb.get_tv_external_ids = AsyncMock(
+        return_value={"imdb_id": "tt0411008"}
+    )
+    finalizer._imdb_importer = _FakeImdbImporter(ratings={"tt0411008": (8.3, 540_000)})
+
+    item = _raw_series_item(tvdb_id=None, tmdb_id=4607)
+    finalizer.prepare(item)
+
+    saved = finalizer._series_repo.save.call_args[0][0]
+    assert saved.tmdb_id == 4607
+    assert saved.imdb_id == "tt0411008"
+    assert saved.imdb_rating == 8.3
+    assert saved.imdb_votes == 540_000
+    assert saved.vote_average == 8.3  # depuis details TMDB

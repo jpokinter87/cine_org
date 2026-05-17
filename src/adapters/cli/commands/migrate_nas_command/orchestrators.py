@@ -93,11 +93,17 @@ def build_plan(
     )
     container = Container()
 
+    # En mode raw, on a besoin de la durée mediainfo pour discriminer les
+    # films homonymes via la formule 50/25/25 + tri par écart de durée TMDB.
+    # En mode symlinks pur, l'extraction est inutile (rating_resolver lit la DB).
+    media_info_extractor = container.media_info_extractor() if include_raw else None
+
     scanner = MigrationScanner(
         video_extensions=VIDEO_EXTENSIONS,
         destination_root=destination_storage_dir,
         alternative_roots=alternative_roots or [],
         category_prefixes=category_prefixes,
+        media_info_extractor=media_info_extractor,
     )
     resolver = MigrationRatingResolver(
         session=session, parser=parser, imdb_importer=importer
@@ -124,9 +130,7 @@ def build_plan(
             tvdb_client=tvdb,
             matcher_service=MatcherService(),
         )
-        fetcher = DefaultDetailsFetcher(
-            tmdb_client=tmdb, tvdb_client=tvdb
-        )
+        fetcher = DefaultDetailsFetcher(tmdb_client=tmdb, tvdb_client=tvdb)
         library_checker = LibraryPresenceChecker(
             movie_repo=container.movie_repository(),
             series_repo=container.series_repository(),
@@ -146,7 +150,9 @@ def build_plan(
     )
 
     if show_progress:
-        plan = _build_with_progress(builder, scanner, source_root, destination_storage_dir)
+        plan = _build_with_progress(
+            builder, scanner, source_root, destination_storage_dir
+        )
     else:
         plan = builder.build(source_root, destination_storage_dir)
 
@@ -167,8 +173,10 @@ def _apply_decisions_to_plan(plan: MigrationPlan, decisions: dict) -> None:
     SKIPPED/REJECTED/DEFERRED_TO_WEB sont retirés du plan.
     """
     review_buckets = {
-        Bucket.NEEDS_VALIDATION, Bucket.UNRATED,
-        Bucket.LOW_RATED, Bucket.ALREADY_IN_LIBRARY,
+        Bucket.NEEDS_VALIDATION,
+        Bucket.UNRATED,
+        Bucket.LOW_RATED,
+        Bucket.ALREADY_IN_LIBRARY,
     }
     enhanced = []
     for item in plan.items:
@@ -229,9 +237,7 @@ def run_apply(
     _apply_decisions_to_plan(plan, decisions)
 
     raw_finalizer = None
-    has_raw_items = any(
-        not item.is_symlink_source for item in plan.items
-    )
+    has_raw_items = any(not item.is_symlink_source for item in plan.items)
     if has_raw_items:
         raw_finalizer = _build_raw_finalizer(plan, session=session)
     try:
@@ -271,6 +277,10 @@ def _build_raw_finalizer(
         session = next(get_session())
 
     config = container.config()
+    # Importer IMDb local pour enrichir Movie/Series avec imdb_rating/votes
+    # lors du fetch initial (aligné sur le workflow principal — voir
+    # batch_builder._enrich_movie_metadata / _enrich_series_metadata).
+    imdb_importer = IMDbDatasetImporter(cache_dir=Path(".cache/imdb"), session=session)
     return MigrationRawFinalizer(
         tmdb_client=container.tmdb_client(),
         tvdb_client=container.tvdb_client(),
@@ -283,12 +293,11 @@ def _build_raw_finalizer(
         storage_dir=Path(config.storage_dir),
         video_dir=Path(config.video_dir),
         session=session,
+        imdb_importer=imdb_importer,
     )
 
 
-def run_status(
-    *, plan_path: Path, state_store_path: Path
-) -> dict[str, dict[str, Any]]:
+def run_status(*, plan_path: Path, state_store_path: Path) -> dict[str, dict[str, Any]]:
     """
     Retourne un résumé combinant les compteurs du plan (par bucket) et
     l'avancement courant (par TransferStatus). Si le state store n'existe
@@ -297,9 +306,7 @@ def run_status(
     plan = deserialize_plan(plan_path.read_text(encoding="utf-8"))
     plan_summary: dict[str, Any] = {"total": len(plan.items)}
     for bucket in Bucket:
-        plan_summary[bucket.value] = sum(
-            1 for it in plan.items if it.bucket == bucket
-        )
+        plan_summary[bucket.value] = sum(1 for it in plan.items if it.bucket == bucket)
 
     progress_summary: dict[str, int] = {}
     if state_store_path.exists():
