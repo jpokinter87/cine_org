@@ -27,6 +27,15 @@ from src.services.migration.dataclasses import (
 from src.services.migration.state_store import MigrationStateStore
 
 
+def _merge_unique(base: list, extra: list) -> None:
+    """Étend `base` in-place avec les éléments de `extra` dont l'id n'y est pas."""
+    seen = {r.id for r in base}
+    for r in extra:
+        if r.id not in seen:
+            base.append(r)
+            seen.add(r.id)
+
+
 # Buckets éligibles à la review (BROKEN exclu — pas de solution UI possible).
 REVIEW_BUCKETS: frozenset[Bucket] = frozenset({
     Bucket.NEEDS_VALIDATION,
@@ -83,7 +92,15 @@ def _build_existing_file_info(path):
 
 
 class MigrationReviewService:
-    """Service métier de la review interactive (4 buckets non-MIGRATE)."""
+    """Service métier de la review interactive (4 buckets non-MIGRATE).
+
+    Le `imdb_aka_searcher` (optionnel) est utilisé comme **fallback** par
+    `search_tmdb` quand TMDB ne reconnaît pas un titre traduit (cf.
+    "La Maîtresse du lieutenant français" 1981 — titre fr absent de
+    l'index TMDB search). Il fournit `search_akas(query) -> list[tconst]`,
+    typiquement un IMDbDatasetImporter alimenté par title.akas.tsv.gz.
+    Quand None, le fallback est désactivé (comportement legacy).
+    """
 
     def __init__(
         self,
@@ -94,6 +111,7 @@ class MigrationReviewService:
         tvdb_client,
         matcher,
         duplicate_detector,
+        imdb_aka_searcher=None,
     ) -> None:
         self._plan = plan
         self._store = state_store
@@ -101,6 +119,7 @@ class MigrationReviewService:
         self._tvdb = tvdb_client
         self._matcher = matcher
         self._duplicate_detector = duplicate_detector
+        self._imdb_aka_searcher = imdb_aka_searcher
 
     def iter_pending(
         self,
@@ -198,18 +217,71 @@ class MigrationReviewService:
     ) -> list["SearchResult"]:
         """Recherche TMDB live + scoring. Retourne list[SearchResult] scorée.
 
-        Pour les films : `tmdb_client.search(query, year)`.
-        Pour les séries : `tmdb_client.search_tv(query, year)`.
+        Aligné sur le matcher migration : double recherche TMDB
+        (`search(query, year)` + `search(f"{query} {year}")`) quand year
+        est fourni — TMDB ignore le param year et range mieux quand
+        l'année est dans le texte. Dédup par id.
+
+        Pour les séries : `tmdb.search_tv` (idem double appel si year fourni).
         Pas de fallback TVDB ici — l'utilisateur peut chercher par ID
         externe via `validation_service.search_by_external_id` si besoin.
+
+        Fallback IMDb : si TMDB rend 0 résultat ET qu'un `imdb_aka_searcher`
+        est branché, on cherche le titre dans le dataset local `title.akas`
+        → tconst → `tmdb.find_by_imdb_id(tconst)`. Couvre les titres
+        traduits absents de l'index TMDB search (ex: titres fr de films
+        anglo-saxons publiés avant les années 2000).
         """
         if is_series:
             raw = await self._tmdb.search_tv(query, year=year)
+            if year is not None:
+                extra = await self._tmdb.search_tv(f"{query} {year}")
+                _merge_unique(raw, extra)
         else:
             raw = await self._tmdb.search(query, year=year)
+            if year is not None:
+                extra = await self._tmdb.search(f"{query} {year}")
+                _merge_unique(raw, extra)
+
+        if not raw and self._imdb_aka_searcher is not None:
+            raw = await self._fallback_imdb_lookup(query)
+
         return self._matcher.score_results(
             raw, query_title=query, query_year=year, is_series=is_series
         )
+
+    async def _fallback_imdb_lookup(self, query: str) -> list["SearchResult"]:
+        """Cherche `query` dans `title.akas` local → tconst → TMDB find.
+
+        Retourne une liste de SearchResult construits depuis MediaDetails
+        TMDB (champs : id, title, original_title, year). Le scoring est
+        fait en amont par l'appelant. Limite à 5 candidats pour éviter
+        une rafale d'appels TMDB sur les titres très ambigus.
+        """
+        from src.core.ports.api_clients import SearchResult
+
+        tconsts = self._imdb_aka_searcher.search_akas(query, limit=5)
+        if not tconsts:
+            return []
+
+        results: list[SearchResult] = []
+        for tconst in tconsts:
+            try:
+                details = await self._tmdb.find_by_imdb_id(tconst)
+            except Exception:  # noqa: BLE001 — best-effort fallback
+                continue
+            if details is None:
+                continue
+            results.append(
+                SearchResult(
+                    id=details.id,
+                    title=details.title,
+                    original_title=details.original_title,
+                    year=details.year,
+                    source="tmdb_tv" if details.is_tv else "tmdb",
+                )
+            )
+        return results
 
     def duplicate_recommendation(self, item: MigrationItem):
         """Pour un item already_in_library : score qualité source vs dest.

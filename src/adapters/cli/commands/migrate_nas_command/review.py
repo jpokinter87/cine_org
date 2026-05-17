@@ -11,6 +11,7 @@ Reprise via --resume (skippe les items déjà décidés).
 
 from __future__ import annotations
 
+import asyncio
 import re
 from pathlib import Path
 from typing import Annotated, Optional
@@ -24,6 +25,7 @@ from src.adapters.cli.validation import console
 from src.container import Container
 from src.services.duplicate_detector import DuplicateDetector
 from src.services.matcher import MatcherService
+from src.services.migration._helpers import is_series_like
 from src.services.migration.dataclasses import Bucket, MigrationItem
 from src.services.migration.decisions import DecisionStatus
 from src.services.migration.plan_builder import deserialize_plan
@@ -66,11 +68,44 @@ def _print_summary(
     console.print("─" * 60)
 
 
+_REVIEW_EVENT_LOOP: Optional[asyncio.AbstractEventLoop] = None
+
+
+def _review_run_async(coro):
+    """Exécute une coroutine sur l'event loop persistant de la review.
+
+    Pourquoi : `asyncio.run()` crée ET ferme un loop à chaque appel.
+    Les ressources async du TMDBClient (httpx AsyncClient + connection
+    pool) restent attachées au premier loop ; le 2e `asyncio.run()`
+    crée un nouveau loop qui essaie de réutiliser le pool fermé, d'où
+    `RuntimeError: Event loop is closed`. On garde un seul loop pour
+    toute la durée de la commande review.
+    """
+    global _REVIEW_EVENT_LOOP
+    if _REVIEW_EVENT_LOOP is None or _REVIEW_EVENT_LOOP.is_closed():
+        _REVIEW_EVENT_LOOP = asyncio.new_event_loop()
+        asyncio.set_event_loop(_REVIEW_EVENT_LOOP)
+    return _REVIEW_EVENT_LOOP.run_until_complete(coro)
+
+
+def _close_review_event_loop() -> None:
+    """Ferme proprement le loop review (appelé en fin de commande)."""
+    global _REVIEW_EVENT_LOOP
+    if _REVIEW_EVENT_LOOP is not None and not _REVIEW_EVENT_LOOP.is_closed():
+        _REVIEW_EVENT_LOOP.close()
+    _REVIEW_EVENT_LOOP = None
+
+
 def review_command(
     plan_path: Annotated[
         Path,
-        typer.Argument(help="Chemin du plan JSON produit par `plan`."),
-    ],
+        typer.Argument(
+            help=(
+                "Chemin du plan JSON produit par `plan`. "
+                "Défaut : ./migration/plan.json (convention de l'app)."
+            ),
+        ),
+    ] = Path("./migration/plan.json"),
     bucket: Annotated[
         Optional[str],
         typer.Option(
@@ -100,9 +135,7 @@ def review_command(
     ] = None,
 ) -> None:
     """Review interactive des items en attente (4 buckets non-MIGRATE)."""
-    state_path = state_store or plan_path.with_suffix(
-        plan_path.suffix + ".state.sqlite"
-    )
+    # Valider les arguments (fail fast sur bad args avant tout I/O).
     try:
         bucket_filter = Bucket(bucket) if bucket else None
     except ValueError as e:
@@ -111,6 +144,15 @@ def review_command(
             f"Bucket invalide : '{bucket}'. Valeurs autorisées : {valid}",
             param_hint="--bucket",
         ) from e
+    if not plan_path.exists():
+        console.print(
+            f"[red]Plan introuvable :[/red] {plan_path}\n"
+            f"[dim]Génère-le avec `cineorg migrate-nas plan --source ... --output {plan_path}`.[/dim]"
+        )
+        raise typer.Exit(code=1)
+    state_path = state_store or plan_path.with_suffix(
+        plan_path.suffix + ".state.sqlite"
+    )
     console.print(
         f"[bold cyan]Review[/bold cyan] depuis [yellow]{plan_path}[/yellow] "
         f"(state: [dim]{state_path}[/dim], "
@@ -155,13 +197,20 @@ def review_command(
         _print_summary(service, plan_path, state_path)
     finally:
         store.close()
+        _close_review_event_loop()
 
 
 def _build_review_service(
     plan_path: Path,
     store: MigrationStateStore,
 ) -> MigrationReviewService:
-    """Câble le ReviewService depuis le container (le store est fourni)."""
+    """Câble le ReviewService depuis le container (le store est fourni).
+
+    Le `imdb_aka_searcher` est branché en best-effort : si la table
+    `imdb_akas` est absente ou vide, le fallback reste inerte (le service
+    appelle search_akas et reçoit []). L'utilisateur active la feature
+    en lançant `cineorg imdb import-akas` une fois.
+    """
     plan = deserialize_plan(plan_path.read_text(encoding="utf-8"))
     container = Container()
     return MigrationReviewService(
@@ -171,7 +220,26 @@ def _build_review_service(
         tvdb_client=container.tvdb_client(),
         matcher=MatcherService(),
         duplicate_detector=DuplicateDetector(),
+        imdb_aka_searcher=_build_imdb_aka_searcher(),
     )
+
+
+def _build_imdb_aka_searcher():
+    """Construit un IMDbDatasetImporter branché sur la session DB courante,
+    ou None si l'init échoue (table absente, etc.). Le service le tolère."""
+    try:
+        from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
+        from src.infrastructure.persistence.database import get_session
+
+        container = Container()
+        config = container.config()
+        session = next(get_session())
+        return IMDbDatasetImporter(
+            cache_dir=Path(getattr(config, "imdb_cache_dir", ".cache/imdb")),
+            session=session,
+        )
+    except Exception:  # noqa: BLE001 — fallback désactivé en cas d'erreur init
+        return None
 
 
 def _collision_tmdb_id(item: MigrationItem) -> Optional[str]:
@@ -235,22 +303,11 @@ def _maybe_bulk_accept_collision(
 
 
 def _is_series_item(item: MigrationItem) -> bool:
-    """True si l'item est probablement un épisode de série.
+    """True si l'item est probablement un épisode de série / animation.
 
-    Détecte de 2 façons :
-    - via `item.media_root` (scanner a identifié la catégorie)
-    - via le chemin (NAS nested : /…/Animations/… ou /…/Séries/…)
+    Délégué à `is_series_like` (partagé avec `raw_finalizer`).
     """
-    if item.symlink_path is None:
-        return False
-    media_root_lower = (item.media_root or "").lower()
-    if media_root_lower.startswith(("seri", "séri", "anim")):
-        return True
-    path_str_lower = str(item.symlink_path).lower()
-    return any(
-        f"/{cat}/" in path_str_lower
-        for cat in ("animations", "animation", "séries", "series")
-    )
+    return is_series_like(item.media_root, item.symlink_path)
 
 
 def _default_search_query(item: MigrationItem) -> str:
@@ -285,6 +342,19 @@ def _default_search_query(item: MigrationItem) -> str:
     except Exception:  # noqa: BLE001 — guessit best-effort
         pass
     return item.symlink_path.stem
+
+
+def _split_query_year(query: str) -> tuple[str, Optional[int]]:
+    """Extrait l'année (4 chiffres, 1900-2099) à la fin du query si présente.
+
+    Retourne (query_sans_année, année) ou (query, None). Permet de passer
+    `year=` à TMDB plutôt que de noyer l'année dans le texte (meilleur
+    ranking sur les homonymes).
+    """
+    m = re.search(r"\s+(19\d{2}|20\d{2})\s*$", query)
+    if m is None:
+        return query, None
+    return query[: m.start()].strip(), int(m.group(1))
 
 
 def _series_group_key(item: MigrationItem) -> Optional[str]:
@@ -332,6 +402,68 @@ def _items_in_series_group(
         if _series_group_key(it) == group_key:
             out.append(it)
     return out
+
+
+def _maybe_cascade_ail_delete_source(
+    service: MigrationReviewService,
+    item: MigrationItem,
+    *,
+    reason: str,
+) -> None:
+    """Cascade pour `already_in_library` + action [d]elete source.
+
+    Si l'item fait partie d'une série, propose de répliquer la même action
+    (suppression du fichier source + persistance SKIPPED) à tous les
+    épisodes de la série encore en attente. Évite à l'utilisateur de
+    confirmer la suppression pour chaque épisode d'une saison déjà en DB.
+
+    Ne s'applique qu'aux siblings en bucket ALREADY_IN_LIBRARY — les
+    autres buckets (NEEDS_VALIDATION etc.) demandent une décision
+    différente et restent en attente. C'est cohérent avec la sémantique :
+    "ces N épisodes sont des doublons d'une version DB → supprimer toutes
+    les sources".
+    """
+    group_key = _series_group_key(item)
+    if group_key is None:
+        return
+    siblings = _items_in_series_group(
+        service._plan, group_key, excluding_id=item.item_id
+    )
+    decided_ids = set(service._store.load_decisions().keys())
+    # On ne cascade qu'aux siblings en ALREADY_IN_LIBRARY pour rester
+    # sémantiquement cohérent avec l'action (doublon → suppression source).
+    pending_siblings = [
+        s for s in siblings
+        if s.item_id not in decided_ids
+        and s.bucket == Bucket.ALREADY_IN_LIBRARY
+    ]
+    if not pending_siblings:
+        return
+    if not Confirm.ask(
+        f"[bold red]📺 Série détectée : supprimer aussi la source pour les "
+        f"{len(pending_siblings)} autre(s) épisode(s) déjà en bibliothèque "
+        f"?[/bold red]",
+        default=True,
+    ):
+        return
+    for sibling in pending_siblings:
+        if sibling.source_path is not None and sibling.source_path.exists():
+            try:
+                sibling.source_path.unlink()
+                console.print(
+                    f"[green]✓ Supprimé :[/green] {sibling.source_path}"
+                )
+            except OSError as exc:
+                console.print(
+                    f"[red]✗ Échec suppression {sibling.source_path} : {exc}[/red]"
+                )
+                continue
+        service.decide(
+            item_id=sibling.item_id,
+            decision=DecisionStatus.SKIPPED,
+            reason=reason,
+            decided_via="cli",
+        )
 
 
 def _maybe_cascade_series_decision(
@@ -448,20 +580,30 @@ def _handle_search_then_pick(
     item: MigrationItem,
 ) -> str:
     """Prompt nouveau titre, lance search TMDB, présente résultats, capture choix."""
-    import asyncio
-
     default_query = _default_search_query(item)
     query = Prompt.ask("Nouveau titre", default=default_query)
     if not query.strip():
         console.print("[yellow]Recherche annulée.[/yellow]")
         return "redraw"
 
+    # Extraire une éventuelle année (4 chiffres) du query pour la passer
+    # explicitement à TMDB. La double recherche côté service capture
+    # quand même le cas où year n'est pas reconnu, mais passer year=
+    # améliore le ranking TMDB sur les titres avec beaucoup d'homonymes.
+    clean_query, year = _split_query_year(query.strip())
+
     is_series = _is_series_item(item)
-    results = asyncio.run(
-        service.search_tmdb(query=query.strip(), is_series=is_series)
+    results = _review_run_async(
+        service.search_tmdb(
+            query=clean_query, is_series=is_series, year=year
+        )
     )
     if not results:
-        console.print("[red]Aucun résultat TMDB.[/red]")
+        console.print(
+            "[red]Aucun résultat TMDB.[/red] "
+            "[dim]Astuce : essayer le titre original (souvent anglais) — "
+            "TMDB indexe mal les titres traduits.[/dim]"
+        )
         return "redraw"
 
     console.print("[bold]Résultats TMDB :[/bold]")
@@ -576,10 +718,12 @@ def _handle_low_rated(
         return "continue"
     delete_source = False
     if answer == "d":
-        # Garde-fou : confirmation explicite avant suppression source
+        # Garde-fou : confirmation explicite avant suppression source.
+        # default=True : l'utilisateur a déjà tapé 'd' (intention claire) —
+        # la confirmation sert juste de double-check, un Enter suffit.
         if not Confirm.ask(
             "[red]Supprimer la source APRÈS commit transfert réussi ?[/red]",
-            default=False,
+            default=True,
         ):
             console.print("[yellow]Suppression annulée.[/yellow]")
             return "redraw"
@@ -658,6 +802,10 @@ def _handle_already_in_library(
             reason="doublon — version DB conservée, source laissée intacte",
             decided_via="cli",
         )
+        _maybe_cascade_series_decision(
+            service, item, DecisionStatus.SKIPPED,
+            reason="doublon — version DB conservée, source laissée intacte",
+        )
         return "continue"
 
     elif answer == "r":
@@ -677,7 +825,7 @@ def _handle_already_in_library(
         )
         if not Confirm.ask(
             "[bold red]Confirmer la suppression du fichier source ?[/bold red]",
-            default=False,
+            default=True,
         ):
             return "redraw"
         try:
@@ -694,6 +842,10 @@ def _handle_already_in_library(
             decision=DecisionStatus.SKIPPED,
             reason="doublon — source supprimée immédiatement",
             decided_via="cli",
+        )
+        _maybe_cascade_ail_delete_source(
+            service, item,
+            reason="doublon — source supprimée immédiatement (cascade série)",
         )
         return "continue"
 
@@ -717,7 +869,7 @@ def _handle_already_in_library(
         )
         if not Confirm.ask(
             "[bold red]Confirmer la suppression du fichier source ?[/bold red]",
-            default=False,
+            default=True,
         ):
             return "redraw"
         try:
@@ -732,6 +884,10 @@ def _handle_already_in_library(
             decision=DecisionStatus.SKIPPED,
             reason="doublon — accept reco (dest meilleure) — source supprimée",
             decided_via="cli",
+        )
+        _maybe_cascade_ail_delete_source(
+            service, item,
+            reason="doublon — accept reco (cascade série)",
         )
         return "continue"
 

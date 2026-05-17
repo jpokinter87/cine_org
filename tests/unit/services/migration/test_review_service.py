@@ -238,6 +238,9 @@ def test_search_tmdb_movies_uses_tmdb_client_and_matcher(store):
 
 
 def test_search_tmdb_series_uses_search_tv(store):
+    """Pour les séries avec year fourni, double recherche search_tv :
+    `(query, year=)` puis `"{query} {year}"` — TMDB ignore le param year
+    et range mieux quand l'année est dans le texte."""
     plan = _plan([])
     fake_tmdb = MagicMock()
     fake_tmdb.search_tv = AsyncMock(return_value=[])
@@ -250,7 +253,155 @@ def test_search_tmdb_series_uses_search_tv(store):
         matcher=fake_matcher, duplicate_detector=MagicMock(),
     )
     asyncio.run(service.search_tmdb(query="GoT", is_series=True, year=2011))
-    fake_tmdb.search_tv.assert_called_once_with("GoT", year=2011)
+    assert fake_tmdb.search_tv.call_count == 2
+    fake_tmdb.search_tv.assert_any_call("GoT", year=2011)
+    fake_tmdb.search_tv.assert_any_call("GoT 2011")
+
+
+def test_search_tmdb_movie_double_search_when_year_provided(store):
+    """Pour les films avec year, double recherche TMDB search + dédup par id."""
+    from src.core.ports.api_clients import SearchResult
+
+    plan = _plan([])
+    fake_tmdb = MagicMock()
+    # 1ère recherche : 1 résultat. 2e recherche : ajoute 1 résultat nouveau
+    # + 1 doublon (même id) qui doit être ignoré.
+    fake_tmdb.search = AsyncMock(side_effect=[
+        [SearchResult(id="1", title="Foo", year=2020, score=0, source="tmdb")],
+        [
+            SearchResult(id="1", title="Foo", year=2020, score=0, source="tmdb"),
+            SearchResult(id="2", title="Foo Other", year=2020, score=0, source="tmdb"),
+        ],
+    ])
+    fake_matcher = MagicMock()
+    fake_matcher.score_results = MagicMock(side_effect=lambda raw, **kw: raw)
+
+    service = MigrationReviewService(
+        plan=plan, state_store=store,
+        tmdb_client=fake_tmdb, tvdb_client=MagicMock(),
+        matcher=fake_matcher, duplicate_detector=MagicMock(),
+    )
+    results = asyncio.run(
+        service.search_tmdb(query="Foo", is_series=False, year=2020)
+    )
+
+    assert fake_tmdb.search.call_count == 2
+    # Le matcher reçoit la fusion dédupliquée : 2 éléments uniques
+    raw_passed = fake_matcher.score_results.call_args.args[0]
+    assert len(raw_passed) == 2
+    assert [r.id for r in raw_passed] == ["1", "2"]
+    assert len(results) == 2
+
+
+def test_search_tmdb_fallback_imdb_when_tmdb_empty(store):
+    """Quand TMDB rend 0, on cherche dans le dataset IMDb local (title.akas)
+    → tconst → tmdb.find_by_imdb_id → SearchResult. Couvre les titres fr
+    absents de l'index TMDB search (cas réel: 'La Maîtresse du lieutenant
+    français' 1981)."""
+    from src.core.ports.api_clients import MediaDetails
+
+    plan = _plan([])
+    fake_tmdb = MagicMock()
+    # TMDB search rend toujours [] (les 2 appels avec year)
+    fake_tmdb.search = AsyncMock(return_value=[])
+    fake_tmdb.find_by_imdb_id = AsyncMock(
+        return_value=MediaDetails(
+            id="12537",
+            title="La maîtresse du lieutenant français",
+            original_title="The French Lieutenant's Woman",
+            year=1981,
+            vote_average=7.0,
+            is_tv=False,
+        )
+    )
+    fake_searcher = MagicMock()
+    fake_searcher.search_akas = MagicMock(return_value=["tt0082416"])
+    fake_matcher = MagicMock()
+    fake_matcher.score_results = MagicMock(side_effect=lambda raw, **kw: raw)
+
+    service = MigrationReviewService(
+        plan=plan, state_store=store,
+        tmdb_client=fake_tmdb, tvdb_client=MagicMock(),
+        matcher=fake_matcher, duplicate_detector=MagicMock(),
+        imdb_aka_searcher=fake_searcher,
+    )
+    results = asyncio.run(
+        service.search_tmdb(
+            query="La maitresse du lieutenant francais",
+            is_series=False,
+            year=1981,
+        )
+    )
+
+    # TMDB a été essayé 2x (la double recherche year), puis fallback IMDb
+    assert fake_tmdb.search.call_count == 2
+    fake_searcher.search_akas.assert_called_once()
+    fake_tmdb.find_by_imdb_id.assert_awaited_once_with("tt0082416")
+    assert len(results) == 1
+    assert results[0].id == "12537"
+    assert results[0].source == "tmdb"
+
+
+def test_search_tmdb_fallback_skipped_when_tmdb_has_results(store):
+    """Si TMDB rend déjà des résultats, on n'appelle pas le fallback IMDb."""
+    from src.core.ports.api_clients import SearchResult
+
+    plan = _plan([])
+    fake_tmdb = MagicMock()
+    fake_tmdb.search = AsyncMock(return_value=[
+        SearchResult(id="1", title="Foo", year=2020, score=0, source="tmdb"),
+    ])
+    fake_searcher = MagicMock()
+    fake_searcher.search_akas = MagicMock()
+    fake_matcher = MagicMock()
+    fake_matcher.score_results = MagicMock(side_effect=lambda raw, **kw: raw)
+
+    service = MigrationReviewService(
+        plan=plan, state_store=store,
+        tmdb_client=fake_tmdb, tvdb_client=MagicMock(),
+        matcher=fake_matcher, duplicate_detector=MagicMock(),
+        imdb_aka_searcher=fake_searcher,
+    )
+    asyncio.run(service.search_tmdb(query="Foo", is_series=False, year=None))
+
+    fake_searcher.search_akas.assert_not_called()
+
+
+def test_search_tmdb_no_fallback_when_searcher_is_none(store):
+    """Sans imdb_aka_searcher, on garde le comportement legacy (0 résultats)."""
+    plan = _plan([])
+    fake_tmdb = MagicMock()
+    fake_tmdb.search = AsyncMock(return_value=[])
+    fake_tmdb.find_by_imdb_id = AsyncMock()
+    fake_matcher = MagicMock()
+    fake_matcher.score_results = MagicMock(return_value=[])
+
+    service = MigrationReviewService(
+        plan=plan, state_store=store,
+        tmdb_client=fake_tmdb, tvdb_client=MagicMock(),
+        matcher=fake_matcher, duplicate_detector=MagicMock(),
+        imdb_aka_searcher=None,
+    )
+    asyncio.run(service.search_tmdb(query="Foo", is_series=False, year=None))
+
+    fake_tmdb.find_by_imdb_id.assert_not_called()
+
+
+def test_search_tmdb_movie_no_extra_call_when_year_missing(store):
+    """Sans year, pas de 2e recherche (économie d'API)."""
+    plan = _plan([])
+    fake_tmdb = MagicMock()
+    fake_tmdb.search = AsyncMock(return_value=[])
+    fake_matcher = MagicMock()
+    fake_matcher.score_results = MagicMock(return_value=[])
+
+    service = MigrationReviewService(
+        plan=plan, state_store=store,
+        tmdb_client=fake_tmdb, tvdb_client=MagicMock(),
+        matcher=fake_matcher, duplicate_detector=MagicMock(),
+    )
+    asyncio.run(service.search_tmdb(query="Foo", is_series=False, year=None))
+    fake_tmdb.search.assert_called_once_with("Foo", year=None)
 
 
 def test_duplicate_recommendation_uses_compare_quality(store, tmp_path):

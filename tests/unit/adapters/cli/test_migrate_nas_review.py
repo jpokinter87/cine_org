@@ -1120,6 +1120,29 @@ def test_default_search_query_for_movie_uses_guessit_title_and_year():
     assert "1983" in default
 
 
+def test_split_query_year_extracts_trailing_year():
+    """Extrait l'année (4 chiffres 19xx/20xx) à la fin du query."""
+    from src.adapters.cli.commands.migrate_nas_command.review import (
+        _split_query_year,
+    )
+
+    assert _split_query_year("La Maîtresse du lieutenant français 1981") == (
+        "La Maîtresse du lieutenant français",
+        1981,
+    )
+    assert _split_query_year("Avatar 2009") == ("Avatar", 2009)
+    # Pas d'année à la fin → year=None, query inchangé
+    assert _split_query_year("The Matrix Reloaded") == ("The Matrix Reloaded", None)
+    # Année au milieu : pas d'extraction (on cherche en fin de chaîne)
+    assert _split_query_year("2001 A Space Odyssey") == (
+        "2001 A Space Odyssey", None
+    )
+    # Espaces multiples + année
+    assert _split_query_year("Lost  2004 ") == ("Lost", 2004)
+    # Année invalide (ex: 1801, 2150) ignorée
+    assert _split_query_year("Old Film 1801") == ("Old Film 1801", None)
+
+
 def test_default_search_query_for_series_uses_parent_dir():
     """Série : nom du dossier parent sans ' Saison N' (pas le titre d'épisode)."""
     from src.adapters.cli.commands.migrate_nas_command.review import (
@@ -1174,11 +1197,12 @@ def test_review_search_action_prefills_default_query(tmp_path, monkeypatch):
     plan_path.write_text(serialize_plan(plan))
     state_path = tmp_path / "s.sqlite"
 
-    # Capture le query utilisé pour search_tmdb
+    # Capture le query + year utilisés pour search_tmdb
     captured = {}
 
     async def fake_search(self, *, query, is_series, year=None):
         captured["query"] = query
+        captured["year"] = year
         return [
             SearchResult(id="1", title="Movie Test", year=2020,
                          score=95.0, source="tmdb"),
@@ -1197,9 +1221,11 @@ def test_review_search_action_prefills_default_query(tmp_path, monkeypatch):
         input="s\n\n1\n",
     )
     assert result.exit_code == 0, result.output
-    # Le query envoyé à TMDB est bien le défaut (titre parsé)
+    # Le query par défaut ("Movie Test 2020") est splitté côté CLI :
+    # le titre sans l'année part dans `query=`, l'année part dans `year=`.
     assert "Movie Test" in captured["query"]
-    assert "2020" in captured["query"]
+    assert "2020" not in captured["query"]
+    assert captured["year"] == 2020
 
 
 def test_review_loop_ail_delete_source_actually_deletes_file(tmp_path):
@@ -1248,6 +1274,137 @@ def test_review_loop_ail_delete_source_actually_deletes_file(tmp_path):
     d = store.get_decision("ail_del")
     assert d.decision == DecisionStatus.SKIPPED
     assert "supprim" in (d.reason or "").lower()
+    store.close()
+
+
+def test_review_loop_ail_delete_source_cascades_to_series_siblings(tmp_path):
+    """[d]elete source sur un épisode AIL propose la cascade sur les autres
+    épisodes AIL en attente (même série). Confirmation 'y' → suppression
+    + SKIPPED automatique pour chaque sibling."""
+    # Crée 3 fichiers de la même série Le Bureau des Légendes S04
+    src_dir = tmp_path / "src" / "Series" / "Le Bureau des Légendes S04"
+    src_dir.mkdir(parents=True)
+    e06 = src_dir / "Le Bureau S04E06.mkv"
+    e07 = src_dir / "Le Bureau S04E07.mkv"
+    e08 = src_dir / "Le Bureau S04E08.mkv"
+    for f in (e06, e07, e08):
+        f.write_bytes(b"DUP")
+
+    dst_dir = tmp_path / "dst"
+    dst_dir.mkdir()
+    dst_e06 = dst_dir / "S04E06.mkv"
+    dst_e07 = dst_dir / "S04E07.mkv"
+    dst_e08 = dst_dir / "S04E08.mkv"
+    for f in (dst_e06, dst_e07, dst_e08):
+        f.write_bytes(b"DEST")
+
+    def _make_item(item_id: str, src: Path, dst: Path) -> MigrationItem:
+        return MigrationItem(
+            item_id=item_id,
+            bucket=Bucket.ALREADY_IN_LIBRARY,
+            symlink_path=src,
+            source_path=src,
+            destination_path=None,
+            media_root="Series",
+            relative_category="",
+            size_bytes=3,
+            rating=RatingDecision(),
+            match=MatchInfo(tvdb_id=999),
+            is_symlink_source=False,
+            tags=[f"existing:{dst}"],
+        )
+
+    items = [
+        _make_item("e06", e06, dst_e06),
+        _make_item("e07", e07, dst_e07),
+        _make_item("e08", e08, dst_e08),
+    ]
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"), destination_root=Path("/d"),
+        threshold=6.0, stats=MigrationStats(), items=items,
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    # Sur e06 : 'd' → confirm delete 'y' → cascade prompt 'y'
+    # → tous les épisodes traités automatiquement, plus de prompts.
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="d\ny\ny\n",
+    )
+    assert result.exit_code == 0, result.output
+
+    # Tous les fichiers source supprimés
+    assert not e06.exists()
+    assert not e07.exists()
+    assert not e08.exists()
+    # Dest intacte
+    assert dst_e06.exists()
+    assert dst_e07.exists()
+    assert dst_e08.exists()
+    # Tous les items ont une décision SKIPPED
+    store = MigrationStateStore(state_path)
+    for iid in ("e06", "e07", "e08"):
+        d = store.get_decision(iid)
+        assert d is not None, f"{iid} sans décision"
+        assert d.decision == DecisionStatus.SKIPPED, f"{iid} pas SKIPPED"
+    store.close()
+
+
+def test_review_loop_ail_delete_cascade_refused_keeps_siblings_pending(tmp_path):
+    """[d]elete source + cascade refusée ('n') → les siblings restent pending."""
+    src_dir = tmp_path / "src" / "Series" / "Show S01"
+    src_dir.mkdir(parents=True)
+    e01 = src_dir / "Show S01E01.mkv"
+    e02 = src_dir / "Show S01E02.mkv"
+    for f in (e01, e02):
+        f.write_bytes(b"DUP")
+
+    dst_e01 = tmp_path / "dst1.mkv"
+    dst_e01.write_bytes(b"DEST")
+    dst_e02 = tmp_path / "dst2.mkv"
+    dst_e02.write_bytes(b"DEST")
+
+    def _make_item(item_id: str, src: Path, dst: Path) -> MigrationItem:
+        return MigrationItem(
+            item_id=item_id,
+            bucket=Bucket.ALREADY_IN_LIBRARY,
+            symlink_path=src, source_path=src, destination_path=None,
+            media_root="Series", relative_category="", size_bytes=3,
+            rating=RatingDecision(), match=MatchInfo(tvdb_id=99),
+            is_symlink_source=False, tags=[f"existing:{dst}"],
+        )
+
+    items = [_make_item("e01", e01, dst_e01), _make_item("e02", e02, dst_e02)]
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"), destination_root=Path("/d"),
+        threshold=6.0, stats=MigrationStats(), items=items,
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "s.sqlite"
+
+    runner = CliRunner()
+    # e01 : 'd', confirm delete 'y', cascade prompt 'n' → e02 reste pending
+    # → re-prompt sur e02 (on saisit 'k' pour skip et finir la session)
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="d\ny\nn\nk\n",
+    )
+    assert result.exit_code == 0, result.output
+
+    # e01 supprimé, e02 intact (cascade refusée)
+    assert not e01.exists()
+    assert e02.exists()
+
+    store = MigrationStateStore(state_path)
+    assert store.get_decision("e01").decision == DecisionStatus.SKIPPED
+    # e02 a une décision aussi (le 'k' final), mais pas par la cascade
+    assert store.get_decision("e02").decision == DecisionStatus.SKIPPED
     store.close()
 
 
