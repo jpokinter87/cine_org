@@ -32,12 +32,21 @@ from src.infrastructure.persistence.models import (
 
 @dataclass(frozen=True)
 class MissingRecord:
-    """Fiche DB dont le ``file_path`` n'existe plus sur le filesystem."""
+    """Fiche DB dont le ``file_path`` n'existe plus sur le filesystem.
+
+    Les champs ``year``, ``season``, ``episode`` et ``series_title`` ne
+    sont pas affichés mais utilisés par ``MissingFileResolver`` quand le
+    basename du fichier a changé entre l'import et le renommage.
+    """
 
     entity_type: str  # "movie" | "episode"
     entity_id: int
     title: str  # libellé d'affichage (avec contexte série pour les épisodes)
     file_path: str
+    year: Optional[int] = None
+    season: Optional[int] = None
+    episode: Optional[int] = None
+    series_title: Optional[str] = None
 
 
 def _serialize_model(model) -> str:
@@ -109,6 +118,7 @@ class MissingFilesScanner:
                     entity_id=int(movie.id),
                     title=movie.title or "",
                     file_path=movie.file_path,
+                    year=movie.year,
                 )
             )
 
@@ -143,6 +153,9 @@ class MissingFilesScanner:
                     entity_id=int(episode.id),
                     title=label,
                     file_path=episode.file_path,
+                    season=episode.season_number,
+                    episode=episode.episode_number,
+                    series_title=series_title,
                 )
             )
 

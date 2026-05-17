@@ -1,19 +1,16 @@
-"""Résolution d'un ``MissingRecord`` via les symlinks de ``video_dir``.
+"""Résolution d'un ``MissingRecord`` via les symlinks vivants de ``video_dir``.
 
-Quand un film a été déplacé manuellement dans ``storage/`` (ou par un script
-de réorganisation), son ``file_path`` en DB est obsolète. Mais si le symlink
-dans ``video/`` a été mis à jour (ou recréé par ``reconcile``/``repair-links``)
-et pointe correctement vers la nouvelle cible storage, alors :
+Quand un film a été déplacé ou renommé, son ``file_path`` en DB est obsolète.
+Mais si un symlink dans ``video/`` pointe correctement vers la nouvelle
+cible storage, on peut recâbler la DB sans rien toucher au filesystem.
 
-1. Le symlink ``video/.../Title (Year).mkv`` existe.
-2. Il n'est pas cassé (resolve() réussit).
-3. Sa cible est la vraie position du fichier.
+Deux passes de matching :
 
-C'est ce signal qu'on utilise. Stratégie V1 :
-
-* Indexe les symlinks vivants de ``video_dir`` par leur basename.
-* Pour chaque ``MissingRecord``, retourne les cibles (uniques) des symlinks
-  dont le basename correspond à celui du ``file_path`` stale.
+1. **Basename exact** : cas le plus fiable, traité en priorité.
+2. **Tokens titre + année / SxxExx** : fallback quand le renamer a modifié
+   le nom du fichier entre l'import (basename obsolète en DB) et le scan
+   (symlink avec le nouveau nom). Tokens normalisés (accents, ligatures,
+   ponctuation) puis présence vérifiée dans le nom du symlink.
 
 La zone ``storage_dir`` n'est volontairement pas scannée — un fichier qui
 serait dans storage sans symlink dans video n'est plus dans la bibliothèque
@@ -23,7 +20,7 @@ inaccessible. Mieux vaut le ``--prune`` puis ré-importer.
 
 from __future__ import annotations
 
-from collections import defaultdict
+import unicodedata
 from pathlib import Path
 from typing import Optional
 
@@ -33,46 +30,106 @@ from src.infrastructure.persistence.models import EpisodeModel, MovieModel
 from src.services.missing_files_scanner import MissingRecord
 
 
+def _normalize_text(text: str) -> str:
+    """Lowercase + strip diacritics + remplace ponctuation par espace."""
+    if not text:
+        return ""
+    # Ligatures FR avant NFKD (sinon œ devient deux glyphes décomposés)
+    text = text.replace("œ", "oe").replace("Œ", "oe")
+    text = text.replace("æ", "ae").replace("Æ", "ae")
+    decomposed = unicodedata.normalize("NFKD", text)
+    no_accents = "".join(c for c in decomposed if not unicodedata.combining(c))
+    lower = no_accents.lower()
+    clean = "".join(c if c.isalnum() or c.isspace() else " " for c in lower)
+    return " ".join(clean.split())
+
+
+class _IndexedSymlink:
+    """Entrée d'index : nom brut, nom normalisé, cible storage."""
+
+    __slots__ = ("name", "normalized", "target")
+
+    def __init__(self, name: str, normalized: str, target: Path) -> None:
+        self.name = name
+        self.normalized = normalized
+        self.target = target
+
+
 class MissingFileResolver:
-    """Indexe les symlinks vivants de ``video_dir`` et résout par basename."""
+    """Indexe les symlinks vivants de ``video_dir`` et résout par basename
+    puis par tokens titre/année (fallback)."""
 
     def __init__(self, video_dir: Path | None) -> None:
         self._video_dir = Path(video_dir) if video_dir else None
-        self._index: Optional[dict[str, set[Path]]] = None
+        self._index: Optional[list[_IndexedSymlink]] = None
 
-    def _build_index(self) -> dict[str, set[Path]]:
-        """Indexe basename → {cibles storage} pour les symlinks vivants."""
+    def _build_index(self) -> list[_IndexedSymlink]:
+        """Construit l'index une seule fois (lazy)."""
         if self._index is not None:
             return self._index
-        index: dict[str, set[Path]] = defaultdict(set)
+        entries: list[_IndexedSymlink] = []
         if self._video_dir is None or not self._video_dir.exists():
-            self._index = dict(index)
-            return self._index
+            self._index = entries
+            return entries
         for path in self._video_dir.rglob("*"):
             if not path.is_symlink():
                 continue
             try:
                 resolved = path.resolve(strict=True)
             except (OSError, RuntimeError):
-                # Symlink cassé ou cycle → on l'ignore.
+                # Symlink cassé ou cycle → ignoré.
                 continue
-            index[path.name].add(resolved)
-        self._index = dict(index)
-        return self._index
+            entries.append(
+                _IndexedSymlink(
+                    name=path.name,
+                    normalized=_normalize_text(path.name),
+                    target=resolved,
+                )
+            )
+        self._index = entries
+        return entries
 
     def find_candidates(self, record: MissingRecord) -> list[Path]:
-        """Retourne les cibles storage des symlinks de même basename.
+        """Retourne les cibles storage des symlinks compatibles.
 
-        La cible égale au ``file_path`` stale est filtrée (en pratique impossible
-        puisqu'elle n'existe pas, mais on protège contre les races/symlinks
-        intermédiaires).
+        Phase 1 : match basename exact (plus fiable).
+        Phase 2 : si rien trouvé, fallback tokens (titre + année / SxxExx).
         """
         target_name = Path(record.file_path).name
-        if not target_name:
-            return []
         stale = Path(record.file_path)
-        cands = self._build_index().get(target_name, set())
-        return sorted(c for c in cands if c != stale)
+        index = self._build_index()
+
+        # Phase 1 : basename exact
+        if target_name:
+            exact = {e.target for e in index if e.name == target_name}
+            exact.discard(stale)
+            if exact:
+                return sorted(exact)
+
+        # Phase 2 : tokens titre/année (ou SxxExx pour épisodes)
+        tokens = self._tokens_for(record)
+        if not tokens:
+            return []
+        fuzzy = {e.target for e in index if all(tok in e.normalized for tok in tokens)}
+        fuzzy.discard(stale)
+        return sorted(fuzzy)
+
+    def _tokens_for(self, record: MissingRecord) -> list[str]:
+        """Tokens normalisés requis pour la recherche fuzzy."""
+        if record.entity_type == "movie":
+            title_tokens = _normalize_text(record.title).split()
+            if not title_tokens:
+                return []
+            if record.year:
+                return title_tokens + [str(record.year)]
+            return title_tokens
+        if record.entity_type == "episode":
+            if record.season is None or record.episode is None:
+                return []
+            sxxeyy = f"s{record.season:02d}e{record.episode:02d}"
+            series_tokens = _normalize_text(record.series_title or "").split()
+            return series_tokens + [sxxeyy]
+        return []
 
     def apply_repair(
         self, session: Session, record: MissingRecord, new_path: Path

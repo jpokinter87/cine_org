@@ -136,6 +136,132 @@ class TestResolverFindCandidates:
         assert resolver.find_candidates(rec) == []
 
 
+class TestFuzzyFallback:
+    """Fallback titre+année / SxxExx quand le basename ne correspond plus."""
+
+    def test_movie_renamed_found_by_title_and_year(self, tmp_path: Path) -> None:
+        """Le file_path DB pointe vers un ancien nom (avant renamer).
+        Le symlink existe avec le nouveau nom standardisé."""
+        storage, video = _setup_dirs(tmp_path)
+        # Symlink avec le nom canonique post-renamer
+        target, _link = _make_symlinked_file(
+            storage,
+            video,
+            "Films/Drame/Respire (2014) FR x264 1080p.mkv",
+            "Films/Drame/Respire (2014) FR x264 1080p.mkv",
+        )
+        # file_path DB avec l'ancien nom (import original "non détectés")
+        stale = storage / "Films" / "non détectés" / "Respire VO.mp4"
+        rec = MissingRecord(
+            entity_type="movie",
+            entity_id=1,
+            title="Respire",
+            file_path=str(stale),
+            year=2014,
+        )
+
+        resolver = MissingFileResolver(video_dir=video)
+        assert resolver.find_candidates(rec) == [target]
+
+    def test_movie_fuzzy_normalizes_accents_and_punctuation(
+        self, tmp_path: Path
+    ) -> None:
+        storage, video = _setup_dirs(tmp_path)
+        target, _link = _make_symlinked_file(
+            storage,
+            video,
+            "Films/Comédie/Et la fete continue ! (2023) FR x264 1080p.mkv",
+            "Films/Comédie/Et la fete continue ! (2023) FR x264 1080p.mkv",
+        )
+        stale = storage / "Films" / "ailleurs" / "Et.la.fete.continue.2023.mkv"
+        rec = MissingRecord(
+            entity_type="movie",
+            entity_id=1,
+            title="Et la fête continue !",  # accent qu'on doit normaliser
+            file_path=str(stale),
+            year=2023,
+        )
+
+        resolver = MissingFileResolver(video_dir=video)
+        assert resolver.find_candidates(rec) == [target]
+
+    def test_episode_renamed_found_by_series_and_sxxeyy(self, tmp_path: Path) -> None:
+        storage, video = _setup_dirs(tmp_path)
+        target, _link = _make_symlinked_file(
+            storage,
+            video,
+            "Series/TV/G-H/Heimat/The Frankenstein Chronicles (2015) - S01E03 - "
+            "Au coeur des ténèbres - FR HEVC 720p.mkv",
+            "Series/TV/G-H/Heimat/The Frankenstein Chronicles (2015) - S01E03 - "
+            "Au coeur des ténèbres - FR HEVC 720p.mkv",
+        )
+        stale = (
+            storage
+            / "Series/TV/G-H/Heimat/The Frankenstein Chronicles - S01E03 - FR HEVC 720p.mkv"
+        )
+        rec = MissingRecord(
+            entity_type="episode",
+            entity_id=42,
+            title="The Frankenstein Chronicles — S01E03 — Au cœur des ténèbres",
+            file_path=str(stale),
+            season=1,
+            episode=3,
+            series_title="The Frankenstein Chronicles",
+        )
+
+        resolver = MissingFileResolver(video_dir=video)
+        assert resolver.find_candidates(rec) == [target]
+
+    def test_exact_basename_wins_over_fuzzy(self, tmp_path: Path) -> None:
+        """Si un match exact ET un match fuzzy existent, on retourne l'exact."""
+        storage, video = _setup_dirs(tmp_path)
+        # Match exact
+        exact_target, _ = _make_symlinked_file(
+            storage,
+            video,
+            "Films/A/Respire VO.mp4",
+            "Films/A/Respire VO.mp4",
+        )
+        # Match fuzzy parasite (titre + année)
+        _other, _ = _make_symlinked_file(
+            storage,
+            video,
+            "Films/B/Respire (2014) FR x264 1080p.mkv",
+            "Films/B/Respire (2014) FR x264 1080p.mkv",
+        )
+
+        stale = storage / "ailleurs" / "Respire VO.mp4"
+        rec = MissingRecord(
+            entity_type="movie",
+            entity_id=1,
+            title="Respire",
+            file_path=str(stale),
+            year=2014,
+        )
+
+        # Le match exact gagne et le fuzzy n'est pas évalué
+        assert MissingFileResolver(video_dir=video).find_candidates(rec) == [
+            exact_target
+        ]
+
+    def test_movie_without_year_uses_title_only(self, tmp_path: Path) -> None:
+        storage, video = _setup_dirs(tmp_path)
+        target, _link = _make_symlinked_file(
+            storage,
+            video,
+            "Films/Drame/Heat (1995) MULTi 1080p.mkv",
+            "Films/Drame/Heat (1995) MULTi 1080p.mkv",
+        )
+        rec = MissingRecord(
+            entity_type="movie",
+            entity_id=1,
+            title="Heat",
+            file_path=str(storage / "ailleurs" / "Heat.mkv"),
+            year=None,
+        )
+        assert MissingFileResolver(video_dir=video).find_candidates(rec) == [target]
+
+
 class TestApplyRepair:
     """Mise à jour de file_path en DB."""
 
