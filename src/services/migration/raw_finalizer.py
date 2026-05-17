@@ -112,6 +112,7 @@ class _MoviePreparer:
         storage_dir: Path,
         video_dir: Path,
         imdb_importer: Optional[IMDbDatasetImporter] = None,
+        short_film_threshold_seconds: int = 900,
     ) -> None:
         self._tmdb = tmdb_client
         self._movie_repo = movie_repo
@@ -120,6 +121,7 @@ class _MoviePreparer:
         self._storage_dir = storage_dir
         self._video_dir = video_dir
         self._imdb_importer = imdb_importer
+        self._short_threshold = short_film_threshold_seconds
 
     def prepare(self, item: MigrationItem) -> Optional[tuple[Path, _CachedMovie]]:
         tmdb_id = item.match.tmdb_id
@@ -131,13 +133,29 @@ class _MoviePreparer:
             return None
 
         extension = item.source_path.suffix or ""
-        directory = self._organizer.get_movie_destination(
-            movie, self._storage_dir, self._video_dir
+        # Routage SHORT vs MOVIE basé sur la durée TMDB et le chemin source.
+        # On utilise un MediaInfo synthétique (la durée TMDB est suffisante,
+        # pas de mediainfo probe au moment de la migration).
+        from src.core.value_objects import MediaInfo
+        from src.services.organizer import route_movie_destination
+
+        media_info = MediaInfo(duration_seconds=movie.duration_seconds)
+        directory, video_dir, is_short = route_movie_destination(
+            movie=movie,
+            file_path=item.source_path,
+            media_info=media_info,
+            organizer=self._organizer,
+            storage_dir=self._storage_dir,
+            video_dir=self._video_dir,
+            threshold_seconds=self._short_threshold,
         )
+        if is_short and not movie.is_short:
+            movie.is_short = True
+            self._movie_repo.save(movie)
+
         filename = self._renamer.generate_movie_filename(
             movie=movie, media_info=None, extension=extension
         )
-        video_dir = self._organizer.get_movie_video_destination(movie, self._video_dir)
         symlink_path = video_dir / filename
 
         return directory / filename, _CachedMovie(
@@ -410,6 +428,7 @@ class MigrationRawFinalizer:
         parser: Optional[IFilenameParser] = None,
         session: Optional[Session] = None,
         imdb_importer: Optional[IMDbDatasetImporter] = None,
+        short_film_threshold_seconds: int = 900,
     ) -> None:
         self._tmdb = tmdb_client
         self._movie_repo = movie_repo
@@ -423,6 +442,7 @@ class MigrationRawFinalizer:
         self._parser = parser
         self._session = session
         self._imdb_importer = imdb_importer
+        self._short_threshold = short_film_threshold_seconds
         # Cache local item_id → bundle pour idempotence prepare → finalize.
         self._movie_cache: dict[str, _CachedMovie] = {}
         self._series_cache: dict[str, _CachedSeries] = {}
@@ -457,10 +477,7 @@ class MigrationRawFinalizer:
             result = self._dispatch_series_prepare(item)
             if result is not None:
                 return result
-            if (
-                self._is_animation_item(item)
-                and item.match.tmdb_id is not None
-            ):
+            if self._is_animation_item(item) and item.match.tmdb_id is not None:
                 return self._dispatch_movie_prepare(item)
             return None
         if item.match.tmdb_id is not None:
@@ -493,6 +510,7 @@ class MigrationRawFinalizer:
             storage_dir=self._storage_dir,
             video_dir=self._video_dir,
             imdb_importer=self._imdb_importer,
+            short_film_threshold_seconds=self._short_threshold,
         )
         result = preparer.prepare(item)
         if result is None:

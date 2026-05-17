@@ -249,6 +249,7 @@ class SQLModelMovieRepository(IMovieRepository):
                 existing.languages_json = json.dumps(list(movie.languages))
             if movie.file_size_bytes is not None:
                 existing.file_size_bytes = movie.file_size_bytes
+            existing.is_short = bool(movie.is_short)
             self._session.add(existing)
             self._session.commit()
             self._session.refresh(existing)

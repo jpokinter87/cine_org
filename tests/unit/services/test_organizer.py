@@ -1095,3 +1095,103 @@ class TestOrganizerServiceShortMethods:
         assert service.get_short_destination(movie, storage_dir, video_dir) == (
             storage_dir / "Films" / "Courts" / "Divers"
         )
+
+
+class TestRouteMovieDestination:
+    """Helper qui route un film vers Films/Courts/ ou Films/Genre/ selon classify_media."""
+
+    def test_long_movie_routes_to_classic_destination(
+        self, storage_dir: Path, video_dir: Path
+    ) -> None:
+        from src.core.value_objects import MediaInfo
+        from src.services.organizer import (
+            OrganizerService,
+            route_movie_destination,
+        )
+
+        movie = Movie(
+            title="Heat",
+            year=1995,
+            genres=("Action",),
+            duration_seconds=7200,
+        )
+        source = video_dir / "Films" / "Action" / "Heat.mkv"
+        media_info = MediaInfo(duration_seconds=7200)
+
+        storage_dest, video_dest, is_short = route_movie_destination(
+            movie=movie,
+            file_path=source,
+            media_info=media_info,
+            organizer=OrganizerService(),
+            storage_dir=storage_dir,
+            video_dir=video_dir,
+            threshold_seconds=900,
+        )
+        assert is_short is False
+        # Genre Action mappé vers "Action" → racine letter "H" si genre dir n'existe pas
+        assert "Courts" not in str(video_dest)
+        assert "Courts" not in str(storage_dest)
+
+    def test_short_movie_routes_to_courts_franchise(
+        self, storage_dir: Path, video_dir: Path
+    ) -> None:
+        from src.core.value_objects import MediaInfo
+        from src.services.organizer import (
+            OrganizerService,
+            route_movie_destination,
+        )
+
+        movie = Movie(
+            title="Hare-Way to the Stars",
+            year=1958,
+            genres=("Animation",),
+            duration_seconds=420,
+            collection_name="Looney Tunes",
+        )
+        source = video_dir / "Films" / "Animation" / "H" / "Hare-Way.mkv"
+        media_info = MediaInfo(duration_seconds=420)
+
+        storage_dest, video_dest, is_short = route_movie_destination(
+            movie=movie,
+            file_path=source,
+            media_info=media_info,
+            organizer=OrganizerService(),
+            storage_dir=storage_dir,
+            video_dir=video_dir,
+            threshold_seconds=900,
+        )
+        assert is_short is True
+        assert video_dest == video_dir / "Films" / "Courts" / "Looney Tunes"
+        assert storage_dest == storage_dir / "Films" / "Courts" / "Looney Tunes"
+
+    def test_short_under_series_dir_stays_classic_route(
+        self, storage_dir: Path, video_dir: Path
+    ) -> None:
+        """La priorité chemin Séries/ s'applique : pas de routage SHORT."""
+        from src.core.value_objects import MediaInfo
+        from src.services.organizer import (
+            OrganizerService,
+            route_movie_destination,
+        )
+
+        movie = Movie(
+            title="Mini",
+            year=2020,
+            genres=("Drame",),
+            duration_seconds=300,
+        )
+        source = video_dir / "Séries" / "Mini" / "Saison 01" / "E01.mkv"
+        media_info = MediaInfo(duration_seconds=300)
+
+        _storage_dest, video_dest, is_short = route_movie_destination(
+            movie=movie,
+            file_path=source,
+            media_info=media_info,
+            organizer=OrganizerService(),
+            storage_dir=storage_dir,
+            video_dir=video_dir,
+            threshold_seconds=900,
+        )
+        # Pas de bascule vers Courts car classify_media renvoie SERIES
+        assert is_short is False
+        assert "Courts" not in str(video_dest)

@@ -294,6 +294,7 @@ def _build_raw_finalizer(
         video_dir=Path(config.video_dir),
         session=session,
         imdb_importer=imdb_importer,
+        short_film_threshold_seconds=config.short_film_duration_threshold_seconds,
     )
 
 
