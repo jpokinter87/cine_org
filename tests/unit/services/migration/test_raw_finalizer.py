@@ -933,6 +933,45 @@ def test_prepare_falls_back_to_movie_when_anim_misclassified_as_series():
     finalizer._movie_repo.get_by_tmdb_id.assert_called_with(460168)
 
 
+def test_prepare_series_no_fallback_to_movie_when_media_root_is_series():
+    """Régression : un item Séries/ dont le filename est une saison entière
+    (S3 sans épisode) ne doit PAS retomber sur la route film via tmdb_id.
+
+    Cas observé : `Les Shadoks - S3 (1972).mkv` → guessit→ season=3 episode=None
+    → _SeriesPreparer rend None → fallback film → `/movie/14710` = "Le Cavalier
+    du désert" (western, homonymie d'ID TMDB film/série) → fichier transféré
+    sous Films/Western/ avec un mauvais match.
+
+    Le fallback film n'est légitime que pour Animations/ (films courts mal
+    classés en série par l'heuristique). Pour Séries/ pur, l'item doit
+    rester non préparé (status failed_other) plutôt que d'être transformé
+    silencieusement en film homonyme."""
+    finalizer = _make_series_finalizer(
+        parsed=ParsedFilename(
+            title="Les Shadoks",
+            media_type=MediaType.SERIES,
+            season=3,
+            episode=None,
+        ),
+    )
+    # Movie 14710 disponible côté film (l'homonyme western)
+    finalizer._movie_repo.get_by_tmdb_id.return_value = Movie(
+        id="99", tmdb_id=14710, title="Le Cavalier du désert", year=1940
+    )
+    item = _raw_series_item(
+        tvdb_id=None,
+        tmdb_id=14710,
+        media_root="Séries",
+        source=Path("/old/Séries/Les Shadoks - S3 (1972).mkv"),
+    )
+
+    destination = finalizer.prepare(item)
+
+    # AUCUNE bascule en film → prepare renvoie None
+    assert destination is None
+    finalizer._movie_repo.get_by_tmdb_id.assert_not_called()
+
+
 # ---- Régression : enrichissement notes IMDb/TMDB sur fetch initial ------
 
 

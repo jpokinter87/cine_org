@@ -445,21 +445,44 @@ class MigrationRawFinalizer:
         Délègue à `_MoviePreparer`/`_SeriesPreparer` selon le type d'item, puis
         stocke le bundle retourné dans le cache local pour `finalize`.
 
-        Fallback film : si la route série échoue (parse saison/épisode
-        impossible, série introuvable) ET qu'on a un tmdb_id, retombe sur
-        la route film. Couvre les films mal classés en série par le
-        heuristique `media_root`-based (ex. film dans `Animations/`).
+        Fallback film : si la route série échoue, on retombe sur la route
+        film UNIQUEMENT pour les items `Animations/` (films courts mal
+        classés par l'heuristique série). Pour `Séries/` pur, le fallback
+        est désactivé — sinon une saison entière sans épisode (ex:
+        `Les Shadoks - S3.mkv`) bascule en film via le tmdb_id, qui peut
+        être un homonyme côté `/movie/{id}` (collision d'ID entre les
+        namespaces TMDB film et TV → catastrophe silencieuse observée).
         """
         if self._is_series_item(item):
             result = self._dispatch_series_prepare(item)
             if result is not None:
                 return result
-            if item.match.tmdb_id is not None:
+            if (
+                self._is_animation_item(item)
+                and item.match.tmdb_id is not None
+            ):
                 return self._dispatch_movie_prepare(item)
             return None
         if item.match.tmdb_id is not None:
             return self._dispatch_movie_prepare(item)
         return None
+
+    def _is_animation_item(self, item: MigrationItem) -> bool:
+        """Vrai si l'item est sous Animation(s) — déclencheur du fallback film.
+
+        Couvre `media_root` direct (`Animation`, `Animations`) et le cas
+        NAS nested (segment `Animation/Animations` au milieu du chemin).
+        """
+        media_root = (item.media_root or "").lower()
+        if media_root.startswith("anim"):
+            return True
+        for p in (item.source_path, item.symlink_path):
+            if p is None:
+                continue
+            path_lower = str(p).lower()
+            if "/animation/" in path_lower or "/animations/" in path_lower:
+                return True
+        return False
 
     def _dispatch_movie_prepare(self, item: MigrationItem) -> Optional[Path]:
         preparer = _MoviePreparer(
