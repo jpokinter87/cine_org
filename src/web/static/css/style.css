@@ -8723,6 +8723,20 @@ details[open] > .maint-issue-toggle::before {
     backdrop-filter: blur(4px);
 }
 
+.collection-card-badge {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 100px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background: rgba(217, 119, 6, 0.9); /* amber-600 — cohérent avec hint icon */
+    color: #fff;
+    backdrop-filter: blur(4px);
+    letter-spacing: 0.02em;
+}
+
 .collection-card-body {
     padding: 0.6rem 0.75rem 0.75rem;
 }

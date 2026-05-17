@@ -960,6 +960,8 @@ uv run cineorg reclassify-shorts --no-dry-run
 
 `ShortReclassifier` détecte automatiquement les drifts : un court déjà marqué `is_short=True` sous `Films/Courts/Divers/` mais à qui on assigne une collection locale sera proposé pour déplacement vers `Films/Courts/{collection}/` au prochain `reclassify-shorts`.
 
+**Vue bibliothèque** : la page `/library/collections` liste à la fois les collections TMDB officielles et les collections locales (badge orange « Locale » sur la carte). Cliquer sur une collection locale ouvre `/library/collections/local/{id}` qui présente la même grille de films que pour une saga TMDB.
+
 ### Migration depuis anciens NAS
 
 La sous-commande `migrate-nas` migre des fichiers vidéo depuis d'anciens volumes (vieux NAS, disques USB) vers le nouveau NAS, en filtrant par note minimale combinée IMDb / TMDB / personnelle. Elle préserve la source (pas de `--remove-source-files`), vérifie l'intégrité xxh3_64 source/destination après chaque copie, et swappe atomiquement les symlinks vers la nouvelle destination.
