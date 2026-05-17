@@ -149,8 +149,13 @@ def plan_command(
 def apply_command(
     plan_path: Annotated[
         Path,
-        typer.Argument(help="Chemin du plan JSON produit par `plan`."),
-    ],
+        typer.Argument(
+            help=(
+                "Chemin du plan JSON produit par `plan`. "
+                "Défaut : ./migration/plan.json (convention de l'app)."
+            ),
+        ),
+    ] = Path("./migration/plan.json"),
     state_store: Annotated[
         Optional[Path],
         typer.Option(
@@ -174,6 +179,12 @@ def apply_command(
     ] = False,
 ) -> None:
     """Exécute les transferts pending et met à jour le state store."""
+    if not plan_path.exists():
+        console.print(
+            f"[red]Plan introuvable :[/red] {plan_path}\n"
+            f"[dim]Génère-le avec `cineorg migrate-nas plan --source ... --output {plan_path}`.[/dim]"
+        )
+        raise typer.Exit(code=1)
     state_path = state_store or plan_path.with_suffix(plan_path.suffix + ".state.sqlite")
     mode_label = (
         "[yellow]fast (no hash verify)[/yellow]" if fast else "verify+hash"
@@ -210,14 +221,25 @@ def apply_command(
 def status_command(
     plan_path: Annotated[
         Path,
-        typer.Argument(help="Chemin du plan JSON."),
-    ],
+        typer.Argument(
+            help=(
+                "Chemin du plan JSON. "
+                "Défaut : ./migration/plan.json (convention de l'app)."
+            ),
+        ),
+    ] = Path("./migration/plan.json"),
     state_store: Annotated[
         Optional[Path],
         typer.Option("--state-store", help="Chemin du journal SQLite."),
     ] = None,
 ) -> None:
     """Affiche l'avancement du plan."""
+    if not plan_path.exists():
+        console.print(
+            f"[red]Plan introuvable :[/red] {plan_path}\n"
+            f"[dim]Génère-le avec `cineorg migrate-nas plan --source ... --output {plan_path}`.[/dim]"
+        )
+        raise typer.Exit(code=1)
     state_path = state_store or plan_path.with_suffix(plan_path.suffix + ".state.sqlite")
     summary = run_status(plan_path=plan_path, state_store_path=state_path)
 
