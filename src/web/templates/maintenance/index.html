@@ -146,6 +146,53 @@
             </div>
             {% endif %}
         </div>
+
+        <!-- Migration NAS -->
+        <div class="maint-card">
+            <div class="maint-card-header">
+                <div class="maint-card-icon" style="background: rgba(168, 130, 255, 0.12); color: #a882ff;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                </div>
+                <div>
+                    <h2 class="maint-card-title">Migration NAS{{ hint_icon("Plans de migration produits par la commande CLI `migrate-nas plan`. Pour chaque plan détecté, le compteur affiche le nombre d'items que tu as marqués `[w]` (defer to web) lors de la review CLI — ces items attendent ton arbitrage dans l'interface graphique avant d'être transférés.") }}</h2>
+                    <p class="maint-card-desc">Plans de migration détectés sous <code>migration/</code>. Arbitre ici les items différés depuis la review CLI.</p>
+                </div>
+            </div>
+
+            <div id="migration-plans-section">
+            {% if migration_plans %}
+                <div class="maint-trash-list">
+                    {% for plan in migration_plans %}
+                    <div class="maint-trash-item">
+                        <div class="maint-trash-item-info">
+                            <span class="maint-trash-item-title">{{ plan.plan_name }}</span>
+                            <span class="maint-trash-item-meta">{{ plan.modified.strftime('%d/%m/%Y %H:%M') }}</span>
+                            {% if plan.state_exists %}
+                                {% if plan.deferred_count > 0 %}
+                                <span class="maint-trash-item-meta" style="color: #a882ff; font-weight: 500;">
+                                    {{ plan.deferred_count }} différé{{ 's' if plan.deferred_count != 1 else '' }} à arbitrer
+                                </span>
+                                {% else %}
+                                <span class="maint-trash-item-meta">aucun différé</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="maint-trash-item-meta" style="color: var(--text-muted);">pas encore appliqué</span>
+                            {% endif %}
+                        </div>
+                        <a class="maint-trash-restore-btn"
+                           href="/migration/review?plan={{ plan.plan_path | urlencode }}"
+                           {% if not plan.state_exists or plan.deferred_count == 0 %}style="opacity: 0.6;"{% endif %}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6"/><path d="M4.22 4.22l4.24 4.24m7.07 7.07l4.25 4.25"/><path d="M1 12h6m6 0h6"/><path d="M4.22 19.78l4.24-4.24m7.07-7.07l4.25-4.25"/></svg>
+                            Ouvrir la review
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="maint-trash-empty-state">Aucun plan de migration détecté dans <code>migration/</code></div>
+            {% endif %}
+            </div>
+        </div>
     </div>
 </div>
 
