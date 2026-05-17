@@ -2,8 +2,20 @@
 Matcher pour le mode raw du package migration.
 
 Pour un fichier physique decouvert sur un vieux NAS pre-CineOrg, identifie
-l'oeuvre correspondante via TMDB (films) ou TMDB+TVDB (series) en
-reutilisant `MatcherService` (scoring + seuil 85%).
+l'oeuvre correspondante via TMDB (films) ou TVDB (series) en réutilisant
+les helpers partagés de `src/services/api_matching.py` — exactement la
+même logique que le workflow standard (`process`).
+
+Gains par rapport à l'ancienne version :
+- Films : double recherche TMDB (`title` + `"{title} {year}"`),
+  enrichissement durée TMDB sur le top 10, tri par écart de durée.
+  Discrimine les homonymes (Float vs Renée, Loop 2019 vs 2020, …).
+- Séries : TVDB-first (comme le workflow). Fallback TMDB search_tv
+  uniquement si TVDB rend 0 résultats — évite la fausse ambiguïté
+  systématique où la même série revient via les 2 providers et bloque
+  le matcher en AMBIGUOUS (Arde Madrid, Robot Chicken, etc.).
+- Séries avec saison/épisode : filtrage par episode_count TVDB.
+- Cache mémoire série partagé entre tous les `.match()` d'un même run.
 
 Le matcher ne touche pas a la base : il retourne un `MatchOutcome` qui sera
 exploite par le plan_builder (etape 3) pour decider entre :
@@ -26,6 +38,11 @@ from src.adapters.api.tvdb_client import TVDBClient
 from src.core.ports.api_clients import SearchResult
 from src.core.ports.parser import IFilenameParser
 from src.core.value_objects.parsed_info import MediaType, ParsedFilename
+from src.services.api_matching import (
+    filter_by_episode_count,
+    search_and_score_movie,
+    search_and_score_series,
+)
 from src.services.matcher import MatcherService
 from src.services.migration._helpers import safe_int
 from src.services.migration.dataclasses import MigrationCandidate
@@ -65,6 +82,10 @@ class MigrationMatcher:
         threshold: Seuil de matching (defaut 85, parite avec workflow standard).
         ambiguity_gap: Ecart top1-top2 sous lequel le match est ambigu.
         max_top: Nombre max de candidats conserves dans MatchOutcome.top_results.
+
+    Le cache mémoire série (clé = (titre_lower, année)) est créé au niveau
+    de l'instance : tous les `.match()` d'un même run le partagent, ce qui
+    évite N recherches TVDB pour N épisodes d'une même série.
     """
 
     def __init__(
@@ -84,6 +105,9 @@ class MigrationMatcher:
         self._threshold = threshold
         self._gap = ambiguity_gap
         self._max_top = max_top
+        self._series_cache: dict[
+            tuple[str, Optional[int]], list[SearchResult]
+        ] = {}
 
     async def match(self, candidate: MigrationCandidate) -> MatchOutcome:
         """Identifie l'oeuvre derriere un fichier physique."""
@@ -93,77 +117,110 @@ class MigrationMatcher:
         if media_type == MediaType.SERIES:
             scored = await self._search_and_score_series(parsed)
         else:
-            scored = await self._search_and_score_movie(parsed)
+            scored = await self._search_and_score_movie(candidate, parsed)
 
         top = scored[: self._max_top]
         return self._classify(top, query_year=parsed.year)
 
     async def _search_and_score_movie(
-        self, parsed: ParsedFilename
+        self,
+        candidate: MigrationCandidate,
+        parsed: ParsedFilename,
     ) -> list[SearchResult]:
-        """Recherche film + scoring, avec fallback titre tronqué si vide."""
+        """Recherche film + scoring via le helper partagé, avec fallback
+        titre tronqué quand vide."""
         if not parsed.title:
             return []
-        results = await self._tmdb.search(parsed.title, year=parsed.year)
+        results = await search_and_score_movie(
+            parsed.title,
+            parsed.year,
+            candidate.media_info,
+            self._scorer,
+            self._tmdb,
+        )
         if results:
-            return self._scorer.score_results(
-                results,
-                query_title=parsed.title,
-                query_year=parsed.year,
-                is_series=False,
-            )
+            return results
         # Fallback : guessit peut "avaler" un n° d'épisode dans le titre
         # (ex: "Rivalité de génies 02 Edison Tesla"). On retente avec le
-        # titre tronqué avant le premier nombre, et on score avec ce titre
-        # tronqué pour que le scoring soit cohérent avec la recherche.
+        # titre tronqué avant le premier nombre.
         truncated = _truncate_title_at_first_number(parsed.title)
         if truncated and truncated != parsed.title:
-            fallback = await self._tmdb.search(truncated, year=parsed.year)
-            return self._scorer.score_results(
-                fallback,
-                query_title=truncated,
-                query_year=parsed.year,
-                is_series=False,
+            return await search_and_score_movie(
+                truncated,
+                parsed.year,
+                candidate.media_info,
+                self._scorer,
+                self._tmdb,
             )
         return []
 
     async def _search_and_score_series(
         self, parsed: ParsedFilename
     ) -> list[SearchResult]:
-        """Recherche série (TMDB+TVDB) + scoring, avec fallback titre tronqué."""
+        """Recherche série TVDB-first + fallback TMDB search_tv si TVDB vide
+        + filter_by_episode_count si saison/épisode connus + fallback titre
+        tronqué quand toutes les pistes sont vides.
+
+        On ne fusionne PAS TMDB+TVDB par défaut : ça créerait une fausse
+        ambiguïté systématique (la même série remonte via les 2 sources
+        avec scores ~100). Le fallback TMDB n'intervient que quand TVDB
+        ne connaît pas la série.
+        """
         if not parsed.title:
             return []
-        merged = await self._search_series_for_title(parsed.title, parsed.year)
-        if merged:
-            return self._scorer.score_results(
-                merged,
-                query_title=parsed.title,
-                query_year=parsed.year,
-                is_series=True,
+        candidates = await self._search_series_for_title(
+            parsed.title, parsed.year
+        )
+        if not candidates:
+            truncated = _truncate_title_at_first_number(parsed.title)
+            if truncated and truncated != parsed.title:
+                candidates = await self._search_series_for_title(
+                    truncated, parsed.year
+                )
+
+        if not candidates:
+            return []
+
+        # Filtrage par episode_count si on connaît saison + épisode.
+        # En cas d'élimination totale, on conserve les originaux (comme
+        # le workflow) : le scoring/classification décidera de l'ambiguïté.
+        if parsed.season is not None and parsed.episode is not None:
+            filtered = await filter_by_episode_count(
+                self._tvdb,
+                candidates,
+                parsed.season,
+                parsed.episode,
             )
-        truncated = _truncate_title_at_first_number(parsed.title)
-        if truncated and truncated != parsed.title:
-            fallback = await self._search_series_for_title(
-                truncated, parsed.year
-            )
-            return self._scorer.score_results(
-                fallback,
-                query_title=truncated,
-                query_year=parsed.year,
-                is_series=True,
-            )
-        return []
+            if filtered:
+                candidates = filtered
+
+        return candidates
 
     async def _search_series_for_title(
         self, title: str, year: Optional[int]
     ) -> list[SearchResult]:
-        """Fusionne les resultats TMDB (search_tv) et TVDB pour un titre série."""
-        merged: list[SearchResult] = []
-        tmdb_results = await self._tmdb.search_tv(title, year=year)
-        merged.extend(tmdb_results)
-        tvdb_results = await self._tvdb.search(title, year=year)
-        merged.extend(tvdb_results)
-        return merged
+        """TVDB d'abord. Si vide, fallback TMDB search_tv (séries pas dans TVDB)."""
+        tvdb_results = await search_and_score_series(
+            title, year, self._scorer, self._tvdb, self._series_cache
+        )
+        if tvdb_results:
+            return tvdb_results
+
+        # Fallback TMDB search_tv : séries qui n'existent que sur TMDB
+        # (cas signalé : Yellowstone 2018 homonymes sans tmdb_id, Fiasco
+        # 2024, etc.). On scorit avec le même MatcherService.
+        try:
+            tmdb_results = await self._tmdb.search_tv(title, year=year)
+        except Exception:
+            return []
+        if not tmdb_results:
+            return []
+        return self._scorer.score_results(
+            tmdb_results,
+            query_title=title,
+            query_year=year,
+            is_series=True,
+        )
 
     def _classify(
         self,
@@ -220,6 +277,12 @@ class DefaultDetailsFetcher:
 
     Cable sur les clients TMDB/TVDB existants. Utilise par le plan_builder
     en mode raw pour recuperer le vote_average d'un match TMDB/TVDB.
+
+    Cas source="tvdb" : TVDB v3 n'expose pas `vote_average` de manière
+    fiable, donc on traverse TMDB via `/find?external_source=tvdb_id`
+    pour récupérer la note (même stratégie que series_enricher). Si TMDB
+    ne connaît pas le tvdb_id, on retombe sur les détails TVDB bruts
+    (sans note → bucket UNRATED, comportement legacy préservé).
     """
 
     def __init__(
@@ -238,6 +301,9 @@ class DefaultDetailsFetcher:
         if source == "tmdb_tv":
             return await self._tmdb.get_tv_details(media_id)
         if source == "tvdb":
+            details = await self._tmdb.find_by_tvdb_id(media_id)
+            if details is not None:
+                return details
             return await self._tvdb.get_details(media_id)
         return None
 

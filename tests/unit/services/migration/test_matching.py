@@ -21,7 +21,9 @@ from src.core.ports.api_clients import SearchResult
 from src.core.value_objects.parsed_info import MediaType, ParsedFilename
 from src.services.matcher import MatcherService
 from src.services.migration.dataclasses import MigrationCandidate
+from src.core.ports.api_clients import MediaDetails
 from src.services.migration.matching import (
+    DefaultDetailsFetcher,
     MatchKind,
     MigrationMatcher,
     _truncate_title_at_first_number,
@@ -216,7 +218,12 @@ async def test_no_results_when_parsed_title_empty():
 
 @pytest.mark.asyncio
 async def test_movie_uses_tmdb_search_only():
-    """Pour un film, on n'appelle ni search_tv ni TVDB."""
+    """Pour un film, on n'appelle ni search_tv ni TVDB.
+
+    On fait deux appels TMDB search : un avec `year=` et un avec la query
+    "{title} {year}" (helper partagé avec le workflow — TMDB ignore le
+    param year et range mieux quand l'année est dans le texte).
+    """
     matcher = _make_matcher(
         parsed=_parsed("Avatar", year=2009, media_type=MediaType.MOVIE),
         tmdb_results=[_result("19995", "Avatar", year=2009)],
@@ -225,14 +232,16 @@ async def test_movie_uses_tmdb_search_only():
 
     await matcher.match(cand)
 
-    matcher._tmdb.search.assert_called_once()
+    assert matcher._tmdb.search.call_count == 2
     matcher._tmdb.search_tv.assert_not_called()
     matcher._tvdb.search.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_series_merges_tmdb_tv_and_tvdb():
-    """Pour une série, on agrège search_tv (TMDB) + search (TVDB)."""
+async def test_series_uses_tvdb_first_skips_tmdb_when_tvdb_hits():
+    """Pour une série, TVDB d'abord. Si TVDB rend des résultats, on ne
+    touche pas à TMDB (évite la fausse ambiguïté quand la même série
+    remonte via les deux providers avec score ~100)."""
     matcher = _make_matcher(
         parsed=_parsed("Lost", year=2004, media_type=MediaType.SERIES),
         tmdb_tv_results=[_result("4607", "Lost", year=2004, source="tmdb_tv")],
@@ -242,12 +251,33 @@ async def test_series_merges_tmdb_tv_and_tvdb():
 
     out = await matcher.match(cand)
 
-    matcher._tmdb.search_tv.assert_called_once()
     matcher._tvdb.search.assert_called_once()
+    matcher._tmdb.search_tv.assert_not_called()
     matcher._tmdb.search.assert_not_called()
-    # Au moins un des deux doit ressortir en MATCHED ou AMBIGUOUS.
-    assert out.kind in (MatchKind.MATCHED, MatchKind.AMBIGUOUS)
-    assert len(out.top_results) >= 1
+    assert out.kind == MatchKind.MATCHED
+    assert out.selected is not None
+    assert out.selected.source == "tvdb"
+
+
+@pytest.mark.asyncio
+async def test_series_fallback_tmdb_when_tvdb_empty():
+    """Si TVDB rend 0 résultat, on fallback sur TMDB search_tv."""
+    matcher = _make_matcher(
+        parsed=_parsed("Yellowstone", year=2018, media_type=MediaType.SERIES),
+        tmdb_tv_results=[
+            _result("73586", "Yellowstone", year=2018, source="tmdb_tv")
+        ],
+        tvdb_results=[],
+    )
+    cand = _candidate("Yellowstone.S01E01.mkv", media_root="Séries")
+
+    out = await matcher.match(cand)
+
+    matcher._tvdb.search.assert_called_once()
+    matcher._tmdb.search_tv.assert_called_once()
+    assert out.kind == MatchKind.MATCHED
+    assert out.selected is not None
+    assert out.selected.source == "tmdb_tv"
 
 
 @pytest.mark.asyncio
@@ -255,14 +285,94 @@ async def test_series_inferred_from_media_root_when_parsed_unknown():
     """Si le parser dit UNKNOWN, on regarde media_root pour décider series/film."""
     matcher = _make_matcher(
         parsed=_parsed("Lost", year=2004, media_type=MediaType.UNKNOWN),
-        tmdb_tv_results=[_result("4607", "Lost", year=2004, source="tmdb_tv")],
+        tvdb_results=[_result("73739", "Lost", year=2004, source="tvdb")],
     )
     cand = _candidate("Lost (2004).mkv", media_root="Séries")
 
     await matcher.match(cand)
 
-    matcher._tmdb.search_tv.assert_called_once()
+    matcher._tvdb.search.assert_called_once()
     matcher._tmdb.search.assert_not_called()
+
+
+# ---- DefaultDetailsFetcher : routage par source ---------------------------
+
+
+@pytest.mark.asyncio
+async def test_fetcher_tvdb_source_uses_tmdb_find_by_tvdb_id():
+    """Pour source=tvdb, on traverse TMDB via /find?external_source=tvdb_id
+    afin de récupérer le vote_average (TVDB v3 ne l'expose pas)."""
+    tmdb = MagicMock()
+    tmdb.find_by_tvdb_id = AsyncMock(
+        return_value=MediaDetails(
+            id="123", title="Arde Madrid", vote_average=8.3
+        )
+    )
+    tvdb = MagicMock()
+    tvdb.get_details = AsyncMock()
+
+    fetcher = DefaultDetailsFetcher(tmdb_client=tmdb, tvdb_client=tvdb)
+    details = await fetcher.fetch(media_id="343089", source="tvdb")
+
+    tmdb.find_by_tvdb_id.assert_awaited_once_with("343089")
+    tvdb.get_details.assert_not_called()
+    assert details is not None
+    assert details.vote_average == 8.3
+
+
+@pytest.mark.asyncio
+async def test_fetcher_tvdb_falls_back_to_tvdb_when_tmdb_not_found():
+    """Si TMDB ne connaît pas le tvdb_id, on retombe sur tvdb.get_details
+    (sans vote_average — bucket UNRATED, comportement legacy)."""
+    tmdb = MagicMock()
+    tmdb.find_by_tvdb_id = AsyncMock(return_value=None)
+    tvdb_details = MediaDetails(id="999", title="Old Show")
+    tvdb = MagicMock()
+    tvdb.get_details = AsyncMock(return_value=tvdb_details)
+
+    fetcher = DefaultDetailsFetcher(tmdb_client=tmdb, tvdb_client=tvdb)
+    details = await fetcher.fetch(media_id="999", source="tvdb")
+
+    tmdb.find_by_tvdb_id.assert_awaited_once()
+    tvdb.get_details.assert_awaited_once_with("999")
+    assert details is tvdb_details
+    assert details.vote_average is None
+
+
+@pytest.mark.asyncio
+async def test_fetcher_tmdb_tv_source_uses_get_tv_details_directly():
+    """Pour source=tmdb_tv, on appelle directement get_tv_details."""
+    tmdb = MagicMock()
+    tmdb.get_tv_details = AsyncMock(
+        return_value=MediaDetails(id="73586", title="Yellowstone", vote_average=8.6)
+    )
+    tmdb.find_by_tvdb_id = AsyncMock()
+    tvdb = MagicMock()
+    tvdb.get_details = AsyncMock()
+
+    fetcher = DefaultDetailsFetcher(tmdb_client=tmdb, tvdb_client=tvdb)
+    details = await fetcher.fetch(media_id="73586", source="tmdb_tv")
+
+    tmdb.get_tv_details.assert_awaited_once_with("73586")
+    tmdb.find_by_tvdb_id.assert_not_called()
+    tvdb.get_details.assert_not_called()
+    assert details.vote_average == 8.6
+
+
+@pytest.mark.asyncio
+async def test_fetcher_tmdb_movie_source_uses_get_details():
+    """Pour source=tmdb (film), on appelle directement get_details."""
+    tmdb = MagicMock()
+    tmdb.get_details = AsyncMock(
+        return_value=MediaDetails(id="19995", title="Avatar", vote_average=7.6)
+    )
+    tvdb = MagicMock()
+
+    fetcher = DefaultDetailsFetcher(tmdb_client=tmdb, tvdb_client=tvdb)
+    details = await fetcher.fetch(media_id="19995", source="tmdb")
+
+    tmdb.get_details.assert_awaited_once_with("19995")
+    assert details.vote_average == 7.6
 
 
 # ---- candidates_to_dicts (sérialisation JSON) -----------------------------
@@ -423,34 +533,43 @@ def test_truncate_title_preserves_year_like_numbers_in_middle():
 
 @pytest.mark.asyncio
 async def test_movie_fallback_truncated_title_when_first_search_empty():
-    """Si TMDB.search initial vide, retenter avec titre tronqué."""
+    """Si la recherche initiale TMDB est vide (les 2 variantes), retenter
+    avec le titre tronqué (qui passe lui aussi par les 2 variantes)."""
     matcher = _make_matcher(
         parsed=_parsed("Rivalité de génies 02 Edison Tesla", year=2015),
-        tmdb_results=[],  # search() default empty
+        tmdb_results=[],
     )
-    # Reconfigure : 1er appel vide, 2e appel avec titre tronqué retourne 1 résultat.
+    # 1ère recherche (titre+year=2015) → vide
+    # 2e recherche ("titre 2015") → vide
+    # 3e recherche (titre tronqué + year=2015) → 1 match
+    # 4e recherche ("titre tronqué 2015") → 1 match (dédupliqué par id)
     matcher._tmdb.search = AsyncMock(
         side_effect=[
-            [],  # search("Rivalité de génies 02 Edison Tesla", 2015) → vide
-            [_result("123", "Rivalité de génies", year=2015)],  # tronqué match
+            [],
+            [],
+            [_result("123", "Rivalité de génies", year=2015)],
+            [_result("123", "Rivalité de génies", year=2015)],
         ]
     )
     cand = _candidate("Rivalité.de.génies.02.Edison.Tesla.2015.mkv")
 
     out = await matcher.match(cand)
 
-    assert matcher._tmdb.search.call_count == 2
+    assert matcher._tmdb.search.call_count == 4
+    # Premier appel : titre original
     assert matcher._tmdb.search.call_args_list[0].args[0] == (
         "Rivalité de génies 02 Edison Tesla"
     )
-    assert matcher._tmdb.search.call_args_list[1].args[0] == "Rivalité de génies"
+    # Troisième appel : titre tronqué
+    assert matcher._tmdb.search.call_args_list[2].args[0] == "Rivalité de génies"
     # Top1 score >= 85 (titre exact) → MATCHED.
     assert out.kind == MatchKind.MATCHED
 
 
 @pytest.mark.asyncio
 async def test_movie_no_fallback_when_no_number_in_title():
-    """Pas de chiffre → pas de retry."""
+    """Pas de chiffre dans le titre → pas de retry tronqué (mais on fait
+    quand même la double recherche TMDB search + "{title} {year}")."""
     matcher = _make_matcher(
         parsed=_parsed("Avatar", year=2009),
         tmdb_results=[],
@@ -460,29 +579,37 @@ async def test_movie_no_fallback_when_no_number_in_title():
 
     out = await matcher.match(cand)
 
-    matcher._tmdb.search.assert_called_once()
+    # 2 appels (search + "title year") mais pas de 3e avec titre tronqué.
+    assert matcher._tmdb.search.call_count == 2
     assert out.kind == MatchKind.NO_RESULTS
 
 
 @pytest.mark.asyncio
 async def test_series_fallback_truncated_title_when_first_search_empty():
-    """Mode séries : fallback aussi sur les deux clients TMDB+TVDB."""
+    """Mode séries : fallback titre tronqué passe lui aussi par
+    TVDB-then-TMDB. Ici, le titre original est vide partout, le titre
+    tronqué match via TMDB après que TVDB ait rendu vide."""
     matcher = _make_matcher(
         parsed=_parsed(
             "Cosmos 13 Voyage", year=2014, media_type=MediaType.SERIES
         ),
     )
+    # TVDB : vide pour titre original puis pour titre tronqué (4 appels au total
+    # — 2 pour chaque tentative parce que filter_by_episode_count est appelé
+    # uniquement après scoring, mais ici sans candidats).
+    matcher._tvdb.search = AsyncMock(side_effect=[[], []])
     matcher._tmdb.search_tv = AsyncMock(
         side_effect=[
-            [],
+            [],  # titre original "Cosmos 13 Voyage" → vide
             [_result("4607", "Cosmos", year=2014, source="tmdb_tv")],
         ]
     )
-    matcher._tvdb.search = AsyncMock(side_effect=[[], []])
     cand = _candidate("Cosmos.13.S01E01.mkv", media_root="Séries")
 
     out = await matcher.match(cand)
 
+    # TVDB appelé pour les deux tentatives, TMDB appelé en fallback les deux fois
+    assert matcher._tvdb.search.call_count == 2
     assert matcher._tmdb.search_tv.call_count == 2
     assert matcher._tmdb.search_tv.call_args_list[1].args[0] == "Cosmos"
     assert out.kind == MatchKind.MATCHED
@@ -490,7 +617,11 @@ async def test_series_fallback_truncated_title_when_first_search_empty():
 
 @pytest.mark.asyncio
 async def test_no_fallback_when_first_search_already_returns_results():
-    """Si la 1re recherche trouve déjà, pas de 2e tentative (économie API)."""
+    """Si la 1re recherche trouve déjà, pas de fallback titre tronqué.
+
+    On fait quand même la double recherche TMDB (search + "{title} {year}")
+    parce que c'est le comportement workflow, mais pas la troncature.
+    """
     matcher = _make_matcher(
         parsed=_parsed("Test 02 Episode", year=2020),
         tmdb_results=[_result("1", "Test 02 Episode", year=2020)],
@@ -498,7 +629,8 @@ async def test_no_fallback_when_first_search_already_returns_results():
     cand = _candidate("Test.02.Episode.2020.mkv")
 
     await matcher.match(cand)
-    matcher._tmdb.search.assert_called_once()
+    # 2 appels (search + "title year") mais pas de 3e avec titre tronqué.
+    assert matcher._tmdb.search.call_count == 2
 
 
 @pytest.mark.asyncio
