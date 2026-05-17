@@ -22,6 +22,18 @@ class GuessitFilenameParser(IFilenameParser):
     depuis un nom de fichier video.
     """
 
+    # Fallback regex pour les mots-clés FR "épisode/ép" que guessit ignore.
+    # Capture les variantes avec/sans accent, point, virgule séparateur. Word
+    # boundary à droite pour éviter de capturer "épisode2" sans espace (peu
+    # probable mais on reste strict).
+    _FR_EPISODE_RE = re.compile(
+        r"\b(?:é|e)p(?:isode)?\.?\s*(\d{1,3})\b",
+        re.IGNORECASE,
+    )
+    # Idem pour "saison N" — guessit la reconnaît déjà mais on garde le
+    # fallback par symétrie (utile si un filename atypique la masque).
+    _FR_SEASON_RE = re.compile(r"\bsaison\s*(\d{1,2})\b", re.IGNORECASE)
+
     def parse(
         self, filename: str, type_hint: Optional[MediaType] = None
     ) -> ParsedFilename:
@@ -41,6 +53,18 @@ class GuessitFilenameParser(IFilenameParser):
 
         # Appeler guessit
         result = guessit(filename, options)
+
+        # Fallback FR : guessit n'identifie pas "épisode N" (avec accent) ni
+        # "Ép N" abrégé — fréquent sur les rips français. Si guessit n'a pas
+        # trouvé d'épisode, on tente la regex sur le filename brut.
+        if "episode" not in result:
+            match = self._FR_EPISODE_RE.search(filename)
+            if match:
+                result["episode"] = int(match.group(1))
+        if "season" not in result:
+            match = self._FR_SEASON_RE.search(filename)
+            if match:
+                result["season"] = int(match.group(1))
 
         # Mapper vers ParsedFilename
         return self._map_to_parsed_filename(result, type_hint)

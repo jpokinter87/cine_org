@@ -8,7 +8,7 @@ avec guessit, couvrant films, series, double episodes, et type hints.
 import pytest
 
 from src.adapters.parsing.guessit_parser import GuessitFilenameParser
-from src.core.value_objects.parsed_info import MediaType, ParsedFilename
+from src.core.value_objects.parsed_info import MediaType
 
 
 class TestGuessitFilenameParserMovies:
@@ -84,6 +84,42 @@ class TestGuessitFilenameParserSeries:
         assert result.resolution == "720p"
         assert result.source == "HDTV"
         assert result.release_group == "CTU"
+
+    def test_french_episode_keyword_with_accent(
+        self, parser: GuessitFilenameParser
+    ) -> None:
+        """Format français "saison N - épisode M" : guessit ignore "épisode"
+        (avec l'accent é) → fallback regex doit récupérer le numéro.
+
+        Régression observée sur les rips Arde Madrid : sans fallback,
+        episode=None → _SeriesPreparer.prepare() retournait None → apply
+        échouait avec "destination_path manquant"."""
+        result = parser.parse("Arde Madrid saison 1 - épisode 6 .mkv", None)
+
+        assert result.title == "Arde Madrid"
+        assert result.season == 1
+        assert result.episode == 6
+
+    def test_french_episode_keyword_no_accent(
+        self, parser: GuessitFilenameParser
+    ) -> None:
+        """Variante sans accent ("episode" au lieu de "épisode")."""
+        result = parser.parse("Foo Bar saison 2 - episode 12.mkv", None)
+
+        assert result.season == 2
+        assert result.episode == 12
+
+    def test_french_episode_keyword_abbreviated(
+        self, parser: GuessitFilenameParser
+    ) -> None:
+        """Abréviations "Ep N" / "Ép N"."""
+        result_ep = parser.parse("Show saison 3 - Ep 4.mkv", None)
+        assert result_ep.season == 3
+        assert result_ep.episode == 4
+
+        result_ep_accent = parser.parse("Show saison 3 - Ép 5.mkv", None)
+        assert result_ep_accent.season == 3
+        assert result_ep_accent.episode == 5
 
     def test_double_episode_parsing(self, parser: GuessitFilenameParser) -> None:
         """Test parsing d'un double episode (S03E09E10)."""
