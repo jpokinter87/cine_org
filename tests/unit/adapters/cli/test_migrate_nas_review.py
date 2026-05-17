@@ -169,6 +169,28 @@ def _write_plan_with_nv(tmp_path):
     return plan_path, item
 
 
+def test_review_loop_needs_validation_default_is_keep_skip(tmp_path):
+    """Régression : un Entrée distrait sur needs_validation NE DOIT PAS accepter
+    le top candidate. Le défaut est `k` (keep skip) — plus safe pour les buckets
+    où le candidat top peut être erroné (homonymes, mauvais match)."""
+    plan_path, item = _write_plan_with_nv(tmp_path)
+    state_path = tmp_path / "s.sqlite"
+    runner = CliRunner()
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path)],
+        input="\n",  # juste Entrée → applique le défaut
+    )
+    assert result.exit_code == 0, result.output
+    store = MigrationStateStore(state_path)
+    decision = store.get_decision(item.item_id)
+    assert decision is not None
+    assert decision.decision == DecisionStatus.SKIPPED, (
+        f"Entrée par défaut doit skip, pas accept (était : {decision.decision})"
+    )
+    store.close()
+
+
 def test_review_loop_accept_top_persists_decision(tmp_path):
     """User tape 'a' → décision approved avec match du top candidate."""
     plan_path, item = _write_plan_with_nv(tmp_path)

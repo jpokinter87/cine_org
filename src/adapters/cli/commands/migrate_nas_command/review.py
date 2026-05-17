@@ -549,7 +549,7 @@ def _handle_needs_validation(
     answer = Prompt.ask(
         "\\[a]ccept top  \\[1-N] pick  \\[s]earch  \\[r]eject  \\[k]eep skip  \\[w]eb defer  \\[q]uit",
         choices=valid_keys,
-        default="a",
+        default="k",
         show_choices=False,
     )
 
