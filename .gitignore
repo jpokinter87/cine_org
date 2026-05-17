@@ -62,7 +62,7 @@ player_profiles.json
 .claude/
 
 # Migration runtime (plans + state SQLite générés par `migrate-nas plan`)
-migration/
+/migration/
 
 # Sorties brutes adhoc (dumps utilisateur, non versionnés)
 cleanup_*.txt

@@ -48,8 +48,14 @@ def plan_command(
     ],
     output: Annotated[
         Path,
-        typer.Option("--output", help="Chemin du fichier plan.json à écrire."),
-    ],
+        typer.Option(
+            "--output",
+            help=(
+                "Chemin du fichier plan.json à écrire. "
+                "Défaut : ./migration/plan.json (convention de l'app)."
+            ),
+        ),
+    ] = Path("./migration/plan.json"),
     csv_dir: Annotated[
         Optional[Path],
         typer.Option(
@@ -73,13 +79,15 @@ def plan_command(
         typer.Option(
             "--include-raw/--no-include-raw",
             help=(
-                "Active le mode raw : les fichiers physiques bruts (vieux NAS sans "
-                "couche symlinks) sont identifiés via TMDB/TVDB et classés selon "
-                "leur note. Les matches ambigus vont dans needs_validation.csv "
-                "pour retraitement via `process`. Nécessite des clés API valides."
+                "Mode raw activé par défaut : les fichiers physiques bruts "
+                "(vieux NAS sans couche symlinks) sont identifiés via TMDB/TVDB "
+                "et classés selon leur note. Les matches ambigus vont dans "
+                "needs_validation pour retraitement via la review. Utilise "
+                "--no-include-raw pour limiter au mode symlinks pur. "
+                "Nécessite des clés API valides."
             ),
         ),
-    ] = False,
+    ] = True,
     category: Annotated[
         Optional[list[str]],
         typer.Option(

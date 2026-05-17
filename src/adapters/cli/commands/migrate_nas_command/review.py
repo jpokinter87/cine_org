@@ -57,14 +57,31 @@ def _print_summary(
             f"\n      → http://localhost:8000/migration/review?plan={plan_path}"
         )
     pending = summary.get("pending", 0)
+    total_review = summary.get("total_review_buckets", 0)
+    decided_in_plan = sum(
+        summary.get(s, 0)
+        for s in ("approved", "skipped", "rejected", "deferred_to_web")
+    )
     if pending:
         console.print(f"  [dim]En attente : {pending} (--resume pour reprendre)[/dim]")
-    elif summary.get("total_review_buckets", 0) > 0:
-        console.print(
-            "[green]Tous les items ont une décision.[/green] "
-            f"Lance [bold]migrate-nas apply {plan_path}[/bold] pour transférer "
-            "les approuvés."
-        )
+    elif total_review > 0:
+        if decided_in_plan == 0:
+            # Tous les items review du plan ont été sautés par --resume
+            # (décisions héritées d'une session antérieure). Cas typique :
+            # re-génération d'un plan sur les mêmes sources.
+            console.print(
+                f"[yellow]Aucun item à reviewer dans ce plan ({total_review} items "
+                f"déjà décidés via --resume).[/yellow]\n"
+                f"Utilise [bold]--restart[/bold] pour les re-traiter ou "
+                f"[bold]migrate-nas apply {plan_path}[/bold] pour transférer "
+                f"directement les approuvés."
+            )
+        else:
+            console.print(
+                "[green]Tous les items ont une décision.[/green] "
+                f"Lance [bold]migrate-nas apply {plan_path}[/bold] pour transférer "
+                "les approuvés."
+            )
     console.print("─" * 60)
 
 

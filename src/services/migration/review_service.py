@@ -189,22 +189,35 @@ class MigrationReviewService:
         )
 
     def summary(self) -> dict[str, int]:
-        """Retourne le récap : pending vs décidés (par status)."""
+        """Retourne le récap : pending vs décidés (par status).
+
+        Filtre les décisions sur les item_ids du plan actuel — le state store
+        peut contenir des décisions résiduelles d'anciens plans ayant utilisé
+        le même `<plan>.state.sqlite` (path par convention). Sans ce filtre,
+        les compteurs s'agrègent à travers les générations de plans et
+        l'utilisateur voit des totaux incompréhensibles (ex : 193 décisions
+        sur un plan de 15 items).
+        """
         from src.services.migration.decisions import DecisionStatus
 
         review_items = [
             it for it in self._plan.items if it.bucket in REVIEW_BUCKETS
         ]
-        decisions = self._store.load_decisions()
-        decided_ids = set(decisions.keys())
-        pending = sum(1 for it in review_items if it.item_id not in decided_ids)
+        review_ids = {it.item_id for it in review_items}
+        all_decisions = self._store.load_decisions()
+        plan_decisions = [
+            d for item_id, d in all_decisions.items() if item_id in review_ids
+        ]
+        pending = sum(
+            1 for it in review_items if it.item_id not in all_decisions
+        )
         out: dict[str, int] = {
             "total_review_buckets": len(review_items),
             "pending": pending,
         }
         for status in DecisionStatus:
             out[status.value] = sum(
-                1 for d in decisions.values() if d.decision == status
+                1 for d in plan_decisions if d.decision == status
             )
         return out
 

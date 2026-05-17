@@ -203,6 +203,50 @@ def test_summary_combines_pending_and_decided(store):
     assert summary["total_review_buckets"] == 3
 
 
+def test_summary_ignores_decisions_from_other_plans_in_shared_store(store):
+    """Le state store peut contenir des décisions d'anciens plans (path partagé
+    `<plan>.state.sqlite`). summary() ne doit compter que les décisions dont
+    l'item_id appartient au plan actuel — sinon l'utilisateur voit des
+    compteurs gonflés (cas observé : plan de 15 items avec 193 décisions
+    historiques affichées en agrégat)."""
+    from src.services.migration.decisions import Decision
+
+    plan = _plan([
+        _item("nv1", Bucket.NEEDS_VALIDATION),
+        _item("u1", Bucket.UNRATED),
+    ])
+    # Décision sur un item du plan actuel
+    service = MigrationReviewService(
+        plan=plan, state_store=store,
+        tmdb_client=MagicMock(), tvdb_client=MagicMock(),
+        matcher=MagicMock(), duplicate_detector=MagicMock(),
+    )
+    service.decide(
+        item_id="nv1",
+        decision=DecisionStatus.APPROVED,
+        chosen_tmdb_id=1,
+        decided_via="cli",
+    )
+    # Décisions résiduelles d'un ancien plan, item_ids inconnus du plan actuel
+    from datetime import datetime, timezone
+    for legacy_id in ("legacy1", "legacy2", "legacy3"):
+        store.save_decision(Decision(
+            item_id=legacy_id,
+            bucket_origin="needs_validation",
+            decision=DecisionStatus.SKIPPED,
+            decided_via="cli",
+            decided_at=datetime.now(timezone.utc),
+        ))
+
+    summary = service.summary()
+    # 1 approved (plan actuel) + 1 pending (u1) — les 3 skipped historiques
+    # NE doivent PAS être comptés.
+    assert summary["approved"] == 1
+    assert summary["pending"] == 1
+    assert summary["skipped"] == 0
+    assert summary["total_review_buckets"] == 2
+
+
 def test_search_tmdb_movies_uses_tmdb_client_and_matcher(store):
     from src.core.ports.api_clients import SearchResult
 
