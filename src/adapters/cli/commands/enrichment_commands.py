@@ -121,15 +121,25 @@ def enrich_imdb_ids(
 @with_container()
 async def _enrich_imdb_ids_async(container, limit: int) -> None:
     """Implementation async de la commande enrich-imdb-ids."""
+    from pathlib import Path
+
+    from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
     from src.services.imdb_id_enricher import ImdbIdEnricherService, EnrichmentResult, ProgressInfo
 
     # Creer le service d'enrichissement des imdb_id
     movie_repo = container.movie_repository()
     tmdb_client = container.tmdb_client()
 
+    # Cache IMDb local : permet de rattraper imdb_rating/imdb_votes en une
+    # seule commande (sans ça il faut chaîner enrich-imdb-ids puis imdb sync).
+    imdb_importer = IMDbDatasetImporter(
+        cache_dir=Path(".cache/imdb"), session=container.session()
+    )
+
     service = ImdbIdEnricherService(
         movie_repo=movie_repo,
         tmdb_client=tmdb_client,
+        imdb_importer=imdb_importer,
     )
 
     # Verifier d'abord combien de films sont a enrichir

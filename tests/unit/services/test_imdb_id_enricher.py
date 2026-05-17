@@ -189,6 +189,62 @@ class TestImdbIdEnricherService:
         assert duration >= 0.1
 
 
+class TestImdbIdEnricherImdbRatingBackfill:
+    """Vérifie que le service rattrape aussi imdb_rating depuis le cache IMDb local."""
+
+    @pytest.mark.asyncio
+    async def test_enrich_also_populates_imdb_rating_from_local_cache(self):
+        """Quand un imdb_importer est fourni, l'imdb_rating doit être lu depuis
+        le cache local dès que l'imdb_id est résolu (aligné sur le workflow
+        principal et migrate-nas raw_finalizer). Sinon on doit lancer 2
+        commandes successives pour avoir un film complet."""
+        movie = Movie(id="1", tmdb_id=19995, title="Avatar", year=2009)
+        movie_repo = MagicMock()
+        movie_repo.list_without_imdb_id.return_value = [movie]
+
+        tmdb_client = AsyncMock()
+        tmdb_client.get_external_ids.return_value = {"imdb_id": "tt0499549"}
+
+        # Stub IMDbDatasetImporter : un seul rating connu pour tt0499549
+        imdb_importer = MagicMock()
+        imdb_importer.get_rating.return_value = (7.9, 1_350_000)
+
+        service = ImdbIdEnricherService(
+            movie_repo=movie_repo,
+            tmdb_client=tmdb_client,
+            imdb_importer=imdb_importer,
+        )
+        await service.enrich_imdb_ids(limit=10)
+
+        saved = movie_repo.save.call_args[0][0]
+        assert saved.imdb_id == "tt0499549"
+        assert saved.imdb_rating == 7.9
+        assert saved.imdb_votes == 1_350_000
+        imdb_importer.get_rating.assert_called_once_with("tt0499549")
+
+    @pytest.mark.asyncio
+    async def test_enrich_without_importer_keeps_imdb_rating_none(self):
+        """Rétrocompat : sans importer, le service garde son comportement
+        historique (imdb_id seulement, imdb_rating laissé à None)."""
+        movie = Movie(id="1", tmdb_id=19995, title="Avatar", year=2009)
+        movie_repo = MagicMock()
+        movie_repo.list_without_imdb_id.return_value = [movie]
+
+        tmdb_client = AsyncMock()
+        tmdb_client.get_external_ids.return_value = {"imdb_id": "tt0499549"}
+
+        service = ImdbIdEnricherService(
+            movie_repo=movie_repo,
+            tmdb_client=tmdb_client,
+        )
+        await service.enrich_imdb_ids(limit=10)
+
+        saved = movie_repo.save.call_args[0][0]
+        assert saved.imdb_id == "tt0499549"
+        assert saved.imdb_rating is None
+        assert saved.imdb_votes is None
+
+
 class TestEnrichmentStats:
     """Tests pour la dataclass EnrichmentStats."""
 
