@@ -501,6 +501,44 @@ def get_movie_video_destination(movie: Movie, video_dir: Path) -> Path:
     return _navigate_to_leaf(genre_dir, movie.title)
 
 
+def get_short_video_destination(movie: Movie, video_dir: Path) -> Path:
+    """Calcule le chemin de symlink pour un court-métrage.
+
+    Structure : ``video/Films/Courts/{franchise}/``.
+
+    La franchise vient de ``movie.collection_name`` (collection TMDB). Quand
+    aucune collection n'est connue, le court est regroupé sous ``Divers``.
+
+    Args:
+        movie: Métadonnées du film (collection_name utilisé comme franchise).
+        video_dir: Répertoire racine des symlinks.
+
+    Returns:
+        Chemin de destination pour le symlink du court-métrage.
+    """
+    franchise = movie.collection_name or "Divers"
+    franchise_folder = sanitize_for_filesystem(franchise) or "Divers"
+    return video_dir / "Films" / "Courts" / franchise_folder
+
+
+def get_short_destination(movie: Movie, storage_dir: Path, video_dir: Path) -> Path:
+    """Calcule le chemin de destination storage pour un court-métrage.
+
+    Transpose ``get_short_video_destination`` dans ``storage_dir``.
+
+    Args:
+        movie: Métadonnées du film.
+        storage_dir: Répertoire racine de stockage.
+        video_dir: Répertoire racine des symlinks (structure maître).
+
+    Returns:
+        Chemin de destination dans storage.
+    """
+    video_path = get_short_video_destination(movie, video_dir)
+    relative_path = video_path.relative_to(video_dir)
+    return storage_dir / relative_path
+
+
 def get_series_type(genres: tuple[str, ...]) -> str:
     """
     Determine le type de serie selon les genres.
@@ -648,6 +686,22 @@ class OrganizerService:
         Voir get_movie_video_destination() pour les détails.
         """
         return get_movie_video_destination(movie, video_dir)
+
+    def get_short_video_destination(self, movie: Movie, video_dir: Path) -> Path:
+        """Calcule le chemin de symlink pour un court-métrage.
+
+        Voir get_short_video_destination() pour les détails.
+        """
+        return get_short_video_destination(movie, video_dir)
+
+    def get_short_destination(
+        self, movie: Movie, storage_dir: Path, video_dir: Path
+    ) -> Path:
+        """Calcule le chemin de destination storage pour un court-métrage.
+
+        Voir get_short_destination() pour les détails.
+        """
+        return get_short_destination(movie, storage_dir, video_dir)
 
     def get_series_destination(
         self,

@@ -15,6 +15,9 @@ from src.services.organizer import (
     get_movie_destination,
     get_movie_video_destination,
     get_series_destination,
+    get_short_destination,
+    get_short_video_destination,
+    OrganizerService,
     SubdivisionRange,
     _title_matches_prefix_dir,
     _find_matching_subdir,
@@ -25,6 +28,7 @@ from src.services.organizer import (
 # ====================
 # Fixtures
 # ====================
+
 
 @pytest.fixture
 def storage_dir() -> Path:
@@ -111,6 +115,7 @@ def series_with_article() -> Series:
 # ====================
 # Tests get_sort_letter
 # ====================
+
 
 class TestGetSortLetter:
     """Tests pour l'extraction de la lettre de tri."""
@@ -272,6 +277,7 @@ class TestTitleMatchesRange:
     def test_title_matches_range_invisible_not_hash(self) -> None:
         """Un titre avec caractère invisible ne doit pas matcher #."""
         from src.services.organizer import _title_matches_range
+
         # U+200E Left-to-Right Mark devant "Zoe"
         assert _title_matches_range("\u200eZoe, mon amie morte", "#") is False
         assert _title_matches_range("\u200eZoe, mon amie morte", "R-Z") is True
@@ -280,8 +286,12 @@ class TestTitleMatchesRange:
     def test_hyphenated_title_not_treated_as_range(self) -> None:
         """Un répertoire de série avec tiret ne doit pas être interprété comme plage."""
         from src.services.organizer import _title_matches_range
+
         # "Extra-Lucide (2025)" ne doit pas matcher des titres dans E-L
-        assert _title_matches_range("La Fabuleuse Mme Maisel", "Extra-Lucide (2025)") is False
+        assert (
+            _title_matches_range("La Fabuleuse Mme Maisel", "Extra-Lucide (2025)")
+            is False
+        )
         assert _title_matches_range("Fallout", "Extra-Lucide (2025)") is False
         # Vérifier que les vraies plages fonctionnent toujours
         assert _title_matches_range("Extra-Lucide", "Ea-Fa") is True
@@ -290,6 +300,7 @@ class TestTitleMatchesRange:
     def test_asymmetric_range_a_ami(self) -> None:
         """Plage asymétrique A-Ami : bornes correctes."""
         from src.services.organizer import _title_matches_range
+
         # Dans la plage
         assert _title_matches_range("Alien", "A-Ami") is True
         assert _title_matches_range("American Beauty", "A-Ami") is True
@@ -304,6 +315,7 @@ class TestTitleMatchesRange:
 # ====================
 # Tests get_priority_genre
 # ====================
+
 
 class TestGetPriorityGenre:
     """Tests pour la sélection du genre prioritaire."""
@@ -349,6 +361,7 @@ class TestGetPriorityGenre:
 # Tests get_movie_destination
 # ====================
 
+
 class TestGetMovieDestination:
     """Tests pour le calcul du chemin de destination des films (storage).
 
@@ -387,7 +400,9 @@ class TestGetMovieDestination:
         # Science-Fiction -> SF
         assert path == Path("/storage/Films/SF/#")
 
-    def test_movie_destination_no_genres(self, storage_dir: Path, video_dir: Path) -> None:
+    def test_movie_destination_no_genres(
+        self, storage_dir: Path, video_dir: Path
+    ) -> None:
         """Film sans genre utilise Drame (fallback Divers -> Drame)."""
         movie = Movie(title="Mystery Film", year=2020, genres=())
         path = get_movie_destination(movie, storage_dir, video_dir)
@@ -406,6 +421,7 @@ class TestGetMovieDestination:
 # Tests get_series_destination
 # ====================
 
+
 class TestGetSeriesDestination:
     """Tests pour le calcul du chemin de destination des séries.
 
@@ -417,7 +433,12 @@ class TestGetSeriesDestination:
         self, series_fixture: Series, storage_dir: Path, video_dir: Path
     ) -> None:
         """Structure de base: stockage/Series/Type/Lettre/Titre (Annee)/Saison XX."""
-        path = get_series_destination(series_fixture, season_number=1, storage_dir=storage_dir, video_dir=video_dir)
+        path = get_series_destination(
+            series_fixture,
+            season_number=1,
+            storage_dir=storage_dir,
+            video_dir=video_dir,
+        )
         # Drame -> TV
         assert path == Path("/storage/Series/TV/B/Breaking Bad (2008)/Saison 01")
 
@@ -425,38 +446,63 @@ class TestGetSeriesDestination:
         self, series_fixture: Series, storage_dir: Path, video_dir: Path
     ) -> None:
         """Numéro de saison à deux chiffres."""
-        path = get_series_destination(series_fixture, season_number=12, storage_dir=storage_dir, video_dir=video_dir)
+        path = get_series_destination(
+            series_fixture,
+            season_number=12,
+            storage_dir=storage_dir,
+            video_dir=video_dir,
+        )
         assert path == Path("/storage/Series/TV/B/Breaking Bad (2008)/Saison 12")
 
     def test_series_destination_with_article(
         self, series_with_article: Series, storage_dir: Path, video_dir: Path
     ) -> None:
         """The est ignoré pour la lettre."""
-        path = get_series_destination(series_with_article, season_number=3, storage_dir=storage_dir, video_dir=video_dir)
+        path = get_series_destination(
+            series_with_article,
+            season_number=3,
+            storage_dir=storage_dir,
+            video_dir=video_dir,
+        )
         assert path == Path("/storage/Series/TV/W/The Wire (2002)/Saison 03")
 
-    def test_series_destination_no_year(self, storage_dir: Path, video_dir: Path) -> None:
+    def test_series_destination_no_year(
+        self, storage_dir: Path, video_dir: Path
+    ) -> None:
         """Série sans année n'a pas de parenthèses."""
         series = Series(title="Friends", year=None)
-        path = get_series_destination(series, season_number=5, storage_dir=storage_dir, video_dir=video_dir)
+        path = get_series_destination(
+            series, season_number=5, storage_dir=storage_dir, video_dir=video_dir
+        )
         assert path == Path("/storage/Series/TV/F/Friends/Saison 05")
 
-    def test_series_destination_numeric_title(self, storage_dir: Path, video_dir: Path) -> None:
+    def test_series_destination_numeric_title(
+        self, storage_dir: Path, video_dir: Path
+    ) -> None:
         """Titre numérique va sous #."""
         series = Series(title="24", year=2001)
-        path = get_series_destination(series, season_number=1, storage_dir=storage_dir, video_dir=video_dir)
+        path = get_series_destination(
+            series, season_number=1, storage_dir=storage_dir, video_dir=video_dir
+        )
         assert path == Path("/storage/Series/TV/#/24 (2001)/Saison 01")
 
-    def test_series_destination_documentary(self, storage_dir: Path, video_dir: Path) -> None:
+    def test_series_destination_documentary(
+        self, storage_dir: Path, video_dir: Path
+    ) -> None:
         """Les séries documentaires vont sous Documentaires/Series documentaires/."""
         series = Series(title="Planet Earth", year=2006, genres=("Documentaire",))
-        path = get_series_destination(series, season_number=1, storage_dir=storage_dir, video_dir=video_dir)
-        assert path == Path("/storage/Documentaires/Series documentaires/P/Planet Earth (2006)/Saison 01")
+        path = get_series_destination(
+            series, season_number=1, storage_dir=storage_dir, video_dir=video_dir
+        )
+        assert path == Path(
+            "/storage/Documentaires/Series documentaires/P/Planet Earth (2006)/Saison 01"
+        )
 
 
 # ====================
 # Tests SubdivisionRange
 # ====================
+
 
 class TestSubdivisionRange:
     """Tests pour la dataclass SubdivisionRange."""
@@ -482,6 +528,7 @@ class TestSubdivisionRange:
 # Tests navigation subdivisions multi-niveaux
 # ====================
 
+
 class TestSeriesSubdivisionNavigation:
     """Tests pour la navigation récursive dans les subdivisions de séries."""
 
@@ -501,7 +548,16 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Vérifier que le chemin utilise Di-Dz (feuille) et non D (parent)
-        assert path == tmp_path / "Series" / "TV" / "D" / "Di-Dz" / "Downtown Cemetery (2025)" / "Saison 01"
+        assert (
+            path
+            == tmp_path
+            / "Series"
+            / "TV"
+            / "D"
+            / "Di-Dz"
+            / "Downtown Cemetery (2025)"
+            / "Saison 01"
+        )
 
     def test_series_navigues_pa_to_po_leaf(self, tmp_path: Path) -> None:
         """Une série P-Q navigue jusqu'à Pa-Po et non P-Q."""
@@ -519,7 +575,16 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Vérifier que le chemin utilise Pa-Po (feuille)
-        assert path == tmp_path / "Series" / "TV" / "P-Q" / "Pa-Po" / "Polar Park (2025)" / "Saison 01"
+        assert (
+            path
+            == tmp_path
+            / "Series"
+            / "TV"
+            / "P-Q"
+            / "Pa-Po"
+            / "Polar Park (2025)"
+            / "Saison 01"
+        )
 
     def test_series_navigues_sa_to_so_leaf(self, tmp_path: Path) -> None:
         """Une série S avec préfixe Sa-So navigue jusqu'à Sa-So et non S."""
@@ -537,7 +602,16 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Vérifier que le chemin utilise Sa-So (feuille)
-        assert path == tmp_path / "Series" / "TV" / "S" / "Sa-So" / "Sanctuary (2025)" / "Saison 01"
+        assert (
+            path
+            == tmp_path
+            / "Series"
+            / "TV"
+            / "S"
+            / "Sa-So"
+            / "Sanctuary (2025)"
+            / "Saison 01"
+        )
 
     def test_series_navigues_sp_to_sz_leaf(self, tmp_path: Path) -> None:
         """Une série S avec préfixe St navigue jusqu'à Sp-Sz."""
@@ -555,7 +629,16 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Vérifier que le chemin utilise Sp-Sz (feuille)
-        assert path == tmp_path / "Series" / "TV" / "S" / "Sp-Sz" / "Station Eleven (2025)" / "Saison 01"
+        assert (
+            path
+            == tmp_path
+            / "Series"
+            / "TV"
+            / "S"
+            / "Sp-Sz"
+            / "Station Eleven (2025)"
+            / "Saison 01"
+        )
 
     def test_series_three_level_subdivision_navigation(self, tmp_path: Path) -> None:
         """Navigation à travers 3 niveaux de subdivisions."""
@@ -574,9 +657,21 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Vérifier qu'on descend jusqu'au niveau le plus profond (Di-Dz)
-        assert path == tmp_path / "Series" / "TV" / "D" / "Da-Di" / "Di-Dz" / "Downtown Abbey (2025)" / "Saison 01"
+        assert (
+            path
+            == tmp_path
+            / "Series"
+            / "TV"
+            / "D"
+            / "Da-Di"
+            / "Di-Dz"
+            / "Downtown Abbey (2025)"
+            / "Saison 01"
+        )
 
-    def test_series_fallback_to_letter_when_no_subdivision(self, tmp_path: Path) -> None:
+    def test_series_fallback_to_letter_when_no_subdivision(
+        self, tmp_path: Path
+    ) -> None:
         """Sans subdivisions existantes, place directement dans le type_dir."""
         from src.services.organizer import get_series_video_destination
 
@@ -606,7 +701,16 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Vérifier l'utilisation du type Mangas
-        assert path == tmp_path / "Series" / "Mangas" / "D" / "Di-Dz" / "Death Note (2005)" / "Saison 01"
+        assert (
+            path
+            == tmp_path
+            / "Series"
+            / "Mangas"
+            / "D"
+            / "Di-Dz"
+            / "Death Note (2005)"
+            / "Saison 01"
+        )
 
     def test_series_type_animation(self, tmp_path: Path) -> None:
         """Les séries d'animation utilisent le type Animation."""
@@ -622,9 +726,20 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Vérifier l'utilisation du type Animation
-        assert path == tmp_path / "Series" / "Animation" / "S" / "Sa-Sm" / "Spider-Man (2025)" / "Saison 01"
+        assert (
+            path
+            == tmp_path
+            / "Series"
+            / "Animation"
+            / "S"
+            / "Sa-Sm"
+            / "Spider-Man (2025)"
+            / "Saison 01"
+        )
 
-    def test_series_chooses_correct_subdivision_when_multiple_exist(self, tmp_path: Path) -> None:
+    def test_series_chooses_correct_subdivision_when_multiple_exist(
+        self, tmp_path: Path
+    ) -> None:
         """Quand plusieurs subdivisions existent, choisit la bonne (Sp-Sz et non Sa-So)."""
         from src.services.organizer import get_series_video_destination
 
@@ -641,12 +756,22 @@ class TestSeriesSubdivisionNavigation:
         path = get_series_video_destination(series, season_number=1, video_dir=tmp_path)
 
         # Vérifier que le chemin utilise Sp-Sz (le bon choix)
-        assert path == tmp_path / "Series" / "TV" / "S" / "Sp-Sz" / "Station Eleven (2025)" / "Saison 01"
+        assert (
+            path
+            == tmp_path
+            / "Series"
+            / "TV"
+            / "S"
+            / "Sp-Sz"
+            / "Station Eleven (2025)"
+            / "Saison 01"
+        )
 
 
 # ====================
 # Tests _is_range_dir
 # ====================
+
 
 class TestIsRangeDir:
     """Tests pour la détection des répertoires de plage alphabétique."""
@@ -691,6 +816,7 @@ class TestIsRangeDir:
 # ====================
 # Tests _title_matches_prefix_dir
 # ====================
+
 
 class TestTitleMatchesPrefixDir:
     """Tests pour le matching titre -> répertoire préfixe."""
@@ -748,6 +874,7 @@ class TestTitleMatchesPrefixDir:
 # Tests _find_matching_subdir avec préfixes
 # ====================
 
+
 class TestFindMatchingSubdirPrefix:
     """Tests pour _find_matching_subdir avec des répertoires préfixe."""
 
@@ -794,6 +921,7 @@ class TestFindMatchingSubdirPrefix:
 # ====================
 # Tests navigation complète avec préfixes
 # ====================
+
 
 class TestNavigateToLeafWithPrefix:
     """Tests pour _navigate_to_leaf traversant des répertoires préfixe."""
@@ -876,3 +1004,94 @@ class TestSeriesContentDirNotSubdivision:
         assert "Gomorra/Gomorra" not in str(result)
         # La saison doit être dans Ga-Ha/Gomorra (2014)/Saison 01
         assert result == ga_ha / "Gomorra (2014)" / "Saison 01"
+
+
+class TestShortVideoDestination:
+    """Chemin symlink pour un court-métrage : video/Films/Courts/{franchise}/."""
+
+    def test_short_with_collection_routes_to_franchise(self, video_dir: Path) -> None:
+        movie = Movie(
+            title="Bugs Bunny — Hare-Way to the Stars",
+            year=1958,
+            duration_seconds=420,
+            collection_name="Looney Tunes",
+        )
+        result = get_short_video_destination(movie, video_dir)
+        assert result == video_dir / "Films" / "Courts" / "Looney Tunes"
+
+    def test_short_without_collection_routes_to_divers(self, video_dir: Path) -> None:
+        movie = Movie(
+            title="Un court orphelin",
+            year=2010,
+            duration_seconds=300,
+            collection_name=None,
+        )
+        result = get_short_video_destination(movie, video_dir)
+        assert result == video_dir / "Films" / "Courts" / "Divers"
+
+    def test_short_with_empty_collection_routes_to_divers(
+        self, video_dir: Path
+    ) -> None:
+        """Une collection vide ("") doit également retomber dans Divers."""
+        movie = Movie(
+            title="Court sans franchise",
+            year=2015,
+            duration_seconds=300,
+            collection_name="",
+        )
+        result = get_short_video_destination(movie, video_dir)
+        assert result == video_dir / "Films" / "Courts" / "Divers"
+
+    def test_short_collection_name_is_sanitized(self, video_dir: Path) -> None:
+        """Les caractères interdits ("/", ":") doivent être nettoyés."""
+        movie = Movie(
+            title="Special",
+            year=2000,
+            duration_seconds=600,
+            collection_name="Wallace & Gromit / Specials",
+        )
+        result = get_short_video_destination(movie, video_dir)
+        # Le slash est remplacé par un tiret par sanitize_for_filesystem
+        franchise_dir = result.name
+        assert "/" not in franchise_dir
+        assert franchise_dir.startswith("Wallace & Gromit")
+
+    def test_short_destination_transposes_video_to_storage(
+        self, storage_dir: Path, video_dir: Path
+    ) -> None:
+        movie = Movie(
+            title="Pluto's Dream House",
+            year=1940,
+            duration_seconds=420,
+            collection_name="Mickey Mouse Shorts",
+        )
+        video_path = get_short_video_destination(movie, video_dir)
+        storage_path = get_short_destination(movie, storage_dir, video_dir)
+        assert storage_path == storage_dir / video_path.relative_to(video_dir)
+        assert storage_path == (
+            storage_dir / "Films" / "Courts" / "Mickey Mouse Shorts"
+        )
+
+
+class TestOrganizerServiceShortMethods:
+    """OrganizerService expose les chemins courts via délégation."""
+
+    def test_get_short_video_destination_delegates(self, video_dir: Path) -> None:
+        movie = Movie(
+            title="Test",
+            duration_seconds=300,
+            collection_name="Pixar Shorts",
+        )
+        service = OrganizerService()
+        assert service.get_short_video_destination(movie, video_dir) == (
+            video_dir / "Films" / "Courts" / "Pixar Shorts"
+        )
+
+    def test_get_short_destination_delegates(
+        self, storage_dir: Path, video_dir: Path
+    ) -> None:
+        movie = Movie(title="Test", duration_seconds=300, collection_name=None)
+        service = OrganizerService()
+        assert service.get_short_destination(movie, storage_dir, video_dir) == (
+            storage_dir / "Films" / "Courts" / "Divers"
+        )
