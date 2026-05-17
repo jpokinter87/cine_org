@@ -1,0 +1,146 @@
+src/services/transferer.py             | 45 +++++++++++++++++++
+ tests/unit/services/test_transferer.py | 80 ++++++++++++++++++++++++++++++++++
+ 2 files changed, 125 insertions(+)
+
+--- Changes ---
+
+src/services/transferer.py
+  @@ -406,8 +406,53 @@
+  +        # Propager la mtime des dossiers parents jusqu'à video_dir.
+  +        # POSIX ne met à jour que le parent direct, mais beaucoup de
+  +        # media-centers (Dune 4K, Plex, Kodi…) détectent les nouveautés
+  +        # via la mtime des dossiers de plus haut niveau. Sans ça, un scan
+  +        # incrémental conclut « rien de nouveau » sur tout le sous-arbre.
+  +        self._bump_ancestors_mtime(symlink_path)
+  +
+           return symlink_path
+   
+  +    def _bump_ancestors_mtime(self, leaf: Path) -> None:
+  +        """
+  +        Met à jour la mtime de chaque dossier ancêtre jusqu'à `_video_dir` inclus.
+  +
+  +        Ne touche rien si `leaf` n'est pas sous `_video_dir` (cas d'un symlink
+  +        custom hors de la zone scannée par les media-centers). Les erreurs
+  +        ponctuelles (permission, montage en lecture seule) sont loguées mais
+  +        n'interrompent pas le transfert.
+  +        """
+  +        try:
+  +            video_root = self._video_dir.resolve()
+  +        except OSError:
+  +            return
+  +
+  +        try:
+  +            current = leaf.parent.resolve()
+  +        except OSError:
+  +            return
+  +
+  +        # Vérifier que leaf est bien sous video_dir avant de bumper
+  +        try:
+  +            current.relative_to(video_root)
+  +        except ValueError:
+  +            return
+  +
+  +        now = datetime.now().timestamp()
+  +        while True:
+  +            try:
+  +                os.utime(current, (now, now))
+  +            except OSError as e:
+  +                logger.warning("Bump mtime impossible sur {} : {}", current, e)
+  +            if current == video_root:
+  +                break
+  +            parent = current.parent
+  +            if parent == current:  # garde-fou : remonté à la racine du FS
+  +                break
+  +            current = parent
+  +
+       def find_similar_content(
+           self,
+           title: str,
+  +45 -0
+
+tests/unit/services/test_transferer.py
+  @@ -326,6 +326,86 @@
+  +    def test_symlink_bumps_ancestor_mtimes_up_to_video_root(self, tmp_path):
+  +        """Crée le symlink et propage le mtime des dossiers parents jusqu'à video_dir.
+  +
+  +        Indispensable pour que les media-centers (Dune 4K, Plex, Kodi…) qui
+  +        détectent les nouveautés via la mtime des dossiers de plus haut niveau
+  +        voient le contenu fraîchement transféré, alors que POSIX ne touche
+  +        que la mtime du parent direct.
+  +        """
+  +        import time
+  +
+  +        storage = tmp_path / "storage"
+  +        video = tmp_path / "video"
+  +
+  +        storage_subdir = storage / "Films" / "Drame" / "A-G" / "Cop-Cy"
+  +        storage_subdir.mkdir(parents=True)
+  +        target = storage_subdir / "Le crime était presque parfait (1954).mkv"
+  +        target.write_bytes(b"content")
+  +
+  +        # Pré-créer la structure video avec une mtime ancienne
+  +        ancestors = [
+  +            video,
+  +            video / "Films",
+  +            video / "Films" / "Drame",
+  +            video / "Films" / "Drame" / "A-G",
+  +        ]
+  +        for d in ancestors:
+  +            d.mkdir(parents=True, exist_ok=True)
+  +        # Forcer mtime ancienne (1 an en arrière) sur tous les ancêtres
+  +        old_ts = time.time() - 365 * 24 * 3600
+  +        for d in ancestors:
+  +            os.utime(d, (old_ts, old_ts))
+  +        # Vérifier le préalable
+  +        for d in ancestors:
+  +            assert d.stat().st_mtime == pytest.approx(old_ts, abs=1)
+  +
+  +        from src.adapters.file_system import FileSystemAdapter
+  +
+  +        fs = FileSystemAdapter()
+  +        transferer = TransfererService(fs, fs, storage, video)
+  +
+  +        before = time.time() - 1
+  +        transferer._create_mirror_symlink(target)
+  +        after = time.time() + 1
+  +
+  +        # Toute la chaîne d'ancêtres dans video_dir (y compris video_dir lui-même)
+  +        # doit avoir une mtime fraîche.
+  +        for d in ancestors:
+  +            mt = d.stat().st_mtime
+  +            assert before <= mt <= after, (
+  +                f"{d} non bumpé : {mt} hors de [{before}, {after}]"
+  +            )
+  +
+  +    def test_symlink_bump_does_not_walk_above_video_root(self, tmp_path):
+  +        """Le bump de mtime ne touche pas les dossiers au-dessus de video_dir."""
+  +        import time
+  +
+  +        storage = tmp_path / "storage"
+  +        video = tmp_path / "video"
+  +        storage.mkdir()
+  +        video.mkdir()
+  +
+  +        storage_subdir = storage / "Films" / "Action"
+  +        storage_subdir.mkdir(parents=True)
+  +        target = storage_subdir / "Heat.mkv"
+  +        target.write_bytes(b"content")
+  +
+  +        # Forcer mtime ancienne sur tmp_path (parent de video_dir)
+  +        old_ts = time.time() - 365 * 24 * 3600
+  +        os.utime(tmp_path, (old_ts, old_ts))
+  +        assert tmp_path.stat().st_mtime == pytest.approx(old_ts, abs=1)
+  +
+  +        from src.adapters.file_system import FileSystemAdapter
+  +
+  +        fs = FileSystemAdapter()
+  +        transferer = TransfererService(fs, fs, storage, video)
+  +        transferer._create_mirror_symlink(target)
+  +
+  +        # tmp_path (parent de video_dir) ne doit pas avoir été bumpé
+  +        assert tmp_path.stat().st_mtime == pytest.approx(old_ts, abs=1)
+  +
+   
+   # ====================
+   # Tests FileSystemAdapter.atomic_move
+  +80 -0
