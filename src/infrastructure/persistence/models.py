@@ -69,6 +69,7 @@ class MovieModel(SQLModel, table=True):
     overview_override: str | None = None
     cast_override_json: str | None = None  # JSON [{"name": "...", "role": "..."}]
     preserve_overrides: bool = Field(default=False, index=True)
+    is_short: bool = Field(default=False, index=True)
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 

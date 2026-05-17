@@ -4,7 +4,6 @@ Tests pour les modeles SQLModel de persistance.
 Verifie les nouveaux champs de notes (vote_average, vote_count) dans MovieModel et SeriesModel.
 """
 
-import pytest
 
 from src.infrastructure.persistence.models import MovieModel, SeriesModel
 
@@ -29,6 +28,16 @@ class TestMovieModel:
         model = MovieModel(title="Test Movie")
         assert model.vote_average is None
         assert model.vote_count is None
+
+    def test_movie_model_is_short_default_false(self):
+        """Le champ is_short doit valoir False par defaut."""
+        model = MovieModel(title="Test Movie")
+        assert model.is_short is False
+
+    def test_movie_model_is_short_can_be_true(self):
+        """is_short doit pouvoir etre fixe a True."""
+        model = MovieModel(title="Court", is_short=True)
+        assert model.is_short is True
 
     def test_movie_model_all_fields(self):
         """MovieModel doit supporter tous les champs existants + votes."""

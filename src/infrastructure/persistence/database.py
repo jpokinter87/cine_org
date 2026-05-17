@@ -63,11 +63,14 @@ def get_engine() -> Engine:
     global _engine
     if _engine is None:
         from src.config import Settings
+
         settings = Settings()
 
         # Creer le repertoire parent si l'URL est un fichier SQLite
         db_url = settings.database_url
-        if db_url.startswith("sqlite:///") and not db_url.startswith("sqlite:///:memory:"):
+        if db_url.startswith("sqlite:///") and not db_url.startswith(
+            "sqlite:///:memory:"
+        ):
             db_path = Path(db_url.replace("sqlite:///", ""))
             db_path.parent.mkdir(exist_ok=True, parents=True)
 
@@ -78,8 +81,6 @@ def get_engine() -> Engine:
             poolclass=NullPool,
         )
     return _engine
-
-
 
 
 def get_session() -> Generator[Session, None, None]:
@@ -153,15 +154,11 @@ def _run_migrations() -> None:
         movie_columns = [row[1] for row in result.fetchall()]
 
         if "vote_average" not in movie_columns:
-            conn.execute(
-                text("ALTER TABLE movies ADD COLUMN vote_average REAL")
-            )
+            conn.execute(text("ALTER TABLE movies ADD COLUMN vote_average REAL"))
             conn.commit()
 
         if "vote_count" not in movie_columns:
-            conn.execute(
-                text("ALTER TABLE movies ADD COLUMN vote_count INTEGER")
-            )
+            conn.execute(text("ALTER TABLE movies ADD COLUMN vote_count INTEGER"))
             conn.commit()
 
         # Migration 3: Ajouter vote_average et vote_count a series si manquantes
@@ -169,15 +166,11 @@ def _run_migrations() -> None:
         series_columns = [row[1] for row in result.fetchall()]
 
         if "vote_average" not in series_columns:
-            conn.execute(
-                text("ALTER TABLE series ADD COLUMN vote_average REAL")
-            )
+            conn.execute(text("ALTER TABLE series ADD COLUMN vote_average REAL"))
             conn.commit()
 
         if "vote_count" not in series_columns:
-            conn.execute(
-                text("ALTER TABLE series ADD COLUMN vote_count INTEGER")
-            )
+            conn.execute(text("ALTER TABLE series ADD COLUMN vote_count INTEGER"))
             conn.commit()
 
         # Migration 4: Ajouter imdb_rating et imdb_votes a movies si manquantes
@@ -185,15 +178,11 @@ def _run_migrations() -> None:
         movie_columns = [row[1] for row in result.fetchall()]
 
         if "imdb_rating" not in movie_columns:
-            conn.execute(
-                text("ALTER TABLE movies ADD COLUMN imdb_rating REAL")
-            )
+            conn.execute(text("ALTER TABLE movies ADD COLUMN imdb_rating REAL"))
             conn.commit()
 
         if "imdb_votes" not in movie_columns:
-            conn.execute(
-                text("ALTER TABLE movies ADD COLUMN imdb_votes INTEGER")
-            )
+            conn.execute(text("ALTER TABLE movies ADD COLUMN imdb_votes INTEGER"))
             conn.commit()
 
         # Migration 5: Ajouter imdb_rating et imdb_votes a series si manquantes
@@ -201,15 +190,11 @@ def _run_migrations() -> None:
         series_columns = [row[1] for row in result.fetchall()]
 
         if "imdb_rating" not in series_columns:
-            conn.execute(
-                text("ALTER TABLE series ADD COLUMN imdb_rating REAL")
-            )
+            conn.execute(text("ALTER TABLE series ADD COLUMN imdb_rating REAL"))
             conn.commit()
 
         if "imdb_votes" not in series_columns:
-            conn.execute(
-                text("ALTER TABLE series ADD COLUMN imdb_votes INTEGER")
-            )
+            conn.execute(text("ALTER TABLE series ADD COLUMN imdb_votes INTEGER"))
             conn.commit()
 
         # Migration 6: Ajouter tmdb_id a series si manquante
@@ -217,9 +202,7 @@ def _run_migrations() -> None:
         series_columns = [row[1] for row in result.fetchall()]
 
         if "tmdb_id" not in series_columns:
-            conn.execute(
-                text("ALTER TABLE series ADD COLUMN tmdb_id INTEGER")
-            )
+            conn.execute(text("ALTER TABLE series ADD COLUMN tmdb_id INTEGER"))
             conn.execute(
                 text("CREATE INDEX IF NOT EXISTS ix_series_tmdb_id ON series(tmdb_id)")
             )
@@ -239,9 +222,7 @@ def _run_migrations() -> None:
             conn.commit()
 
         if "personal_rating" not in movie_columns:
-            conn.execute(
-                text("ALTER TABLE movies ADD COLUMN personal_rating INTEGER")
-            )
+            conn.execute(text("ALTER TABLE movies ADD COLUMN personal_rating INTEGER"))
             conn.commit()
 
         # Migration 8: Ajouter watched et personal_rating a series si manquantes
@@ -258,9 +239,7 @@ def _run_migrations() -> None:
             conn.commit()
 
         if "personal_rating" not in series_columns:
-            conn.execute(
-                text("ALTER TABLE series ADD COLUMN personal_rating INTEGER")
-            )
+            conn.execute(text("ALTER TABLE series ADD COLUMN personal_rating INTEGER"))
             conn.commit()
 
         # Migration 9: Ajouter collection_id et collection_name a movies si manquantes
@@ -268,18 +247,16 @@ def _run_migrations() -> None:
         movie_columns = [row[1] for row in result.fetchall()]
 
         if "collection_id" not in movie_columns:
+            conn.execute(text("ALTER TABLE movies ADD COLUMN collection_id INTEGER"))
             conn.execute(
-                text("ALTER TABLE movies ADD COLUMN collection_id INTEGER")
-            )
-            conn.execute(
-                text("CREATE INDEX IF NOT EXISTS ix_movies_collection_id ON movies(collection_id)")
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_movies_collection_id ON movies(collection_id)"
+                )
             )
             conn.commit()
 
         if "collection_name" not in movie_columns:
-            conn.execute(
-                text("ALTER TABLE movies ADD COLUMN collection_name VARCHAR")
-            )
+            conn.execute(text("ALTER TABLE movies ADD COLUMN collection_name VARCHAR"))
             conn.commit()
 
         # Migration 10: Ajouter is_extra a episodes si manquante
@@ -307,9 +284,7 @@ def _run_migrations() -> None:
         movie_columns = [row[1] for row in result.fetchall()]
 
         if "poster_override" not in movie_columns:
-            conn.execute(
-                text("ALTER TABLE movies ADD COLUMN poster_override VARCHAR")
-            )
+            conn.execute(text("ALTER TABLE movies ADD COLUMN poster_override VARCHAR"))
             conn.commit()
         if "overview_override" not in movie_columns:
             conn.execute(
@@ -341,9 +316,7 @@ def _run_migrations() -> None:
         series_columns = [row[1] for row in result.fetchall()]
 
         if "poster_override" not in series_columns:
-            conn.execute(
-                text("ALTER TABLE series ADD COLUMN poster_override VARCHAR")
-            )
+            conn.execute(text("ALTER TABLE series ADD COLUMN poster_override VARCHAR"))
             conn.commit()
         if "overview_override" not in series_columns:
             conn.execute(
@@ -366,6 +339,23 @@ def _run_migrations() -> None:
                 text(
                     "CREATE INDEX IF NOT EXISTS ix_series_preserve_overrides "
                     "ON series(preserve_overrides)"
+                )
+            )
+            conn.commit()
+
+        # Migration 13: is_short sur movies (phase courts-métrages P3)
+        result = conn.execute(text("PRAGMA table_info(movies)"))
+        movie_columns = [row[1] for row in result.fetchall()]
+
+        if "is_short" not in movie_columns:
+            conn.execute(
+                text(
+                    "ALTER TABLE movies ADD COLUMN is_short BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_movies_is_short ON movies(is_short)"
                 )
             )
             conn.commit()

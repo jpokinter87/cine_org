@@ -907,6 +907,26 @@ uv run cineorg rename-canonical --from-cache logs/quality_scan_cache.json --exec
 
 **Sortie** : table Rich listant pour chaque film son statut (`renamed` / `already_canonical` / `conflict` / `file_missing` / `error`) avec le nom actuel et le nom cible.
 
+### Reclassement des courts-métrages
+
+La commande `reclassify-shorts` identifie les films de la base dont la durée est inférieure ou égale au seuil configuré (`short_film_duration_threshold_seconds`, défaut 900 s / 15 min) et déplace leur symlink `video/` vers la nouvelle hiérarchie `Films/Courts/{franchise}/`. La franchise est dérivée du champ `collection_name` (collection TMDB) ; les courts sans collection vont sous `Films/Courts/Divers/`.
+
+```bash
+# Dry-run (défaut) : liste les candidats sans rien modifier
+uv run cineorg reclassify-shorts
+
+# Application : déplace les symlinks et marque is_short=True en DB
+uv run cineorg reclassify-shorts --no-dry-run
+```
+
+**Périmètre** :
+
+- Seuls les symlinks dans `video/` sont déplacés ; le storage physique n'est jamais touché (les fichiers conservent leur emplacement actuel).
+- Les films sous l'arborescence `Séries/` ou `Series/` sont systématiquement ignorés (un épisode court reste une série, jamais un court-métrage).
+- Les films déjà marqués `is_short=True` ou déjà au bon emplacement sont ignorés (commande idempotente).
+
+**Sortie** : tableau Rich listant titre, durée, franchise et destination. En mode `--no-dry-run`, un résumé final indique le nombre de symlinks déplacés et d'erreurs éventuelles (destination déjà occupée, symlink source illisible, etc.).
+
 ### Migration depuis anciens NAS
 
 La sous-commande `migrate-nas` migre des fichiers vidéo depuis d'anciens volumes (vieux NAS, disques USB) vers le nouveau NAS, en filtrant par note minimale combinée IMDb / TMDB / personnelle. Elle préserve la source (pas de `--remove-source-files`), vérifie l'intégrité xxh3_64 source/destination après chaque copie, et swappe atomiquement les symlinks vers la nouvelle destination.

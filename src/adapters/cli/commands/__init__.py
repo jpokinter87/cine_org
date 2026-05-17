@@ -78,6 +78,9 @@ from src.adapters.cli.commands.hardlink_commands import (
 from src.adapters.cli.commands.rename_canonical_command import (
     rename_canonical,
 )
+from src.adapters.cli.commands.reclassify_shorts_command import (
+    reclassify_shorts,
+)
 
 __all__ = [
     # workflow
@@ -126,4 +129,5 @@ __all__ = [
     "check_duplicates",
     "purge_hardlinks",
     "rename_canonical",
+    "reclassify_shorts",
 ]

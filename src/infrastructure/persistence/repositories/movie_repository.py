@@ -44,7 +44,9 @@ class SQLModelMovieRepository(IMovieRepository):
         """
         genres_list = json.loads(model.genres_json) if model.genres_json else []
         cast_list = json.loads(model.cast_json) if model.cast_json else []
-        languages_list = json.loads(model.languages_json) if model.languages_json else []
+        languages_list = (
+            json.loads(model.languages_json) if model.languages_json else []
+        )
         return Movie(
             id=str(model.id) if model.id else None,
             tmdb_id=model.tmdb_id,
@@ -71,6 +73,7 @@ class SQLModelMovieRepository(IMovieRepository):
             languages=tuple(languages_list),
             file_size_bytes=model.file_size_bytes,
             preserve_overrides=bool(model.preserve_overrides),
+            is_short=bool(model.is_short),
         )
 
     def _to_model(self, entity: Movie) -> MovieModel:
@@ -105,9 +108,12 @@ class SQLModelMovieRepository(IMovieRepository):
             codec_video=entity.codec_video,
             codec_audio=entity.codec_audio,
             resolution=entity.resolution,
-            languages_json=json.dumps(list(entity.languages)) if entity.languages else None,
+            languages_json=json.dumps(list(entity.languages))
+            if entity.languages
+            else None,
             file_size_bytes=entity.file_size_bytes,
             preserve_overrides=bool(entity.preserve_overrides),
+            is_short=bool(entity.is_short),
         )
         if entity.id:
             model.id = int(entity.id)
@@ -226,9 +232,7 @@ class SQLModelMovieRepository(IMovieRepository):
             existing.imdb_rating = movie.imdb_rating
             existing.imdb_votes = movie.imdb_votes
             existing.director = movie.director
-            existing.cast_json = (
-                json.dumps(list(movie.cast)) if movie.cast else None
-            )
+            existing.cast_json = json.dumps(list(movie.cast)) if movie.cast else None
             if movie.collection_id is not None:
                 existing.collection_id = movie.collection_id
             if movie.collection_name is not None:
