@@ -8,6 +8,14 @@ envoie les fiches détectées en corbeille (réversible via la maintenance web).
 from typing import Annotated
 
 import typer
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 from rich.prompt import Confirm
 from rich.table import Table
 
@@ -40,7 +48,32 @@ def check_missing_files(
         )
 
         scanner = MissingFilesScanner(session)
-        records = scanner.find_missing()
+        total = scanner.count_to_scan()
+
+        if total == 0:
+            console.print("[green]Aucune fiche avec file_path à vérifier.[/green]\n")
+            return
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TextColumn("[dim]{task.fields[label]}[/dim]"),
+            TimeElapsedColumn(),
+            console=console,
+            transient=True,
+        ) as progress:
+            scan_task = progress.add_task(
+                "Vérification filesystem…", total=total, label=""
+            )
+
+            def _on_progress(current: int, _total: int, label: str) -> None:
+                # tronque pour ne pas déborder en cas de chemin long
+                short = label[:60] + "…" if len(label) > 60 else label
+                progress.update(scan_task, completed=current, label=short)
+
+            records = scanner.find_missing(on_progress=_on_progress)
 
         if not records:
             console.print(

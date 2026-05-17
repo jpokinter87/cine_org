@@ -113,6 +113,54 @@ class TestFindMissing:
         assert [r.title for r in results[:2]] == ["A film", "B film"]
 
 
+class TestProgressCallback:
+    """find_missing relaie sa progression via le callback fourni."""
+
+    def test_callback_called_once_per_scanned_file(
+        self, session, tmp_path: Path
+    ) -> None:
+        series = SeriesModel(title="Show")
+        session.add(series)
+        session.commit()
+        session.refresh(series)
+
+        f1 = tmp_path / "a.mkv"
+        f1.touch()
+        session.add(MovieModel(title="Existe", file_path=str(f1)))
+        session.add(MovieModel(title="Manquant", file_path=str(tmp_path / "nope.mkv")))
+        session.add(
+            EpisodeModel(
+                series_id=series.id,
+                season_number=1,
+                episode_number=1,
+                title="Pilot",
+                file_path=str(tmp_path / "pilot.mkv"),
+            )
+        )
+        session.commit()
+
+        calls: list[tuple[int, int, str]] = []
+        MissingFilesScanner(session).find_missing(
+            on_progress=lambda c, t, label: calls.append((c, t, label))
+        )
+
+        # 3 fichiers scannés → 3 callbacks, currents 1..3, total constant à 3
+        assert len(calls) == 3
+        assert [c[0] for c in calls] == [1, 2, 3]
+        assert {c[1] for c in calls} == {3}
+
+    def test_count_to_scan_matches_callback_total(
+        self, session, tmp_path: Path
+    ) -> None:
+        for i in range(5):
+            session.add(MovieModel(title=f"M{i}", file_path=str(tmp_path / f"{i}.mkv")))
+        session.add(MovieModel(title="Sans path", file_path=None))
+        session.commit()
+
+        scanner = MissingFilesScanner(session)
+        assert scanner.count_to_scan() == 5
+
+
 class TestPrune:
     """Le pruning envoie chaque fiche manquante en corbeille."""
 
@@ -143,7 +191,6 @@ class TestPrune:
         prune ne fait que des opérations DB."""
         existing = tmp_path / "real.mkv"
         existing.touch()
-
 
         rec = MissingRecord(
             entity_type="movie",

@@ -16,8 +16,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable, Optional
 
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from src.infrastructure.persistence.models import (
@@ -56,13 +57,41 @@ class MissingFilesScanner:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def find_missing(self) -> list[MissingRecord]:
+    def count_to_scan(self) -> int:
+        """Nombre total de fiches à examiner (films + épisodes avec file_path)."""
+        movie_count = self._session.exec(
+            select(func.count(MovieModel.id)).where(MovieModel.file_path.isnot(None))
+        ).one()
+        episode_count = self._session.exec(
+            select(func.count(EpisodeModel.id)).where(
+                EpisodeModel.file_path.isnot(None)
+            )
+        ).one()
+        return int(movie_count) + int(episode_count)
+
+    def find_missing(
+        self,
+        on_progress: Optional[Callable[[int, int, str], None]] = None,
+    ) -> list[MissingRecord]:
         """Renvoie la liste triée des fiches dont le file_path n'existe plus.
 
         Tri stable : films d'abord (par titre), puis épisodes (par série,
         saison, épisode).
+
+        Args:
+            on_progress: callback optionnel invoqué pour chaque fiche scannée
+                avec ``(current, total, label)``. Permet à la CLI d'afficher
+                une barre Rich, le scan filesystem pouvant être long sur NAS.
         """
         missing: list[MissingRecord] = []
+        total = self.count_to_scan() if on_progress else 0
+        current = 0
+
+        def _notify(label: str) -> None:
+            nonlocal current
+            current += 1
+            if on_progress is not None:
+                on_progress(current, total, label)
 
         # Films
         movie_stmt = (
@@ -71,6 +100,7 @@ class MissingFilesScanner:
             .order_by(MovieModel.title)
         )
         for movie in self._session.exec(movie_stmt).all():
+            _notify(movie.title or "")
             if Path(movie.file_path).exists():
                 continue
             missing.append(
@@ -95,8 +125,6 @@ class MissingFilesScanner:
         # Cache série_id → titre série pour libellé lisible
         series_titles: dict[int, str] = {}
         for episode in self._session.exec(episode_stmt).all():
-            if Path(episode.file_path).exists():
-                continue
             if episode.series_id not in series_titles:
                 series = self._session.get(SeriesModel, episode.series_id)
                 series_titles[episode.series_id] = series.title if series else "?"
@@ -106,6 +134,9 @@ class MissingFilesScanner:
                 f"S{episode.season_number:02d}E{episode.episode_number:02d} — "
                 f"{episode.title}"
             )
+            _notify(label)
+            if Path(episode.file_path).exists():
+                continue
             missing.append(
                 MissingRecord(
                     entity_type="episode",
