@@ -116,6 +116,47 @@ class TSVParser:
                         "genres": parts[8].split(",") if parts[8] != "\\N" else [],
                     }
 
+    def parse_akas(self, file_path: Path) -> Generator[dict, None, None]:
+        """
+        Parse le fichier title.akas.tsv(.gz).
+
+        Format du fichier:
+        titleId    ordering    title    region    language    types    attributes    isOriginalTitle
+        tt0082416    11    La maîtresse du lieutenant français    FR    \\N    \\N    \\N    0
+
+        Args:
+            file_path: Chemin vers le fichier TSV (compresse ou non)
+
+        Yields:
+            Dictionnaire avec:
+            - tconst: ID IMDb (ex: "tt0082416")
+            - title: Variante de titre (avec accents/casse d'origine)
+            - region: Code pays (ex: "FR", "US") ou None
+            - language: Code langue ISO 639-1 (ex: "fr", "en") ou None
+
+        Raises:
+            FileNotFoundError: Si le fichier n'existe pas
+        """
+        if not file_path.exists():
+            raise FileNotFoundError(f"Fichier non trouve: {file_path}")
+
+        open_fn = gzip.open if file_path.suffix == ".gz" else open
+        mode = "rt"
+
+        with open_fn(file_path, mode, encoding="utf-8") as f:
+            # Ignorer l'en-tete
+            next(f)
+
+            for line in f:
+                parts = line.rstrip("\n").split("\t")
+                if len(parts) >= 5:
+                    yield {
+                        "tconst": parts[0],
+                        "title": parts[2],
+                        "region": self._parse_optional(parts[3]),
+                        "language": self._parse_optional(parts[4]),
+                    }
+
     @staticmethod
     def _parse_int(value: str) -> int | None:
         """Parse une valeur entiere, retourne None pour \\N."""
@@ -125,3 +166,8 @@ class TSVParser:
             return int(value)
         except ValueError:
             return None
+
+    @staticmethod
+    def _parse_optional(value: str) -> str | None:
+        """Retourne None pour \\N, sinon la valeur telle quelle."""
+        return None if value == "\\N" else value
