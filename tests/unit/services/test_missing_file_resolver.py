@@ -1,4 +1,4 @@
-"""Tests P6 — MissingFileResolver : retrouve un fichier déplacé par basename."""
+"""Tests MissingFileResolver : recherche via les symlinks vivants de video/."""
 
 from pathlib import Path
 
@@ -33,54 +33,107 @@ def _record(
     )
 
 
+def _setup_dirs(tmp_path: Path) -> tuple[Path, Path]:
+    """Crée storage/ et video/ vides et les retourne."""
+    storage = tmp_path / "storage"
+    video = tmp_path / "video"
+    storage.mkdir()
+    video.mkdir()
+    return storage, video
+
+
+def _make_symlinked_file(
+    storage: Path,
+    video: Path,
+    storage_subpath: str,
+    video_subpath: str,
+) -> tuple[Path, Path]:
+    """Crée un fichier storage + un symlink video qui pointe dessus."""
+    target = storage / storage_subpath
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.touch()
+    link = video / video_subpath
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(target)
+    return target, link
+
+
 class TestResolverFindCandidates:
-    """Recherche par basename exact dans les répertoires fournis."""
+    """Recherche par basename dans les symlinks vivants de video_dir."""
 
-    def test_finds_file_moved_to_other_directory(self, tmp_path: Path) -> None:
-        # Fichier réel à un autre endroit que celui en DB
-        real = tmp_path / "Films" / "Drame" / "Et la fête continue ! (2024).mkv"
-        real.parent.mkdir(parents=True)
-        real.touch()
+    def test_finds_target_of_live_symlink(self, tmp_path: Path) -> None:
+        storage, video = _setup_dirs(tmp_path)
+        target, _link = _make_symlinked_file(
+            storage,
+            video,
+            "Films/Drame/Et la fête continue ! (2024).mkv",
+            "Films/Drame/Et la fête continue ! (2024).mkv",
+        )
 
-        stale = tmp_path / "Films" / "Comédie" / "Et la fête continue ! (2024).mkv"
+        stale = storage / "Films" / "Comédie" / "Et la fête continue ! (2024).mkv"
         rec = _record(stale)
 
-        resolver = MissingFileResolver(search_dirs=[tmp_path])
-        candidates = resolver.find_candidates(rec)
-        assert candidates == [real]
+        resolver = MissingFileResolver(video_dir=video)
+        assert resolver.find_candidates(rec) == [target]
 
-    def test_no_match_returns_empty(self, tmp_path: Path) -> None:
-        # Seul un fichier sans rapport existe
-        (tmp_path / "Films").mkdir()
-        (tmp_path / "Films" / "Autre.mkv").touch()
+    def test_no_symlink_in_video_returns_empty(self, tmp_path: Path) -> None:
+        """Un fichier dans storage mais sans symlink dans video → pas candidat."""
+        storage, video = _setup_dirs(tmp_path)
+        # Fichier présent dans storage mais aucun symlink créé
+        f = storage / "Films" / "Drame" / "Solo.mkv"
+        f.parent.mkdir(parents=True)
+        f.touch()
 
-        stale = tmp_path / "Films" / "Inexistant.mkv"
-        resolver = MissingFileResolver(search_dirs=[tmp_path])
-        assert resolver.find_candidates(_record(stale)) == []
+        rec = _record(storage / "ailleurs" / "Solo.mkv")
+        assert MissingFileResolver(video_dir=video).find_candidates(rec) == []
 
-    def test_multiple_matches_all_returned(self, tmp_path: Path) -> None:
-        """Le même basename présent dans 2 sous-arbo (ex. storage + video symlink)."""
-        a = tmp_path / "storage" / "Plein la vue (1997).mkv"
-        b = tmp_path / "video" / "Plein la vue (1997).mkv"
-        a.parent.mkdir()
-        b.parent.mkdir()
-        a.touch()
-        b.touch()
+    def test_broken_symlink_is_ignored(self, tmp_path: Path) -> None:
+        storage, video = _setup_dirs(tmp_path)
+        link = video / "Films" / "Drame" / "Broken.mkv"
+        link.parent.mkdir(parents=True)
+        link.symlink_to(storage / "absent.mkv")  # cible inexistante → cassé
 
-        stale = tmp_path / "ailleurs" / "Plein la vue (1997).mkv"
-        resolver = MissingFileResolver(search_dirs=[tmp_path])
-        candidates = resolver.find_candidates(_record(stale))
-        assert set(candidates) == {a, b}
+        rec = _record(storage / "ailleurs" / "Broken.mkv")
+        assert MissingFileResolver(video_dir=video).find_candidates(rec) == []
 
-    def test_excludes_stale_path_itself(self, tmp_path: Path) -> None:
-        """Si par accident le file_path stale existe (course condition),
-        il ne doit pas être retourné comme candidat."""
-        stale = tmp_path / "Films" / "Respire (2014).mkv"
-        stale.parent.mkdir()
-        stale.touch()
+    def test_multiple_symlinks_same_target_collapse_to_one(
+        self, tmp_path: Path
+    ) -> None:
+        """Deux symlinks dans video pointant vers le même fichier → 1 seul candidat."""
+        storage, video = _setup_dirs(tmp_path)
+        target = storage / "Films" / "A.mkv"
+        target.parent.mkdir(parents=True)
+        target.touch()
 
-        resolver = MissingFileResolver(search_dirs=[tmp_path])
-        assert resolver.find_candidates(_record(stale)) == []
+        for sub in ("Films/Drame/A.mkv", "Films/Comédie/A.mkv"):
+            link = video / sub
+            link.parent.mkdir(parents=True, exist_ok=True)
+            link.symlink_to(target)
+
+        rec = _record(storage / "ailleurs" / "A.mkv")
+        assert MissingFileResolver(video_dir=video).find_candidates(rec) == [target]
+
+    def test_multiple_targets_returned_when_ambiguous(self, tmp_path: Path) -> None:
+        """Deux symlinks même basename mais cibles différentes → ambigu (2 candidats)."""
+        storage, video = _setup_dirs(tmp_path)
+        t1 = storage / "Films" / "A" / "X.mkv"
+        t2 = storage / "Films" / "B" / "X.mkv"
+        for t in (t1, t2):
+            t.parent.mkdir(parents=True, exist_ok=True)
+            t.touch()
+        (video / "Films" / "Drame").mkdir(parents=True)
+        (video / "Films" / "Action").mkdir(parents=True)
+        (video / "Films" / "Drame" / "X.mkv").symlink_to(t1)
+        (video / "Films" / "Action" / "X.mkv").symlink_to(t2)
+
+        rec = _record(storage / "ailleurs" / "X.mkv")
+        cands = MissingFileResolver(video_dir=video).find_candidates(rec)
+        assert set(cands) == {t1, t2}
+
+    def test_video_dir_missing_returns_empty(self, tmp_path: Path) -> None:
+        rec = _record(tmp_path / "Films" / "Solo.mkv")
+        resolver = MissingFileResolver(video_dir=tmp_path / "inexistant")
+        assert resolver.find_candidates(rec) == []
 
 
 class TestApplyRepair:
@@ -106,8 +159,9 @@ class TestApplyRepair:
             title="Respire",
             file_path=movie.file_path,
         )
-        resolver = MissingFileResolver(search_dirs=[tmp_path])
-        ok = resolver.apply_repair(session, rec, new_path)
+        ok = MissingFileResolver(video_dir=tmp_path).apply_repair(
+            session, rec, new_path
+        )
 
         assert ok is True
         session.refresh(movie)
@@ -122,7 +176,7 @@ class TestApplyRepair:
             title="?",
             file_path="/whatever",
         )
-        ok = MissingFileResolver(search_dirs=[tmp_path]).apply_repair(
+        ok = MissingFileResolver(video_dir=tmp_path).apply_repair(
             session, rec, tmp_path / "x.mkv"
         )
         assert ok is False

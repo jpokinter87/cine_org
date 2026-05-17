@@ -1,20 +1,24 @@
-"""Résolution d'un ``MissingRecord`` vers un fichier réel déplacé ailleurs.
+"""Résolution d'un ``MissingRecord`` via les symlinks de ``video_dir``.
 
-Cas typique : un film a été déplacé manuellement ou par un script de
-réorganisation. Son ``file_path`` en DB est obsolète mais le fichier
-existe encore quelque part dans la zone storage/video, avec le même
-basename (le renamer produit un nom déterministe).
+Quand un film a été déplacé manuellement dans ``storage/`` (ou par un script
+de réorganisation), son ``file_path`` en DB est obsolète. Mais si le symlink
+dans ``video/`` a été mis à jour (ou recréé par ``reconcile``/``repair-links``)
+et pointe correctement vers la nouvelle cible storage, alors :
 
-Stratégie V1 — recherche par basename exact :
+1. Le symlink ``video/.../Title (Year).mkv`` existe.
+2. Il n'est pas cassé (resolve() réussit).
+3. Sa cible est la vraie position du fichier.
 
-1. Indexe tous les fichiers et symlinks sous les répertoires fournis
-   (un seul ``rglob`` partagé entre tous les records).
-2. Pour chaque ``MissingRecord``, retourne les chemins dont le ``Path.name``
-   est identique à celui de ``record.file_path`` (en excluant le chemin
-   stale lui-même).
+C'est ce signal qu'on utilise. Stratégie V1 :
 
-Si le basename a changé (renommage manuel), la recherche échoue et l'utilisateur
-peut toujours basculer sur ``--prune`` pour archiver la fiche.
+* Indexe les symlinks vivants de ``video_dir`` par leur basename.
+* Pour chaque ``MissingRecord``, retourne les cibles (uniques) des symlinks
+  dont le basename correspond à celui du ``file_path`` stale.
+
+La zone ``storage_dir`` n'est volontairement pas scannée — un fichier qui
+serait dans storage sans symlink dans video n'est plus dans la bibliothèque
+côté utilisateur ; le repair ne ferait que recâbler vers un fichier
+inaccessible. Mieux vaut le ``--prune`` puis ré-importer.
 """
 
 from __future__ import annotations
@@ -30,38 +34,45 @@ from src.services.missing_files_scanner import MissingRecord
 
 
 class MissingFileResolver:
-    """Indexe storage/video et retrouve les fichiers déplacés par basename."""
+    """Indexe les symlinks vivants de ``video_dir`` et résout par basename."""
 
-    def __init__(self, search_dirs: list[Path]) -> None:
-        self._search_dirs = [Path(d) for d in search_dirs if Path(d).exists()]
-        self._index: Optional[dict[str, list[Path]]] = None
+    def __init__(self, video_dir: Path | None) -> None:
+        self._video_dir = Path(video_dir) if video_dir else None
+        self._index: Optional[dict[str, set[Path]]] = None
 
-    def _build_index(self) -> dict[str, list[Path]]:
-        """Index basename → [paths]. Construit à la demande, mis en cache."""
+    def _build_index(self) -> dict[str, set[Path]]:
+        """Indexe basename → {cibles storage} pour les symlinks vivants."""
         if self._index is not None:
             return self._index
-        index: dict[str, list[Path]] = defaultdict(list)
-        for root in self._search_dirs:
-            for path in root.rglob("*"):
-                # is_file() suit le symlink → True quand cible existe.
-                # On veut aussi indexer les symlinks même cassés pour le diagnostic.
-                if path.is_file() or path.is_symlink():
-                    index[path.name].append(path)
+        index: dict[str, set[Path]] = defaultdict(set)
+        if self._video_dir is None or not self._video_dir.exists():
+            self._index = dict(index)
+            return self._index
+        for path in self._video_dir.rglob("*"):
+            if not path.is_symlink():
+                continue
+            try:
+                resolved = path.resolve(strict=True)
+            except (OSError, RuntimeError):
+                # Symlink cassé ou cycle → on l'ignore.
+                continue
+            index[path.name].add(resolved)
         self._index = dict(index)
         return self._index
 
     def find_candidates(self, record: MissingRecord) -> list[Path]:
-        """Retourne les chemins partageant le basename de ``record.file_path``.
+        """Retourne les cibles storage des symlinks de même basename.
 
-        Le chemin stale lui-même (qui en pratique n'existe pas mais on filtre
-        au cas où) est exclu.
+        La cible égale au ``file_path`` stale est filtrée (en pratique impossible
+        puisqu'elle n'existe pas, mais on protège contre les races/symlinks
+        intermédiaires).
         """
         target_name = Path(record.file_path).name
         if not target_name:
             return []
-        stale = Path(record.file_path).resolve(strict=False)
-        candidates = self._build_index().get(target_name, [])
-        return [c for c in candidates if c.resolve(strict=False) != stale]
+        stale = Path(record.file_path)
+        cands = self._build_index().get(target_name, set())
+        return sorted(c for c in cands if c != stale)
 
     def apply_repair(
         self, session: Session, record: MissingRecord, new_path: Path
@@ -69,9 +80,8 @@ class MissingFileResolver:
         """Réécrit le ``file_path`` en DB vers ``new_path``. Retourne True si OK.
 
         N'opère aucune modification filesystem : la cible ``new_path`` doit
-        déjà exister (sinon on aurait un nouveau missing_file). La fiche
-        ``VideoFileModel`` éventuelle est laissée en l'état — un futur
-        ``reconcile`` ou ``repair-links`` la traitera.
+        déjà exister (c'est garanti par ``find_candidates`` qui ne renvoie
+        que des cibles de symlinks vivants).
         """
         if record.entity_type == "movie":
             model = session.get(MovieModel, record.entity_id)

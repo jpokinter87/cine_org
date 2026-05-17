@@ -115,15 +115,10 @@ def check_missing_files(
             )
             return
 
-        # Résolution par basename (storage + video)
+        # Résolution via les symlinks vivants de video_dir
         candidates_by_record: dict[int, list[Path]] = {}
         if resolve:
-            search_dirs = [
-                d
-                for d in (settings.storage_dir, settings.video_dir)
-                if d and Path(d).exists()
-            ]
-            resolver = MissingFileResolver(search_dirs=search_dirs)
+            resolver = MissingFileResolver(video_dir=settings.video_dir)
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
@@ -134,7 +129,7 @@ def check_missing_files(
                 transient=True,
             ) as progress:
                 resolve_task = progress.add_task(
-                    "Recherche basename dans storage + video…",
+                    "Recherche symlinks vivants dans video_dir…",
                     total=len(records),
                 )
                 for idx, rec in enumerate(records, start=1):
@@ -181,10 +176,7 @@ def check_missing_files(
             for idx, rec in enumerate(records, start=1):
                 cands = candidates_by_record.get(idx, [])
                 if len(cands) == 1:
-                    resolver_instance = MissingFileResolver(
-                        search_dirs=[]
-                    )  # apply_repair n'a pas besoin de l'index
-                    if resolver_instance.apply_repair(session, rec, cands[0]):
+                    if resolver.apply_repair(session, rec, cands[0]):
                         repaired += 1
                 elif len(cands) > 1:
                     ambiguous += 1

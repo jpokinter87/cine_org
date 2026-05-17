@@ -978,8 +978,8 @@ La commande `cineorg check-missing-files` balaye la base de données pour détec
 # Dry-run par défaut : liste les fiches orphelines sans rien modifier
 uv run cineorg check-missing-files
 
-# Idem + cherche chaque fiche ailleurs (basename exact dans storage + video)
-# et affiche les candidats trouvés sans modifier la DB
+# Idem + cherche chaque fiche dans les symlinks vivants de video_dir
+# (basename exact) et affiche les candidats trouvés sans modifier la DB
 uv run cineorg check-missing-files --resolve
 
 # Idem + réécrit file_path en DB quand un seul candidat est trouvé
@@ -997,6 +997,8 @@ uv run cineorg check-missing-files --repair --prune
 1. Lancer `--resolve` pour voir la colonne « Candidat trouvé ».
 2. Si chaque fiche orpheline a exactement 1 candidat (cas normal d'un fichier déplacé manuellement), relancer en `--repair`.
 3. Pour les fiches ambiguës (plusieurs candidats), les traiter manuellement via le bouton « Supprimer la fiche » + nouveau scan.
+
+**Stratégie** : la recherche ne scanne que `video_dir`, car le signal le plus fiable de la position « live » d'un film dans la bibliothèque est un symlink vivant qui pointe vers lui. La cible storage du symlink devient le nouveau `file_path` en DB. Un fichier qui serait dans `storage_dir` sans symlink correspondant dans `video_dir` n'est plus accessible côté bibliothèque — il vaut mieux le `--prune` puis ré-importer.
 
 Le scan couvre `MovieModel` et `EpisodeModel`. Les fiches sans `file_path` (incomplètes) sont ignorées : elles ne sont pas « orphelines », simplement non-rattachées à un fichier — utiliser le bouton « Supprimer la fiche » sur la page détail pour les nettoyer.
 
