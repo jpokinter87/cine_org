@@ -185,9 +185,15 @@ def review_command(
             console.print("[yellow]Aucun item en attente — rien à reviewer.[/yellow]")
             _print_summary(service, plan_path, state_path)
             return
+        # Snapshot des décisions à l'entrée de la session : permet de ne skipper
+        # que celles ajoutées EN COURS (cas typique : cascade bulk-accept série
+        # qui décide plusieurs épisodes d'un coup). Sans snapshot, --restart
+        # serait inopérant — la boucle re-skipperait sur les décisions
+        # historiques que --restart cherche justement à re-traiter.
+        decisions_at_start = set(store.load_decisions().keys())
         for idx, item in enumerate(items, start=1):
-            # Saute les items déjà décidés en cours de session (ex. bulk-accept)
-            if store.get_decision(item.item_id) is not None:
+            already = store.get_decision(item.item_id)
+            if already is not None and item.item_id not in decisions_at_start:
                 continue
             while True:
                 render_review_card(console, item, position=(idx, total))

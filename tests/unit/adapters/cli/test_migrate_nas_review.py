@@ -261,6 +261,48 @@ def test_review_loop_quit_stops_iteration(tmp_path):
     store.close()
 
 
+def test_review_loop_restart_resubmits_previously_decided_items(tmp_path):
+    """Avec --restart, un item déjà décidé en base doit pouvoir être re-traité.
+
+    Régression du bug observé : la boucle CLI faisait
+    `if store.get_decision(item.item_id): continue` ce qui annulait l'effet
+    de --restart (iter_pending(resume=False) yieldait l'item mais la boucle
+    le re-skippait immédiatement sur la base de l'ancienne décision).
+    """
+    from datetime import datetime, timezone
+
+    from src.services.migration.decisions import Decision
+
+    plan_path, item = _write_plan_with_nv(tmp_path)
+    state_path = tmp_path / "s.sqlite"
+    # Pré-décide l'item (simule une session review antérieure)
+    store = MigrationStateStore(state_path)
+    store.save_decision(Decision(
+        item_id=item.item_id,
+        bucket_origin="needs_validation",
+        decision=DecisionStatus.SKIPPED,
+        decided_via="cli",
+        decided_at=datetime.now(timezone.utc),
+    ))
+    store.close()
+
+    runner = CliRunner()
+    result = runner.invoke(
+        migrate_nas_app,
+        ["review", str(plan_path), "--state-store", str(state_path), "--restart"],
+        input="a\n",  # accept top candidate
+    )
+    assert result.exit_code == 0, result.output
+
+    store = MigrationStateStore(state_path)
+    decision = store.get_decision(item.item_id)
+    # La décision doit avoir été écrasée par APPROVED
+    assert decision.decision == DecisionStatus.APPROVED, (
+        f"--restart n'a pas re-traité l'item (toujours {decision.decision})"
+    )
+    store.close()
+
+
 def test_review_command_closes_store_when_build_service_fails(tmp_path, monkeypatch):
     """Si Container() raise, le store déjà ouvert doit être fermé proprement."""
     from src.adapters.cli.commands.migrate_nas_command import review as review_module
