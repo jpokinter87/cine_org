@@ -36,6 +36,7 @@ from .adapters.cli.commands import (
     populate_movies,
     populate_series,
     process,
+    collections_app,
     purge_hardlinks,
     reclassify_shorts,
     rename_canonical,
@@ -135,6 +136,9 @@ app.add_typer(imdb_app, name="imdb")
 
 # Monter migrate_nas_app comme sous-commande (plan / apply / status)
 app.add_typer(migrate_nas_app, name="migrate-nas")
+
+# Monter collections_app comme sous-commande (list / suggest)
+app.add_typer(collections_app, name="collections")
 
 
 def get_config() -> Settings:

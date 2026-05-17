@@ -70,6 +70,9 @@ class MovieModel(SQLModel, table=True):
     cast_override_json: str | None = None  # JSON [{"name": "...", "role": "..."}]
     preserve_overrides: bool = Field(default=False, index=True)
     is_short: bool = Field(default=False, index=True)
+    local_collection_id: int | None = Field(
+        default=None, foreign_key="local_collections.id", index=True
+    )
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 
@@ -453,3 +456,21 @@ class HardlinkModel(SQLModel, table=True):
     storage_path: str = Field(index=True)  # Chemin renommé dans storage/
     created_at: datetime = Field(default_factory=datetime.utcnow)
     expires_at: datetime  # created_at + hardlink_retention_days
+
+
+class LocalCollectionModel(SQLModel, table=True):
+    """
+    Regroupement local de films (phase P4 courts-métrages).
+
+    Sert à grouper des courts-métrages qui ne sont pas dans une collection
+    TMDB (ex. cartoons Hanna-Barbera, courts de festival regroupés par
+    réalisateur). Les Movie référencent une collection via
+    ``local_collection_id``.
+    """
+
+    __tablename__ = "local_collections"
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(index=True, unique=True)
+    description: str | None = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)

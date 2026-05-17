@@ -123,7 +123,7 @@ class TestFindCandidates:
         )
         assert reclassifier.find_candidates() == []
 
-    def test_already_marked_short_is_not_candidate(
+    def test_already_marked_short_at_correct_location_is_not_candidate(
         self, session, video_dir, storage_dir
     ) -> None:
         _create_symlinked_movie(
@@ -143,6 +143,53 @@ class TestFindCandidates:
             threshold_seconds=THRESHOLD_SECONDS,
         )
         assert reclassifier.find_candidates() == []
+
+    def test_already_short_in_divers_with_new_local_collection_is_candidate(
+        self, session, video_dir, storage_dir
+    ) -> None:
+        """Drift P4 : court déjà marqué is_short mais dans Films/Courts/Divers/.
+        Quand on lui assigne une collection locale, find_candidates doit le
+        repérer pour le déplacer vers Films/Courts/{collection}/."""
+        from src.infrastructure.persistence.models import LocalCollectionModel
+
+        # Crée la collection locale
+        coll = LocalCollectionModel(name="Cartoons Hanna-Barbera")
+        session.add(coll)
+        session.commit()
+        session.refresh(coll)
+
+        # Court déjà sous Divers, marqué is_short, sans collection TMDB
+        model = _create_symlinked_movie(
+            session,
+            video_dir,
+            storage_dir,
+            title="Tom Concerto",
+            duration_seconds=420,
+            collection_name=None,
+            current_video_subpath="Films/Courts/Divers/Tom Concerto.mkv",
+            storage_subpath="Films/Animation/T/Tom Concerto.mkv",
+            is_short=True,
+        )
+
+        # Assigne la collection locale (l'utilisateur vient de le faire via UI/CLI)
+        model.local_collection_id = coll.id
+        session.add(model)
+        session.commit()
+
+        reclassifier = ShortReclassifier(
+            session=session,
+            video_dir=video_dir,
+            threshold_seconds=THRESHOLD_SECONDS,
+        )
+        candidates = reclassifier.find_candidates()
+        assert len(candidates) == 1
+        assert candidates[0].new_symlink == (
+            video_dir
+            / "Films"
+            / "Courts"
+            / "Cartoons Hanna-Barbera"
+            / "Tom Concerto.mkv"
+        )
 
     def test_movie_under_series_dir_is_skipped(
         self, session, video_dir, storage_dir

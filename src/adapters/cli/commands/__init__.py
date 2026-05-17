@@ -81,6 +81,9 @@ from src.adapters.cli.commands.rename_canonical_command import (
 from src.adapters.cli.commands.reclassify_shorts_command import (
     reclassify_shorts,
 )
+from src.adapters.cli.commands.collections_command import (
+    collections_app,
+)
 
 __all__ = [
     # workflow
@@ -130,4 +133,5 @@ __all__ = [
     "purge_hardlinks",
     "rename_canonical",
     "reclassify_shorts",
+    "collections_app",
 ]

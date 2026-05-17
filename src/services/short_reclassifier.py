@@ -24,7 +24,7 @@ from sqlmodel import Session, select
 
 from src.core.entities.media import Movie
 from src.core.value_objects import MediaInfo, MediaType
-from src.infrastructure.persistence.models import MovieModel
+from src.infrastructure.persistence.models import LocalCollectionModel, MovieModel
 from src.services.classification import classify_media
 from src.services.organizer import get_short_video_destination
 
@@ -47,7 +47,11 @@ class ReclassResult:
     error: Optional[str] = None
 
 
-def _model_to_movie_for_destination(model: MovieModel) -> Movie:
+def _model_to_movie_for_destination(
+    model: MovieModel,
+    *,
+    local_collection_name: Optional[str] = None,
+) -> Movie:
     """Construit une entité Movie minimale, suffisante pour calculer la destination."""
     return Movie(
         id=str(model.id) if model.id else None,
@@ -55,6 +59,8 @@ def _model_to_movie_for_destination(model: MovieModel) -> Movie:
         year=model.year,
         collection_name=model.collection_name,
         duration_seconds=model.duration_seconds,
+        local_collection_id=model.local_collection_id,
+        local_collection_name=local_collection_name,
     )
 
 
@@ -71,17 +77,30 @@ class ShortReclassifier:
         self._video_dir = video_dir
         self._threshold = threshold_seconds
 
+    def _lookup_local_collection_name(
+        self, local_collection_id: Optional[int]
+    ) -> Optional[str]:
+        """Charge le nom de la collection locale référencée (None si absente)."""
+        if local_collection_id is None:
+            return None
+        coll = self._session.get(LocalCollectionModel, local_collection_id)
+        return coll.name if coll else None
+
     def find_candidates(self) -> list[ShortCandidate]:
         """Liste les films à reclasser en court-métrage.
 
-        Sélectionne les films avec ``duration_seconds <= threshold``, encore
-        marqués ``is_short=False``, ayant un ``symlink_path`` actif, et hors
-        de l'arborescence ``Séries/``. Les films déjà au bon emplacement (cas
-        idempotent) sont également exclus.
+        Sélectionne les films avec ``duration_seconds <= threshold``, ayant un
+        ``symlink_path`` actif, hors de l'arborescence ``Séries/``, et dont le
+        symlink actuel ne correspond pas à la destination calculée. Capte donc
+        à la fois :
+
+        * les films non encore marqués ``is_short=True`` (migration initiale) ;
+        * les films déjà ``is_short=True`` mais dont la franchise a changé
+          (P4 : assignation d'une collection locale → déplacement de Divers
+          vers la nouvelle franchise).
         """
         stmt = (
             select(MovieModel)
-            .where(MovieModel.is_short == False)  # noqa: E712
             .where(MovieModel.duration_seconds.isnot(None))
             .where(MovieModel.duration_seconds <= self._threshold)
             .where(MovieModel.symlink_path.isnot(None))
@@ -95,7 +114,10 @@ class ShortReclassifier:
                 is not MediaType.SHORT
             ):
                 continue
-            movie = _model_to_movie_for_destination(model)
+            local_name = self._lookup_local_collection_name(model.local_collection_id)
+            movie = _model_to_movie_for_destination(
+                model, local_collection_name=local_name
+            )
             new_dir = get_short_video_destination(movie, self._video_dir)
             new_symlink = new_dir / current.name
             if current == new_symlink:

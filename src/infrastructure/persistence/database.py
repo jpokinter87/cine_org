@@ -359,3 +359,43 @@ def _run_migrations() -> None:
                 )
             )
             conn.commit()
+
+        # Migration 14: table local_collections (phase courts-métrages P4)
+        result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
+        existing_tables = {row[0] for row in result.fetchall()}
+        if "local_collections" not in existing_tables:
+            conn.execute(
+                text(
+                    "CREATE TABLE local_collections ("
+                    "id INTEGER PRIMARY KEY, "
+                    "name VARCHAR NOT NULL, "
+                    "description VARCHAR, "
+                    "created_at DATETIME NOT NULL"
+                    ")"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_local_collections_name "
+                    "ON local_collections(name)"
+                )
+            )
+            conn.commit()
+
+        # Migration 15: local_collection_id sur movies (FK vers local_collections)
+        result = conn.execute(text("PRAGMA table_info(movies)"))
+        movie_columns = [row[1] for row in result.fetchall()]
+        if "local_collection_id" not in movie_columns:
+            conn.execute(
+                text(
+                    "ALTER TABLE movies ADD COLUMN local_collection_id INTEGER "
+                    "REFERENCES local_collections(id)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_movies_local_collection_id "
+                    "ON movies(local_collection_id)"
+                )
+            )
+            conn.commit()

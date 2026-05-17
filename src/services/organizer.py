@@ -555,17 +555,20 @@ def get_short_video_destination(movie: Movie, video_dir: Path) -> Path:
 
     Structure : ``video/Films/Courts/{franchise}/``.
 
-    La franchise vient de ``movie.collection_name`` (collection TMDB). Quand
-    aucune collection n'est connue, le court est regroupé sous ``Divers``.
+    Priorité de la franchise :
+    1. ``movie.collection_name`` (collection TMDB) — la plus fiable.
+    2. ``movie.local_collection_name`` (collection locale P4) — fallback
+       utilisateur pour les courts qui ne sont pas dans une collection TMDB.
+    3. ``"Divers"`` — quand aucune collection n'est connue.
 
     Args:
-        movie: Métadonnées du film (collection_name utilisé comme franchise).
+        movie: Métadonnées du film (collection_name / local_collection_name).
         video_dir: Répertoire racine des symlinks.
 
     Returns:
         Chemin de destination pour le symlink du court-métrage.
     """
-    franchise = movie.collection_name or "Divers"
+    franchise = movie.collection_name or movie.local_collection_name or "Divers"
     franchise_folder = sanitize_for_filesystem(franchise) or "Divers"
     return video_dir / "Films" / "Courts" / franchise_folder
 

@@ -927,6 +927,39 @@ uv run cineorg reclassify-shorts --no-dry-run
 
 **Sortie** : tableau Rich listant titre, durée, franchise et destination. En mode `--no-dry-run`, un résumé final indique le nombre de symlinks déplacés et d'erreurs éventuelles (destination déjà occupée, symlink source illisible, etc.).
 
+### Collections locales (regroupement manuel)
+
+La sous-commande `collections` regroupe les courts-métrages qui ne sont pas associés à une collection TMDB officielle (cartoons Hanna-Barbera, courts de festival, séries de niche, etc.) en collections locales nommées. Le routage `Films/Courts/{franchise}/` utilise alors le nom de la collection locale en fallback du `collection_name` TMDB.
+
+```bash
+# Lister les collections locales existantes (+ nombre de films par collection)
+uv run cineorg collections list
+
+# Voir les suggestions automatiques (groupes de courts orphelins par préfixe de titre commun)
+uv run cineorg collections suggest
+
+# Créer les collections suggérées et rattacher les films
+uv run cineorg collections suggest --no-dry-run
+
+# Puis déplacer les symlinks vers les nouveaux dossiers de franchise
+uv run cineorg reclassify-shorts --no-dry-run
+```
+
+**Fonctionnement de `suggest`** :
+
+1. Liste les films `is_short=True` sans `collection_name` TMDB ni `local_collection_id`.
+2. Extrait le préfixe sur 2 mots de chaque titre (insensible à la casse).
+3. Regroupe les films partageant le même préfixe ; ne conserve que les groupes d'au moins 2 films.
+4. Affiche un tableau avec nom suggéré, nombre de films et exemples.
+5. En `--no-dry-run` : crée chaque collection (ou réutilise si elle existe déjà par nom), assigne les films via `local_collection_id` et invite à relancer `reclassify-shorts` pour déplacer les symlinks.
+
+**Priorité de routage** pour `Films/Courts/{franchise}/` :
+1. `Movie.collection_name` (collection TMDB officielle)
+2. `Movie.local_collection_name` (collection locale assignée)
+3. `"Divers"` si aucune des deux
+
+`ShortReclassifier` détecte automatiquement les drifts : un court déjà marqué `is_short=True` sous `Films/Courts/Divers/` mais à qui on assigne une collection locale sera proposé pour déplacement vers `Films/Courts/{collection}/` au prochain `reclassify-shorts`.
+
 ### Migration depuis anciens NAS
 
 La sous-commande `migrate-nas` migre des fichiers vidéo depuis d'anciens volumes (vieux NAS, disques USB) vers le nouveau NAS, en filtrant par note minimale combinée IMDb / TMDB / personnelle. Elle préserve la source (pas de `--remove-source-files`), vérifie l'intégrité xxh3_64 source/destination après chaque copie, et swappe atomiquement les symlinks vers la nouvelle destination.

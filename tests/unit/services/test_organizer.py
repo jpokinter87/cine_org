@@ -1042,6 +1042,31 @@ class TestShortVideoDestination:
         result = get_short_video_destination(movie, video_dir)
         assert result == video_dir / "Films" / "Courts" / "Divers"
 
+    def test_short_uses_local_collection_when_tmdb_absent(
+        self, video_dir: Path
+    ) -> None:
+        """Si collection_name TMDB absent, on retombe sur local_collection_name."""
+        movie = Movie(
+            title="Tom and Jerry — Cat Concerto",
+            year=1947,
+            duration_seconds=420,
+            collection_name=None,
+            local_collection_name="Cartoons Hanna-Barbera",
+        )
+        result = get_short_video_destination(movie, video_dir)
+        assert result == (video_dir / "Films" / "Courts" / "Cartoons Hanna-Barbera")
+
+    def test_tmdb_collection_wins_over_local_collection(self, video_dir: Path) -> None:
+        """collection_name TMDB prime toujours sur local_collection_name."""
+        movie = Movie(
+            title="Anything",
+            duration_seconds=300,
+            collection_name="Pixar Shorts",
+            local_collection_name="Fallback Local",
+        )
+        result = get_short_video_destination(movie, video_dir)
+        assert result == video_dir / "Films" / "Courts" / "Pixar Shorts"
+
     def test_short_collection_name_is_sanitized(self, video_dir: Path) -> None:
         """Les caractères interdits ("/", ":") doivent être nettoyés."""
         movie = Movie(

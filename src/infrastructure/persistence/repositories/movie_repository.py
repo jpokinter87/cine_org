@@ -12,7 +12,7 @@ from sqlmodel import Session, select
 
 from src.core.entities.media import Movie
 from src.core.ports.repositories import IMovieRepository
-from src.infrastructure.persistence.models import MovieModel
+from src.infrastructure.persistence.models import LocalCollectionModel, MovieModel
 
 
 class SQLModelMovieRepository(IMovieRepository):
@@ -74,7 +74,20 @@ class SQLModelMovieRepository(IMovieRepository):
             file_size_bytes=model.file_size_bytes,
             preserve_overrides=bool(model.preserve_overrides),
             is_short=bool(model.is_short),
+            local_collection_id=model.local_collection_id,
+            local_collection_name=self._lookup_local_collection_name(
+                model.local_collection_id
+            ),
         )
+
+    def _lookup_local_collection_name(
+        self, local_collection_id: Optional[int]
+    ) -> Optional[str]:
+        """Charge le nom de la collection locale référencée (lookup léger)."""
+        if local_collection_id is None:
+            return None
+        coll = self._session.get(LocalCollectionModel, local_collection_id)
+        return coll.name if coll else None
 
     def _to_model(self, entity: Movie) -> MovieModel:
         """
@@ -114,6 +127,7 @@ class SQLModelMovieRepository(IMovieRepository):
             file_size_bytes=entity.file_size_bytes,
             preserve_overrides=bool(entity.preserve_overrides),
             is_short=bool(entity.is_short),
+            local_collection_id=entity.local_collection_id,
         )
         if entity.id:
             model.id = int(entity.id)
@@ -250,6 +264,8 @@ class SQLModelMovieRepository(IMovieRepository):
             if movie.file_size_bytes is not None:
                 existing.file_size_bytes = movie.file_size_bytes
             existing.is_short = bool(movie.is_short)
+            if movie.local_collection_id is not None:
+                existing.local_collection_id = movie.local_collection_id
             self._session.add(existing)
             self._session.commit()
             self._session.refresh(existing)
