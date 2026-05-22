@@ -228,6 +228,80 @@
         });
     }
 
+    // --- Action : ajouter à une collection ---
+    var collectionBtn = document.getElementById('collection-confirm-btn');
+    var collectionOverlay = document.getElementById('collection-overlay');
+    var collectionCount = document.getElementById('collection-overlay-count');
+    var collectionInput = document.getElementById('collection-name-input');
+    var collectionOverlayConfirm = document.getElementById('collection-overlay-confirm');
+    var collectionOverlayCancel = document.getElementById('collection-overlay-cancel');
+
+    if (collectionBtn) {
+        collectionBtn.addEventListener('click', function () {
+            if (selected.size === 0) return;
+            if (collectionCount) collectionCount.textContent = selected.size;
+            if (collectionInput) collectionInput.value = '';
+            if (collectionOverlay) collectionOverlay.classList.add('active');
+            if (collectionInput) setTimeout(function () { collectionInput.focus(); }, 50);
+        });
+    }
+
+    if (collectionOverlayCancel) {
+        collectionOverlayCancel.addEventListener('click', function () {
+            if (collectionOverlay) collectionOverlay.classList.remove('active');
+        });
+    }
+
+    if (collectionOverlay) {
+        collectionOverlay.addEventListener('click', function (e) {
+            if (e.target === collectionOverlay) collectionOverlay.classList.remove('active');
+        });
+    }
+
+    if (collectionOverlayConfirm) {
+        collectionOverlayConfirm.addEventListener('click', function () {
+            var name = ((collectionInput && collectionInput.value) || '').trim();
+            if (selected.size === 0 || !name) return;
+
+            var items = [];
+            selected.forEach(function (val) {
+                items.push({ type: val.type, id: val.id });
+            });
+
+            collectionOverlayConfirm.disabled = true;
+            collectionOverlayConfirm.textContent = 'Ajout...';
+
+            fetch('/library/collection-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ collection_name: name, items: items })
+            })
+                .then(function (res) {
+                    if (res.status === 403) {
+                        return res.json().then(function (data) {
+                            alert(data.error || 'Accès refusé.');
+                            throw new Error('forbidden');
+                        });
+                    }
+                    return res.json();
+                })
+                .then(function (data) {
+                    if (data && data.assigned !== undefined) {
+                        clearState();
+                        window.location.href = '/library/';
+                    }
+                })
+                .catch(function (err) {
+                    if (err.message !== 'forbidden') {
+                        alert('Erreur lors de l\'ajout à la collection.');
+                    }
+                    collectionOverlayConfirm.disabled = false;
+                    collectionOverlayConfirm.textContent = 'Ajouter à la collection';
+                    if (collectionOverlay) collectionOverlay.classList.remove('active');
+                });
+        });
+    }
+
     // Ré-attacher les checkboxes après un swap HTMX (changement de filtre/page)
     document.body.addEventListener('htmx:afterSwap', function (e) {
         if (selectMode && e.detail.target && e.detail.target.id === 'library-content') {
@@ -240,6 +314,8 @@
         if (e.key === 'Escape' && selectMode) {
             if (overlay && overlay.classList.contains('active')) {
                 overlay.classList.remove('active');
+            } else if (collectionOverlay && collectionOverlay.classList.contains('active')) {
+                collectionOverlay.classList.remove('active');
             } else {
                 exitSelectMode();
             }
