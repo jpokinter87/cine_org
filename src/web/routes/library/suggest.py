@@ -24,7 +24,6 @@ from .helpers import (
     _format_duration,
     _genre_json_escaped,
     _parse_genres,
-    _poster_url,
 )
 
 router = APIRouter()
@@ -148,7 +147,12 @@ async def suggest(
         candidates = []
 
         if type in ("all", "movie"):
-            movie_stmt = select(MovieModel).where(_eligible_filter(MovieModel))
+            # Les courts-métrages ne sont jamais proposés par « Surprends-moi »
+            movie_stmt = (
+                select(MovieModel)
+                .where(_eligible_filter(MovieModel))
+                .where(MovieModel.is_short == False)  # noqa: E712
+            )
             if genre:
                 movie_stmt = movie_stmt.where(
                     MovieModel.genres_json.contains(_genre_json_escaped(genre))
