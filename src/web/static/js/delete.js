@@ -287,8 +287,20 @@
                 })
                 .then(function (data) {
                     if (data && data.assigned !== undefined) {
+                        if (data.errors && data.errors.length > 0) {
+                            alert(
+                                data.errors.length +
+                                    ' déplacement(s) de symlink en échec. ' +
+                                    'Les fiches ont quand même été rattachées à la collection.'
+                            );
+                        }
                         clearState();
                         window.location.href = '/library/';
+                    } else {
+                        // Réponse inattendue : réactiver le bouton plutôt que le bloquer
+                        collectionOverlayConfirm.disabled = false;
+                        collectionOverlayConfirm.textContent = 'Ajouter à la collection';
+                        alert('Réponse inattendue du serveur.');
                     }
                 })
                 .catch(function (err) {
