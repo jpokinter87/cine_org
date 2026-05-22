@@ -19,7 +19,6 @@ from .helpers import (
     _genre_json_escaped,
     _parse_genres,
     _effective_poster_url,
-    _poster_url,
     _resolution_label,
     _resolution_pixels,
     _title_search_filter,
@@ -84,7 +83,7 @@ async def library_index(
         items = []
 
         # --- Films ---
-        if type in ("all", "movie"):
+        if type in ("all", "movie", "courts"):
             movie_stmt = select(MovieModel)
             if q:
                 movie_stmt = movie_stmt.where(
@@ -129,6 +128,10 @@ async def library_index(
                 movie_stmt = movie_stmt.where(MovieModel.poster_path.is_(None))
             if unwatched == "1":
                 movie_stmt = movie_stmt.where(MovieModel.watched == False)  # noqa: E712
+            if type == "courts":
+                movie_stmt = movie_stmt.where(MovieModel.is_short == True)  # noqa: E712
+            else:
+                movie_stmt = movie_stmt.where(MovieModel.is_short == False)  # noqa: E712
 
             movies = session.exec(movie_stmt).all()
 
