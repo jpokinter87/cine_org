@@ -8372,26 +8372,23 @@ details[open] > .maint-issue-toggle::before {
     border-color: rgba(52, 211, 153, 0.6);
 }
 
-/* Case « Tout sélectionner » — visible uniquement en mode sélection */
+/* Groupe Batch + « Tout sélectionner » : la case apparaît sous le bouton */
+.lib-batch-group {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+}
+
+/* « Tout sélectionner » : visible uniquement en mode sélection.
+   Le style visuel est hérité de .lib-filter-checkbox (cohérent avec les
+   autres cases : Non-vus, Sans fichier, Sans poster). */
 .lib-selectall-toggle {
     display: none;
-    align-items: center;
-    gap: 0.4rem;
-    font-family: var(--font-body);
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    cursor: pointer;
-    user-select: none;
 }
 
 body.delete-mode .lib-selectall-toggle {
     display: inline-flex;
-}
-
-.lib-selectall-toggle input {
-    cursor: pointer;
-    accent-color: var(--accent-emerald);
 }
 
 #collection-overlay .delete-dialog-icon {

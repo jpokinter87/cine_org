@@ -2,7 +2,7 @@
       hx-get="/library/"
       hx-target="#library-content"
       hx-push-url="true"
-      hx-trigger="change from:select, change from:input[type=checkbox], change from:input[name=order], keyup changed delay:1000ms from:find input[name=q]">
+      hx-trigger="change from:select, change from:input[name=unwatched], change from:input[name=no_file], change from:input[name=no_poster], change from:input[name=order], keyup changed delay:1000ms from:find input[name=q]">
 
     {# ── Ligne 1 : recherche, mode, type, genre, année ── #}
     <div class="lib-filters-main">
@@ -102,14 +102,16 @@
         </button>
 
         {% if is_local %}
-        <button type="button" id="delete-mode-toggle" class="delete-mode-btn delete-mode-btn-subtle">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            Batch
-        </button>
-        <label class="lib-selectall-toggle" title="Sélectionner toutes les jaquettes de la page">
-            <input type="checkbox" id="select-all-checkbox">
-            Tout sélectionner
-        </label>
+        <div class="lib-batch-group">
+            <button type="button" id="delete-mode-toggle" class="delete-mode-btn delete-mode-btn-subtle">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                Batch
+            </button>
+            <label class="lib-filter-checkbox lib-filter-checkbox-sm lib-selectall-toggle" title="Sélectionner toutes les jaquettes de la page">
+                <input type="checkbox" id="select-all-checkbox">
+                Tout sélectionner
+            </label>
+        </div>
         {% endif %}
     </div>
 
