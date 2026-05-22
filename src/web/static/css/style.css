@@ -8372,6 +8372,28 @@ details[open] > .maint-issue-toggle::before {
     border-color: rgba(52, 211, 153, 0.6);
 }
 
+/* Case « Tout sélectionner » — visible uniquement en mode sélection */
+.lib-selectall-toggle {
+    display: none;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--font-body);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+
+body.delete-mode .lib-selectall-toggle {
+    display: inline-flex;
+}
+
+.lib-selectall-toggle input {
+    cursor: pointer;
+    accent-color: var(--accent-emerald);
+}
+
 #collection-overlay .delete-dialog-icon {
     background: rgba(78, 203, 141, 0.15);
 }

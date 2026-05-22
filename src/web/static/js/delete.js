@@ -87,6 +87,55 @@
         if (bar) {
             bar.classList.toggle('active', n > 0 && selectMode);
         }
+        syncSelectAllCheckbox();
+    }
+
+    // Itère les cartes de la page courante (films + séries) et invoque
+    // fn(card, key, type, id, title) pour chacune.
+    function forEachCard(fn) {
+        container.querySelectorAll('.lib-card').forEach(function (card) {
+            var match = (card.getAttribute('href') || '').match(
+                /\/library\/(movies|series)\/(\d+)/
+            );
+            if (!match) return;
+            var type = match[1] === 'movies' ? 'movie' : 'series';
+            var id = parseInt(match[2], 10);
+            var key = type + '-' + id;
+            var title = (card.querySelector('.lib-card-title') || {}).textContent || '';
+            fn(card, key, type, id, title);
+        });
+    }
+
+    // Sélectionne (ou désélectionne) toutes les jaquettes de la page courante.
+    function setAllCardsSelection(check) {
+        forEachCard(function (card, key, type, id, title) {
+            var input = card.querySelector('.delete-checkbox input');
+            if (check) {
+                selected.set(key, { type: type, id: id, title: title });
+                card.classList.add('delete-selected');
+                if (input) input.checked = true;
+            } else {
+                selected.delete(key);
+                card.classList.remove('delete-selected');
+                if (input) input.checked = false;
+            }
+        });
+        updateUI();
+        saveState();
+    }
+
+    // Reflète l'état de sélection de la page sur la case maître (#select-all-checkbox).
+    function syncSelectAllCheckbox() {
+        var master = document.getElementById('select-all-checkbox');
+        if (!master) return;
+        var total = 0;
+        var sel = 0;
+        forEachCard(function (card, key) {
+            total += 1;
+            if (selected.has(key)) sel += 1;
+        });
+        master.checked = total > 0 && sel === total;
+        master.indeterminate = sel > 0 && sel < total;
     }
 
     function enterSelectMode() {
@@ -118,6 +167,12 @@
         } else {
             enterSelectMode();
         }
+    });
+
+    // Case « Tout sélectionner » — recréée à chaque swap HTMX, donc déléguée.
+    document.addEventListener('change', function (e) {
+        if (!e.target || e.target.id !== 'select-all-checkbox') return;
+        setAllCardsSelection(e.target.checked);
     });
 
     if (cancelBtn) {
