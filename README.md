@@ -45,6 +45,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Tableau de bord](#tableau-de-bord)
   - [Bibliothèque](#bibliothèque)
   - [Filtres et recherche](#filtres-et-recherche)
+  - [Courts-métrages dans la bibliothèque](#courts-métrages-dans-la-bibliothèque)
   - [Fiches détaillées](#fiches-détaillées)
   - [Correction des associations TMDB](#correction-des-associations-tmdb)
   - [Lecteur vidéo intégré](#lecteur-vidéo-intégré)
@@ -1273,7 +1274,7 @@ La barre de filtres en haut de la bibliothèque permet de combiner librement plu
 | Filtre | Description |
 |--------|-------------|
 | **Recherche** | Par titre (défaut) ou titre + synopsis (mode « Titre + Synopsis ») |
-| **Type** | Tous, Films, Séries |
+| **Type** | Tous, Films, Séries, Courts (voir [Courts-métrages dans la bibliothèque](#courts-métrages-dans-la-bibliothèque)) |
 | **Genre** | Filtrer par genre (Action, Drame, Science-Fiction…) |
 | **Année** | Filtrer par année de sortie |
 | **Résolution** | 4K, 1080p, 720p, SD |
@@ -1289,6 +1290,20 @@ La barre de filtres en haut de la bibliothèque permet de combiner librement plu
 **Filtrage par clic** — Depuis les fiches détaillées, un clic sur un badge technique (résolution, codec), un genre, un réalisateur ou un acteur filtre automatiquement la bibliothèque sur ce critère. Les réalisateurs et acteurs sont distingués par des icônes différentes (mégaphone pour le réalisateur, buste pour l'acteur).
 
 **Recherche étendue** — Le mode « Titre + Synopsis » permet de chercher des mots-clés dans le synopsis des films (ex : chercher « espace » trouve les films de science-fiction même si le mot n'est pas dans le titre).
+
+### Courts-métrages dans la bibliothèque
+
+- **Filtre « Courts »** — Le sélecteur de type de la grille propose désormais
+  Tous / Films / Séries / **Courts**. Par défaut (Tous) et sous « Films », les
+  courts-métrages (`is_short`) sont masqués ; ils n'apparaissent que via le
+  type « Courts ».
+- **Ranger des courts en collection (sélection en masse)** — Activer le mode
+  « Suppression » (qui est en réalité un mode sélection), cocher plusieurs
+  jaquettes, puis cliquer **« Ajouter à une collection »**. Saisir un nom de
+  collection (un nom existant est réutilisé, un nouveau nom la crée). Les courts
+  sélectionnés sont rattachés à la collection locale et leurs symlinks sont
+  déplacés vers `video/Films/Courts/{collection}/`. Action réservée à la machine
+  maître (modification de la base et des symlinks).
 
 ### Fiches détaillées
 
