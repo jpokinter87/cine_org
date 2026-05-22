@@ -8346,7 +8346,7 @@ details[open] > .maint-issue-toggle::before {
 
 .delete-bar-btn-collection {
     background: rgba(52, 211, 153, 0.15);
-    color: var(--accent-emerald, #34d399);
+    color: var(--accent-emerald);
     border: 1px solid rgba(52, 211, 153, 0.3);
 }
 
@@ -8370,6 +8370,20 @@ details[open] > .maint-issue-toggle::before {
 .collection-name-input:focus {
     outline: none;
     border-color: rgba(52, 211, 153, 0.6);
+}
+
+#collection-overlay .delete-dialog-icon {
+    background: rgba(78, 203, 141, 0.15);
+}
+
+#collection-overlay .delete-dialog-icon svg {
+    color: var(--accent-emerald);
+}
+
+#collection-overlay .reject-dialog-confirm {
+    background: rgba(78, 203, 141, 0.15);
+    color: var(--accent-emerald);
+    border: 1px solid rgba(78, 203, 141, 0.3);
 }
 
 /* ── Delete Overlay (confirmation) ── */
