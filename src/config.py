@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     min_file_size_mb: int = Field(default=100, ge=1)
     max_files_per_subdir: int = Field(default=50, ge=1)
     match_score_threshold: int = Field(default=85, ge=0, le=100)
+    short_film_duration_threshold_seconds: int = Field(default=900, ge=60)
 
     # Sandbox (isolation des fichiers orphelins pour revue)
     sandbox_dir: Optional[Path] = Field(default=None)

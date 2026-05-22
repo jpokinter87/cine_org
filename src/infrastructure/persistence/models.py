@@ -69,6 +69,10 @@ class MovieModel(SQLModel, table=True):
     overview_override: str | None = None
     cast_override_json: str | None = None  # JSON [{"name": "...", "role": "..."}]
     preserve_overrides: bool = Field(default=False, index=True)
+    is_short: bool = Field(default=False, index=True)
+    local_collection_id: int | None = Field(
+        default=None, foreign_key="local_collections.id", index=True
+    )
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 
@@ -330,6 +334,36 @@ class IMDbRatingModel(SQLModel, table=True):
     last_updated: date | None = Field(default_factory=date.today)
 
 
+class IMDbAkaModel(SQLModel, table=True):
+    """
+    Modele representant un titre alternatif (aka) IMDb.
+
+    Stocke les variantes de titres (par région/langue) importees depuis
+    le dataset IMDb title.akas.tsv.gz. Permet de retrouver un imdb_id
+    depuis un titre traduit (fr, ja, ko, …) quand le moteur de recherche
+    TMDB ne reconnaît que le titre original.
+
+    Workflow type (mode review migration) :
+      titre fr → IMDbAkaModel.title_normalized → tconst → TMDB find_by_imdb_id
+
+    Le champ `title_normalized` (lowercase + sans accents) est indexé
+    pour permettre une recherche rapide sans dépendre de FTS.
+    """
+
+    __tablename__ = "imdb_akas"
+    __table_args__ = (
+        Index("ix_imdb_akas_title_normalized", "title_normalized"),
+        Index("ix_imdb_akas_tconst", "tconst"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    tconst: str  # ID IMDb (ex: "tt0082416" pour The French Lieutenant's Woman)
+    title: str  # Titre tel qu'il apparaît dans le dataset (avec accents/casse)
+    title_normalized: str  # lowercase + sans accents, pour la recherche
+    region: str | None = None  # Code pays (FR, US, GB, …) ou None
+    language: str | None = None  # Code ISO 639-1 (fr, en, …) ou None
+
+
 class TrashModel(SQLModel, table=True):
     """
     Modele representant un element dans la corbeille.
@@ -422,3 +456,21 @@ class HardlinkModel(SQLModel, table=True):
     storage_path: str = Field(index=True)  # Chemin renommé dans storage/
     created_at: datetime = Field(default_factory=datetime.utcnow)
     expires_at: datetime  # created_at + hardlink_retention_days
+
+
+class LocalCollectionModel(SQLModel, table=True):
+    """
+    Regroupement local de films (phase P4 courts-métrages).
+
+    Sert à grouper des courts-métrages qui ne sont pas dans une collection
+    TMDB (ex. cartoons Hanna-Barbera, courts de festival regroupés par
+    réalisateur). Les Movie référencent une collection via
+    ``local_collection_id``.
+    """
+
+    __tablename__ = "local_collections"
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(index=True, unique=True)
+    description: str | None = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)

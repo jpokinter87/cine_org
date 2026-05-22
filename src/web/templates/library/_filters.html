@@ -28,6 +28,7 @@
             <option value="all" {{ 'selected' if current_type == 'all' }}>Tous</option>
             <option value="movie" {{ 'selected' if current_type == 'movie' }}>Films</option>
             <option value="series" {{ 'selected' if current_type == 'series' }}>Series</option>
+            <option value="courts" {{ 'selected' if current_type == 'courts' }}>Courts</option>
         </select>
 
         <select name="genre" class="lib-filter-select">
@@ -159,7 +160,7 @@
     <div class="lib-active-filters">
         {% if current_type != 'all' %}
         <span class="lib-filter-tag">
-            {{ 'Film' if current_type == 'movie' else 'Serie' }}
+            {% if current_type == 'movie' %}Film{% elif current_type == 'courts' %}Court{% else %}Serie{% endif %}
             <a href="/library/?type=all&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q={{ current_q }}&person={{ current_person }}&person_role={{ current_person_role }}&resolution={{ current_resolution }}&codec_video={{ current_codec_video }}&codec_audio={{ current_codec_audio }}&search_mode={{ current_search_mode }}&sort={{ current_sort }}&order={{ current_order }}"
                class="lib-filter-tag-remove">&times;</a>
         </span>

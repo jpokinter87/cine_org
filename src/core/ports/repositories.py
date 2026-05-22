@@ -118,6 +118,11 @@ class ISeriesRepository(ABC):
         ...
 
     @abstractmethod
+    def get_by_tmdb_id(self, tmdb_id: int) -> Optional[Series]:
+        """Récupère une série par son ID TMDB."""
+        ...
+
+    @abstractmethod
     def search_by_title(self, title: str, year: Optional[int] = None) -> list[Series]:
         """Recherche des séries par titre, avec filtrage optionnel par année."""
         ...

@@ -1,0 +1,21 @@
+<div class="review-card review-card--{{ item.bucket.value }}"
+     id="review-{{ item.item_id }}">
+  <div class="review-card__header">
+    <span class="bucket-badge">{{ item.bucket.value }}</span>
+    <strong>{{ item.symlink_path.name }}</strong>
+  </div>
+  <div class="review-card__body">
+    {% if item.bucket.value == "needs_validation" and item.match.top_candidates %}
+      <p>Top match : <strong>{{ item.match.top_candidates[0].title }}</strong>
+         ({{ item.match.top_candidates[0].year }})
+         score {{ "%.0f"|format(item.match.top_candidates[0].score) }}</p>
+    {% elif item.bucket.value == "already_in_library" %}
+      <p>Doublon — déjà présent en bibliothèque</p>
+    {% endif %}
+    <button hx-get="/migration/review/{{ item.item_id }}?plan={{ plan_path | urlencode }}"
+            hx-target="#review-{{ item.item_id }}"
+            hx-swap="outerHTML">
+      Voir détail
+    </button>
+  </div>
+</div>

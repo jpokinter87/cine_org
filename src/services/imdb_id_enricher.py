@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Optional
 
-from src.core.entities.media import Movie
+from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
 from src.core.ports.api_clients import IMediaAPIClient
 from src.core.ports.repositories import IMovieRepository
 
@@ -60,6 +60,7 @@ class ImdbIdEnricherService:
         self,
         movie_repo: IMovieRepository,
         tmdb_client: IMediaAPIClient,
+        imdb_importer: Optional[IMDbDatasetImporter] = None,
     ) -> None:
         """
         Initialise le service d'enrichissement.
@@ -67,9 +68,15 @@ class ImdbIdEnricherService:
         Args:
             movie_repo: Repository des films
             tmdb_client: Client API TMDB (doit implementer get_external_ids)
+            imdb_importer: Cache IMDb local (optionnel). Quand fourni, le
+                service rattrape aussi imdb_rating/imdb_votes dès que
+                l'imdb_id est résolu — évite de devoir lancer une seconde
+                commande pour avoir un film complet (aligné sur le workflow
+                principal et migrate-nas raw_finalizer).
         """
         self._movie_repo = movie_repo
         self._tmdb_client = tmdb_client
+        self._imdb_importer = imdb_importer
 
     async def enrich_imdb_ids(
         self,
@@ -144,6 +151,18 @@ class ImdbIdEnricherService:
 
             # Mettre a jour le film avec l'imdb_id
             movie.imdb_id = imdb_id
+
+            # Rattrape aussi imdb_rating/imdb_votes depuis le cache local
+            # quand un importer est fourni — sans ça, l'utilisateur doit
+            # lancer une seconde commande (et la note risque de rester None
+            # pour les œuvres absentes du snapshot IMDb).
+            if self._imdb_importer is not None:
+                try:
+                    rating_data = self._imdb_importer.get_rating(imdb_id)
+                except Exception:
+                    rating_data = None
+                if rating_data:
+                    movie.imdb_rating, movie.imdb_votes = rating_data
 
             # Sauvegarder
             self._movie_repo.save(movie)

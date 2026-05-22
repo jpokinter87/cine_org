@@ -1,0 +1,42 @@
+<div class="duplicate-compare">
+  <h4>Comparaison qualité (doublon)</h4>
+  <table class="compare-table">
+    <thead>
+      <tr>
+        <th>Critère</th>
+        <th>Source NAS</th>
+        <th>Bibliothèque</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Score global</td>
+        <td>{{ "%.1f"|format(reco.new_score) }}</td>
+        <td>{{ "%.1f"|format(reco.existing_score) }}</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="reco-summary">
+    {% if reco.recommended == "new" %}
+      La source NAS est de meilleure qualité — remplacer recommandé.
+    {% else %}
+      La version en bibliothèque est de meilleure qualité — conserver recommandé.
+    {% endif %}
+  </p>
+  <div class="duplicate-actions">
+    <button class="btn btn--sm btn--approve"
+            hx-post="/migration/review/{{ item.item_id }}/decide?plan={{ plan_path | urlencode }}"
+            hx-target="#review-{{ item.item_id }}"
+            hx-swap="outerHTML"
+            hx-vals='{"decision": "approved", "duplicate_action": "replace_dest"}'>
+      Remplacer avec source NAS
+    </button>
+    <button class="btn btn--sm"
+            hx-post="/migration/review/{{ item.item_id }}/decide?plan={{ plan_path | urlencode }}"
+            hx-target="#review-{{ item.item_id }}"
+            hx-swap="outerHTML"
+            hx-vals='{"decision": "rejected", "duplicate_action": "keep_dest"}'>
+      Garder bibliothèque
+    </button>
+  </div>
+</div>

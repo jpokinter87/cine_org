@@ -20,11 +20,25 @@ Utilisation :
 from __future__ import annotations
 
 import os
+import unicodedata
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Optional
 
+from src.core.ports.parser import IMediaInfoExtractor
 from src.services.migration.dataclasses import MigrationCandidate
+
+
+# Préfixes par défaut pour limiter le scan aux répertoires de vidéothèque
+# pertinents (Films, Séries/Series, Animations/Animes). Insensible à la casse
+# et aux accents — match si un segment du chemin commence par un de ces préfixes.
+DEFAULT_CATEGORY_PREFIXES: tuple[str, ...] = ("film", "seri", "anim")
+
+
+def _normalize_segment(value: str) -> str:
+    """Normalise un segment de chemin pour comparaison : strip accents + lowercase."""
+    nfkd = unicodedata.normalize("NFKD", value)
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).lower().strip()
 
 
 class MigrationScanner:
@@ -45,6 +59,8 @@ class MigrationScanner:
         video_extensions: Iterable[str],
         destination_root: Optional[Path] = None,
         alternative_roots: Optional[Iterable[Path]] = None,
+        category_prefixes: Optional[Iterable[str]] = DEFAULT_CATEGORY_PREFIXES,
+        media_info_extractor: Optional[IMediaInfoExtractor] = None,
     ) -> None:
         self._video_extensions = frozenset(e.lower() for e in video_extensions)
         self._destination_root = (
@@ -53,15 +69,50 @@ class MigrationScanner:
         self._alternative_roots = (
             [Path(r) for r in alternative_roots] if alternative_roots else []
         )
+        # category_prefixes=None désactive le filtrage (scan tout).
+        self._category_prefixes: Optional[tuple[str, ...]] = (
+            tuple(_normalize_segment(p) for p in category_prefixes)
+            if category_prefixes is not None
+            else None
+        )
         # Cache des index alt_root -> {filename: full_path} pour éviter de
         # re-scanner les disques de secours à chaque lien cassé.
         self._alt_index_cache: dict[Path, dict[str, Path]] = {}
+        # Extracteur mediainfo (optionnel). Quand fourni, le scanner extrait
+        # la durée + codecs sur la cible résolue. Utilisé par le matcher
+        # mode raw pour discriminer les films homonymes via la durée TMDB.
+        self._media_info_extractor = media_info_extractor
+
+    def count_files(self, root: Path) -> int:
+        """Compte rapidement les fichiers vidéo matchant les filtres, sans
+        extraire les métadonnées ni résoudre les symlinks.
+
+        Utile pour prédimensionner une barre de progression sans payer le
+        coût (potentiellement long) de mediainfo sur des milliers de
+        fichiers vidéo. La sémantique de filtrage est identique à `scan()`.
+        """
+        root = Path(root)
+        n = 0
+        for dirpath, _, filenames in os.walk(root, followlinks=False):
+            for name in filenames:
+                full = Path(dirpath) / name
+                if full.suffix.lower() not in self._video_extensions:
+                    continue
+                if not self._matches_category(full, root):
+                    continue
+                n += 1
+        return n
 
     def scan(self, root: Path) -> Iterator[MigrationCandidate]:
         """
         Itère sur tous les fichiers vidéo sous `root` et produit un candidat
         par entrée. Les fichiers d'extension non vidéo sont silencieusement
         ignorés (cas typique : fichiers .nfo, .txt, posters, etc.).
+
+        Si `category_prefixes` est défini, seuls les fichiers dont au moins
+        un segment de chemin commence par un de ces préfixes (insensible à
+        la casse et aux accents) sont produits. Permet d'ignorer Docs/, TV/,
+        Musique/, etc. quand on scanne la racine d'une vidéothèque mixte.
         """
         root = Path(root)
         for dirpath, _, filenames in os.walk(root, followlinks=False):
@@ -69,7 +120,33 @@ class MigrationScanner:
                 full = Path(dirpath) / name
                 if full.suffix.lower() not in self._video_extensions:
                     continue
+                if not self._matches_category(full, root):
+                    continue
                 yield self._classify(full, root)
+
+    def _matches_category(self, path: Path, root: Path) -> bool:
+        """Vérifie que le média_root (1er segment sous root) matche la whitelist.
+
+        Ne teste que le premier segment du chemin relatif — sinon un
+        sous-dossier dont le nom commence par un préfixe (ex: "SeriousImages"
+        sous "ISX/Divers/") faisait passer le fichier en faux positif. La
+        whitelist s'applique aux *catégories de premier niveau* (Films,
+        Séries, Animations), pas à un nom arbitraire profond dans l'arbre.
+        """
+        if self._category_prefixes is None:
+            return True
+        try:
+            relative = path.relative_to(root)
+        except ValueError:
+            return True  # Hors source_root : on ne devrait pas arriver ici.
+        if len(relative.parts) < 2:
+            # Fichier directement à la racine : pas de catégorie → ignoré.
+            return False
+        media_root_segment = _normalize_segment(relative.parts[0])
+        return any(
+            media_root_segment.startswith(prefix)
+            for prefix in self._category_prefixes
+        )
 
     def _classify(self, path: Path, root: Path) -> MigrationCandidate:
         media_root, relative_category = self._extract_categories(path, root)
@@ -90,6 +167,7 @@ class MigrationScanner:
                 is_broken=False,
                 already_on_destination=False,
                 is_symlink=False,
+                media_info=self._extract_media_info(path),
             )
 
         # Symlink : tenter de résoudre la cible.
@@ -116,7 +194,21 @@ class MigrationScanner:
             is_broken=is_broken,
             already_on_destination=already_on_destination,
             is_symlink=True,
+            media_info=self._extract_media_info(target),
         )
+
+    def _extract_media_info(self, target: Optional[Path]):
+        """Extrait mediainfo sur la cible si un extracteur est configuré.
+
+        Retourne None silencieusement quand : aucun extracteur configuré,
+        target absente ou inexistante. Les erreurs d'extraction sont
+        captées par l'extracteur lui-même (qui retourne None).
+        """
+        if self._media_info_extractor is None:
+            return None
+        if target is None or not target.exists():
+            return None
+        return self._media_info_extractor.extract(target)
 
     def _resolve_target(self, symlink: Path) -> Optional[Path]:
         """Suit le symlink, puis fallback sur la recherche dans alternative_roots."""
@@ -134,6 +226,14 @@ class MigrationScanner:
                 return candidate
 
         # Fallback : chercher par nom de fichier dans les roots alternatifs.
+        # Fast-path : essai direct alt_root/<basename> avant le walk indexant
+        # toute l'arborescence — évite des millions de stat() quand le fichier
+        # est exactement à la racine de l'alt_root.
+        for alt in self._alternative_roots:
+            shortcut = alt / candidate.name
+            if shortcut.exists():
+                return shortcut
+        # Sinon walk complet (mis en cache pour les appels suivants).
         for alt in self._alternative_roots:
             index = self._index_for(alt)
             found = index.get(candidate.name)

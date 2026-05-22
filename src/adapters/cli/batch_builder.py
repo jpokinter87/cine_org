@@ -26,7 +26,7 @@ from src.adapters.cli.helpers import (
 
 if TYPE_CHECKING:
     from src.container import Container
-    from src.core.entities.media import Episode, Movie, Series
+    from src.core.entities.media import Movie
     from src.core.entities.video import PendingValidation
     from src.core.ports.api_clients import MediaDetails
 
@@ -327,13 +327,9 @@ async def _build_series_transfer_data(
     if isinstance(candidate, dict):
         candidate_title = candidate.get("title", "")
         candidate_year = candidate.get("year")
-        candidate_source = candidate.get("source", "")
-        series_id = candidate.get("id", "")
     else:
         candidate_title = candidate.title
         candidate_year = candidate.year
-        candidate_source = candidate.source
-        series_id = candidate.id
 
     # Extraire l'extension et langue
     source_path = (
@@ -420,6 +416,9 @@ async def build_transfers_batch(
     organizer = container.organizer_service()
     tvdb_client = container.tvdb_client()
     tmdb_client = container.tmdb_client()
+
+    # Seuil court-métrage (utilisé pour router vers Films/Courts/)
+    short_threshold_seconds = container.config().short_film_duration_threshold_seconds
 
     # Instancier les repositories UNE SEULE FOIS hors de la boucle
     # pour eviter d'epuiser le pool de connexions SQLite
@@ -590,9 +589,7 @@ async def build_transfers_batch(
                 imdb_rating=s_imdb_rating,
                 imdb_votes=s_imdb_votes,
             )
-            is_extra = (
-                canonical_count is not None and episode_num > canonical_count
-            )
+            is_extra = canonical_count is not None and episode_num > canonical_count
             episode = Episode(
                 season_number=season_num,
                 episode_number=episode_num,
@@ -697,12 +694,31 @@ async def build_transfers_batch(
                 imdb_votes=imdb_votes,
                 director=movie_details.director if movie_details else None,
                 cast=movie_details.cast if movie_details else (),
+                collection_id=movie_details.collection_id if movie_details else None,
+                collection_name=movie_details.collection_name
+                if movie_details
+                else None,
                 codec_video=codec_video,
                 codec_audio=codec_audio,
                 resolution=resolution,
                 languages=languages,
                 file_size_bytes=file_size_bytes,
             )
+
+            # Décider du routage (Films/Genre/... vs Films/Courts/{franchise}/)
+            # et marquer is_short=True AVANT save pour persistance immédiate.
+            from src.services.organizer import route_movie_destination
+
+            dest_dir, symlink_dir, is_short_flag = route_movie_destination(
+                movie=movie,
+                file_path=source_path,
+                media_info=media_info,
+                organizer=organizer,
+                storage_dir=storage_dir,
+                video_dir=video_dir,
+                threshold_seconds=short_threshold_seconds,
+            )
+            movie.is_short = is_short_flag
 
             # Sauvegarder le film dans la base de donnees
             saved_movie = movie_repo.save(movie)
@@ -727,15 +743,6 @@ async def build_transfers_batch(
                 media_info=media_info,
                 extension=extension,
                 fallback_language=fallback_language,
-            )
-            dest_dir = organizer.get_movie_destination(
-                movie=movie,
-                storage_dir=storage_dir,
-                video_dir=video_dir,
-            )
-            symlink_dir = organizer.get_movie_video_destination(
-                movie=movie,
-                video_dir=video_dir,
             )
 
             transfer_data = {
@@ -933,7 +940,10 @@ def _detect_duplicates(
                 if ep_m:
                     new_ep_key = f"S{int(ep_m.group(1)):02d}E{int(ep_m.group(2)):02d}"
                     # Vérification par épisode exact (prioritaire)
-                    if match.existing_episodes and new_ep_key not in match.existing_episodes:
+                    if (
+                        match.existing_episodes
+                        and new_ep_key not in match.existing_episodes
+                    ):
                         t["has_duplicate"] = False
                         t["duplicate_match"] = None
                         continue

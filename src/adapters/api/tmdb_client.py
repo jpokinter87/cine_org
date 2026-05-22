@@ -459,6 +459,43 @@ class TMDBClient(IMediaAPIClient):
 
         return None
 
+    async def find_by_tvdb_id(self, tvdb_id: str | int) -> Optional[MediaDetails]:
+        """
+        Recherche une série TV via son ID TVDB.
+
+        Utilise l'endpoint TMDB /find/{external_id} avec source=tvdb_id.
+        Si une série est trouvée, retourne ses détails complets via
+        get_tv_details (vote_average inclus).
+
+        Utilisé par le mode raw migration : le matcher trouve la série
+        via TVDB (parce que TVDB est plus exhaustif pour les séries),
+        mais la note pour décider MIGRATE/LOW_RATED/UNRATED doit venir
+        de TMDB (TVDB v3 n'expose pas vote_average de façon fiable).
+
+        Args:
+            tvdb_id: ID TVDB de la série
+
+        Returns:
+            MediaDetails si trouvé, None sinon
+        """
+        client = self._get_client()
+        try:
+            response = await request_with_retry(
+                client,
+                "GET",
+                f"/find/{tvdb_id}",
+                params={"language": "fr-FR", "external_source": "tvdb_id"},
+            )
+        except httpx.HTTPStatusError:
+            return None
+
+        data = response.json()
+        tv_results = data.get("tv_results", [])
+        if not tv_results:
+            return None
+        tmdb_tv_id = str(tv_results[0]["id"])
+        return await self.get_tv_details(tmdb_tv_id)
+
     async def get_external_ids(self, media_id: str) -> Optional[dict[str, str | None]]:
         """
         Recupere les IDs externes (IMDb, Wikidata, etc.) pour un film.

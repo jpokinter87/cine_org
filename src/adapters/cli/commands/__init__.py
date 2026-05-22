@@ -78,6 +78,15 @@ from src.adapters.cli.commands.hardlink_commands import (
 from src.adapters.cli.commands.rename_canonical_command import (
     rename_canonical,
 )
+from src.adapters.cli.commands.reclassify_shorts_command import (
+    reclassify_shorts,
+)
+from src.adapters.cli.commands.collections_command import (
+    collections_app,
+)
+from src.adapters.cli.commands.check_missing_files_command import (
+    check_missing_files,
+)
 
 __all__ = [
     # workflow
@@ -126,4 +135,7 @@ __all__ = [
     "check_duplicates",
     "purge_hardlinks",
     "rename_canonical",
+    "reclassify_shorts",
+    "collections_app",
+    "check_missing_files",
 ]

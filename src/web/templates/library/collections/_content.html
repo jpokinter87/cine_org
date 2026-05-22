@@ -23,7 +23,7 @@
 {% if collections %}
 <div class="collections-grid">
     {% for col in collections %}
-    <a href="/library/collections/{{ col.id }}" class="collection-card">
+    <a href="{{ col.url | default('/library/collections/' ~ col.id) }}" class="collection-card">
         <div class="collection-card-poster">
             {% if col.poster_url %}
             <img src="{{ col.poster_url }}" alt="{{ col.name }}" loading="lazy">
@@ -31,6 +31,9 @@
             <div class="lib-card-no-poster">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
             </div>
+            {% endif %}
+            {% if col.type == 'local' %}
+            <div class="collection-card-badge">Locale</div>
             {% endif %}
             <div class="collection-card-count">{{ col.count }} film{{ 's' if col.count != 1 else '' }}</div>
         </div>

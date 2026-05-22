@@ -1,0 +1,61 @@
+<div class="review-detail review-detail--{{ item.bucket.value }}"
+     id="review-{{ item.item_id }}">
+  <div class="review-detail__header">
+    <span class="bucket-badge">{{ item.bucket.value }}</span>
+    <strong>{{ item.symlink_path.name }}</strong>
+    {% if item.size_bytes %}
+      <span class="dim">({{ "%.1f"|format(item.size_bytes / 1_073_741_824) }} Go)</span>
+    {% endif %}
+  </div>
+
+  <div class="review-detail__body">
+    {% if item.match.top_candidates %}
+      <h4>Candidats TMDB</h4>
+      <ul class="candidates-list">
+        {% for c in item.match.top_candidates %}
+          <li>
+            <strong>{{ c.title }}</strong> ({{ c.year }}) — score {{ "%.0f"|format(c.score) }}%
+            <span class="dim">[{{ c.source }}]</span>
+            <button class="btn btn--sm btn--approve"
+                    hx-post="/migration/review/{{ item.item_id }}/decide?plan={{ plan_path | urlencode }}"
+                    hx-target="#review-{{ item.item_id }}"
+                    hx-swap="outerHTML"
+                    hx-vals='{"decision": "approved", {% if c.tmdb_id %}"chosen_tmdb_id": "{{ c.tmdb_id }}"{% elif c.tvdb_id %}"chosen_tvdb_id": "{{ c.tvdb_id }}"{% endif %}, "chosen_title": "{{ c.title }}", "chosen_year": "{{ c.year }}", "chosen_score": "{{ c.score }}"}'>
+              Approuver
+            </button>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% if item.bucket.value == "already_in_library" and reco %}
+      {% include "migration/_duplicate_compare.html" %}
+    {% endif %}
+
+    <h4>Recherche manuelle</h4>
+    <form hx-get="/migration/review/{{ item.item_id }}/search?plan={{ plan_path | urlencode }}"
+          hx-target="#search-results-{{ item.item_id }}"
+          hx-trigger="submit">
+      <input type="text" name="q" placeholder="Titre TMDB…" />
+      <button type="submit" class="btn btn--sm">Rechercher</button>
+    </form>
+    <div id="search-results-{{ item.item_id }}"></div>
+
+    <div class="review-detail__actions">
+      <button class="btn btn--skip"
+              hx-post="/migration/review/{{ item.item_id }}/decide?plan={{ plan_path | urlencode }}"
+              hx-target="#review-{{ item.item_id }}"
+              hx-swap="outerHTML"
+              hx-vals='{"decision": "skipped"}'>
+        Passer
+      </button>
+      <button class="btn btn--reject"
+              hx-post="/migration/review/{{ item.item_id }}/decide?plan={{ plan_path | urlencode }}"
+              hx-target="#review-{{ item.item_id }}"
+              hx-swap="outerHTML"
+              hx-vals='{"decision": "rejected"}'>
+        Refuser
+      </button>
+    </div>
+  </div>
+</div>

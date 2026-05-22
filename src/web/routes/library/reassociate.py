@@ -3,12 +3,12 @@ Routes de ré-association TMDB — correction manuelle des associations films et
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse, Response
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from loguru import logger
 
@@ -33,6 +33,37 @@ from .helpers import (
 )
 
 _parser = GuessitFilenameParser()
+
+
+def _lookup_imdb_rating(
+    session: Session, imdb_id: str | None
+) -> tuple[float | None, int | None]:
+    """Lit la note IMDb dans le cache local pour un imdb_id donné.
+
+    Même pont TMDB→IMDb que `batch_builder` et `series_enricher` : la
+    ré-association pose le nouvel `imdb_id`, on en profite pour rafraîchir
+    `imdb_rating`/`imdb_votes` depuis le dataset IMDb local. Renvoie
+    `(None, None)` si l'imdb_id est absent ou hors du cache — l'ancienne
+    note (héritée d'une association précédente) est alors purgée.
+
+    `session` est la session ouverte par l'apply (films/séries) : on la
+    réutilise pour éviter une fuite de connexion (Factory.session() ne
+    ferme pas automatiquement).
+    """
+    if not imdb_id:
+        return None, None
+    try:
+        from ....adapters.imdb.dataset_importer import IMDbDatasetImporter
+
+        importer = IMDbDatasetImporter(
+            cache_dir=Path(".cache/imdb"), session=session
+        )
+        rating_data = importer.get_rating(imdb_id)
+        if rating_data:
+            return rating_data[0], rating_data[1]
+    except Exception:  # noqa: BLE001 — un échec d'enrichissement ne bloque pas l'apply
+        logger.warning("Lecture note IMDb échouée pour {}", imdb_id)
+    return None, None
 
 
 def _populate_tech_from_filename(movie: MovieModel) -> None:
@@ -327,19 +358,25 @@ async def movie_reassociate_apply(
     if not details:
         return HTMLResponse("<p>Résultat TMDB non trouvé</p>", status_code=404)
 
-    # Recuperer l'imdb_id
+    # Recuperer l'imdb_id puis sa note dans le cache IMDb local
     ext_ids = await tmdb_client.get_external_ids(tmdb_id)
     imdb_id = ext_ids.get("imdb_id") if ext_ids else None
 
     # Mettre a jour le MovieModel
     session = next(get_session())
     try:
+        # IMDb cache lit la même DB que la session ouverte ici : on la
+        # réutilise pour éviter une fuite de connexion (cf. _lookup_imdb_rating).
+        imdb_rating, imdb_votes = _lookup_imdb_rating(session, imdb_id)
+
         movie = session.get(MovieModel, movie_id)
         if not movie:
             return HTMLResponse("<p>Film non trouvé</p>", status_code=404)
 
         movie.tmdb_id = int(tmdb_id)
         movie.imdb_id = imdb_id
+        movie.imdb_rating = imdb_rating
+        movie.imdb_votes = imdb_votes
         movie.title = details.title
         movie.original_title = details.original_title
         movie.year = details.year
@@ -359,7 +396,7 @@ async def movie_reassociate_apply(
             details.collection_id if details.collection_id is not None else 0
         )
         movie.collection_name = details.collection_name
-        movie.updated_at = datetime.utcnow()
+        movie.updated_at = datetime.now(timezone.utc)
 
         # Tenter de relier le fichier physique via le symlink video/
         if not movie.file_path:
@@ -640,19 +677,25 @@ async def series_reassociate_apply(
     if not details:
         return HTMLResponse("<p>Résultat TMDB non trouvé</p>", status_code=404)
 
-    # Recuperer l'imdb_id
+    # Recuperer l'imdb_id puis sa note dans le cache IMDb local
     ext_ids = await tmdb_client.get_tv_external_ids(tmdb_id)
     imdb_id = ext_ids.get("imdb_id") if ext_ids else None
 
     # Mettre a jour le SeriesModel
     session = next(get_session())
     try:
+        # Cf. movie_reassociate_apply : on réutilise la session ouverte
+        # pour éviter une fuite de connexion sur le cache IMDb.
+        imdb_rating, imdb_votes = _lookup_imdb_rating(session, imdb_id)
+
         series = session.get(SeriesModel, series_id)
         if not series:
             return HTMLResponse("<p>Série non trouvée</p>", status_code=404)
 
         series.tmdb_id = int(tmdb_id)
         series.imdb_id = imdb_id
+        series.imdb_rating = imdb_rating
+        series.imdb_votes = imdb_votes
         series.tvdb_id = (
             None  # L'association change, l'ancien tvdb_id n'est plus valide
         )
@@ -670,7 +713,7 @@ async def series_reassociate_apply(
             series.cast_json = json.dumps(list(details.cast)) if details.cast else None
         series.vote_average = details.vote_average
         series.vote_count = details.vote_count
-        series.updated_at = datetime.utcnow()
+        series.updated_at = datetime.now(timezone.utc)
 
         # Marquer comme confirmé (exclure des futurs scans qualité)
         existing = session.exec(

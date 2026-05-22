@@ -57,3 +57,24 @@ data/
 
 drame.txt
 player_profiles.json
+
+# IDE / agent local config
+.claude/
+
+# Migration runtime (plans + state SQLite générés par `migrate-nas plan`)
+/migration/
+
+# Sorties brutes adhoc (dumps utilisateur, non versionnés)
+cleanup_*.txt
+corrected.txt
+fichiers_temp.txt
+films.txt
+films introuvables.txt
+reprise_superpowers.txt
+series.txt
+series_perdues.txt
+
+# Scripts one-shot à la racine (à déplacer dans scripts/ si à conserver)
+/migration_nas.py
+/rescue_series.py
+/create_test_fixtures.py

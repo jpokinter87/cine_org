@@ -14,18 +14,20 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.core.ports.api_clients import MediaDetails, SearchResult
 from src.services.migration.dataclasses import (
     Bucket,
+    MatchInfo,
     MigrationCandidate,
     MigrationItem,
-    MigrationPlan,
     MigrationStats,
     RatingDecision,
 )
+from src.services.migration.matching import MatchKind, MatchOutcome
 from src.services.migration.plan_builder import (
     MigrationPlanBuilder,
     deserialize_plan,
@@ -353,7 +355,7 @@ def test_write_review_csvs_creates_three_files(tmp_path):
         rows = list(csv.DictReader(f))
     assert len(rows) == 1
     assert rows[0]["symlink_path"].endswith("nul.mkv")
-    assert rows[0]["rating_value"] == "4.0"
+    assert rows[0]["rating_value"] == "4.00"
     assert rows[0]["rating_source"] == "imdb"
     assert rows[0]["title_match"] == "Nul"
 
@@ -386,3 +388,593 @@ def test_write_review_csvs_handles_empty_buckets(tmp_path):
         with path.open(newline="") as f:
             rows = list(csv.DictReader(f))
         assert rows == []  # header présent mais aucune ligne
+
+
+# ---- Mode raw : extension dataclasses (étape 1) --------------------------
+
+
+def test_bucket_has_needs_validation_value():
+    """NEEDS_VALIDATION = bucket terminal pour les fichiers raw au match incertain."""
+    assert Bucket.NEEDS_VALIDATION.value == "needs_validation"
+
+
+def test_match_info_defaults_are_empty():
+    """Sans match TMDB/TVDB, MatchInfo() est vide (mode symlinks pur)."""
+    info = MatchInfo()
+    assert info.tmdb_id is None
+    assert info.tvdb_id is None
+    assert info.score is None
+    assert info.top_candidates == []
+
+
+def test_migration_item_has_match_field_with_default():
+    """MigrationItem accepte un MatchInfo par défaut (rétrocompat mode symlinks)."""
+    item = MigrationItem(
+        item_id="abc",
+        bucket=Bucket.MIGRATE,
+        symlink_path=Path("/old/x.mkv"),
+        source_path=Path("/storage/x.mkv"),
+        destination_path=Path("/new/x.mkv"),
+        media_root="Films",
+        relative_category="Drame/D",
+        size_bytes=1000,
+        rating=RatingDecision(),
+    )
+    assert item.match.tmdb_id is None
+    assert item.match.top_candidates == []
+    assert item.is_symlink_source is True
+
+
+def test_migration_item_accepts_populated_match_info():
+    """MigrationItem alimenté en mode raw porte tmdb_id, score, candidats."""
+    match = MatchInfo(
+        tmdb_id=12345,
+        score=92.5,
+        top_candidates=[
+            {"title": "Avatar", "year": 2009, "score": 92.5, "tmdb_id": 12345}
+        ],
+    )
+    item = MigrationItem(
+        item_id="abc",
+        bucket=Bucket.MIGRATE,
+        symlink_path=Path("/old/avatar.mkv"),
+        source_path=Path("/old/avatar.mkv"),
+        destination_path=Path("/new/Films/SF/A/Avatar.mkv"),
+        media_root="Films",
+        relative_category="",
+        size_bytes=2_000_000_000,
+        rating=RatingDecision(value=8.0, source="imdb"),
+        match=match,
+        is_symlink_source=False,
+    )
+    assert item.match.tmdb_id == 12345
+    assert item.match.score == 92.5
+    assert item.is_symlink_source is False
+
+
+def test_migration_stats_has_needs_validation_counter():
+    """MigrationStats expose un compteur needs_validation à 0 par défaut."""
+    stats = MigrationStats()
+    assert stats.needs_validation == 0
+
+
+def test_accumulate_stats_counts_needs_validation():
+    """Le builder incrémente needs_validation pour les items raw au match raté."""
+    cand = _candidate("ambigu.mkv", is_symlink=False)
+    builder = _make_builder([cand], {}, {})
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+    # Forcer manuellement le bucket pour tester _accumulate_stats (l'étape 3
+    # branchera la classification automatique).
+    plan.items[0].bucket = Bucket.NEEDS_VALIDATION
+    stats = MigrationStats()
+    from src.services.migration.plan_builder import _accumulate_stats
+
+    _accumulate_stats(stats, plan.items[0])
+    assert stats.needs_validation == 1
+
+
+def test_serialize_roundtrip_preserves_match_info():
+    """JSON roundtrip : tmdb_id/score/top_candidates restent intacts."""
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_builder(
+        [cand],
+        {"avatar.mkv": RatingDecision(value=8.0)},
+        {"avatar.mkv": Path("/new_nas/Films/SF/A/Avatar (2009).mkv")},
+    )
+    plan_orig = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+    # Étape 1 : on injecte directement les champs raw (l'étape 3 les remplira
+    # automatiquement). Le test garantit la persistance JSON dès maintenant.
+    plan_orig.items[0].match = MatchInfo(
+        tmdb_id=19995,
+        score=95.0,
+        top_candidates=[{"title": "Avatar", "year": 2009, "score": 95.0}],
+    )
+    plan_orig.items[0].is_symlink_source = False
+
+    plan_back = deserialize_plan(serialize_plan(plan_orig))
+
+    item = plan_back.items[0]
+    assert item.match.tmdb_id == 19995
+    assert item.match.score == 95.0
+    assert item.match.top_candidates == [
+        {"title": "Avatar", "year": 2009, "score": 95.0}
+    ]
+    assert item.is_symlink_source is False
+
+
+def test_deserialize_plan_without_match_field_defaults_to_empty():
+    """Plans pré-mode-raw (sans champs match/is_symlink_source) restent lisibles."""
+    cand = _candidate("legacy.mkv")
+    builder = _make_builder(
+        [cand],
+        {"legacy.mkv": RatingDecision(value=8.0)},
+        {"legacy.mkv": Path("/new_nas/legacy.mkv")},
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+    payload = json.loads(serialize_plan(plan))
+    # Simule un plan ancien : on retire les nouveaux champs.
+    for it in payload["items"]:
+        it.pop("match", None)
+        it.pop("is_symlink_source", None)
+    payload["stats"].pop("needs_validation", None)
+
+    # MigrationStats est strict (dataclass), on doit pouvoir réinjecter le
+    # champ manquant via un fallback : ici on vérifie au moins que l'item se
+    # désérialise avec les nouveaux defaults.
+    obj = payload
+    item_dict = obj["items"][0]
+    from src.services.migration.plan_builder import _item_from_dict
+
+    item = _item_from_dict(item_dict)
+    assert item.match.tmdb_id is None
+    assert item.match.top_candidates == []
+    assert item.is_symlink_source is True
+
+
+# ---- Mode raw : plan_builder + matcher + fetcher (étape 3) ---------------
+
+
+def _make_matched_outcome(
+    *, source: str = "tmdb", media_id: str = "19995", score: float = 95.0
+) -> MatchOutcome:
+    selected = SearchResult(
+        id=media_id,
+        title="Avatar",
+        year=2009,
+        score=score,
+        source=source,
+    )
+    other = SearchResult(
+        id="9999", title="Autre", year=2000, score=70.0, source=source
+    )
+    return MatchOutcome(
+        kind=MatchKind.MATCHED,
+        top_results=[selected, other],
+        selected=selected,
+    )
+
+
+def _make_ambiguous_outcome() -> MatchOutcome:
+    return MatchOutcome(
+        kind=MatchKind.AMBIGUOUS,
+        top_results=[
+            SearchResult(
+                id="1", title="Foo", year=2020, score=78.0, source="tmdb"
+            ),
+            SearchResult(
+                id="2", title="Foo Bis", year=2020, score=76.0, source="tmdb"
+            ),
+        ],
+        selected=None,
+    )
+
+
+def _make_no_results_outcome() -> MatchOutcome:
+    return MatchOutcome(kind=MatchKind.NO_RESULTS, top_results=[])
+
+
+def _make_raw_builder(
+    candidates: list[MigrationCandidate],
+    *,
+    outcome: MatchOutcome,
+    vote_average: float | None,
+    threshold: float = 6.0,
+) -> MigrationPlanBuilder:
+    """Builder en mode raw avec matcher + fetcher mockés."""
+    scanner = MagicMock()
+    scanner.scan.return_value = iter(candidates)
+
+    resolver = MagicMock()
+    resolver.resolve.return_value = RatingDecision()
+
+    planner = MagicMock()
+    planner.plan.return_value = None
+
+    matcher = MagicMock()
+    matcher.match = AsyncMock(return_value=outcome)
+
+    fetcher = MagicMock()
+    details = (
+        MediaDetails(id="19995", title="Avatar", vote_average=vote_average)
+        if vote_average is not None
+        else MediaDetails(id="19995", title="Avatar", vote_average=None)
+    )
+    fetcher.fetch = AsyncMock(return_value=details)
+
+    return MigrationPlanBuilder(
+        scanner=scanner,
+        rating_resolver=resolver,
+        destination_planner=planner,
+        threshold=threshold,
+        matcher=matcher,
+        details_fetcher=fetcher,
+        include_raw=True,
+    )
+
+
+def test_include_raw_requires_matcher_and_fetcher():
+    """include_raw=True sans matcher ou fetcher → ValueError au constructeur."""
+    scanner = MagicMock()
+    resolver = MagicMock()
+    planner = MagicMock()
+    with pytest.raises(ValueError, match="include_raw"):
+        MigrationPlanBuilder(
+            scanner=scanner,
+            rating_resolver=resolver,
+            destination_planner=planner,
+            include_raw=True,
+        )
+
+
+def test_raw_matched_with_high_rating_goes_to_migrate():
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=8.0
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    assert len(plan.items) == 1
+    item = plan.items[0]
+    assert item.bucket == Bucket.MIGRATE
+    assert item.is_symlink_source is False
+    assert item.rating.value == 8.0
+    assert item.rating.source == "tmdb"
+    assert item.match.tmdb_id == 19995
+    assert item.match.score == 95.0
+    assert plan.stats.to_migrate == 1
+
+
+def test_raw_matched_with_low_rating_goes_to_low_rated():
+    cand = _candidate("flop.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand],
+        outcome=_make_matched_outcome(),
+        vote_average=4.5,
+        threshold=6.0,
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    assert plan.items[0].bucket == Bucket.LOW_RATED
+    assert plan.stats.low_rated == 1
+    assert plan.stats.to_migrate == 0
+
+
+def test_raw_matched_without_vote_average_goes_to_unrated():
+    cand = _candidate("mystere.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=None
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    item = plan.items[0]
+    assert item.bucket == Bucket.UNRATED
+    assert item.rating.value is None
+    # Match info reste rempli même sans rating.
+    assert item.match.tmdb_id == 19995
+    assert plan.stats.unrated == 1
+
+
+def test_raw_ambiguous_goes_to_needs_validation():
+    cand = _candidate("ambigu.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_ambiguous_outcome(), vote_average=None
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    item = plan.items[0]
+    assert item.bucket == Bucket.NEEDS_VALIDATION
+    assert item.is_symlink_source is False
+    assert item.match.tmdb_id is None  # pas de selected
+    assert len(item.match.top_candidates) == 2
+    assert plan.stats.needs_validation == 1
+    # Pas de fetcher quand match ambigu (économie d'API).
+    builder._fetcher.fetch.assert_not_called()
+
+
+def test_raw_no_results_goes_to_needs_validation():
+    cand = _candidate("inconnu.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_no_results_outcome(), vote_average=None
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    item = plan.items[0]
+    assert item.bucket == Bucket.NEEDS_VALIDATION
+    assert item.match.top_candidates == []
+    assert plan.stats.needs_validation == 1
+
+
+def test_raw_broken_candidate_still_goes_to_broken_bucket():
+    """Les flags techniques (is_broken) priment toujours sur le matcher."""
+    cand = _candidate(
+        "missing.mkv", is_symlink=False, is_broken=True, target=None
+    )
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=8.0
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    # is_broken implique pas d'appel matcher → bucket NOT_SYMLINK fallback
+    # (chemin _build_symlink_item) qui regarde is_broken en premier.
+    assert plan.items[0].bucket == Bucket.BROKEN
+    builder._matcher.match.assert_not_called()
+
+
+def test_raw_matched_destination_is_none_during_plan():
+    """Mode raw : la destination canonique est calculée à l'apply, pas au plan."""
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=8.0
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    assert plan.items[0].bucket == Bucket.MIGRATE
+    assert plan.items[0].destination_path is None
+
+
+def test_raw_movie_tmdb_collision_demoted_to_needs_validation():
+    """Si plusieurs items raw classés MIGRATE partagent le même tmdb_id (cas
+    multi-parts comme La Flor parties 1-4), tous basculent en NEEDS_VALIDATION
+    avec un tag explicatif. Sinon ils écraseraient mutuellement leur
+    destination canonique pendant l'apply : raw_finalizer génère un filename
+    basé sur Movie.title — identique pour les N parties — et rsync --inplace
+    écraserait silencieusement."""
+    cands = [
+        _candidate(f"La.Flor.partie {i}.2018.mkv", is_symlink=False)
+        for i in range(1, 5)
+    ]
+    builder = _make_raw_builder(
+        cands,
+        outcome=_make_matched_outcome(media_id="423778"),
+        vote_average=8.0,
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    assert len(plan.items) == 4
+    for item in plan.items:
+        assert item.bucket == Bucket.NEEDS_VALIDATION
+        assert any(t.startswith("collision_tmdb:423778") for t in item.tags)
+    assert plan.stats.to_migrate == 0
+    assert plan.stats.needs_validation == 4
+
+
+def test_raw_single_movie_match_unchanged_by_collision_check():
+    """Garde-fou : un seul item MIGRATE par tmdb_id reste MIGRATE."""
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=8.0
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    assert plan.items[0].bucket == Bucket.MIGRATE
+    assert plan.items[0].tags == []
+
+
+def test_raw_series_episodes_with_same_tmdb_id_not_demoted():
+    """Garde-fou inverse : deux épisodes d'une même série partagent toujours
+    le même tmdb_id (parent série) mais le pipeline série upsert par
+    season+episode — pas de collision filename possible. Ils doivent rester
+    MIGRATE, contrairement aux films multi-parts. Couverture explicite de
+    `_demote_movie_tmdb_collisions` qui exclut les media_root commençant
+    par 'seri'/'séri'/'anim'."""
+    cands = [
+        _candidate(
+            f"Got.S01E0{i}.mkv",
+            media_root="Séries",
+            relative_category="G",
+            is_symlink=False,
+        )
+        for i in range(1, 4)
+    ]
+    builder = _make_raw_builder(
+        cands,
+        outcome=_make_matched_outcome(),
+        vote_average=9.0,
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    assert len(plan.items) == 3
+    for item in plan.items:
+        assert item.bucket == Bucket.MIGRATE
+        assert all(not t.startswith("collision_tmdb:") for t in item.tags)
+    assert plan.stats.to_migrate == 3
+    assert plan.stats.needs_validation == 0
+
+
+def test_write_review_csvs_writes_needs_validation_file(tmp_path):
+    cand = _candidate("ambigu.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_ambiguous_outcome(), vote_average=None
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    write_review_csvs(plan, tmp_path)
+
+    needs_csv = tmp_path / "needs_validation.csv"
+    assert needs_csv.exists()
+    with needs_csv.open(newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 1
+    assert rows[0]["symlink_path"].endswith("ambigu.mkv")
+    payload = json.loads(rows[0]["top_candidates_json"])
+    assert len(payload) == 2
+    assert payload[0]["title"] == "Foo"
+
+
+def test_serialize_plan_persists_match_info_for_raw_matched():
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=8.0
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    obj = json.loads(serialize_plan(plan))
+    item = obj["items"][0]
+    assert item["bucket"] == "migrate"
+    assert item["is_symlink_source"] is False
+    assert item["match"]["tmdb_id"] == 19995
+    assert item["match"]["score"] == 95.0
+    assert obj["stats"]["needs_validation"] == 0
+
+
+def test_legacy_mode_unchanged_when_include_raw_false():
+    """Garde-fou : un fichier physique en mode symlinks pur reste NOT_SYMLINK."""
+    cand = _candidate("physical.mkv", is_symlink=False)
+    builder = _make_builder([cand], {}, {})  # include_raw default False
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+    assert plan.items[0].bucket == Bucket.NOT_SYMLINK
+    assert plan.stats.not_symlink == 1
+    assert plan.stats.needs_validation == 0
+
+
+# ---- Callback de progression ---------------------------------------------
+
+
+def test_build_invokes_on_progress_callback_per_item():
+    """Le callback on_progress est appelé après chaque item construit."""
+    candidates = [
+        _candidate("a.mkv"),
+        _candidate("b.mkv"),
+        _candidate("c.mkv"),
+    ]
+    builder = _make_builder(
+        candidates,
+        {
+            "a.mkv": RatingDecision(value=8.0),
+            "b.mkv": RatingDecision(value=5.0),
+            "c.mkv": RatingDecision(),
+        },
+        {"a.mkv": Path("/new/a.mkv")},
+    )
+
+    progress_calls: list[tuple[str, Bucket, int]] = []
+
+    def on_progress(item, stats):
+        progress_calls.append(
+            (item.symlink_path.name, item.bucket, stats.total_symlinks)
+        )
+
+    builder.build(
+        Path("/old_nas/Vidéos"), Path("/new_nas"), on_progress=on_progress
+    )
+
+    assert len(progress_calls) == 3
+    # L'ordre suit le scanner ; total_symlinks est incrémenté avant chaque appel.
+    assert [c[2] for c in progress_calls] == [1, 2, 3]
+    assert progress_calls[0][1] == Bucket.MIGRATE
+    assert progress_calls[1][1] == Bucket.LOW_RATED
+    assert progress_calls[2][1] == Bucket.UNRATED
+
+
+def test_build_works_without_on_progress():
+    """Garde-fou : sans callback (rétrocompat), build() doit toujours marcher."""
+    cand = _candidate("avatar.mkv")
+    builder = _make_builder(
+        [cand],
+        {"avatar.mkv": RatingDecision(value=8.0)},
+        {"avatar.mkv": Path("/new/avatar.mkv")},
+    )
+    plan = builder.build(Path("/old"), Path("/new"))
+    assert len(plan.items) == 1
+
+
+# ---- Bucket ALREADY_IN_LIBRARY (étape 2 amélioration matcher) ------------
+
+
+def test_raw_matched_already_in_library_skips_to_bucket():
+    """Si library_checker trouve un fichier existant → ALREADY_IN_LIBRARY,
+    pas de fetch détails (économie API), pas de transfert prévu."""
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=8.0
+    )
+    builder._library_checker = MagicMock()
+    builder._library_checker.find_existing_path.return_value = (
+        "/storage/Films/SF/A/Avatar (2009).mkv"
+    )
+
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    item = plan.items[0]
+    assert item.bucket == Bucket.ALREADY_IN_LIBRARY
+    assert plan.stats.already_in_library == 1
+    assert plan.stats.to_migrate == 0
+    # Pas d'appel au fetcher quand déjà en bibliothèque (économie API).
+    builder._fetcher.fetch.assert_not_called()
+    # Le tag 'existing:...' contient le path en DB pour reporting.
+    assert any(t.startswith("existing:") for t in item.tags)
+
+
+def test_raw_ambiguous_already_in_library_also_skips():
+    """Le checker fonctionne même sur AMBIGUOUS : top candidate suffit."""
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_ambiguous_outcome(), vote_average=None
+    )
+    builder._library_checker = MagicMock()
+    builder._library_checker.find_existing_path.return_value = (
+        "/storage/already.mkv"
+    )
+
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    item = plan.items[0]
+    assert item.bucket == Bucket.ALREADY_IN_LIBRARY
+    assert plan.stats.needs_validation == 0  # pas en NEEDS_VALIDATION
+    assert plan.stats.already_in_library == 1
+
+
+def test_raw_without_library_checker_keeps_normal_flow():
+    """Sans library_checker injecté, le flux normal reprend."""
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=8.0
+    )
+    # library_checker reste None (default)
+    plan = builder.build(Path("/old"), Path("/new"))
+    assert plan.items[0].bucket == Bucket.MIGRATE
+    assert plan.stats.already_in_library == 0
+
+
+def test_write_review_csvs_writes_already_in_library_file(tmp_path):
+    """already_in_library.csv listée les sources à supprimer manuellement."""
+    cand = _candidate("avatar.mkv", is_symlink=False)
+    builder = _make_raw_builder(
+        [cand], outcome=_make_matched_outcome(), vote_average=8.0
+    )
+    builder._library_checker = MagicMock()
+    builder._library_checker.find_existing_path.return_value = (
+        "/storage/Avatar.mkv"
+    )
+    plan = builder.build(Path("/old_nas/Vidéos"), Path("/new_nas"))
+
+    write_review_csvs(plan, tmp_path)
+
+    csv_path = tmp_path / "already_in_library.csv"
+    assert csv_path.exists()
+    with csv_path.open(newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 1
+    assert rows[0]["source_path"].endswith("avatar.mkv")
+    assert rows[0]["existing_db_path"] == "/storage/Avatar.mkv"
+    assert rows[0]["tmdb_id"] == "19995"

@@ -10,9 +10,8 @@ Datasets supportes:
 Documentation: https://www.imdb.com/interfaces/
 """
 
-import os
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -20,7 +19,27 @@ import httpx
 from sqlmodel import Session, select
 
 from src.adapters.imdb.tsv_parser import TSVParser
-from src.infrastructure.persistence.models import IMDbRatingModel
+from src.infrastructure.persistence.models import IMDbAkaModel, IMDbRatingModel
+from src.utils.helpers import normalize_accents
+
+
+# Langues retenues par défaut pour title.akas (filtre raisonnable : couvre
+# les principaux marchés européens + asiatiques sans exploser la DB).
+# Le dataset complet fait ~35M lignes ; ce filtre le réduit à ~5-8M.
+DEFAULT_AKA_LANGUAGES: frozenset[str] = frozenset({
+    "fr", "en", "ja", "ko", "es", "de", "it", "pt", "zh",
+    "ru", "ar", "nl", "pl", "sv", "da", "no", "fi", "cs",
+    "hu", "tr", "he", "hi", "vi", "th", "id", "ms", "el",
+})
+
+# Régions retenues quand language est manquant (\\N). Un titre peut avoir
+# region=FR sans language explicite — on le garde quand même.
+DEFAULT_AKA_REGIONS: frozenset[str] = frozenset({
+    "FR", "US", "GB", "CA", "JP", "KR", "ES", "DE", "IT",
+    "PT", "BR", "NL", "BE", "CH", "AU", "NZ", "RU", "CN",
+    "TW", "HK", "MX", "AR", "IN", "TR", "PL", "SE", "DK",
+    "NO", "FI", "GR", "IL", "AE", "TH", "VN", "ID", "MY",
+})
 
 
 # URL de base des datasets IMDb
@@ -123,7 +142,6 @@ class IMDbDatasetImporter:
         Returns:
             Statistiques d'import
         """
-        from sqlalchemy import text
 
         stats = IMDbDatasetStats()
 
@@ -162,7 +180,6 @@ class IMDbDatasetImporter:
         Args:
             batch: Liste de dictionnaires avec les donnees
         """
-        from sqlalchemy import text
 
         # SQLite UPSERT via INSERT OR REPLACE
         for record in batch:
@@ -174,6 +191,140 @@ class IMDbDatasetImporter:
             )
             # Merge pour faire un upsert
             self._session.merge(model)
+
+    def import_akas(
+        self,
+        file_path: Path,
+        *,
+        languages: Optional[frozenset[str]] = None,
+        regions: Optional[frozenset[str]] = None,
+        batch_size: int = 10000,
+        on_progress: Optional["callable"] = None,
+    ) -> IMDbDatasetStats:
+        """
+        Importe les titres alternatifs IMDb depuis title.akas.tsv.gz.
+
+        Filtre par langues et régions pour réduire la table à un sous-ensemble
+        utile (sans ce filtre, ~35M lignes). Les akas dont language ET region
+        sont absents/non listés sont skippés.
+
+        La table existante est purgée avant l'import (full refresh) — c'est
+        un dataset versionné par snapshot IMDb, pas incrémental.
+
+        Mémoire : utilise `session.execute(insert(table), batch_dicts)`
+        (SQLAlchemy core) au lieu de `session.add(Model(...))` pour
+        bypasser l'Identity Map. Commit à chaque batch pour libérer le
+        WAL SQLite. Pic mémoire constant indépendamment du nombre de
+        lignes (sinon : OOM sur 5-8M lignes accumulées en Identity Map).
+
+        Args:
+            file_path: Chemin vers le fichier title.akas.tsv(.gz)
+            languages: Langues retenues (ISO 639-1). Défaut: DEFAULT_AKA_LANGUAGES.
+            regions: Régions retenues (codes pays). Défaut: DEFAULT_AKA_REGIONS.
+            batch_size: Taille des batches d'insertion (défaut 10000).
+
+        Returns:
+            Statistiques d'import
+        """
+        from sqlalchemy import delete, insert
+
+        lang_filter = languages if languages is not None else DEFAULT_AKA_LANGUAGES
+        region_filter = regions if regions is not None else DEFAULT_AKA_REGIONS
+
+        # Full refresh : vide la table avant import (dataset = snapshot
+        # complet, pas de notion d'incremental). Commit immédiat pour
+        # libérer le WAL.
+        table = IMDbAkaModel.__table__
+        self._session.execute(delete(table))
+        self._session.commit()
+
+        stats = IMDbDatasetStats()
+        batch: list[dict] = []
+
+        for record in self._parser.parse_akas(file_path):
+            stats.total += 1
+
+            lang = record.get("language")
+            region = record.get("region")
+            # Garder si language listé OU (language absent ET region listée).
+            keep = (
+                (lang is not None and lang in lang_filter)
+                or (lang is None and region is not None and region in region_filter)
+            )
+            if not keep:
+                stats.skipped += 1
+                continue
+
+            title = record["title"]
+            if not title:
+                stats.skipped += 1
+                continue
+
+            batch.append({
+                "tconst": record["tconst"],
+                "title": title,
+                "title_normalized": normalize_accents(title).lower().strip(),
+                "region": region,
+                "language": lang,
+            })
+
+            if len(batch) >= batch_size:
+                self._session.execute(insert(table), batch)
+                self._session.commit()
+                stats.imported += len(batch)
+                batch = []
+                if on_progress is not None:
+                    on_progress(stats)
+
+        if batch:
+            self._session.execute(insert(table), batch)
+            self._session.commit()
+            stats.imported += len(batch)
+            if on_progress is not None:
+                on_progress(stats)
+
+        return stats
+
+    def search_akas(
+        self, query: str, *, limit: int = 20
+    ) -> list[str]:
+        """Recherche les tconst dont au moins un aka match la query.
+
+        Match exact sur `title_normalized` (lowercase + sans accents).
+        Retourne les tconst uniques, triés par fréquence d'apparition
+        décroissante (plus une variante existe, plus c'est probable).
+
+        Args:
+            query: Titre à chercher (n'importe quelle casse / accents).
+            limit: Nombre max de tconst retournés.
+
+        Returns:
+            Liste de tconst (ex: ["tt0082416", "tt0099999"]).
+        """
+        normalized = normalize_accents(query).lower().strip()
+        if not normalized:
+            return []
+
+        from sqlalchemy import func
+
+        statement = (
+            select(IMDbAkaModel.tconst, func.count().label("n"))
+            .where(IMDbAkaModel.title_normalized == normalized)
+            .group_by(IMDbAkaModel.tconst)
+            .order_by(func.count().desc())
+            .limit(limit)
+        )
+        return [row[0] for row in self._session.exec(statement).all()]
+
+    def get_akas_stats(self) -> dict:
+        """Retourne les statistiques de la table d'akas."""
+        from sqlalchemy import func
+
+        count_stmt = select(func.count()).select_from(IMDbAkaModel)
+        count = self._session.exec(count_stmt).one()
+        tconst_stmt = select(func.count(func.distinct(IMDbAkaModel.tconst)))
+        unique_tconsts = self._session.exec(tconst_stmt).one()
+        return {"count": count, "unique_tconsts": unique_tconsts}
 
     def get_rating(self, imdb_id: str) -> Optional[tuple[float, int]]:
         """

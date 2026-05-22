@@ -69,6 +69,11 @@
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                     Éditer
                 </button>
+                {% if is_local %}
+                {% with entity_type="series", entity_id=series.id, entity_label=series.title %}
+                {% include "library/_delete_record_btn.html" %}
+                {% endwith %}
+                {% endif %}
                 {% if has_any_override %}
                 <span class="override-badge override-badge-inline" title="Contient des modifications manuelles">✎ modifié</span>
                 {% endif %}

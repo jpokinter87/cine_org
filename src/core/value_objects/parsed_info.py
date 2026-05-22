@@ -16,11 +16,13 @@ class MediaType(Enum):
     Valeurs:
         MOVIE: Film (long-metrage)
         SERIES: Serie TV (avec saison/episode)
+        SHORT: Court-metrage (duree <= seuil configure)
         UNKNOWN: Type non determine
     """
 
     MOVIE = "movie"
     SERIES = "series"
+    SHORT = "short"
     UNKNOWN = "unknown"
 
 

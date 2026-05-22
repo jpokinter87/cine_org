@@ -6390,6 +6390,12 @@ details[open] > .maint-issue-toggle::before {
 .reassociate-select-btn:hover {
     opacity: 0.85;
 }
+/* Carte de l'association actuelle : relance l'enrichissement (note TMDB/IMDb) */
+.reassociate-refresh-btn {
+    color: var(--accent-amber);
+    background: transparent;
+    border: 1px solid var(--accent-amber);
+}
 
 /* ── Reassociate Confirm Dialog ── */
 .reassociate-confirm-overlay {
@@ -8338,6 +8344,48 @@ details[open] > .maint-issue-toggle::before {
     color: var(--text-primary);
 }
 
+.delete-bar-btn-collection {
+    background: rgba(52, 211, 153, 0.15);
+    color: var(--accent-emerald);
+    border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.delete-bar-btn-collection:hover {
+    background: rgba(52, 211, 153, 0.25);
+    border-color: rgba(52, 211, 153, 0.5);
+}
+
+.collection-name-input {
+    width: 100%;
+    margin: 0.5rem 0 1rem;
+    padding: 0.6rem 0.85rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+}
+
+.collection-name-input:focus {
+    outline: none;
+    border-color: rgba(52, 211, 153, 0.6);
+}
+
+#collection-overlay .delete-dialog-icon {
+    background: rgba(78, 203, 141, 0.15);
+}
+
+#collection-overlay .delete-dialog-icon svg {
+    color: var(--accent-emerald);
+}
+
+#collection-overlay .reject-dialog-confirm {
+    background: rgba(78, 203, 141, 0.15);
+    color: var(--accent-emerald);
+    border: 1px solid rgba(78, 203, 141, 0.3);
+}
+
 /* ── Delete Overlay (confirmation) ── */
 
 .delete-overlay {
@@ -8715,6 +8763,20 @@ details[open] > .maint-issue-toggle::before {
     background: rgba(91, 141, 239, 0.85);
     color: #fff;
     backdrop-filter: blur(4px);
+}
+
+.collection-card-badge {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 100px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background: rgba(217, 119, 6, 0.9); /* amber-600 — cohérent avec hint icon */
+    color: #fff;
+    backdrop-filter: blur(4px);
+    letter-spacing: 0.02em;
 }
 
 .collection-card-body {
@@ -9512,6 +9574,28 @@ details[open] > .maint-issue-toggle::before {
     color: var(--accent-amber);
     border-color: var(--accent-amber);
     background: var(--accent-amber-dim);
+}
+
+/* Bouton « Supprimer la fiche » : même gabarit que .edit-metadata-btn,
+   accent rouge sombre discret pour signaler l'action destructive. */
+.delete-record-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.7rem;
+    font-family: 'DM Sans', sans-serif;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.delete-record-btn:hover {
+    color: #ef4444; /* red-500 */
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
 }
 
 /* Badge discret "✎ modifié" sur le poster ou inline */

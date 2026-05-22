@@ -36,7 +36,10 @@ from .adapters.cli.commands import (
     populate_movies,
     populate_series,
     process,
+    check_missing_files,
+    collections_app,
     purge_hardlinks,
+    reclassify_shorts,
     rename_canonical,
     reconcile,
     regroup,
@@ -58,9 +61,8 @@ class _LoguruInterceptHandler(_logging.Handler):
             level = logger.level(record.levelname).name
         except ValueError:
             level = record.levelno
-        logger.opt(depth=6, exception=record.exc_info).log(
-            level, record.getMessage()
-        )
+        logger.opt(depth=6, exception=record.exc_info).log(level, record.getMessage())
+
 
 app = typer.Typer(
     name="cineorg",
@@ -125,6 +127,8 @@ app.command(name="fix-series-symlinks")(fix_series_symlinks)
 app.command(name="check-duplicates")(check_duplicates)
 app.command(name="purge-hardlinks")(purge_hardlinks)
 app.command(name="rename-canonical")(rename_canonical)
+app.command(name="reclassify-shorts")(reclassify_shorts)
+app.command(name="check-missing-files")(check_missing_files)
 
 # Monter validate_app comme sous-commande
 app.add_typer(validate_app, name="validate")
@@ -134,6 +138,9 @@ app.add_typer(imdb_app, name="imdb")
 
 # Monter migrate_nas_app comme sous-commande (plan / apply / status)
 app.add_typer(migrate_nas_app, name="migrate-nas")
+
+# Monter collections_app comme sous-commande (list / suggest)
+app.add_typer(collections_app, name="collections")
 
 
 def get_config() -> Settings:
@@ -200,7 +207,9 @@ def serve(
     port: Annotated[int, typer.Option(help="Port d'écoute")] = 8000,
     reload: Annotated[bool, typer.Option(help="Rechargement automatique")] = False,
     workers: Annotated[int, typer.Option(help="Nombre de workers uvicorn")] = 1,
-    access_log: Annotated[bool, typer.Option(help="Activer les logs d'accès HTTP")] = True,
+    access_log: Annotated[
+        bool, typer.Option(help="Activer les logs d'accès HTTP")
+    ] = True,
 ) -> None:
     """Lance le serveur web CineOrg."""
     import uvicorn
@@ -215,8 +224,16 @@ def serve(
         },
         "loggers": {
             "uvicorn": {"handlers": ["loguru"], "level": "INFO", "propagate": False},
-            "uvicorn.error": {"handlers": ["loguru"], "level": "INFO", "propagate": False},
-            "uvicorn.access": {"handlers": ["loguru"], "level": "INFO", "propagate": False},
+            "uvicorn.error": {
+                "handlers": ["loguru"],
+                "level": "INFO",
+                "propagate": False,
+            },
+            "uvicorn.access": {
+                "handlers": ["loguru"],
+                "level": "INFO",
+                "propagate": False,
+            },
         },
     }
 
@@ -231,7 +248,9 @@ def serve(
         try:
             result = subprocess.run(
                 ["lsof", "-ti", f":{target_port}"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             pids = result.stdout.strip().split()
             my_pid = str(os.getpid())

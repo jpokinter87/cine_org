@@ -25,6 +25,14 @@ from .helpers import (
 
 router = APIRouter()
 
+_LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def _is_local_client(request: Request) -> bool:
+    """Vrai si la requête vient de la machine maître (ip locale)."""
+    host = request.client.host if request.client else ""
+    return host in _LOCAL_HOSTS
+
 
 @router.get("/movies/{movie_id}")
 async def movie_detail(request: Request, movie_id: int):
@@ -86,6 +94,7 @@ async def movie_detail(request: Request, movie_id: int):
             "languages": languages,
             "storage_genre": storage_genre,
             "storage_folder": storage_folder,
+            "is_local": _is_local_client(request),
         },
     )
 
@@ -206,6 +215,7 @@ async def series_detail(request: Request, series_id: int):
             "ep_codecs_audio": sorted(ep_codecs_audio),
             "ep_languages": sorted(ep_languages),
             "first_episode": episodes[0] if episodes else None,
+            "is_local": _is_local_client(request),
         },
     )
 

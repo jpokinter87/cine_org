@@ -94,6 +94,11 @@ class MigrationRatingResolver:
             title_match=series.title,
         )
 
+    # Garde-fou : sous cette longueur, la recherche par sous-chaîne devient
+    # trop ambiguë (ex: "Saw" matche "Sawmill", "Sawyer", etc.). Le fallback
+    # est désactivé sauf si l'année est aussi connue (qui désambiguïse).
+    _MIN_FALLBACK_TITLE_LEN: int = 6
+
     def _find_movie(self, parsed: ParsedFilename) -> Optional[MovieModel]:
         if not parsed.title:
             return None
@@ -104,7 +109,13 @@ class MigrationRatingResolver:
         result = self._session.exec(stmt).first()
         if result is not None:
             return result
-        # Fallback : recherche par sous-chaîne
+        # Fallback sous-chaîne : exigé si titre court ET année absente
+        # (sinon risque élevé de mauvais binding sur un titre similaire).
+        if (
+            len(parsed.title) < self._MIN_FALLBACK_TITLE_LEN
+            and parsed.year is None
+        ):
+            return None
         stmt = select(MovieModel).where(MovieModel.title.contains(parsed.title))
         if parsed.year:
             stmt = stmt.where(MovieModel.year == parsed.year)
@@ -119,6 +130,11 @@ class MigrationRatingResolver:
         result = self._session.exec(stmt).first()
         if result is not None:
             return result
+        if (
+            len(parsed.title) < self._MIN_FALLBACK_TITLE_LEN
+            and parsed.year is None
+        ):
+            return None
         stmt = select(SeriesModel).where(SeriesModel.title.contains(parsed.title))
         if parsed.year:
             stmt = stmt.where(SeriesModel.year == parsed.year)

@@ -4,7 +4,6 @@ Tests pour les entites media (Movie, Series, Episode).
 Verifie les nouveaux champs de notes (vote_average, vote_count).
 """
 
-import pytest
 
 from src.core.entities.media import Episode, Movie, Series
 
@@ -28,6 +27,16 @@ class TestMovieEntity:
         movie = Movie(title="Test Movie")
         assert movie.vote_average is None
         assert movie.vote_count is None
+
+    def test_movie_is_short_default_false(self):
+        """Le drapeau is_short doit valoir False par defaut."""
+        movie = Movie(title="Test Movie")
+        assert movie.is_short is False
+
+    def test_movie_is_short_can_be_set(self):
+        """is_short doit pouvoir etre fixe a True a la construction."""
+        movie = Movie(title="Pluto's Dream House", is_short=True)
+        assert movie.is_short is True
 
     def test_movie_with_all_fields(self):
         """Movie doit supporter tous les champs incluant les votes."""
@@ -152,4 +161,7 @@ class TestEpisodeEntity:
             title="Pilot",
         )
         # Les episodes n'ont pas de champs vote
-        assert not hasattr(episode, "vote_average") or episode.__dict__.get("vote_average") is None
+        assert (
+            not hasattr(episode, "vote_average")
+            or episode.__dict__.get("vote_average") is None
+        )

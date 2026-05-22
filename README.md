@@ -10,6 +10,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
 ## Table des matières
 
 - [Installation](#installation)
+  - [Setup développement](#setup-développement)
 - [Configuration](#configuration)
 - [Architecture](#architecture)
   - [Modèle de stockage dual](#modèle-de-stockage-dual)
@@ -33,6 +34,10 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Réparation des symlinks cassés](#réparation-des-symlinks-cassés)
   - [Consolidation des fichiers externes](#consolidation-des-fichiers-externes)
   - [Migration depuis anciens NAS](#migration-depuis-anciens-nas)
+    - [Mode raw (`--include-raw`)](#mode-raw---include-raw)
+    - [migrate-nas review — Review interactive des items en attente](#migrate-nas-review--review-interactive-des-items-en-attente)
+    - [migrate-nas apply (étendu)](#migrate-nas-apply-étendu)
+    - [Page web `/migration/review`](#page-web-migrationreview)
   - [Purge des hardlinks](#purge-des-hardlinks)
 - [Format de nommage](#format-de-nommage)
 - [Interface web](#interface-web)
@@ -40,6 +45,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Tableau de bord](#tableau-de-bord)
   - [Bibliothèque](#bibliothèque)
   - [Filtres et recherche](#filtres-et-recherche)
+  - [Courts-métrages dans la bibliothèque](#courts-métrages-dans-la-bibliothèque)
   - [Fiches détaillées](#fiches-détaillées)
   - [Correction des associations TMDB](#correction-des-associations-tmdb)
   - [Lecteur vidéo intégré](#lecteur-vidéo-intégré)
@@ -64,6 +70,25 @@ uv sync
 # Vérifier l'installation
 uv run cineorg --help
 ```
+
+### Setup développement
+
+Pour contribuer au projet, installer les deps de dev et activer le hook
+pre-commit (ruff lint sur les fichiers staged à chaque `git commit`) :
+
+```bash
+# Installe pytest, ruff, pre-commit, etc.
+uv sync --extra dev
+
+# Active le hook git localement (une seule fois par clone)
+uv run pre-commit install
+
+# (Optionnel) Vérifier le lint sur tout le repo
+uv run pre-commit run --all-files
+```
+
+Le hook rejette les commits qui introduisent des erreurs ruff. Pour
+bypasser ponctuellement : `git commit --no-verify`.
 
 ## Configuration
 
@@ -883,6 +908,101 @@ uv run cineorg rename-canonical --from-cache logs/quality_scan_cache.json --exec
 
 **Sortie** : table Rich listant pour chaque film son statut (`renamed` / `already_canonical` / `conflict` / `file_missing` / `error`) avec le nom actuel et le nom cible.
 
+### Reclassement des courts-métrages
+
+La commande `reclassify-shorts` identifie les films de la base dont la durée est inférieure ou égale au seuil configuré (`short_film_duration_threshold_seconds`, défaut 900 s / 15 min) et déplace leur symlink `video/` vers la nouvelle hiérarchie `Films/Courts/{franchise}/`. La franchise est dérivée du champ `collection_name` (collection TMDB) ; les courts sans collection vont sous `Films/Courts/Divers/`.
+
+```bash
+# Dry-run (défaut) : liste les candidats sans rien modifier
+uv run cineorg reclassify-shorts
+
+# Application : déplace les symlinks et marque is_short=True en DB
+uv run cineorg reclassify-shorts --no-dry-run
+```
+
+**Périmètre** :
+
+- Seuls les symlinks dans `video/` sont déplacés ; le storage physique n'est jamais touché (les fichiers conservent leur emplacement actuel).
+- Les films sous l'arborescence `Séries/` ou `Series/` sont systématiquement ignorés (un épisode court reste une série, jamais un court-métrage).
+- Les films déjà marqués `is_short=True` ou déjà au bon emplacement sont ignorés (commande idempotente).
+
+**Sortie** : tableau Rich listant titre, durée, franchise et destination. En mode `--no-dry-run`, un résumé final indique le nombre de symlinks déplacés et d'erreurs éventuelles (destination déjà occupée, symlink source illisible, etc.).
+
+### Collections locales (regroupement manuel)
+
+La sous-commande `collections` regroupe les courts-métrages qui ne sont pas associés à une collection TMDB officielle (cartoons Hanna-Barbera, courts de festival, séries de niche, etc.) en collections locales nommées. Le routage `Films/Courts/{franchise}/` utilise alors le nom de la collection locale en fallback du `collection_name` TMDB.
+
+```bash
+# Lister les collections locales existantes (+ nombre de films par collection)
+uv run cineorg collections list
+
+# Voir les suggestions automatiques (groupes de courts orphelins par préfixe de titre commun)
+uv run cineorg collections suggest
+
+# Créer les collections suggérées et rattacher les films
+uv run cineorg collections suggest --no-dry-run
+
+# Puis déplacer les symlinks vers les nouveaux dossiers de franchise
+uv run cineorg reclassify-shorts --no-dry-run
+```
+
+**Fonctionnement de `suggest`** :
+
+1. Liste les films `is_short=True` sans `collection_name` TMDB ni `local_collection_id`.
+2. Extrait le préfixe sur 2 mots de chaque titre (insensible à la casse).
+3. Regroupe les films partageant le même préfixe ; ne conserve que les groupes d'au moins 2 films.
+4. Affiche un tableau avec nom suggéré, nombre de films et exemples.
+5. En `--no-dry-run` : crée chaque collection (ou réutilise si elle existe déjà par nom), assigne les films via `local_collection_id` et invite à relancer `reclassify-shorts` pour déplacer les symlinks.
+
+**Priorité de routage** pour `Films/Courts/{franchise}/` :
+1. `Movie.collection_name` (collection TMDB officielle)
+2. `Movie.local_collection_name` (collection locale assignée)
+3. `"Divers"` si aucune des deux
+
+`ShortReclassifier` détecte automatiquement les drifts : un court déjà marqué `is_short=True` sous `Films/Courts/Divers/` mais à qui on assigne une collection locale sera proposé pour déplacement vers `Films/Courts/{collection}/` au prochain `reclassify-shorts`.
+
+**Vue bibliothèque** : la page `/library/collections` liste à la fois les collections TMDB officielles et les collections locales (badge orange « Locale » sur la carte). Cliquer sur une collection locale ouvre `/library/collections/local/{id}` qui présente la même grille de films que pour une saga TMDB.
+
+### Suppression d'une fiche obsolète
+
+Quand deux fiches DB pointent vers le même film (ex. une complète avec son fichier + une incomplète sans `file_path`, ou une fiche dont le fichier a été déplacé manuellement), on veut souvent supprimer la fiche en trop sans toucher au fichier physique.
+
+**Depuis l'UI** : sur la page détail d'un film ou d'une série (accessible depuis la machine maître uniquement, c'est-à-dire `127.0.0.1`/`localhost`), un bouton rouge discret « Supprimer la fiche » à côté de « Corriger » et « Éditer » envoie la fiche en corbeille via `/library/delete-batch`. Le symlink vidéo associé est supprimé mais le fichier storage est conservé. Pour une série, tous les épisodes sont également déplacés.
+
+**Restauration** : depuis `/maintenance/trash` tant que la corbeille n'a pas été vidée.
+
+### Scan des fichiers manquants
+
+La commande `cineorg check-missing-files` balaye la base de données pour détecter les fiches dont le `file_path` ne pointe plus sur un fichier existant. Utile quand des fichiers ont été supprimés/déplacés manuellement et qu'on tombe sur le bouton « Visionner » qui indique fichier absent.
+
+```bash
+# Dry-run par défaut : liste les fiches orphelines sans rien modifier
+uv run cineorg check-missing-files
+
+# Idem + cherche chaque fiche dans les symlinks vivants de video_dir
+# (basename exact) et affiche les candidats trouvés sans modifier la DB
+uv run cineorg check-missing-files --resolve
+
+# Idem + réécrit file_path en DB quand un seul candidat est trouvé
+# (filesystem non touché — utile quand le fichier a juste été déplacé)
+uv run cineorg check-missing-files --repair
+
+# Envoyer les fiches encore orphelines en corbeille (réversible via /maintenance/trash)
+uv run cineorg check-missing-files --prune
+
+# Combinable : répare ce qui peut l'être, puis purge les restantes
+uv run cineorg check-missing-files --repair --prune
+```
+
+**Workflow type** quand `--resolve` détecte des candidats :
+1. Lancer `--resolve` pour voir la colonne « Candidat trouvé ».
+2. Si chaque fiche orpheline a exactement 1 candidat (cas normal d'un fichier déplacé manuellement), relancer en `--repair`.
+3. Pour les fiches ambiguës (plusieurs candidats), les traiter manuellement via le bouton « Supprimer la fiche » + nouveau scan.
+
+**Stratégie** : la recherche ne scanne que `video_dir`, car le signal le plus fiable de la position « live » d'un film dans la bibliothèque est un symlink vivant qui pointe vers lui. La cible storage du symlink devient le nouveau `file_path` en DB. Un fichier qui serait dans `storage_dir` sans symlink correspondant dans `video_dir` n'est plus accessible côté bibliothèque — il vaut mieux le `--prune` puis ré-importer.
+
+Le scan couvre `MovieModel` et `EpisodeModel`. Les fiches sans `file_path` (incomplètes) sont ignorées : elles ne sont pas « orphelines », simplement non-rattachées à un fichier — utiliser le bouton « Supprimer la fiche » sur la page détail pour les nettoyer.
+
 ### Migration depuis anciens NAS
 
 La sous-commande `migrate-nas` migre des fichiers vidéo depuis d'anciens volumes (vieux NAS, disques USB) vers le nouveau NAS, en filtrant par note minimale combinée IMDb / TMDB / personnelle. Elle préserve la source (pas de `--remove-source-files`), vérifie l'intégrité xxh3_64 source/destination après chaque copie, et swappe atomiquement les symlinks vers la nouvelle destination.
@@ -911,11 +1031,12 @@ uv run cineorg migrate-nas status ./migration/plan.json
 | `MIGRATE` | Note ≥ seuil et destination calculable — sera transféré. |
 | `LOW_RATED` | Note < seuil — ignoré (à revoir manuellement). |
 | `UNRATED` | Œuvre absente de la base ou aucune note — ignoré. |
+| `NEEDS_VALIDATION` | Mode raw uniquement : match TMDB/TVDB ambigu — à retraiter via `process`. |
 | `BROKEN` | Symlink brisé même après recherche dans `--alt-root`. |
 | `ALREADY_ON_DESTINATION` | Cible déjà sur le nouveau NAS — rien à faire. |
-| `NOT_SYMLINK` | Fichier physique trouvé dans la source — signalé. |
+| `NOT_SYMLINK` | Mode symlinks uniquement : fichier physique signalé (utilisez `--include-raw` pour le traiter). |
 
-Le plan est écrit en JSON (versionné, désérialisable) et accompagné de trois CSV de revue (`low_rated.csv` / `unrated.csv` / `broken.csv`) listant `symlink_path`, note, source de la note, et titre matché.
+Le plan est écrit en JSON (versionné, désérialisable) et accompagné de CSV de revue (`low_rated.csv` / `unrated.csv` / `broken.csv` / `needs_validation.csv` en mode raw) listant `symlink_path`, note, source, et top candidats TMDB/TVDB sérialisés JSON pour les ambigus.
 
 **Phase apply** : pour chaque item `MIGRATE` non encore `COMMITTED` dans le state store, lance `rsync -a --partial --inplace --bwlimit=NM` avec retry sur paliers de bande passante (par défaut **25 → 20 → 15 → 10 → 5 MB/s**). Vérifie ensuite le hash xxh3_64 source/destination ; en cas de mismatch, la destination est supprimée et la source reste intacte. Si OK, le symlink est swappé via `os.symlink` + `os.replace` (atomique sur même filesystem) et l'item est marqué `COMMITTED`.
 
@@ -928,9 +1049,90 @@ Le state store est un journal SQLite local (par défaut `<plan>.json.state.sqlit
 - `--csv-dir PATH` : répertoire des CSV de revue (omis = pas de CSV).
 - `--alt-root PATH` (multi) : racines alternatives où retrouver les cibles brisées (utile quand un fichier physique a été déplacé sur un autre disque).
 - `--threshold FLOAT` : note minimale (échelle 0-10), défaut `6.0`.
+- `--include-raw / --no-include-raw` : active le mode raw (voir ci-dessous), défaut `--no-include-raw`.
 - `--state-store PATH` (apply / status) : journal SQLite custom.
 
-**Sécurité** : `apply` n'efface jamais la source. Le réordonnancement se fait uniquement par swap des symlinks. La suppression effective de la source relève d'une étape ultérieure (post-validation), hors du périmètre de cette commande.
+#### Mode raw (`--include-raw`)
+
+Pour les vieux NAS **sans couche symlinks** (fichiers vidéo physiques à plat sous `Films/`, `Séries/`, `Animations/`), le mode symlinks pur classe tout en `NOT_SYMLINK` (terminal). Le mode raw active une chaîne d'identification automatique :
+
+1. **Scanner** : détecte les fichiers physiques (`is_symlink=False`).
+2. **Matcher** : interroge TMDB (films) ou TMDB+TVDB (séries) avec scoring 85 % (parité workflow standard). Score < 85 % ou candidats trop serrés (gap < 5 points) → `NEEDS_VALIDATION`.
+3. **Fetcher** : récupère `vote_average` depuis l'API pour le match retenu → bucket selon seuil.
+4. **Plan canonique** : pour les `MIGRATE`, le `destination_path` reste `null` dans le plan (calculé à l'apply via `OrganizerService` + `RenamerService` après insertion DB).
+
+À l'**apply** en mode raw, pour chaque item :
+
+1. Insertion/upsert `Movie` ou `Series` en DB (lookup par `tmdb_id`/`tvdb_id` puis fetch + `save` si absent).
+2. Pour les séries : `Episode` synthétique inséré (saison/épisode parsés depuis le filename) — titre déféré à `enrich-episode-titles`.
+3. Calcul destination canonique via `OrganizerService.get_movie_destination` (films) ou `get_series_destination` (séries).
+4. `rsync` + verify hash xxh3_64 (parité mode symlinks).
+5. **Création du symlink** dans `video/` canonique (au lieu de swap d'un symlink existant).
+6. **Suppression du fichier source** physique (différence majeure avec le mode symlinks). La source est supprimée uniquement après que le hash destination ait été vérifié — irrécupérable, mais sans risque de perte.
+
+Les items `NEEDS_VALIDATION` sont écrits dans `needs_validation.csv` avec leurs top candidats TMDB/TVDB sérialisés JSON. Pour les retraiter : lancer le workflow `process` standard sur ces fichiers (validation interactive).
+
+**Différences mode raw vs mode symlinks** :
+
+| Aspect | Mode symlinks | Mode raw |
+|---|---|---|
+| Source typique | NAS au format CineOrg (video → storage) | Vieux NAS pré-CineOrg (fichiers à plat) |
+| Identification œuvre | DB CineOrg (œuvre déjà importée) | TMDB/TVDB API (matching) |
+| Insert DB pendant apply | Non (œuvre déjà en DB) | Oui (Movie/Series + Episode si série) |
+| Source après transfert | Intacte | Supprimée après verify hash |
+| Swap symlink | Oui (sur le NAS source) | Non (création symlink dans nouveau video/) |
+| Items ambigus | N/A | `NEEDS_VALIDATION` → CSV pour `process` |
+
+**Sécurité** :
+- En mode symlinks : `apply` n'efface jamais la source.
+- En mode raw : la source est supprimée **uniquement** après verify hash xxh3_64. En cas de mismatch, la destination est supprimée et la source reste intacte — `FAILED_VERIFY` dans le state store.
+- Le state store SQLite est reprenable dans les deux modes : un crash mid-flight ne perd pas de données.
+
+#### `migrate-nas review` — Review interactive des items en attente
+
+Après `migrate-nas plan`, les items qui n'atterrissent pas dans le bucket
+MIGRATE (4 buckets : needs_validation, unrated, low_rated, already_in_library)
+sont en attente d'arbitrage. La commande `review` ouvre une boucle CLI
+interactive pour décider par item.
+
+```bash
+uv run python -m src.main migrate-nas review migration/plan.json
+uv run python -m src.main migrate-nas review migration/plan.json --bucket needs_validation
+uv run python -m src.main migrate-nas review migration/plan.json --restart  # ignore decisions précédentes
+```
+
+**Actions par bucket :**
+
+| Bucket | Touches | Description |
+|---|---|---|
+| **needs_validation** | a / 1-5 / s / r / k / w / q | accept top, pick N, search TMDB live, reject, keep skip, web defer, quit |
+| **unrated** | m / k / w / q | migrate-anyway, keep skip, web, quit |
+| **low_rated** | m / d / k / w / q | migrate-anyway, **delete-source-after-commit (avec confirmation)**, keep skip, web, quit |
+| **already_in_library** | a / k / r / d / w / q | accept reco DuplicateDetector, keep dest, replace dest, delete source, web, quit |
+
+Les décisions sont persistées dans `<plan>.state.sqlite` (table `migration_decisions`).
+Reprenable via `--resume` (par défaut). Les items deferred-to-web sont arbitrés sur
+la page `/migration/review?plan=<chemin>`.
+
+#### `migrate-nas apply` (étendu)
+
+Désormais, `apply` consulte les décisions review en plus du bucket MIGRATE.
+Les items APPROVED des 4 buckets review sont hydratés (`item.match.tmdb_id`
+remplacé par la décision) et transférés via `raw_finalizer`.
+
+```bash
+# Workflow complet
+uv run python -m src.main migrate-nas plan --source /media/wd10-1 --output migration/plan.json --csv-dir migration/review --include-raw
+uv run python -m src.main migrate-nas review migration/plan.json
+uv run python -m src.main migrate-nas apply migration/plan.json
+```
+
+#### Page web `/migration/review`
+
+Pour les items difficiles (besoin de comparaison visuelle), la page web propose :
+- Liste filtrable (par bucket, par statut décision)
+- Overlay détail avec poster TMDB + 5 candidats + recherche live
+- Pour `already_in_library` : comparaison qualité côte-à-côte
 
 ### Purge des hardlinks
 
@@ -1072,7 +1274,7 @@ La barre de filtres en haut de la bibliothèque permet de combiner librement plu
 | Filtre | Description |
 |--------|-------------|
 | **Recherche** | Par titre (défaut) ou titre + synopsis (mode « Titre + Synopsis ») |
-| **Type** | Tous, Films, Séries |
+| **Type** | Tous, Films, Séries, Courts (voir [Courts-métrages dans la bibliothèque](#courts-métrages-dans-la-bibliothèque)) |
 | **Genre** | Filtrer par genre (Action, Drame, Science-Fiction…) |
 | **Année** | Filtrer par année de sortie |
 | **Résolution** | 4K, 1080p, 720p, SD |
@@ -1088,6 +1290,20 @@ La barre de filtres en haut de la bibliothèque permet de combiner librement plu
 **Filtrage par clic** — Depuis les fiches détaillées, un clic sur un badge technique (résolution, codec), un genre, un réalisateur ou un acteur filtre automatiquement la bibliothèque sur ce critère. Les réalisateurs et acteurs sont distingués par des icônes différentes (mégaphone pour le réalisateur, buste pour l'acteur).
 
 **Recherche étendue** — Le mode « Titre + Synopsis » permet de chercher des mots-clés dans le synopsis des films (ex : chercher « espace » trouve les films de science-fiction même si le mot n'est pas dans le titre).
+
+### Courts-métrages dans la bibliothèque
+
+- **Filtre « Courts »** — Le sélecteur de type de la grille propose désormais
+  Tous / Films / Séries / **Courts**. Par défaut (Tous) et sous « Films », les
+  courts-métrages (`is_short`) sont masqués ; ils n'apparaissent que via le
+  type « Courts ».
+- **Ranger des courts en collection (sélection en masse)** — Activer le mode
+  « Suppression » (qui est en réalité un mode sélection), cocher plusieurs
+  jaquettes, puis cliquer **« Ajouter à une collection »**. Saisir un nom de
+  collection (un nom existant est réutilisé, un nouveau nom la crée). Les courts
+  sélectionnés sont rattachés à la collection locale et leurs symlinks sont
+  déplacés vers `video/Films/Courts/{collection}/`. Action réservée à la machine
+  maître (modification de la base et des symlinks).
 
 ### Fiches détaillées
 
@@ -1130,8 +1346,10 @@ Lorsqu'un film ou une série est mal identifié par TMDB, le bouton **Corriger**
    - Score de correspondance (badge vert/orange/rouge)
    - Popularité TMDB
    - Synopsis abrégé
-3. **Sélection** — Cliquer sur « Associer » pour remplacer l'association TMDB
-4. Les métadonnées (titre, synopsis, genres, notes, jaquette) sont automatiquement mises à jour
+3. **Sélection** — Cliquer sur « Sélectionner » pour remplacer l'association TMDB
+4. Les métadonnées (titre, synopsis, genres, note TMDB **et note IMDb**, jaquette) sont automatiquement mises à jour
+
+> **Rafraîchir une association déjà correcte** — La carte marquée « Association actuelle » expose un bouton **Rafraîchir les données** : il relance l'enrichissement sur le même `tmdb_id` (note TMDB, `imdb_id` et note IMDb du cache local) sans changer l'association. Utile quand un film/série correctement associé n'a pas de note — typiquement importé avant que l'enrichissement des notes n'existe.
 
 ### Lecteur vidéo intégré
 

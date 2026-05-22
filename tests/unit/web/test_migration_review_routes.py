@@ -1,0 +1,167 @@
+"""Tests pour les routes /migration/review."""
+
+from pathlib import Path
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from src.container import Container
+from src.services.migration.dataclasses import (
+    Bucket,
+    MatchInfo,
+    MigrationItem,
+    MigrationPlan,
+    MigrationStats,
+    RatingDecision,
+)
+from src.services.migration.plan_builder import serialize_plan
+from src.web.routes.migration import router as migration_router
+
+
+@pytest.fixture
+def client_with_plan(tmp_path):
+    """Crée un plan minimal et un client FastAPI configuré avec le router migration."""
+    item = MigrationItem(
+        item_id="nv1",
+        bucket=Bucket.NEEDS_VALIDATION,
+        symlink_path=Path("/old/Wrong.mkv"),
+        source_path=Path("/old/Wrong.mkv"),
+        destination_path=None,
+        media_root="Films",
+        relative_category="",
+        size_bytes=1_500_000_000,
+        rating=RatingDecision(),
+        match=MatchInfo(top_candidates=[
+            {"title": "Wrong", "year": 2012, "score": 67.0,
+             "tmdb_id": 83186, "source": "tmdb"}
+        ]),
+        is_symlink_source=False,
+    )
+    plan = MigrationPlan(
+        version=1, source_root=Path("/s"), destination_root=Path("/d"),
+        threshold=6.0, stats=MigrationStats(), items=[item],
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(serialize_plan(plan))
+    state_path = tmp_path / "plan.json.state.sqlite"
+
+    app = FastAPI()
+    app.include_router(migration_router)
+    app.state.container = Container()
+
+    return TestClient(app), plan_path, state_path
+
+
+def test_review_list_renders(client_with_plan):
+    client, plan_path, _ = client_with_plan
+    response = client.get(
+        "/migration/review", params={"plan": str(plan_path)}
+    )
+    assert response.status_code == 200
+    assert "Wrong.mkv" in response.text
+    assert "needs_validation" in response.text.lower()
+
+
+def test_review_list_validates_plan_path_missing(client_with_plan, tmp_path):
+    """Plan inexistant → 400 (pas un traceback)."""
+    client, _, _ = client_with_plan
+    response = client.get(
+        "/migration/review",
+        params={"plan": str(tmp_path / "does_not_exist.json")},
+    )
+    assert response.status_code == 400
+
+
+def test_review_list_validates_plan_path_wrong_suffix(client_with_plan, tmp_path):
+    """Plan avec mauvais suffixe → 400."""
+    client, _, _ = client_with_plan
+    bad_plan = tmp_path / "etc.txt"
+    bad_plan.write_text("nope")
+    response = client.get(
+        "/migration/review",
+        params={"plan": str(bad_plan)},
+    )
+    assert response.status_code == 400
+
+
+def test_review_list_renders_includes_pending_count(client_with_plan):
+    """Vérifie que le résumé pending=1 apparaît dans le rendu."""
+    client, plan_path, _ = client_with_plan
+    response = client.get(
+        "/migration/review", params={"plan": str(plan_path)}
+    )
+    assert response.status_code == 200
+    # 1 NV item, pas de décision → pending=1
+    assert "En attente : 1" in response.text
+
+
+def test_review_detail_returns_overlay_fragment(client_with_plan):
+    client, plan_path, _ = client_with_plan
+    response = client.get(
+        "/migration/review/nv1", params={"plan": str(plan_path)}
+    )
+    assert response.status_code == 200
+    assert "Wrong.mkv" in response.text
+    # Fragment HTMX (pas la page complète)
+    assert "<html" not in response.text.lower()
+
+
+def test_review_decide_post_persists(client_with_plan):
+    from src.services.migration.state_store import MigrationStateStore
+    from src.services.migration.decisions import DecisionStatus
+
+    client, plan_path, state_path = client_with_plan
+    response = client.post(
+        "/migration/review/nv1/decide",
+        params={"plan": str(plan_path)},
+        data={
+            "decision": "approved",
+            "chosen_tmdb_id": "83186",
+            "chosen_title": "Wrong",
+            "chosen_year": "2012",
+            "chosen_score": "67.0",
+        },
+    )
+    assert response.status_code == 200
+    store = MigrationStateStore(state_path)
+    d = store.get_decision("nv1")
+    assert d.decision == DecisionStatus.APPROVED
+    assert d.decided_via == "web"
+    store.close()
+
+
+def test_review_decide_unknown_item_returns_404(client_with_plan):
+    """POST sur un item_id inexistant → 404, pas 500."""
+    client, plan_path, _ = client_with_plan
+    response = client.post(
+        "/migration/review/unknown_id/decide",
+        params={"plan": str(plan_path)},
+        data={"decision": "skipped"},
+    )
+    assert response.status_code == 404
+
+
+def test_review_decide_invalid_decision_value_returns_400(client_with_plan):
+    """POST avec decision=garbage → 400, pas 500."""
+    client, plan_path, _ = client_with_plan
+    response = client.post(
+        "/migration/review/nv1/decide",
+        params={"plan": str(plan_path)},
+        data={"decision": "garbage_value"},
+    )
+    assert response.status_code == 400
+
+
+def test_review_decide_invalid_tmdb_id_returns_400(client_with_plan):
+    """POST avec chosen_tmdb_id non numérique → 400, pas 500."""
+    client, plan_path, _ = client_with_plan
+    response = client.post(
+        "/migration/review/nv1/decide",
+        params={"plan": str(plan_path)},
+        data={
+            "decision": "approved",
+            "chosen_tmdb_id": "not_a_number",
+        },
+    )
+    assert response.status_code == 400

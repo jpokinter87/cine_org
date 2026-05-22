@@ -51,11 +51,16 @@ class FakeRsync:
     """RsyncRunner factice qui suit un script de comportements par appel."""
 
     def __init__(self, behaviors: list[_Behavior]) -> None:
-        self.calls: list[tuple[Path, Path, int]] = []
+        self.calls: list[tuple[Path, Path]] = []
         self._behaviors = list(behaviors)
 
-    def run(self, source: Path, destination: Path, bwlimit_mbps: int) -> RsyncResult:
-        self.calls.append((source, destination, bwlimit_mbps))
+    def run(
+        self,
+        source: Path,
+        destination: Path,
+        on_progress=None,
+    ) -> RsyncResult:
+        self.calls.append((source, destination))
         if not self._behaviors:
             raise AssertionError("FakeRsync: appel inattendu")
         b = self._behaviors.pop(0)
@@ -172,15 +177,16 @@ def test_executes_one_item_end_to_end(layout, store):
     # La source originale est intacte (pas de --remove-source-files)
     assert layout["source_file"].exists()
 
-    # Un seul appel rsync à la vitesse max (25 MB/s par défaut)
+    # Un seul appel rsync (succès au 1er essai)
     assert len(rsync.calls) == 1
-    assert rsync.calls[0][2] == 25
 
 
 # ---- Retry sur erreur réseau --------------------------------------------
 
 
-def test_retries_on_lower_bandwidth_after_rsync_failure(layout, store):
+def test_retries_after_rsync_failure_with_pause(layout, store):
+    """En cas d'échec rsync, retry jusqu'à max_retries avec pause entre.
+    Pause respectée via sleep_fn injectable."""
     item = _migrate_item(layout)
     plan = _plan([item], layout)
     store.init_from_plan(plan)
@@ -192,33 +198,43 @@ def test_retries_on_lower_bandwidth_after_rsync_failure(layout, store):
             _Behavior(success=True, on_success=_copy_file),
         ]
     )
+    sleep_calls: list[float] = []
 
     executor = MigrationTransferExecutor(
-        plan=plan, state_store=store, rsync_runner=rsync
+        plan=plan,
+        state_store=store,
+        rsync_runner=rsync,
+        max_retries=3,
+        retry_pause_seconds=30,
+        sleep_fn=sleep_calls.append,
     )
     outcome = executor.execute_one(item)
 
     assert outcome.status == TransferStatus.COMMITTED
-    # Tentatives à 25, 20, 15 MB/s
-    assert [c[2] for c in rsync.calls] == [25, 20, 15]
+    assert len(rsync.calls) == 3
+    # 2 pauses entre les 3 essais (pas après le succès final).
+    assert sleep_calls == [30, 30]
 
 
-def test_marks_failed_copy_when_all_bandwidth_steps_fail(layout, store):
+def test_marks_failed_copy_when_all_retries_fail(layout, store):
     item = _migrate_item(layout)
     plan = _plan([item], layout)
     store.init_from_plan(plan)
 
-    # Tous les paliers échouent (5 par défaut : 25, 20, 15, 10, 5)
-    rsync = FakeRsync([_Behavior(success=False, error="fail")] * 5)
+    rsync = FakeRsync([_Behavior(success=False, error="fail")] * 3)
 
     executor = MigrationTransferExecutor(
-        plan=plan, state_store=store, rsync_runner=rsync
+        plan=plan,
+        state_store=store,
+        rsync_runner=rsync,
+        max_retries=3,
+        retry_pause_seconds=0,  # tests rapides
     )
     outcome = executor.execute_one(item)
 
     assert outcome.status == TransferStatus.FAILED_COPY
     assert "fail" in (outcome.error_message or "")
-    assert len(rsync.calls) == 5
+    assert len(rsync.calls) == 3
     assert store.get_status(item.item_id) == TransferStatus.FAILED_COPY
 
     # La source est intacte, pas de symlink swap
@@ -374,3 +390,309 @@ def test_execute_all_processes_pending_items_only(layout, store, tmp_path):
     assert outcomes[0].item_id == "bbb"
     assert outcomes[0].status == TransferStatus.COMMITTED
     assert len(rsync.calls) == 1
+
+
+# ---- Mode raw : RawItemFinalizer (étape 4a) ------------------------------
+
+
+class _FakeRawFinalizer:
+    """RawItemFinalizer factice : enregistre les appels prepare/finalize."""
+
+    def __init__(
+        self,
+        prepare_destination: Optional[Path] = None,
+        prepare_raises: Optional[Exception] = None,
+        finalize_raises: Optional[Exception] = None,
+    ) -> None:
+        self.prepare_calls: list[MigrationItem] = []
+        self.finalize_calls: list[tuple[MigrationItem, Path]] = []
+        self._destination = prepare_destination
+        self._prepare_raises = prepare_raises
+        self._finalize_raises = finalize_raises
+
+    def prepare(self, item: MigrationItem) -> Optional[Path]:
+        self.prepare_calls.append(item)
+        if self._prepare_raises is not None:
+            raise self._prepare_raises
+        return self._destination
+
+    def finalize(self, item: MigrationItem, destination: Path) -> None:
+        self.finalize_calls.append((item, destination))
+        if self._finalize_raises is not None:
+            raise self._finalize_raises
+
+
+def _raw_item(layout, item_id: str = "raw1") -> MigrationItem:
+    """MigrationItem en mode raw : is_symlink_source=False, destination_path=None."""
+    return MigrationItem(
+        item_id=item_id,
+        bucket=Bucket.MIGRATE,
+        symlink_path=layout["source_file"],  # = source physique elle-même
+        source_path=layout["source_file"],
+        destination_path=None,  # calculée à l'apply via prepare()
+        media_root="Films",
+        relative_category="",
+        size_bytes=layout["source_file"].stat().st_size,
+        rating=RatingDecision(value=8.0, source="tmdb"),
+        is_symlink_source=False,
+    )
+
+
+def test_raw_item_calls_prepare_then_finalize(layout, store):
+    item = _raw_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    canonical_dest = layout["new_storage"] / "Films" / "SF" / "A" / "Avatar.mkv"
+    finalizer = _FakeRawFinalizer(prepare_destination=canonical_dest)
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+
+    executor = MigrationTransferExecutor(
+        plan=plan,
+        state_store=store,
+        rsync_runner=rsync,
+        raw_finalizer=finalizer,
+    )
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.COMMITTED
+    # prepare appelé une fois avec l'item raw, retour utilisé comme destination
+    assert len(finalizer.prepare_calls) == 1
+    assert finalizer.prepare_calls[0] is item
+    # finalize appelé une fois avec l'item + destination retournée par prepare
+    assert len(finalizer.finalize_calls) == 1
+    finalize_item, finalize_dest = finalizer.finalize_calls[0]
+    assert finalize_item is item
+    assert finalize_dest == canonical_dest
+    # Le fichier a bien été copié
+    assert canonical_dest.exists()
+
+
+def test_raw_item_without_finalizer_fails(layout, store):
+    """Un item raw sans raw_finalizer → FAILED_OTHER (destination manquante)."""
+    item = _raw_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=FakeRsync([])
+    )  # pas de raw_finalizer
+    outcome = executor.execute_one(item)
+    assert outcome.status == TransferStatus.FAILED_OTHER
+
+
+def test_raw_prepare_failure_marks_failed_other(layout, store):
+    item = _raw_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    finalizer = _FakeRawFinalizer(prepare_raises=RuntimeError("DB indisponible"))
+    rsync = FakeRsync([])
+    executor = MigrationTransferExecutor(
+        plan=plan,
+        state_store=store,
+        rsync_runner=rsync,
+        raw_finalizer=finalizer,
+    )
+
+    outcome = executor.execute_one(item)
+    assert outcome.status == TransferStatus.FAILED_OTHER
+    # rsync n'a jamais été appelé : on s'arrête avant la copie.
+    assert rsync.calls == []
+    assert finalizer.finalize_calls == []
+
+
+def test_raw_finalize_failure_marks_failed_other(layout, store):
+    item = _raw_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    canonical_dest = layout["new_storage"] / "Films" / "SF" / "A" / "Avatar.mkv"
+    finalizer = _FakeRawFinalizer(
+        prepare_destination=canonical_dest,
+        finalize_raises=OSError("permission denied on video/"),
+    )
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+
+    executor = MigrationTransferExecutor(
+        plan=plan,
+        state_store=store,
+        rsync_runner=rsync,
+        raw_finalizer=finalizer,
+    )
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.FAILED_OTHER
+    # Le rsync + verify ont eu lieu (canonical_dest existe), mais finalize a explosé.
+    assert canonical_dest.exists()
+    assert len(finalizer.finalize_calls) == 1
+
+
+def test_symlink_mode_unchanged_when_no_finalizer_provided(layout, store):
+    """Garde-fou : un item symlinks classique reste intact sans raw_finalizer."""
+    item = _migrate_item(layout)  # is_symlink_source default True
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync
+    )  # pas de raw_finalizer
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.COMMITTED
+    # Le symlink a bien été swappé vers la nouvelle destination.
+    assert layout["symlink"].is_symlink()
+    assert layout["symlink"].resolve() == layout["destination"].resolve()
+
+
+# ---- Mode --fast : verify_hash=False -------------------------------------
+
+
+def test_fast_mode_skips_source_and_dest_hashing(layout, store):
+    """Mode --fast : aucun hash n'est calculé, on fait confiance à rsync."""
+    item = _migrate_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    # hash_fn qui lève si appelé : prouve qu'il n'est jamais invoqué.
+    def _hash_must_not_be_called(_path):
+        raise AssertionError("hash_fn ne doit pas être appelé en mode --fast")
+
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+    executor = MigrationTransferExecutor(
+        plan=plan,
+        state_store=store,
+        rsync_runner=rsync,
+        verify_hash=False,
+        hash_fn=_hash_must_not_be_called,
+    )
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.COMMITTED
+    # source_hash et destination_hash restent vides (pas de verify)
+    assert outcome.source_hash == ""
+    assert outcome.destination_hash == ""
+    # Mais le fichier est bien copié et le symlink swappé
+    assert layout["destination"].exists()
+    assert layout["symlink"].resolve() == layout["destination"].resolve()
+
+
+def test_fast_mode_resume_skips_when_destination_size_matches(layout, store):
+    """Mode --fast : si destination existe avec la même taille, on saute rsync."""
+    item = _migrate_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+
+    # Pré-remplit la destination avec un fichier de MÊME taille (contenu peu importe
+    # en mode --fast, c'est la taille qui sert d'indicateur de reprise).
+    layout["destination"].parent.mkdir(parents=True, exist_ok=True)
+    source_size = layout["source_file"].stat().st_size
+    layout["destination"].write_bytes(b"X" * source_size)
+
+    rsync = FakeRsync([])  # ne doit pas être appelé
+    executor = MigrationTransferExecutor(
+        plan=plan,
+        state_store=store,
+        rsync_runner=rsync,
+        verify_hash=False,
+    )
+    outcome = executor.execute_one(item)
+
+    assert outcome.status == TransferStatus.COMMITTED
+    assert rsync.calls == []  # reprise sans nouveau transfert
+    assert layout["symlink"].resolve() == layout["destination"].resolve()
+
+
+# ---- Tag delete_source_after_commit --------------------------------------
+
+
+def test_delete_source_after_commit_tag_removes_source_post_commit(
+    layout, store, tmp_path
+):
+    """Tag 'delete_source_after_commit' → source supprimée après COMMITTED."""
+    item = _migrate_item(layout)
+    item.tags = ["delete_source_after_commit"]
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync,
+    )
+    outcome = executor.execute_one(item)
+    assert outcome.status == TransferStatus.COMMITTED
+    # Source supprimée
+    assert not layout["source_file"].exists()
+    # Mais destination intacte
+    assert layout["destination"].exists()
+
+
+def test_no_tag_keeps_source_intact(layout, store):
+    """Sans tag, comportement standard : source intacte."""
+    item = _migrate_item(layout)
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync,
+    )
+    executor.execute_one(item)
+    assert layout["source_file"].exists()  # intacte (mode symlinks default)
+
+
+def test_delete_source_after_commit_tag_handles_missing_source_path(
+    layout, store, monkeypatch
+):
+    """Tag posé mais source_path=None → no-op (pas de crash, COMMITTED ok)."""
+    item = _migrate_item(layout)
+    item.tags = ["delete_source_after_commit"]
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync,
+    )
+    # Intercepte le post-commit hook pour forcer source_path=None avant
+    # l'appel réel, simulant un item raw dont la source a déjà été résolue.
+    original_helper = executor._post_commit_delete_source
+
+    def _wrapped(it):
+        it.source_path = None  # simule item raw / source déjà résolue ailleurs
+        return original_helper(it)
+
+    monkeypatch.setattr(executor, "_post_commit_delete_source", _wrapped)
+
+    outcome = executor.execute_one(item)
+    assert outcome.status == TransferStatus.COMMITTED
+    # Pas de crash, destination intacte
+    assert layout["destination"].exists()
+
+
+def test_delete_source_after_commit_tag_idempotent_if_already_deleted(
+    layout, store, monkeypatch
+):
+    """Tag posé mais source déjà absente → FileNotFoundError ignoré, COMMITTED ok."""
+    item = _migrate_item(layout)
+    item.tags = ["delete_source_after_commit"]
+    plan = _plan([item], layout)
+    store.init_from_plan(plan)
+    rsync = FakeRsync([_Behavior(success=True, on_success=_copy_file)])
+
+    executor = MigrationTransferExecutor(
+        plan=plan, state_store=store, rsync_runner=rsync,
+    )
+    original_helper = executor._post_commit_delete_source
+
+    def _wrapped(it):
+        # Simule une suppression concurrente : on retire la source
+        # JUSTE avant que le helper tente l'unlink.
+        if it.source_path is not None and it.source_path.exists():
+            it.source_path.unlink()
+        return original_helper(it)
+
+    monkeypatch.setattr(executor, "_post_commit_delete_source", _wrapped)
+    outcome = executor.execute_one(item)
+    assert outcome.status == TransferStatus.COMMITTED

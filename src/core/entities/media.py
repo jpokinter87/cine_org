@@ -61,6 +61,9 @@ class Movie:
     languages: tuple[str, ...] = ()
     file_size_bytes: Optional[int] = None
     preserve_overrides: bool = False
+    is_short: bool = False
+    local_collection_id: Optional[int] = None
+    local_collection_name: Optional[str] = None
 
 
 @dataclass

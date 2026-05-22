@@ -245,6 +245,12 @@ Cas d'usage : la fiche détaillée affiche une mauvaise association (mauvais fil
 
 Les mêmes endpoints existent pour `/series/{id}` et `/episodes/{id}`.
 
+### Rafraîchir une association correcte
+
+La carte « Association actuelle » des résultats expose un bouton **Rafraîchir les données** : il rejoue `POST .../reassociate` sur le `tmdb_id` **inchangé**. Sans ce bouton, relancer l'enrichissement d'une fiche correctement associée mais incomplète (ex. importée avant l'enrichissement des notes) imposait de choisir volontairement une fausse association puis de revenir.
+
+Le handler `apply` (films comme séries) backfille `imdb_rating`/`imdb_votes` depuis le cache IMDb local via `_lookup_imdb_rating()` — même pont TMDB→IMDb que `batch_builder` et `series_enricher`. Si le nouvel `imdb_id` est absent du cache, l'ancienne note (héritée d'une association précédente) est purgée.
+
 ### Fallback métadonnées techniques depuis le symlink
 
 Quand le fichier source original a été supprimé de `storage/`, les métadonnées techniques (résolution, codecs, langue) ne sont plus extractibles via pymediainfo. Le système applique alors un fallback :

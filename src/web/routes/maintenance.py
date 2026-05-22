@@ -91,6 +91,60 @@ def _get_sandbox_service(container) -> SandboxService:
     )
 
 
+def _list_migration_plans() -> list[dict]:
+    """Détecte les plans de migration et compte leurs items à arbitrer.
+
+    Scanne `<cwd>/migration/*.json` (hors fichiers `.bak.*`), apparie chaque
+    plan à son `*.state.sqlite` éventuel, et compte les décisions
+    `deferred_to_web` (cas typique : l'utilisateur a coché `[w]` lors de la
+    review CLI pour différer l'arbitrage à l'interface web).
+
+    Retourne une liste de dicts triés du plus récent au plus ancien :
+        {plan_path, plan_name, deferred_count, state_exists, modified}
+
+    Tolérant : un state store absent ou corrompu donne `deferred_count = 0`
+    sans erreur (le plan reste listé pour info).
+    """
+    import sqlite3
+    from datetime import datetime
+
+    plans_dir = Path.cwd() / "migration"
+    if not plans_dir.exists():
+        return []
+
+    results: list[dict] = []
+    for plan_path in plans_dir.glob("*.json"):
+        if ".bak." in plan_path.name:
+            continue
+        state_path = plan_path.with_suffix(plan_path.suffix + ".state.sqlite")
+        deferred = 0
+        if state_path.exists():
+            try:
+                conn = sqlite3.connect(state_path)
+                deferred = conn.execute(
+                    "SELECT COUNT(*) FROM migration_decisions "
+                    "WHERE decision = 'deferred_to_web'"
+                ).fetchone()[0]
+                conn.close()
+            except sqlite3.Error:
+                # State store corrompu ou schéma différent : compteur à 0,
+                # on n'empêche pas l'affichage du plan.
+                pass
+        results.append(
+            {
+                "plan_path": str(plan_path),
+                "plan_name": plan_path.name,
+                "deferred_count": deferred,
+                "state_exists": state_path.exists(),
+                "modified": datetime.fromtimestamp(
+                    plan_path.stat().st_mtime
+                ),
+            }
+        )
+    results.sort(key=lambda p: p["modified"], reverse=True)
+    return results
+
+
 def _format_size(size_bytes: int) -> str:
     """Formate une taille en octets en unité lisible."""
     if size_bytes < 1024:
@@ -174,6 +228,7 @@ async def maintenance_page(request: Request):
             "sandbox_items": sandbox_items,
             "sandbox_count": len(sandbox_items),
             "sandbox_total_size": _format_size(sandbox_total_size),
+            "migration_plans": _list_migration_plans(),
         },
     )
 

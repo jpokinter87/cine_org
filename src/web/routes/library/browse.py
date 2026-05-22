@@ -10,7 +10,11 @@ from fastapi import APIRouter, Request
 from sqlmodel import select
 
 from ....infrastructure.persistence.database import get_session
-from ....infrastructure.persistence.models import MovieModel, SeriesModel
+from ....infrastructure.persistence.models import (
+    LocalCollectionModel,
+    MovieModel,
+    SeriesModel,
+)
 from ....utils.helpers import title_sort_key
 from ...deps import templates
 from .helpers import (
@@ -19,7 +23,6 @@ from .helpers import (
     _genre_json_escaped,
     _parse_genres,
     _effective_poster_url,
-    _poster_url,
     _resolution_label,
     _resolution_pixels,
     _title_search_filter,
@@ -84,7 +87,7 @@ async def library_index(
         items = []
 
         # --- Films ---
-        if type in ("all", "movie"):
+        if type in ("all", "movie", "courts"):
             movie_stmt = select(MovieModel)
             if q:
                 movie_stmt = movie_stmt.where(
@@ -129,6 +132,10 @@ async def library_index(
                 movie_stmt = movie_stmt.where(MovieModel.poster_path.is_(None))
             if unwatched == "1":
                 movie_stmt = movie_stmt.where(MovieModel.watched == False)  # noqa: E712
+            if type == "courts":
+                movie_stmt = movie_stmt.where(MovieModel.is_short == True)  # noqa: E712
+            else:
+                movie_stmt = movie_stmt.where(MovieModel.is_short == False)  # noqa: E712
 
             movies = session.exec(movie_stmt).all()
 
@@ -389,6 +396,10 @@ async def library_index(
                 pass
         all_languages = sorted(raw_langs)
 
+        local_collection_names = session.exec(
+            select(LocalCollectionModel.name).order_by(LocalCollectionModel.name)
+        ).all()
+
     finally:
         session.close()
 
@@ -403,6 +414,7 @@ async def library_index(
         "codecs_video": all_codecs_video,
         "codecs_audio": all_codecs_audio,
         "languages": all_languages,
+        "local_collections": local_collection_names,
         "current_type": type,
         "current_genre": genre,
         "current_year": year_int,

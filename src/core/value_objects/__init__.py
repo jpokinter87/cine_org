@@ -10,7 +10,7 @@ Exports :
 - AudioCodec : Informations sur le codec audio avec canaux
 - Language : Langue avec code ISO et nom complet
 - MediaInfo : Composite de toutes les informations techniques media
-- MediaType : Type de media (MOVIE, SERIES, UNKNOWN)
+- MediaType : Type de media (MOVIE, SERIES, SHORT, UNKNOWN)
 - ParsedFilename : Informations extraites du parsing d'un nom de fichier
 """
 
