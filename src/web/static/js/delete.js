@@ -1,10 +1,15 @@
 /**
- * Mode sélection pour suppression par lot.
+ * Mode sélection par lot (« Batch ») : suppression ou ajout à une collection.
  *
  * Gère l'activation du mode sélection, les cases à cocher sur les jaquettes,
- * le compteur flottant, et l'envoi de la requête de suppression.
+ * le compteur flottant, et l'envoi des requêtes (suppression / collection).
  * L'état est persisté dans sessionStorage pour survivre à la navigation
  * vers les fiches détail et au retour.
+ *
+ * Le bouton d'activation (#delete-mode-toggle) vit dans #library-content,
+ * qui est remplacé à chaque swap HTMX (changement de filtre/tri/recherche).
+ * On délègue donc son clic au document et on le requête à la volée, sinon le
+ * handler serait perdu après le premier swap.
  */
 
 (function () {
@@ -47,9 +52,22 @@
     var container = document.getElementById('library-content');
     if (!container) return;
 
-    // --- Bouton d'activation ---
-    var toggleBtn = document.getElementById('delete-mode-toggle');
-    if (!toggleBtn) return;
+    // --- Bouton d'activation (présent uniquement sur la machine maître) ---
+    if (!document.getElementById('delete-mode-toggle')) return;
+
+    var TOGGLE_ICON_DEFAULT =
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Batch';
+    var TOGGLE_ICON_ACTIVE =
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Annuler la sélection';
+
+    // Requête le bouton à la volée (il est recréé à chaque swap HTMX) et
+    // applique l'apparence correspondant à l'état courant.
+    function applyToggleAppearance() {
+        var btn = document.getElementById('delete-mode-toggle');
+        if (!btn) return;
+        btn.classList.toggle('active', selectMode);
+        btn.innerHTML = selectMode ? TOGGLE_ICON_ACTIVE : TOGGLE_ICON_DEFAULT;
+    }
 
     // --- Barre flottante ---
     var bar = document.getElementById('delete-bar');
@@ -74,8 +92,7 @@
     function enterSelectMode() {
         selectMode = true;
         document.body.classList.add('delete-mode');
-        toggleBtn.classList.add('active');
-        toggleBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Annuler la sélection';
+        applyToggleAppearance();
         attachCheckboxes();
         updateUI();
         saveState();
@@ -85,14 +102,17 @@
         selectMode = false;
         selected.clear();
         document.body.classList.remove('delete-mode');
-        toggleBtn.classList.remove('active');
-        toggleBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Sélectionner pour suppression';
+        applyToggleAppearance();
         removeCheckboxes();
         updateUI();
         clearState();
     }
 
-    toggleBtn.addEventListener('click', function () {
+    // Délégation au document : survit aux remplacements de #library-content
+    // (le bouton est recréé à chaque swap HTMX).
+    document.addEventListener('click', function (e) {
+        if (!e.target || !e.target.closest) return;
+        if (!e.target.closest('#delete-mode-toggle')) return;
         if (selectMode) {
             exitSelectMode();
         } else {
@@ -317,7 +337,11 @@
     // Ré-attacher les checkboxes après un swap HTMX (changement de filtre/page)
     document.body.addEventListener('htmx:afterSwap', function (e) {
         if (selectMode && e.detail.target && e.detail.target.id === 'library-content') {
-            setTimeout(function () { attachCheckboxes(); updateUI(); }, 50);
+            setTimeout(function () {
+                applyToggleAppearance();
+                attachCheckboxes();
+                updateUI();
+            }, 50);
         }
     });
 
