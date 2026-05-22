@@ -7,18 +7,34 @@ import math
 from typing import Optional
 
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import select
 
+from ....core.entities.local_collection import LocalCollection
 from ....infrastructure.persistence.database import get_session
 from ....infrastructure.persistence.models import LocalCollectionModel, MovieModel
+from ....infrastructure.persistence.repositories.local_collection_repository import (
+    SQLModelLocalCollectionRepository,
+)
+from ....services.short_reclassifier import ShortReclassifier
 from ....utils.helpers import title_sort_key
 from ...deps import templates
 from .helpers import _best_rating, _parse_genres, _poster_url
 
 COLLECTIONS_PER_PAGE = 24
 
+_LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
 router = APIRouter()
+
+
+class CollectionAssignItem(BaseModel):
+    """Élément à rattacher à une collection locale."""
+
+    type: str  # "movie" | "series"
+    id: int
 
 
 @router.get("/collections")
@@ -190,6 +206,80 @@ async def collection_detail_local(request: Request, collection_id: int):
             "total_pages": 1,
             "page": 1,
         },
+    )
+
+
+@router.post("/collection-batch")
+async def collection_batch(request: Request):
+    """Rattache des films sélectionnés à une collection locale (find-or-create)
+    et déplace les symlinks des courts vers ``Films/Courts/{collection}/``.
+
+    Réservé à la machine maître (modification DB + filesystem). Les items
+    ``series`` sont ignorés : seuls les films portent ``local_collection_id``.
+    """
+    client_host = request.client.host if request.client else ""
+    if client_host not in _LOCAL_HOSTS:
+        return JSONResponse(
+            {"error": "Action autorisée uniquement depuis la machine maître."},
+            status_code=403,
+        )
+
+    body = await request.json()
+    collection_name = (body.get("collection_name") or "").strip()
+    if not collection_name:
+        return JSONResponse({"error": "Nom de collection requis."}, status_code=400)
+
+    items = [CollectionAssignItem(**it) for it in body.get("items", [])]
+    movie_ids = [it.id for it in items if it.type == "movie"]
+    if not movie_ids:
+        return JSONResponse(
+            {"assigned": 0, "moved": 0, "errors": [], "collection_id": None}
+        )
+
+    settings = request.app.state.container.config()
+    session = next(get_session())
+    try:
+        repo = SQLModelLocalCollectionRepository(session)
+        collection = repo.get_by_name(collection_name) or repo.save(
+            LocalCollection(name=collection_name)
+        )
+
+        assigned = 0
+        for movie_id in movie_ids:
+            movie = session.get(MovieModel, movie_id)
+            if movie is None:
+                continue
+            movie.local_collection_id = collection.id
+            session.add(movie)
+            assigned += 1
+        session.commit()
+
+        moved = 0
+        errors: list[str] = []
+        reclassifier = ShortReclassifier(
+            session,
+            settings.video_dir,
+            settings.short_film_duration_threshold_seconds,
+        )
+        target_ids = set(movie_ids)
+        for candidate in reclassifier.find_candidates():
+            if candidate.model.id not in target_ids:
+                continue
+            result = reclassifier.apply(candidate)
+            if result.moved:
+                moved += 1
+            elif result.error:
+                errors.append(result.error)
+    finally:
+        session.close()
+
+    return JSONResponse(
+        {
+            "assigned": assigned,
+            "moved": moved,
+            "errors": errors,
+            "collection_id": collection.id,
+        }
     )
 
 

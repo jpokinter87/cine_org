@@ -1,12 +1,18 @@
 """Tests P5 — routes /library/collections incluent les collections locales."""
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi import FastAPI
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 from starlette.testclient import TestClient
 
-from src.infrastructure.persistence.models import LocalCollectionModel, MovieModel
+from src.infrastructure.persistence.models import (
+    LocalCollectionModel,
+    MovieModel,
+    SeriesModel,
+)
 from src.web.routes.library.collections import router as collections_router
 
 
@@ -146,3 +152,180 @@ class TestLocalCollectionDetail:
     def test_detail_unknown_id_returns_404(self, client, engine) -> None:
         r = client.get("/library/collections/local/99999")
         assert r.status_code == 404
+
+
+@pytest.fixture
+def batch_client(engine, tmp_path, monkeypatch):
+    """Client /collection-batch : container stub + hôte de test autorisé."""
+    from src.web.routes.library import collections as collections_module
+
+    def _get_session():
+        with Session(engine) as session:
+            yield session
+
+    monkeypatch.setattr(collections_module, "get_session", _get_session)
+    monkeypatch.setattr(
+        collections_module,
+        "_LOCAL_HOSTS",
+        {"testclient", "127.0.0.1", "::1", "localhost"},
+    )
+
+    video_dir = tmp_path / "video"
+    video_dir.mkdir()
+    settings = SimpleNamespace(
+        video_dir=video_dir,
+        short_film_duration_threshold_seconds=900,
+    )
+    app = FastAPI()
+    app.state.container = SimpleNamespace(config=lambda: settings)
+    app.include_router(collections_router, prefix="/library")
+    return TestClient(app), video_dir
+
+
+class TestCollectionBatch:
+    def test_requires_local_host(self, client, engine):
+        # La fixture 'client' n'autorise pas l'hôte 'testclient' → 403
+        r = client.post(
+            "/library/collection-batch",
+            json={"collection_name": "Looney Tunes", "items": []},
+        )
+        assert r.status_code == 403
+
+    def test_creates_collection_and_assigns(self, batch_client, engine):
+        test_client, _ = batch_client
+        with Session(engine) as session:
+            m1 = MovieModel(title="A", year=1958, is_short=True)
+            m2 = MovieModel(title="B", year=1959, is_short=True)
+            session.add(m1)
+            session.add(m2)
+            session.commit()
+            session.refresh(m1)
+            session.refresh(m2)
+            ids = [m1.id, m2.id]
+
+        r = test_client.post(
+            "/library/collection-batch",
+            json={
+                "collection_name": "Looney Tunes",
+                "items": [
+                    {"type": "movie", "id": ids[0]},
+                    {"type": "movie", "id": ids[1]},
+                ],
+            },
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["assigned"] == 2
+        assert data["collection_id"] is not None
+
+        with Session(engine) as session:
+            coll = session.exec(
+                select(LocalCollectionModel).where(
+                    LocalCollectionModel.name == "Looney Tunes"
+                )
+            ).first()
+            assert coll is not None
+            movies = session.exec(
+                select(MovieModel).where(MovieModel.id.in_(ids))
+            ).all()
+            assert all(m.local_collection_id == coll.id for m in movies)
+
+    def test_reuses_existing_collection(self, batch_client, engine):
+        test_client, _ = batch_client
+        with Session(engine) as session:
+            coll = LocalCollectionModel(name="Looney Tunes")
+            session.add(coll)
+            m = MovieModel(title="A", year=1958, is_short=True)
+            session.add(m)
+            session.commit()
+            session.refresh(coll)
+            session.refresh(m)
+            coll_id, movie_id = coll.id, m.id
+
+        r = test_client.post(
+            "/library/collection-batch",
+            json={
+                "collection_name": "Looney Tunes",
+                "items": [{"type": "movie", "id": movie_id}],
+            },
+        )
+        assert r.status_code == 200
+        assert r.json()["collection_id"] == coll_id
+
+        with Session(engine) as session:
+            count = len(
+                session.exec(
+                    select(LocalCollectionModel).where(
+                        LocalCollectionModel.name == "Looney Tunes"
+                    )
+                ).all()
+            )
+            assert count == 1
+
+    def test_ignores_series_items(self, batch_client, engine):
+        test_client, _ = batch_client
+        with Session(engine) as session:
+            s = SeriesModel(title="Ma Serie", year=2015)
+            m = MovieModel(title="A", year=1958, is_short=True)
+            session.add(s)
+            session.add(m)
+            session.commit()
+            session.refresh(s)
+            session.refresh(m)
+            series_id, movie_id = s.id, m.id
+
+        r = test_client.post(
+            "/library/collection-batch",
+            json={
+                "collection_name": "Looney Tunes",
+                "items": [
+                    {"type": "series", "id": series_id},
+                    {"type": "movie", "id": movie_id},
+                ],
+            },
+        )
+        assert r.status_code == 200
+        assert r.json()["assigned"] == 1  # série ignorée
+
+    def test_moves_symlink_to_franchise_folder(self, batch_client, engine):
+        test_client, video_dir = batch_client
+        storage = video_dir.parent / "storage"
+        storage.mkdir()
+        target = storage / "bunny.mkv"
+        target.write_text("x")
+        divers = video_dir / "Films" / "Courts" / "Divers"
+        divers.mkdir(parents=True)
+        link = divers / "Court Bunny (1958).mkv"
+        link.symlink_to(target)
+
+        with Session(engine) as session:
+            m = MovieModel(
+                title="Court Bunny",
+                year=1958,
+                duration_seconds=420,
+                is_short=True,
+                symlink_path=str(link),
+            )
+            session.add(m)
+            session.commit()
+            session.refresh(m)
+            movie_id = m.id
+
+        r = test_client.post(
+            "/library/collection-batch",
+            json={
+                "collection_name": "Looney Tunes",
+                "items": [{"type": "movie", "id": movie_id}],
+            },
+        )
+        assert r.status_code == 200
+        assert r.json()["moved"] == 1
+
+        new_link = (
+            video_dir / "Films" / "Courts" / "Looney Tunes" / "Court Bunny (1958).mkv"
+        )
+        assert new_link.is_symlink()
+        assert not link.exists()
+        with Session(engine) as session:
+            m = session.get(MovieModel, movie_id)
+            assert m.symlink_path == str(new_link)
