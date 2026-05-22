@@ -8344,6 +8344,34 @@ details[open] > .maint-issue-toggle::before {
     color: var(--text-primary);
 }
 
+.delete-bar-btn-collection {
+    background: rgba(52, 211, 153, 0.15);
+    color: var(--accent-emerald, #34d399);
+    border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.delete-bar-btn-collection:hover {
+    background: rgba(52, 211, 153, 0.25);
+    border-color: rgba(52, 211, 153, 0.5);
+}
+
+.collection-name-input {
+    width: 100%;
+    margin: 0.5rem 0 1rem;
+    padding: 0.6rem 0.85rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+}
+
+.collection-name-input:focus {
+    outline: none;
+    border-color: rgba(52, 211, 153, 0.6);
+}
+
 /* ── Delete Overlay (confirmation) ── */
 
 .delete-overlay {

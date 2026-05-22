@@ -10,7 +10,11 @@ from fastapi import APIRouter, Request
 from sqlmodel import select
 
 from ....infrastructure.persistence.database import get_session
-from ....infrastructure.persistence.models import MovieModel, SeriesModel
+from ....infrastructure.persistence.models import (
+    LocalCollectionModel,
+    MovieModel,
+    SeriesModel,
+)
 from ....utils.helpers import title_sort_key
 from ...deps import templates
 from .helpers import (
@@ -392,6 +396,10 @@ async def library_index(
                 pass
         all_languages = sorted(raw_langs)
 
+        local_collection_names = session.exec(
+            select(LocalCollectionModel.name).order_by(LocalCollectionModel.name)
+        ).all()
+
     finally:
         session.close()
 
@@ -406,6 +414,7 @@ async def library_index(
         "codecs_video": all_codecs_video,
         "codecs_audio": all_codecs_audio,
         "languages": all_languages,
+        "local_collections": local_collection_names,
         "current_type": type,
         "current_genre": genre,
         "current_year": year_int,
