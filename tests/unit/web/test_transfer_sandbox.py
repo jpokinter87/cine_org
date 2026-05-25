@@ -1,9 +1,21 @@
 """Tests des opérations sandbox de la route transfert."""
 
+import asyncio
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
-from src.web.routes.transfer import _sandbox_existing
-from src.services.sandbox_service import REPLACED_SUBDIR
+from src.web.routes.transfer import (
+    _sandbox_existing,
+    _run_web_transfer,
+    TransferProgress,
+)
+from src.services.sandbox_service import (
+    REPLACED_SUBDIR,
+    SandboxService,
+    REJECTED_SUBDIR,
+)
+from src.services.duplicate_detector import DuplicateMatch
 
 
 def test_sandbox_existing_movie_goes_to_replaced_subdir(tmp_path: Path):
@@ -53,8 +65,13 @@ def test_sandbox_existing_series_episode_goes_to_replaced_subdir(tmp_path: Path)
 
     # Seul l'épisode S01E01 part sous anciennes_versions/
     dest1 = (
-        sandbox / REPLACED_SUBDIR / "Series" / "O" / "Octobre (2021)"
-        / "Saison 01" / ep1.name
+        sandbox
+        / REPLACED_SUBDIR
+        / "Series"
+        / "O"
+        / "Octobre (2021)"
+        / "Saison 01"
+        / ep1.name
     )
     assert dest1.exists()
     assert dest1.read_text() == "av1-ep1"
@@ -63,3 +80,70 @@ def test_sandbox_existing_series_episode_goes_to_replaced_subdir(tmp_path: Path)
     assert ep2.exists()
     assert not (season_video / ep1.name).exists()
     assert (season_video / ep2.name).exists()
+
+
+def _make_container(tmp_path):
+    storage = tmp_path / "storage"
+    video = tmp_path / "video"
+    downloads = tmp_path / "downloads"
+    sandbox = tmp_path / ".sandbox"
+    for d in (storage, video, downloads):
+        d.mkdir(parents=True, exist_ok=True)
+
+    settings = SimpleNamespace(
+        storage_dir=storage,
+        video_dir=video,
+        downloads_dir=downloads,
+        sandbox_dir=sandbox,
+        resolved_sandbox_dir=sandbox,
+    )
+    container = MagicMock()
+    container.config.return_value = settings
+    container.transferer_service.return_value = MagicMock()
+    container.sandbox_service.side_effect = lambda **kw: SandboxService(**kw)
+    return container, settings
+
+
+def test_keep_old_moves_source_to_sandbox(tmp_path):
+    container, settings = _make_container(tmp_path)
+    src = settings.downloads_dir / "Series" / "Octobre (2021)" / "ep01.mkv"
+    src.parent.mkdir(parents=True)
+    src.write_text("x265")
+
+    existing_dir = settings.video_dir / "Series" / "Octobre (2021)"
+    existing_dir.mkdir(parents=True)
+
+    transfers = [
+        {
+            "source": src,
+            "destination": settings.storage_dir / "Series" / "x" / "ep01.mkv",
+            "symlink_destination": None,
+            "new_filename": "Octobre (2021) - S01E01 - x265.mkv",
+            "is_series": True,
+            "has_duplicate": True,
+            "duplicate_resolution": "keep_old",
+            "duplicate_match": DuplicateMatch(
+                existing_dir=existing_dir,
+                existing_title="Octobre",
+                existing_files=[],
+                similarity_reason="même nom",
+            ),
+            "title": "Octobre",
+            "year": 2021,
+        }
+    ]
+
+    progress = TransferProgress()
+    asyncio.run(_run_web_transfer(container, transfers, progress, dry_run=False))
+
+    dest = (
+        settings.sandbox_dir
+        / REJECTED_SUBDIR
+        / "Series"
+        / "Octobre (2021)"
+        / "ep01.mkv"
+    )
+    assert dest.exists()
+    assert not src.exists()
+    # keep_old ne transfère jamais
+    container.transferer_service.return_value.transfer_file.assert_not_called()

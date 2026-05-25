@@ -96,6 +96,23 @@ def _get_sandbox_dir(settings) -> Path:
     return Path("/tmp/cineorg_sandbox")
 
 
+def _reject_source_to_sandbox(container, settings, source: Path) -> None:
+    """Déplace un nouveau fichier rejeté (« Garder l'ancien ») vers le sandbox.
+
+    Sort le fichier de downloads/ pour qu'il ne soit plus re-détecté aux
+    traitements suivants. Échec → log, on ne bloque pas le transfert.
+    """
+    try:
+        sandbox_svc = container.sandbox_service(
+            sandbox_dir=settings.resolved_sandbox_dir,
+            storage_dir=settings.storage_dir,
+            downloads_dir=settings.downloads_dir,
+        )
+        sandbox_svc.sandbox_rejected([source])
+    except Exception as e:
+        logger.warning("Échec sandbox du rejet %s: %s", source, e)
+
+
 def _resolve_storage_path(existing_dir: Path, storage_dir: Path) -> Path | None:
     """
     Trouve le vrai chemin storage en suivant les symlinks dans existing_dir.
@@ -603,6 +620,8 @@ async def _run_web_transfer(
             # Résolution pré-faite au résumé batch → exécuter sans SSE pause
             if transfer.get("has_duplicate") and duplicate_match and pre_resolution:
                 if pre_resolution == "keep_old":
+                    if not dry_run:
+                        _reject_source_to_sandbox(container, settings, source)
                     progress.conflicts_resolved += 1
                     progress.message = (
                         f"Doublon résolu (pré) : ancien conservé pour {display_name}"
@@ -803,6 +822,8 @@ async def _run_web_transfer(
                 progress.conflict_choice = None
 
                 if choice == "keep_old":
+                    if not dry_run:
+                        _reject_source_to_sandbox(container, settings, source)
                     progress.conflicts_resolved += 1
                     progress.message = (
                         f"Doublon résolu : ancien conservé pour {display_name}"
