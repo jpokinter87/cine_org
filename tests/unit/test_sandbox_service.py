@@ -357,3 +357,10 @@ class TestAnnotateKeptVersions:
         files = service.list_sandboxed()
         service.annotate_kept_versions(files, tmp_path / "inexistant")
         assert all(f.kept_version is None for f in files)
+
+    def test_raw_filename_no_year_is_none(self, service, dirs, tmp_path):
+        """Nom de fichier brut sans « (Année) » → kept_version None (pas d'erreur)."""
+        _create_file(dirs["sandbox"] / REJECTED_SUBDIR / "Films" / "batman.mkv")
+        files = service.list_sandboxed()
+        service.annotate_kept_versions(files, tmp_path / "video")
+        assert files[0].kept_version is None

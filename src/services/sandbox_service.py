@@ -305,7 +305,9 @@ class SandboxService:
     ) -> None:
         """Renseigne f.kept_version : chemin d'une copie présente dans video/,
         ou None si aucune trouvée. Réutilise DuplicateDetector (mémoïsé)."""
-        from src.services.duplicate_detector import DuplicateDetector, _normalize_title
+        # Import local : duplicate_detector tire transferer/quality_scorer ;
+        # import différé pour éviter tout cycle et alléger l'import du module.
+        from src.services.duplicate_detector import DuplicateDetector
 
         detector = DuplicateDetector()
         cache: dict[tuple[str, Optional[int], bool], object] = {}
@@ -315,7 +317,7 @@ class SandboxService:
             if not title:
                 f.kept_version = None
                 continue
-            key = (_normalize_title(title), year, is_series)
+            key = (title.casefold(), year, is_series)
             if key not in cache:
                 cache[key] = detector.detect_duplicate(
                     title, year, video_dir, is_series=is_series
