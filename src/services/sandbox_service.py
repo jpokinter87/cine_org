@@ -5,6 +5,7 @@ Permet d'isoler les fichiers orphelins (non ciblés par un symlink)
 dans un répertoire dédié pour revue avant décision (supprimer ou réintégrer).
 """
 
+import re
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -13,6 +14,10 @@ from pathlib import Path
 from typing import Optional
 
 from loguru import logger
+
+_EPISODE_RE = re.compile(r"S(\d+)E(\d+)", re.IGNORECASE)
+_TITLE_YEAR_RE = re.compile(r"^(.+?)\s*\((\d{4})\)$")
+_SERIES_PARTS = {"Series", "Séries"}
 
 # Sous-dossiers de catégories (noms réels sur disque)
 ORPHANS_SUBDIR = "orphans"
@@ -262,6 +267,67 @@ class SandboxService:
 
         self._cleanup_empty_parents(paths, root=self._orphans_dir)
         return reinjected
+
+    def _parse_identity(
+        self, f: "SandboxedFile"
+    ) -> tuple[Optional[str], Optional[int], bool, Optional[str]]:
+        """Extrait (titre, année, is_series, SxxExx) d'un fichier sandboxé.
+
+        Titre/année : composant de chemin « Titre (AAAA) ». Épisode : regex
+        SxxExx sur le nom de fichier. Retourne (None, ...) si indéterminable.
+        """
+        _, _, relative = self._classify(f.path)
+        parts = relative.parts
+        is_series = bool(parts) and parts[0] in _SERIES_PARTS
+
+        title: Optional[str] = None
+        year: Optional[int] = None
+        for part in parts:
+            m = _TITLE_YEAR_RE.match(part)
+            if m:
+                title, year = m.group(1).strip(), int(m.group(2))
+                break
+        if title is None:
+            # Fallback : tenter sur le nom de fichier (sans extension)
+            m = _TITLE_YEAR_RE.match(Path(f.name).stem)
+            if m:
+                title, year = m.group(1).strip(), int(m.group(2))
+
+        episode = None
+        em = _EPISODE_RE.search(f.name)
+        if em:
+            episode = f"S{int(em.group(1)):02d}E{int(em.group(2)):02d}"
+
+        return title, year, is_series, episode
+
+    def annotate_kept_versions(
+        self, files: list["SandboxedFile"], video_dir: Path
+    ) -> None:
+        """Renseigne f.kept_version : chemin d'une copie présente dans video/,
+        ou None si aucune trouvée. Réutilise DuplicateDetector (mémoïsé)."""
+        from src.services.duplicate_detector import DuplicateDetector, _normalize_title
+
+        detector = DuplicateDetector()
+        cache: dict[tuple[str, Optional[int], bool], object] = {}
+
+        for f in files:
+            title, year, is_series, episode = self._parse_identity(f)
+            if not title:
+                f.kept_version = None
+                continue
+            key = (_normalize_title(title), year, is_series)
+            if key not in cache:
+                cache[key] = detector.detect_duplicate(
+                    title, year, video_dir, is_series=is_series
+                )
+            match = cache[key]
+            if match is None:
+                f.kept_version = None
+            elif is_series and episode:
+                eps = getattr(match, "existing_episodes", None) or set()
+                f.kept_version = str(match.existing_dir) if episode in eps else None
+            else:
+                f.kept_version = str(match.existing_dir)
 
     def _is_inside_sandbox(self, path: Path) -> bool:
         """Vérifie qu'un chemin est bien à l'intérieur du sandbox."""

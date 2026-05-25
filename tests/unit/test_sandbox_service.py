@@ -290,3 +290,70 @@ class TestSandboxRejected:
         service.sandbox_rejected([other])
         # storage/Films ne doit PAS avoir été supprimé par le nettoyage
         assert (dirs["storage"] / "Films").exists()
+
+
+class TestAnnotateKeptVersions:
+    """annotate_kept_versions marque vert/rouge selon présence dans video/."""
+
+    def test_movie_present_and_absent(self, service, dirs, tmp_path):
+        video = tmp_path / "video"
+        # Film présent dans la vidéothèque
+        _create_file(
+            video / "Films" / "Action" / "A-B" / "Heat (1995)" / "Heat (1995) VF.mkv"
+        )
+        sb = dirs["sandbox"]
+        _create_file(
+            sb / REJECTED_SUBDIR / "Films" / "Heat (1995)" / "Heat (1995) VF x265.mkv"
+        )
+        _create_file(
+            sb / REJECTED_SUBDIR / "Films" / "Inconnu (2099)" / "Inconnu (2099).mkv"
+        )
+
+        files = service.list_sandboxed()
+        service.annotate_kept_versions(files, video)
+        by_name = {f.name: f for f in files}
+
+        assert by_name["Heat (1995) VF x265.mkv"].kept_version is not None
+        assert by_name["Inconnu (2099).mkv"].kept_version is None
+
+    def test_series_episode_presence(self, service, dirs, tmp_path):
+        video = tmp_path / "video"
+        _create_file(
+            video
+            / "Series"
+            / "O"
+            / "Octobre (2021)"
+            / "Saison 01"
+            / "Octobre (2021) - S01E01 - VF.mkv"
+        )
+        sb = dirs["sandbox"]
+        _create_file(
+            sb
+            / REJECTED_SUBDIR
+            / "Series"
+            / "Octobre (2021)"
+            / "Saison 01"
+            / "Octobre (2021) - S01E01 - x265.mkv"
+        )
+        _create_file(
+            sb
+            / REJECTED_SUBDIR
+            / "Series"
+            / "Octobre (2021)"
+            / "Saison 01"
+            / "Octobre (2021) - S01E09 - x265.mkv"
+        )
+
+        files = service.list_sandboxed()
+        service.annotate_kept_versions(files, video)
+        by_name = {f.name: f for f in files}
+
+        assert by_name["Octobre (2021) - S01E01 - x265.mkv"].kept_version is not None
+        assert by_name["Octobre (2021) - S01E09 - x265.mkv"].kept_version is None
+
+    def test_video_dir_missing_is_safe(self, service, dirs, tmp_path):
+        sb = dirs["sandbox"]
+        _create_file(sb / REJECTED_SUBDIR / "Films" / "X (2000)" / "X (2000).mkv")
+        files = service.list_sandboxed()
+        service.annotate_kept_versions(files, tmp_path / "inexistant")
+        assert all(f.kept_version is None for f in files)
