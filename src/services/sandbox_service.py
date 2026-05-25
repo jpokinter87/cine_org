@@ -101,6 +101,32 @@ class SandboxService:
         self._cleanup_empty_parents(orphan_paths)
         return moved
 
+    def sandbox_rejected(self, paths: list[Path]) -> int:
+        """Déplace des doublons rejetés (« Garder l'ancien ») vers le sandbox.
+
+        Cible le sous-dossier rejets_doublons/, en préservant l'arborescence
+        relative à downloads_dir (fallback : nom de fichier si hors downloads).
+
+        Returns:
+            Nombre de fichiers déplacés.
+        """
+        rejected_dir = self._sandbox_dir / REJECTED_SUBDIR
+        moved = 0
+        for src in paths:
+            if not src.exists():
+                logger.warning("Rejet introuvable, ignoré : {}", src)
+                continue
+            try:
+                relative = src.relative_to(self._downloads_dir)
+            except ValueError:
+                relative = Path(src.name)
+            dest = rejected_dir / relative
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(dest))
+            moved += 1
+            logger.info("Doublon rejeté sandboxé : {} → {}", src, dest)
+        return moved
+
     def _classify(self, path: Path) -> tuple[str, Path, Path]:
         """Déduit (catégorie, base de l'original_path, relative sous la catégorie).
 

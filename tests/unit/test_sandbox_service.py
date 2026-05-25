@@ -244,3 +244,34 @@ class TestListSandboxedCategories:
         result = {f.name: f for f in service.list_sandboxed()}
         assert result["seul.mkv"].category == CATEGORY_ORPHAN
         assert result["seul.mkv"].original_path == dirs["storage"] / "seul.mkv"
+
+
+class TestSandboxRejected:
+    """sandbox_rejected déplace un doublon rejeté de downloads → rejets_doublons/."""
+
+    def test_preserve_arborescence_from_downloads(self, service, dirs):
+        src = _create_file(
+            dirs["downloads"] / "Series" / "Octobre (2021)" / "ep01.mkv", "x265"
+        )
+
+        count = service.sandbox_rejected([src])
+
+        assert count == 1
+        dest = (
+            dirs["sandbox"] / REJECTED_SUBDIR / "Series" / "Octobre (2021)" / "ep01.mkv"
+        )
+        assert dest.exists()
+        assert dest.read_text() == "x265"
+        assert not src.exists()
+
+    def test_fallback_name_when_outside_downloads(self, service, dirs):
+        src = _create_file(dirs["storage"] / "ailleurs.mkv", "data")
+
+        count = service.sandbox_rejected([src])
+
+        assert count == 1
+        assert (dirs["sandbox"] / REJECTED_SUBDIR / "ailleurs.mkv").exists()
+
+    def test_skip_missing(self, service, dirs):
+        count = service.sandbox_rejected([dirs["downloads"] / "nope.mkv"])
+        assert count == 0
