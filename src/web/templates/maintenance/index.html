@@ -366,8 +366,11 @@ function sandboxMoveOrphansConfirmed() {
 }
 
 function sandboxToggleAll(master) {
-    var cbs = document.querySelectorAll('.sandbox-cb');
-    cbs.forEach(function(cb) { cb.checked = master.checked; });
+    document.querySelectorAll('.sandbox-row').forEach(function(row) {
+        if (row.style.display === 'none') return;
+        var cb = row.querySelector('.sandbox-cb');
+        if (cb) cb.checked = master.checked;
+    });
     sandboxUpdateActions();
 }
 
@@ -408,15 +411,20 @@ function sandboxUpdateActions() {
     var list = document.getElementById('sandbox-delete-list');
     if (list) {
         list.innerHTML = names.slice(0, 10).map(function(n) {
-            return '<li>' + n.replace(/</g, '&lt;') + '</li>';
+            return '<li>' + sandboxEscHtml(n) + '</li>';
         }).join('') + (names.length > 10 ? '<li>… +' + (names.length - 10) + '</li>' : '');
     }
 }
 
+function sandboxEscHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function sandboxFmtSize(b) {
-    if (b >= 1073741824) return (b / 1073741824).toFixed(1) + ' Go';
-    if (b >= 1048576) return Math.round(b / 1048576) + ' Mo';
-    return Math.round(b / 1024) + ' Ko';
+    if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' Go';
+    if (b >= 1048576) return (b / 1048576).toFixed(1) + ' Mo';
+    if (b >= 1024) return (b / 1024).toFixed(1) + ' Ko';
+    return b + ' o';
 }
 
 function sandboxFilter(btn, cat) {

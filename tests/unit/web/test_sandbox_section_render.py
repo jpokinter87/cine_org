@@ -1,3 +1,6 @@
+# Note : la logique JS (sandboxFilter, sandboxToggleAll, récap suppression) n'est
+# pas couverte par pytest (pas de jsdom/Playwright dans le projet) — vérification
+# manuelle dans le navigateur. Ces tests couvrent uniquement le rendu Jinja.
 from src.web.deps import templates
 
 
@@ -48,6 +51,15 @@ def test_section_shows_category_badge_and_kept_indicator():
     assert 'data-kept="no"' in html
     # Barre de filtre
     assert "sandbox-filter" in html
+
+
+def test_section_no_filter_when_empty():
+    tmpl = templates.env.get_template("maintenance/_sandbox_section.html")
+    html = tmpl.render(
+        sandbox_items=[], sandbox_count=0, sandbox_total_size="0 o", is_local=True
+    )
+    assert "sandbox-filter" not in html
+    assert "sandbox-empty-state" in html
 
 
 def test_section_renders_without_checkboxes_when_not_local():
