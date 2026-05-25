@@ -19,6 +19,7 @@ from starlette.responses import StreamingResponse
 
 from loguru import logger
 
+from src.services.sandbox_service import REPLACED_SUBDIR
 from ..deps import templates
 
 router = APIRouter(prefix="/transfer")
@@ -237,7 +238,7 @@ def _sandbox_existing(
         for item in storage_path.rglob("*"):
             if item.is_file() and pattern.search(item.name):
                 item_rel = item.relative_to(storage_dir)
-                dest = sandbox_dir / item_rel
+                dest = sandbox_dir / REPLACED_SUBDIR / item_rel
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(item), str(dest))
                 moved += 1
@@ -252,8 +253,8 @@ def _sandbox_existing(
                 "Sandbox: aucun fichier {} trouvé dans {}", episode_key, storage_path
             )
     else:
-        # Films : déplacer tout le dossier (comportement original)
-        dest = sandbox_dir / relative
+        # Films : déplacer tout le dossier sous la catégorie « ancienne version »
+        dest = sandbox_dir / REPLACED_SUBDIR / relative
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(storage_path), str(dest))
         logger.info("Sandbox (storage) : {} → {}", storage_path, dest)
