@@ -14,6 +14,17 @@ from typing import Optional
 
 from loguru import logger
 
+# Sous-dossiers de catégories (noms réels sur disque)
+ORPHANS_SUBDIR = "orphans"
+REPLACED_SUBDIR = "anciennes_versions"
+REJECTED_SUBDIR = "rejets_doublons"
+
+# Libellés de catégorie (valeur de SandboxedFile.category)
+CATEGORY_ORPHAN = "orphelin"
+CATEGORY_REPLACED = "ancienne_version"
+CATEGORY_REJECTED = "rejet_doublon"
+CATEGORY_OTHER = "autre"
+
 
 @dataclass
 class SandboxedFile:
@@ -24,6 +35,8 @@ class SandboxedFile:
     size: int
     modified: datetime
     original_path: Path
+    category: str = CATEGORY_OTHER
+    kept_version: Optional[str] = None
 
 
 class SandboxService:
@@ -88,33 +101,54 @@ class SandboxService:
         self._cleanup_empty_parents(orphan_paths)
         return moved
 
+    def _classify(self, path: Path) -> tuple[str, Path, Path]:
+        """Déduit (catégorie, base de l'original_path, relative sous la catégorie).
+
+        La catégorie vient du sous-dossier de premier niveau dans le sandbox.
+        - orphans/, anciennes_versions/ → base storage_dir
+        - rejets_doublons/ → base downloads_dir
+        - racine / inconnu → catégorie "autre", base storage_dir
+        """
+        try:
+            rel = path.relative_to(self._sandbox_dir)
+        except ValueError:
+            return (CATEGORY_OTHER, self._storage_dir, Path(path.name))
+
+        parts = rel.parts
+        first = parts[0] if parts else ""
+        sub = Path(*parts[1:]) if len(parts) > 1 else Path(parts[-1]) if parts else rel
+
+        if first == ORPHANS_SUBDIR:
+            return (CATEGORY_ORPHAN, self._storage_dir, sub)
+        if first == REPLACED_SUBDIR:
+            return (CATEGORY_REPLACED, self._storage_dir, sub)
+        if first == REJECTED_SUBDIR:
+            return (CATEGORY_REJECTED, self._downloads_dir, sub)
+        return (CATEGORY_OTHER, self._storage_dir, rel)
+
     def list_sandboxed(self) -> list[SandboxedFile]:
-        """Liste les fichiers présents dans le sandbox.
+        """Liste tous les fichiers du sandbox, toutes catégories confondues.
 
         Returns:
-            Liste de SandboxedFile avec métadonnées.
+            Liste de SandboxedFile avec métadonnées + catégorie.
         """
-        if not self._orphans_dir.exists():
+        if not self._sandbox_dir.exists():
             return []
 
         files: list[SandboxedFile] = []
-        for entry in sorted(self._orphans_dir.rglob("*")):
+        for entry in sorted(self._sandbox_dir.rglob("*")):
             if entry.is_dir() or entry.is_symlink():
                 continue
-            try:
-                relative = entry.relative_to(self._orphans_dir)
-            except ValueError:
-                continue
-
+            category, base, relative = self._classify(entry)
             stat = entry.stat()
-            original = self._storage_dir / relative
             files.append(
                 SandboxedFile(
                     path=entry,
                     name=entry.name,
                     size=stat.st_size,
                     modified=datetime.fromtimestamp(stat.st_mtime),
-                    original_path=original,
+                    original_path=base / relative,
+                    category=category,
                 )
             )
         return files

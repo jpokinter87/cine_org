@@ -5,7 +5,16 @@ from pathlib import Path
 
 import pytest
 
-from src.services.sandbox_service import SandboxService, SandboxedFile
+from src.services.sandbox_service import (
+    CATEGORY_ORPHAN,
+    CATEGORY_OTHER,
+    CATEGORY_REJECTED,
+    CATEGORY_REPLACED,
+    REJECTED_SUBDIR,
+    REPLACED_SUBDIR,
+    SandboxService,
+    SandboxedFile,
+)
 
 
 @pytest.fixture
@@ -80,7 +89,7 @@ class TestListSandboxed:
     def test_list_files_with_metadata(self, service, dirs):
         """La liste retourne les bons fichiers avec métadonnées."""
         orphans_dir = dirs["sandbox"] / "orphans"
-        f1 = _create_file(orphans_dir / "Films" / "Action" / "film.mkv", "content123")
+        _create_file(orphans_dir / "Films" / "Action" / "film.mkv", "content123")
 
         result = service.list_sandboxed()
 
@@ -196,3 +205,28 @@ class TestReinjectFiles:
         service.reinject_files([f])
 
         assert not (orphans_dir / "Films" / "Genre").exists()
+
+
+class TestListSandboxedCategories:
+    """list_sandboxed scanne toutes les catégories."""
+
+    def test_categories_and_original_base(self, service, dirs):
+        sb = dirs["sandbox"]
+        _create_file(sb / "orphans" / "Films" / "Action" / "o.mkv")
+        _create_file(sb / REPLACED_SUBDIR / "Films" / "SF" / "r.mkv")
+        _create_file(sb / REJECTED_SUBDIR / "Series" / "T (2021)" / "Saison 01" / "x.mkv")
+        _create_file(sb / "vieux_a_la_racine.mkv")  # legacy
+
+        result = {f.name: f for f in service.list_sandboxed()}
+
+        assert result["o.mkv"].category == CATEGORY_ORPHAN
+        assert result["o.mkv"].original_path == dirs["storage"] / "Films" / "Action" / "o.mkv"
+        assert result["r.mkv"].category == CATEGORY_REPLACED
+        assert result["r.mkv"].original_path == dirs["storage"] / "Films" / "SF" / "r.mkv"
+        assert result["x.mkv"].category == CATEGORY_REJECTED
+        # rejet : base = downloads
+        assert (
+            result["x.mkv"].original_path
+            == dirs["downloads"] / "Series" / "T (2021)" / "Saison 01" / "x.mkv"
+        )
+        assert result["vieux_a_la_racine.mkv"].category == CATEGORY_OTHER
