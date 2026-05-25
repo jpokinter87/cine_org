@@ -365,6 +365,22 @@ class TestAnnotateKeptVersions:
         service.annotate_kept_versions(files, tmp_path / "video")
         assert files[0].kept_version is None
 
+    def test_rejected_series_flat_name_matches_kept(self, service, dirs, tmp_path):
+        """Rejet série à plat (nom formaté, sans dossier Titre) → version trouvée."""
+        video = tmp_path / "video"
+        _create_file(
+            video / "Series" / "O" / "Octobre (2021)" / "Saison 01"
+            / "Octobre (2021) - S01E01 - VF.mkv"
+        )
+        # Rejet tel que déposé par sandbox_rejected : à plat sous Series/, nom formaté
+        _create_file(
+            dirs["sandbox"] / REJECTED_SUBDIR / "Series"
+            / "Octobre (2021) - S01E01 - MULTI x265.mkv"
+        )
+        files = service.list_sandboxed()
+        service.annotate_kept_versions(files, video)
+        assert files[0].kept_version is not None
+
 
 class TestReinjectAllCategories:
     """reinject_files fonctionne pour les catégories hors orphans/."""

@@ -16,7 +16,7 @@ from typing import Optional
 from loguru import logger
 
 _EPISODE_RE = re.compile(r"S(\d+)E(\d+)", re.IGNORECASE)
-_TITLE_YEAR_RE = re.compile(r"^(.+?)\s*\((\d{4})\)$")
+_TITLE_YEAR_RE = re.compile(r"^(.+?)\s*\((\d{4})\)")
 _SERIES_PARTS = {"Series", "Séries"}
 
 # Sous-dossiers de catégories (noms réels sur disque)

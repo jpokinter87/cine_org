@@ -1251,6 +1251,8 @@ La page **Maintenance** (`/maintenance`) fournit deux diagnostics et la gestion 
 - **Analyse de nettoyage** — Détecte les symlinks cassés dans `video/`, les répertoires vides, les symlinks mal placés (mauvais genre, mauvaise subdivision), les problèmes de case.
 - **Sandbox** — Liste tous les fichiers sandboxés avec leur catégorie (badge : *Orphelin*, *Ancienne version*, *Doublon rejeté*, *Autre*), un indicateur de présence dans la vidéothèque (vert = une version est conservée en bibliothèque ; orange = aucune copie trouvée, fichier potentiellement unique), et un filtre par catégorie.
 
+> **Limitation de l'indicateur « version conservée »** : cet indicateur repose sur l'extraction du titre et de l'année depuis le nom de fichier (pattern `Titre (AAAA)`). Pour des noms de release bruts ne contenant pas ce pattern (ex. noms pointés type `Octobre.2021.S01E01.x265.mkv`), l'indicateur peut afficher *orange* par prudence même si une copie existe dans la vidéothèque — c'est une dégradation sûre (jamais de fausse confirmation verte).
+
 La **suppression définitive** (overlay sécurisé) affiche un récapitulatif du nombre de fichiers, de la taille libérée et des noms concernés, avec un avertissement explicite si un fichier semble unique (aucune version dans la vidéothèque). La suppression et la réinjection sont restreintes à la **machine maître** (localhost).
 
 Chaque diagnostic s'exécute avec une barre de progression en temps réel (SSE) et affiche un rapport détaillé avec compteurs. Les actions correctives restent disponibles via le CLI (`uv run cineorg cleanup --fix`).
