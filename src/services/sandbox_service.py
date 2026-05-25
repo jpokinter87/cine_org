@@ -106,25 +106,35 @@ class SandboxService:
 
         Cible le sous-dossier rejets_doublons/, en préservant l'arborescence
         relative à downloads_dir (fallback : nom de fichier si hors downloads).
+        Nettoie les répertoires vides laissés dans downloads/ après déplacement.
 
         Returns:
             Nombre de fichiers déplacés.
         """
         rejected_dir = self._sandbox_dir / REJECTED_SUBDIR
         moved = 0
+        cleanup_targets: list[Path] = []
         for src in paths:
             if not src.exists():
                 logger.warning("Rejet introuvable, ignoré : {}", src)
                 continue
             try:
                 relative = src.relative_to(self._downloads_dir)
+                under_downloads = True
             except ValueError:
                 relative = Path(src.name)
+                under_downloads = False
             dest = rejected_dir / relative
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(src), str(dest))
             moved += 1
+            if under_downloads:
+                cleanup_targets.append(src)
             logger.info("Doublon rejeté sandboxé : {} → {}", src, dest)
+
+        # Nettoyer les répertoires vides laissés dans downloads/ (uniquement
+        # pour les fichiers qui y étaient réellement, pas les fichiers fallback).
+        self._cleanup_empty_parents(cleanup_targets, root=self._downloads_dir)
         return moved
 
     def _classify(self, path: Path) -> tuple[str, Path, Path]:

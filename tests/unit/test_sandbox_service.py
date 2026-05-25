@@ -275,3 +275,18 @@ class TestSandboxRejected:
     def test_skip_missing(self, service, dirs):
         count = service.sandbox_rejected([dirs["downloads"] / "nope.mkv"])
         assert count == 0
+
+    def test_cleanup_empty_dirs_in_downloads(self, service, dirs):
+        """Les dossiers vides laissés dans downloads/ sont nettoyés."""
+        src = _create_file(
+            dirs["downloads"] / "Series" / "Octobre (2021)" / "ep01.mkv", "x265"
+        )
+        service.sandbox_rejected([src])
+        assert not (dirs["downloads"] / "Series" / "Octobre (2021)").exists()
+
+    def test_fallback_outside_downloads_does_not_clean_other_trees(self, service, dirs):
+        """Un fichier hors downloads ne déclenche pas de nettoyage de storage/."""
+        other = _create_file(dirs["storage"] / "Films" / "x.mkv", "data")
+        service.sandbox_rejected([other])
+        # storage/Films ne doit PAS avoir été supprimé par le nettoyage
+        assert (dirs["storage"] / "Films").exists()
