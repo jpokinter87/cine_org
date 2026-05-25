@@ -214,15 +214,22 @@ class TestListSandboxedCategories:
         sb = dirs["sandbox"]
         _create_file(sb / "orphans" / "Films" / "Action" / "o.mkv")
         _create_file(sb / REPLACED_SUBDIR / "Films" / "SF" / "r.mkv")
-        _create_file(sb / REJECTED_SUBDIR / "Series" / "T (2021)" / "Saison 01" / "x.mkv")
+        _create_file(
+            sb / REJECTED_SUBDIR / "Series" / "T (2021)" / "Saison 01" / "x.mkv"
+        )
         _create_file(sb / "vieux_a_la_racine.mkv")  # legacy
 
         result = {f.name: f for f in service.list_sandboxed()}
 
         assert result["o.mkv"].category == CATEGORY_ORPHAN
-        assert result["o.mkv"].original_path == dirs["storage"] / "Films" / "Action" / "o.mkv"
+        assert (
+            result["o.mkv"].original_path
+            == dirs["storage"] / "Films" / "Action" / "o.mkv"
+        )
         assert result["r.mkv"].category == CATEGORY_REPLACED
-        assert result["r.mkv"].original_path == dirs["storage"] / "Films" / "SF" / "r.mkv"
+        assert (
+            result["r.mkv"].original_path == dirs["storage"] / "Films" / "SF" / "r.mkv"
+        )
         assert result["x.mkv"].category == CATEGORY_REJECTED
         # rejet : base = downloads
         assert (
@@ -230,3 +237,10 @@ class TestListSandboxedCategories:
             == dirs["downloads"] / "Series" / "T (2021)" / "Saison 01" / "x.mkv"
         )
         assert result["vieux_a_la_racine.mkv"].category == CATEGORY_OTHER
+
+    def test_file_at_category_root(self, service, dirs):
+        """Fichier directement sous orphans/ (sans Films/Series intermédiaire)."""
+        _create_file(dirs["sandbox"] / "orphans" / "seul.mkv")
+        result = {f.name: f for f in service.list_sandboxed()}
+        assert result["seul.mkv"].category == CATEGORY_ORPHAN
+        assert result["seul.mkv"].original_path == dirs["storage"] / "seul.mkv"

@@ -116,7 +116,7 @@ class SandboxService:
 
         parts = rel.parts
         first = parts[0] if parts else ""
-        sub = Path(*parts[1:]) if len(parts) > 1 else Path(parts[-1]) if parts else rel
+        sub = Path(*parts[1:]) if len(parts) > 1 else Path(".")
 
         if first == ORPHANS_SUBDIR:
             return (CATEGORY_ORPHAN, self._storage_dir, sub)
