@@ -6,6 +6,12 @@
 {% endif %}
 
 {% if sandbox_items %}
+    <div class="sandbox-filter">
+        <button type="button" class="sandbox-filter-btn active" data-filter="all" onclick="sandboxFilter(this, 'all')">Tout</button>
+        <button type="button" class="sandbox-filter-btn" data-filter="orphelin" onclick="sandboxFilter(this, 'orphelin')">Orphelins</button>
+        <button type="button" class="sandbox-filter-btn" data-filter="ancienne_version" onclick="sandboxFilter(this, 'ancienne_version')">Anciennes versions</button>
+        <button type="button" class="sandbox-filter-btn" data-filter="rejet_doublon" onclick="sandboxFilter(this, 'rejet_doublon')">Doublons rejetés</button>
+    </div>
 <form id="sandbox-form">
     <div class="sandbox-table-wrap">
         <table class="sandbox-table">
@@ -17,22 +23,41 @@
                     </th>
                     {% endif %}
                     <th>Fichier</th>
+                    <th>Catégorie</th>
                     <th>Taille</th>
                     <th>Modifié</th>
+                    <th>Version conservée</th>
                     <th>Emplacement original</th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in sandbox_items %}
-                <tr class="sandbox-row">
+                <tr class="sandbox-row" data-category="{{ item.category }}" data-size-bytes="{{ item.size_bytes }}" data-kept="{{ 'yes' if item.kept_version else 'no' }}">
                     {% if is_local %}
                     <td class="sandbox-td-check">
                         <input type="checkbox" name="selected" value="{{ item.path }}" class="sandbox-cb" onchange="sandboxUpdateActions()">
                     </td>
                     {% endif %}
                     <td class="sandbox-td-name" title="{{ item.path }}">{{ item.name }}</td>
+                    <td class="sandbox-td-cat">
+                        {% set labels = {'orphelin': 'Orphelin', 'ancienne_version': 'Ancienne version', 'rejet_doublon': 'Doublon rejeté', 'autre': 'Autre'} %}
+                        <span class="sandbox-badge sandbox-badge-{{ item.category }}">{{ labels.get(item.category, item.category) }}</span>
+                    </td>
                     <td class="sandbox-td-size">{{ item.size }}</td>
                     <td class="sandbox-td-date">{{ item.modified }}</td>
+                    <td class="sandbox-td-kept">
+                        {% if item.kept_version %}
+                        <span class="sandbox-kept sandbox-kept-yes" title="{{ item.kept_version }}">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            présente
+                        </span>
+                        {% else %}
+                        <span class="sandbox-kept sandbox-kept-no" title="Aucune autre copie trouvée dans la vidéothèque">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                            unique ?
+                        </span>
+                        {% endif %}
+                    </td>
                     <td class="sandbox-td-origin"><code>{{ item.original_path }}</code></td>
                 </tr>
                 {% endfor %}
