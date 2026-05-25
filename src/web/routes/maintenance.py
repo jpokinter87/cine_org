@@ -91,7 +91,7 @@ def _get_sandbox_service(container) -> SandboxService:
     )
 
 
-def _build_sandbox_items(sandbox_svc: SandboxService, video_dir) -> list[dict]:
+def _build_sandbox_items(sandbox_svc: SandboxService, video_dir: Path) -> list[dict]:
     """Liste les fichiers sandboxés + annote la version conservée pour l'UI."""
     files = sandbox_svc.list_sandboxed()
     sandbox_svc.annotate_kept_versions(files, video_dir)
