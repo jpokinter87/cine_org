@@ -110,7 +110,7 @@ def _reject_source_to_sandbox(container, settings, source: Path) -> None:
         )
         sandbox_svc.sandbox_rejected([source])
     except Exception as e:
-        logger.warning("Échec sandbox du rejet %s: %s", source, e)
+        logger.warning("Échec sandbox du rejet {}: {}", source, e)
 
 
 def _resolve_storage_path(existing_dir: Path, storage_dir: Path) -> Path | None:
@@ -989,6 +989,8 @@ async def _run_web_transfer(
                     progress.conflict_choice = None
 
                     if choice == "keep_old":
+                        if not dry_run:
+                            _reject_source_to_sandbox(container, settings, source)
                         progress.conflicts_resolved += 1
                         progress.message = (
                             f"Conflit résolu : ancien conservé pour {display_name}"

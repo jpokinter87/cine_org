@@ -147,3 +147,61 @@ def test_keep_old_moves_source_to_sandbox(tmp_path):
     assert not src.exists()
     # keep_old ne transfère jamais
     container.transferer_service.return_value.transfer_file.assert_not_called()
+
+
+def test_keep_old_name_collision_moves_source_to_sandbox(tmp_path):
+    """Vérifie que keep_old sur un conflit SSE NAME_COLLISION déplace la source en sandbox."""
+    container, settings = _make_container(tmp_path)
+    src = settings.downloads_dir / "Films" / "Film (2000).mkv"
+    src.parent.mkdir(parents=True)
+    src.write_text("new")
+    dest = settings.storage_dir / "Films" / "Film (2000).mkv"
+    dest.parent.mkdir(parents=True)
+    dest.write_text("old")
+
+    from src.services.transferer import ConflictInfo, ConflictType
+
+    transferer = container.transferer_service.return_value
+    transferer.check_conflict.return_value = ConflictInfo(
+        conflict_type=ConflictType.NAME_COLLISION,
+        existing_path=dest,
+        existing_hash="aaa",
+        new_hash="bbb",
+    )
+    transferer._get_file_info.return_value = SimpleNamespace(
+        resolution="1080p", video_codec="x264", audio_codec="AC3"
+    )
+
+    transfers = [
+        {
+            "source": src,
+            "destination": dest,
+            "symlink_destination": None,
+            "new_filename": "Film (2000).mkv",
+            "is_series": False,
+            "has_duplicate": False,
+            "title": "Film",
+            "year": 2000,
+        }
+    ]
+    progress = TransferProgress()
+
+    async def _drive():
+        task = asyncio.create_task(
+            _run_web_transfer(container, transfers, progress, dry_run=False)
+        )
+        for _ in range(500):
+            if progress.conflict_pending:
+                break
+            await asyncio.sleep(0.01)
+        assert progress.conflict_pending, "le conflit aurait dû être en attente"
+        progress.conflict_choice = "keep_old"
+        progress.conflict_event.set()
+        await asyncio.wait_for(task, timeout=5)
+
+    asyncio.run(_drive())
+
+    sandbox_dest = settings.sandbox_dir / REJECTED_SUBDIR / "Films" / "Film (2000).mkv"
+    assert sandbox_dest.exists(), f"La source devrait être en sandbox : {sandbox_dest}"
+    assert not src.exists(), "La source ne doit plus exister dans downloads/"
+    transferer.transfer_file.assert_not_called()
