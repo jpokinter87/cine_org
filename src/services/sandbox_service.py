@@ -214,7 +214,7 @@ class SandboxService:
             deleted += 1
             logger.info("Supprimé définitivement : {}", path)
 
-        self._cleanup_empty_parents(paths, root=self._orphans_dir)
+        self._cleanup_empty_parents(paths, root=self._sandbox_dir)
         return deleted
 
     def reinject_files(self, paths: list[Path]) -> int:
@@ -238,12 +238,8 @@ class SandboxService:
 
             # Conserver le sous-répertoire de type (Films/ ou Series/) pour
             # que le scan workflow détecte correctement le type de contenu
-            try:
-                relative = path.relative_to(self._orphans_dir)
-                # Premier segment = Films, Series, Documentaires...
-                type_dir = relative.parts[0] if relative.parts else ""
-            except ValueError:
-                type_dir = ""
+            _, _, relative = self._classify(path)
+            type_dir = relative.parts[0] if relative.parts else ""
 
             if type_dir:
                 dest_dir = self._downloads_dir / type_dir
@@ -265,7 +261,7 @@ class SandboxService:
             reinjected += 1
             logger.info("Réinjecté : {} → {}", path, dest)
 
-        self._cleanup_empty_parents(paths, root=self._orphans_dir)
+        self._cleanup_empty_parents(paths, root=self._sandbox_dir)
         return reinjected
 
     def _parse_identity(

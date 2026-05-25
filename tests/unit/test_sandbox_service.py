@@ -364,3 +364,26 @@ class TestAnnotateKeptVersions:
         files = service.list_sandboxed()
         service.annotate_kept_versions(files, tmp_path / "video")
         assert files[0].kept_version is None
+
+
+class TestReinjectAllCategories:
+    """reinject_files fonctionne pour les catégories hors orphans/."""
+
+    def test_reinject_rejected_series(self, service, dirs):
+        f = _create_file(
+            dirs["sandbox"] / REJECTED_SUBDIR / "Series" / "T (2021)" / "ep.mkv", "d"
+        )
+        count = service.reinject_files([f])
+        assert count == 1
+        assert (dirs["downloads"] / "Series" / "ep.mkv").exists()
+        assert not f.exists()
+
+    def test_delete_rejected_cleans_dirs(self, service, dirs):
+        f = _create_file(
+            dirs["sandbox"] / REJECTED_SUBDIR / "Films" / "X (2000)" / "x.mkv"
+        )
+        count = service.delete_files([f])
+        assert count == 1
+        assert not (dirs["sandbox"] / REJECTED_SUBDIR / "Films" / "X (2000)").exists()
+        # la racine du sandbox subsiste
+        assert dirs["sandbox"].exists()
