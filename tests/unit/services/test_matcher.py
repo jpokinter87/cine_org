@@ -373,6 +373,88 @@ class TestSeriesScoring:
         assert score == 100.0
 
 
+class TestSeriesScoringDistinctiveYear:
+    """Garde-fou anti-homonymes pour les series dont le titre contient une annee.
+
+    Regression « Paris Police 1900 / 1905 / 1910 » : ces titres ne different que
+    par un nombre a 4 chiffres (annee dans le titre). token_sort_ratio leur donne
+    ~94 % de similarite, au-dessus du seuil d'auto-validation (85 %), ce qui les
+    confondait en une seule serie. Quand les deux titres portent des annees
+    distinctes, ce sont des entrees differentes : le score doit chuter sous le seuil.
+    """
+
+    def test_distinct_year_1905_vs_1900_below_threshold(self):
+        """« Paris Police 1905 » ne doit PAS matcher « Paris Police 1900 » >= 85 %."""
+        score = calculate_series_score(
+            query_title="Paris Police 1905",
+            candidate_title="Paris Police 1900",
+        )
+        assert score < 85.0
+
+    def test_distinct_year_1910_vs_1900_below_threshold(self):
+        """« Paris Police 1910 » ne doit PAS matcher « Paris Police 1900 » >= 85 %."""
+        score = calculate_series_score(
+            query_title="Paris Police 1910",
+            candidate_title="Paris Police 1900",
+        )
+        assert score < 85.0
+
+    def test_distinct_year_generic_high_similarity_below_threshold(self):
+        """Deux annees proches sur un titre identique restent distinctes."""
+        score = calculate_series_score(
+            query_title="Tribunal 1999",
+            candidate_title="Tribunal 1998",
+        )
+        assert score < 85.0
+
+    def test_same_year_in_title_still_perfect_match(self):
+        """Non-regression : meme annee dans le titre = correspondance parfaite."""
+        score = calculate_series_score(
+            query_title="Paris Police 1900",
+            candidate_title="Paris Police 1900",
+        )
+        assert score == 100.0
+
+    def test_distinct_year_recovered_via_original_title(self):
+        """Si le titre original porte la bonne annee, le meilleur score est conserve."""
+        score = calculate_series_score(
+            query_title="Paris Police 1905",
+            candidate_title="Paris Police 1900",  # localise FR : mauvaise annee
+            candidate_original_title="Paris Police 1905",  # original : bonne annee
+        )
+        assert score == 100.0
+
+    def test_episode_numbers_not_treated_as_year(self):
+        """Non-regression : un numero d'episode (2 chiffres) ne penalise pas."""
+        score = calculate_series_score(
+            query_title="Breaking Bad S01E05",
+            candidate_title="Breaking Bad",
+        )
+        assert score >= 70.0
+
+    def test_single_digit_show_numbers_not_penalized(self):
+        """Non-regression : « 9-1-1 » (chiffres a 1 chiffre) n'est pas penalise."""
+        score = calculate_series_score(
+            query_title="9-1-1",
+            candidate_title="9-1-1",
+        )
+        assert score == 100.0
+
+    def test_year_present_only_on_one_side_not_penalized(self):
+        """Une annee presente d'un seul cote ne declenche pas la penalite.
+
+        Ex : fichier « Doctor Who 2005 » vs candidat « Doctor Who » (sans annee).
+        La penalite ne s'applique que si les DEUX titres portent une annee
+        distincte ; ici le score reste celui de token_sort_ratio (non plafonne).
+        """
+        score = calculate_series_score(
+            query_title="Doctor Who 2005",
+            candidate_title="Doctor Who",
+        )
+        # Si la penalite s'appliquait a tort, le score serait plafonne tres bas.
+        assert score > 70.0
+
+
 class TestScoreResults:
     """Tests for score_results method."""
 

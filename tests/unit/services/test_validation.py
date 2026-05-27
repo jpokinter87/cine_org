@@ -165,6 +165,24 @@ class TestShouldAutoValidate:
         """Empty candidates list should NOT auto-validate."""
         assert validation_service.should_auto_validate([]) is False
 
+    def test_distinct_year_series_not_auto_validated(self, validation_service):
+        """Regression « Paris Police » : un unique candidat « Paris Police 1900 »
+        pour une requete « Paris Police 1905 » ne doit PAS etre auto-valide.
+
+        Les deux titres ne different que par l'annee : ce sont des series
+        distinctes. Le scoring reel (MatcherService) doit faire chuter le score
+        sous le seuil pour basculer en validation manuelle.
+        """
+        from src.services.matcher import MatcherService
+
+        raw = [
+            SearchResult(id="387541", title="Paris Police 1900", year=2021, source="tvdb")
+        ]
+        scored = MatcherService().score_results(
+            raw, query_title="Paris Police 1905", is_series=True
+        )
+        assert validation_service.should_auto_validate(scored) is False
+
 
 # ============================================================================
 # Tests: process_auto_validation
