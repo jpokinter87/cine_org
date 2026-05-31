@@ -10,9 +10,8 @@ Datasets supportes:
 Documentation: https://www.imdb.com/interfaces/
 """
 
-import os
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -123,7 +122,6 @@ class IMDbDatasetImporter:
         Returns:
             Statistiques d'import
         """
-        from sqlalchemy import text
 
         stats = IMDbDatasetStats()
 
@@ -134,12 +132,14 @@ class IMDbDatasetImporter:
         for record in self._parser.parse_ratings(file_path):
             stats.total += 1
 
-            batch.append({
-                "tconst": record["tconst"],
-                "average_rating": record["average_rating"],
-                "num_votes": record["num_votes"],
-                "last_updated": date.today(),
-            })
+            batch.append(
+                {
+                    "tconst": record["tconst"],
+                    "average_rating": record["average_rating"],
+                    "num_votes": record["num_votes"],
+                    "last_updated": date.today(),
+                }
+            )
 
             if len(batch) >= batch_size:
                 self._insert_batch(batch)
@@ -162,7 +162,6 @@ class IMDbDatasetImporter:
         Args:
             batch: Liste de dictionnaires avec les donnees
         """
-        from sqlalchemy import text
 
         # SQLite UPSERT via INSERT OR REPLACE
         for record in batch:
@@ -193,6 +192,47 @@ class IMDbDatasetImporter:
         result = self._session.exec(statement).first()
 
         return result if result else None
+
+    def find_tconst_by_title(self, title: str) -> Optional[str]:
+        """
+        Recherche le tconst IMDb d'un titre via la table locale imdb_akas.
+
+        Repli quand TMDB ne fournit pas d'imdb_id (frequent pour les series non
+        anglophones, ex. quebecoises). On compare le titre brut ET sa version
+        normalisee (sans accents, minuscules) a la colonne title_normalized.
+
+        Garde-fou anti-homonymes : si plusieurs tconst distincts correspondent au
+        meme titre, on s'abstient (retourne None) plutot que de deviner.
+
+        Args:
+            title: Titre de la serie/film a rechercher
+
+        Returns:
+            Le tconst unique correspondant, ou None si introuvable, ambigu, ou si
+            la table imdb_akas n'existe pas (vieilles bases).
+        """
+        from sqlalchemy import text
+
+        from src.utils.helpers import normalize_accents
+
+        normalized = normalize_accents(title).lower().strip()
+        try:
+            rows = self._session.exec(
+                text(
+                    "SELECT DISTINCT tconst FROM imdb_akas "
+                    "WHERE title = :raw OR title_normalized = :norm"
+                ),
+                params={"raw": title, "norm": normalized},
+            ).all()
+        except Exception:
+            # Table absente (bases anterieures a l'import des akas) : pas de repli.
+            return None
+
+        if len(rows) != 1:
+            # Aucun resultat ou homonymes : on n'invente pas.
+            return None
+        # .all() renvoie des Row SQLAlchemy indexables : 1re colonne = tconst.
+        return rows[0][0]
 
     def get_stats(self) -> dict:
         """

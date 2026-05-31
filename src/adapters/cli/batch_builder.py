@@ -254,13 +254,20 @@ async def _enrich_series_metadata(
         if ext_ids:
             imdb_id = ext_ids.get("imdb_id") or None
 
-        if imdb_id:
-            from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
+        from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
 
-            imdb_session = container.session()
-            imdb_importer = IMDbDatasetImporter(
-                cache_dir=Path(".cache/imdb"), session=imdb_session
-            )
+        imdb_session = container.session()
+        imdb_importer = IMDbDatasetImporter(
+            cache_dir=Path(".cache/imdb"), session=imdb_session
+        )
+
+        # Repli : TMDB ne fournit pas toujours d'imdb_id (series non anglophones,
+        # ex. quebecoises). On retrouve alors le tconst via la table locale
+        # imdb_akas par titre (garde-fou anti-homonymes inclus).
+        if not imdb_id:
+            imdb_id = imdb_importer.find_tconst_by_title(title)
+
+        if imdb_id:
             rating_data = imdb_importer.get_rating(imdb_id)
             if rating_data:
                 imdb_rating, imdb_votes = rating_data

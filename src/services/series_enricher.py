@@ -306,6 +306,14 @@ class SeriesEnricherService:
                 if ext_ids and ext_ids.get("imdb_id"):
                     series.imdb_id = ext_ids["imdb_id"]
 
+            # Repli : TMDB ne fournit pas toujours d'imdb_id (series non
+            # anglophones, ex. quebecoises). On retrouve alors le tconst via la
+            # table locale imdb_akas par titre (garde-fou anti-homonymes inclus).
+            if not series.imdb_id and self._imdb_importer:
+                tconst = self._imdb_importer.find_tconst_by_title(series.title)
+                if tconst:
+                    series.imdb_id = tconst
+
             # Notes IMDb depuis le cache local (si importer fourni et imdb_id connu).
             # Permet d'eviter une commande imdb sync supplementaire pour les series.
             if self._imdb_importer and series.imdb_id:

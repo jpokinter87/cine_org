@@ -42,9 +42,15 @@ def mock_tmdb_client():
 
 @pytest.fixture
 def mock_imdb_importer():
-    """Mock du IMDbDatasetImporter (cache local)."""
+    """Mock du IMDbDatasetImporter (cache local).
+
+    Par defaut, le repli par titre ne trouve rien (find_tconst_by_title -> None) :
+    ces tests couvrent le chemin imdb_id-via-TMDB. Le repli par titre est teste
+    a part dans test_series_enricher_imdb_title_fallback.py.
+    """
     importer = MagicMock()
     importer.get_rating.return_value = None
+    importer.find_tconst_by_title.return_value = None
     return importer
 
 

@@ -27,9 +27,13 @@ def _container_with_imdb_cache(rating_table: dict[str, tuple[float, int]]):
     """Construit un container minimal exposant session() pour IMDbDatasetImporter."""
     fake_importer = MagicMock()
     fake_importer.get_rating.side_effect = lambda imdb_id: rating_table.get(imdb_id)
+    # Par defaut, le repli par titre ne trouve rien (teste a part).
+    fake_importer.find_tconst_by_title.return_value = None
 
     container = MagicMock()
-    container.session.return_value = MagicMock()  # session reelle non utilisee par le mock
+    container.session.return_value = (
+        MagicMock()
+    )  # session reelle non utilisee par le mock
     return container, fake_importer
 
 
@@ -40,7 +44,12 @@ async def test_enrich_series_returns_full_tuple_when_all_data_available(monkeypa
     tmdb._api_key = "fake-key"
     tmdb.search_tv.return_value = [_search_result("99", "Forever", 1996)]
     tmdb.get_tv_details.return_value = MediaDetails(
-        id="99", title="Forever", year=1996, vote_average=7.8, vote_count=1500, is_tv=True,
+        id="99",
+        title="Forever",
+        year=1996,
+        vote_average=7.8,
+        vote_count=1500,
+        is_tv=True,
     )
     tmdb.get_tv_external_ids.return_value = {"imdb_id": "tt0123456"}
 
@@ -53,7 +62,10 @@ async def test_enrich_series_returns_full_tuple_when_all_data_available(monkeypa
     )
 
     result = await _enrich_series_metadata(
-        title="Forever", year=1996, tmdb_client=tmdb, container=container,
+        title="Forever",
+        year=1996,
+        tmdb_client=tmdb,
+        container=container,
     )
 
     assert result == (99, 7.8, 1500, "tt0123456", 8.2, 9876)
@@ -68,7 +80,10 @@ async def test_enrich_series_returns_none_when_no_search_result():
     container = MagicMock()
 
     result = await _enrich_series_metadata(
-        title="Inconnue Quelconque", year=2050, tmdb_client=tmdb, container=container,
+        title="Inconnue Quelconque",
+        year=2050,
+        tmdb_client=tmdb,
+        container=container,
     )
     assert result == (None, None, None, None, None, None)
 
@@ -80,7 +95,12 @@ async def test_enrich_series_handles_missing_imdb_id(monkeypatch):
     tmdb._api_key = "fake-key"
     tmdb.search_tv.return_value = [_search_result("88", "Mystery", 2020)]
     tmdb.get_tv_details.return_value = MediaDetails(
-        id="88", title="Mystery", year=2020, vote_average=6.5, vote_count=200, is_tv=True,
+        id="88",
+        title="Mystery",
+        year=2020,
+        vote_average=6.5,
+        vote_count=200,
+        is_tv=True,
     )
     tmdb.get_tv_external_ids.return_value = {"imdb_id": None}
 
@@ -91,7 +111,10 @@ async def test_enrich_series_handles_missing_imdb_id(monkeypatch):
     )
 
     result = await _enrich_series_metadata(
-        title="Mystery", year=2020, tmdb_client=tmdb, container=container,
+        title="Mystery",
+        year=2020,
+        tmdb_client=tmdb,
+        container=container,
     )
     assert result == (88, 6.5, 200, None, None, None)
     fake_importer.get_rating.assert_not_called()
@@ -106,7 +129,10 @@ async def test_enrich_series_swallows_api_errors():
     container = MagicMock()
 
     result = await _enrich_series_metadata(
-        title="Whatever", year=2024, tmdb_client=tmdb, container=container,
+        title="Whatever",
+        year=2024,
+        tmdb_client=tmdb,
+        container=container,
     )
     assert result == (None, None, None, None, None, None)
 
@@ -119,7 +145,10 @@ async def test_enrich_series_no_api_key_returns_none():
     container = MagicMock()
 
     result = await _enrich_series_metadata(
-        title="Whatever", year=2024, tmdb_client=tmdb, container=container,
+        title="Whatever",
+        year=2024,
+        tmdb_client=tmdb,
+        container=container,
     )
     assert result == (None, None, None, None, None, None)
     tmdb.search_tv.assert_not_called()
