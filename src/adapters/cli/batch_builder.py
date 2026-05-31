@@ -15,6 +15,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
+from loguru import logger
 from rich.console import Console
 
 from src.adapters.cli.helpers import (
@@ -183,6 +184,7 @@ async def _enrich_series_metadata(
     year: int | None,
     tmdb_client,
     container: "Container",
+    tvdb_id: int | None = None,
 ) -> tuple[
     int | None,
     float | None,
@@ -220,14 +222,23 @@ async def _enrich_series_metadata(
         return tmdb_id, vote_average, vote_count, imdb_id, imdb_rating, imdb_votes
 
     try:
-        from src.services.series_enricher import pick_best_tv_match
+        from src.services.series_enricher import (
+            pick_best_tv_match,
+            resolve_tmdb_tv_by_external_id,
+            strip_trailing_year,
+        )
 
-        results = await tmdb_client.search_tv(title, year=year)
-        if not results:
-            return tmdb_id, vote_average, vote_count, imdb_id, imdb_rating, imdb_votes
+        # Priorite aux identifiants externes (tvdb_id) : fiable meme quand le
+        # titre est traduit (ex: « Les Detectoristes » vs « Detectorists »).
+        best = await resolve_tmdb_tv_by_external_id(tmdb_client, tvdb_id=tvdb_id)
+        if best is None:
+            # Repli : recherche par titre normalise (sans « (AAAA) » final).
+            query = strip_trailing_year(title)
+            results = await tmdb_client.search_tv(query, year=year)
+            if results:
+                best = pick_best_tv_match(results, query, year)
 
-        best = pick_best_tv_match(results, title, year)
-        if not best:
+        if best is None:
             return tmdb_id, vote_average, vote_count, imdb_id, imdb_rating, imdb_votes
 
         details = await tmdb_client.get_tv_details(best.id)
@@ -254,9 +265,12 @@ async def _enrich_series_metadata(
             if rating_data:
                 imdb_rating, imdb_votes = rating_data
 
-    except Exception:
-        # Workflow resilient : un echec d'enrichissement ne bloque pas le transfert.
-        pass
+    except Exception as exc:
+        # Workflow resilient : un echec d'enrichissement ne bloque pas le
+        # transfert, mais on trace l'echec pour ne plus le subir silencieusement.
+        logger.warning(
+            "Enrichissement des notes echoue pour la serie « {} » : {}", title, exc
+        )
 
     return tmdb_id, vote_average, vote_count, imdb_id, imdb_rating, imdb_votes
 
@@ -565,6 +579,7 @@ async def build_transfers_batch(
                     year=candidate_year,
                     tmdb_client=tmdb_client,
                     container=container,
+                    tvdb_id=tvdb_id_int,
                 )
                 # Conserver les valeurs preexistantes en cas d'echec de l'appel TMDB.
                 if existing_series:
@@ -590,9 +605,7 @@ async def build_transfers_batch(
                 imdb_rating=s_imdb_rating,
                 imdb_votes=s_imdb_votes,
             )
-            is_extra = (
-                canonical_count is not None and episode_num > canonical_count
-            )
+            is_extra = canonical_count is not None and episode_num > canonical_count
             episode = Episode(
                 season_number=season_num,
                 episode_number=episode_num,
@@ -933,7 +946,10 @@ def _detect_duplicates(
                 if ep_m:
                     new_ep_key = f"S{int(ep_m.group(1)):02d}E{int(ep_m.group(2)):02d}"
                     # Vérification par épisode exact (prioritaire)
-                    if match.existing_episodes and new_ep_key not in match.existing_episodes:
+                    if (
+                        match.existing_episodes
+                        and new_ep_key not in match.existing_episodes
+                    ):
                         t["has_duplicate"] = False
                         t["duplicate_match"] = None
                         continue

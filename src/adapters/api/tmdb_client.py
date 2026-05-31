@@ -307,29 +307,9 @@ class TMDBClient(IMediaAPIClient):
         response = await request_with_retry(client, "GET", "/search/tv", params=params)
         data = response.json()
 
-        results = []
-        for item in data.get("results", []):
-            first_air_date = item.get("first_air_date", "")
-            item_year = (
-                int(first_air_date[:4])
-                if first_air_date and len(first_air_date) >= 4
-                else None
-            )
-
-            localized_title = item.get("name", "")
-            original_title = item.get("original_name", "")
-
-            results.append(
-                SearchResult(
-                    id=str(item["id"]),
-                    title=localized_title or original_title,
-                    original_title=original_title
-                    if original_title != localized_title
-                    else None,
-                    year=item_year,
-                    source=self.source,
-                )
-            )
+        results = [
+            self._tv_item_to_search_result(item) for item in data.get("results", [])
+        ]
 
         await self._cache.set_search(cache_key, results)
         return results
@@ -458,6 +438,65 @@ class TMDBClient(IMediaAPIClient):
             return await self.get_tv_details(tmdb_tv_id)
 
         return None
+
+    def _tv_item_to_search_result(self, item: dict) -> SearchResult:
+        """
+        Construit un SearchResult a partir d'un element TV brut de l'API TMDB.
+
+        Mutualise le parsing entre search_tv et find_by_external_id.
+        """
+        first_air_date = item.get("first_air_date", "")
+        item_year = (
+            int(first_air_date[:4])
+            if first_air_date and len(first_air_date) >= 4
+            else None
+        )
+        localized_title = item.get("name", "")
+        original_title = item.get("original_name", "")
+        return SearchResult(
+            id=str(item["id"]),
+            title=localized_title or original_title,
+            original_title=original_title
+            if original_title != localized_title
+            else None,
+            year=item_year,
+            source=self.source,
+        )
+
+    async def find_by_external_id(
+        self, external_id: str, source: str
+    ) -> list[SearchResult]:
+        """
+        Recherche des series TV via un identifiant externe (tvdb_id, imdb_id).
+
+        Plus fiable que la recherche par titre pour retrouver l'equivalent TMDB
+        d'une serie matchee via TVDB : le titre stocke est souvent traduit (ex:
+        « Les Detectoristes ») et ne matche pas la recherche TMDB, alors que
+        /find par tvdb_id reussit directement.
+
+        Args:
+            external_id: Identifiant externe (ex: "280847" pour tvdb_id,
+                "tt4082744" pour imdb_id)
+            source: Type d'identifiant TMDB ("tvdb_id" ou "imdb_id")
+
+        Returns:
+            Liste de SearchResult issus de tv_results (vide si aucun resultat)
+        """
+        client = self._get_client()
+        try:
+            response = await request_with_retry(
+                client,
+                "GET",
+                f"/find/{external_id}",
+                params={"language": "fr-FR", "external_source": source},
+            )
+        except httpx.HTTPStatusError:
+            return []
+
+        data = response.json()
+        return [
+            self._tv_item_to_search_result(item) for item in data.get("tv_results", [])
+        ]
 
     async def get_external_ids(self, media_id: str) -> Optional[dict[str, str | None]]:
         """

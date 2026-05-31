@@ -28,8 +28,15 @@ def mock_series_repo():
 
 @pytest.fixture
 def mock_tmdb_client():
-    """Mock TMDB avec methodes async usuelles."""
+    """Mock TMDB avec methodes async usuelles.
+
+    Par defaut, aucune resolution par identifiant externe : ces tests couvrent
+    le repli par recherche titre (et ses garde-fous annee/episodes). Les tests
+    dedies a la resolution par tvdb_id/imdb_id vivent dans
+    test_series_enricher_external_id.py.
+    """
     client = AsyncMock()
+    client.find_by_external_id = AsyncMock(return_value=[])
     return client
 
 
