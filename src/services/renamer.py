@@ -161,7 +161,11 @@ def _build_tech_suffix(
     elif fallback_language:
         # Fallback sur la langue du nom de fichier (guessit)
         # Garder la casse d'origine (ex: "Multi" pas "MULTI")
-        audio_lang_str = fallback_language if fallback_language == "Multi" else fallback_language.upper()
+        audio_lang_str = (
+            fallback_language
+            if fallback_language == "Multi"
+            else fallback_language.upper()
+        )
         parts.append(audio_lang_str)
 
     # VOSTFR : sous-titres FR avec audio non français et non Multi
@@ -256,7 +260,9 @@ def generate_movie_filename(
         parts.append(f"Partie {part}")
 
     # Suffixe technique
-    tech_suffix = _build_tech_suffix(media_info, fallback_language, fallback_subtitle_language)
+    tech_suffix = _build_tech_suffix(
+        media_info, fallback_language, fallback_subtitle_language
+    )
     if tech_suffix:
         parts.append(tech_suffix)
 
@@ -320,7 +326,9 @@ def generate_series_filename(
         parts.append(episode_title)
 
     # Suffixe technique
-    tech_suffix = _build_tech_suffix(media_info, fallback_language, fallback_subtitle_language)
+    tech_suffix = _build_tech_suffix(
+        media_info, fallback_language, fallback_subtitle_language
+    )
     if tech_suffix:
         parts.append("-")
         parts.append(tech_suffix)
@@ -357,7 +365,12 @@ class RenamerService:
         Voir generate_movie_filename() pour les détails.
         """
         return generate_movie_filename(
-            movie, media_info, extension, fallback_language, fallback_subtitle_language, part
+            movie,
+            media_info,
+            extension,
+            fallback_language,
+            fallback_subtitle_language,
+            part,
         )
 
     def generate_series_filename(
@@ -376,6 +389,11 @@ class RenamerService:
         Voir generate_series_filename() pour les détails.
         """
         return generate_series_filename(
-            series, episode, media_info, extension, fallback_language, fallback_subtitle_language,
+            series,
+            episode,
+            media_info,
+            extension,
+            fallback_language,
+            fallback_subtitle_language,
             part,
         )

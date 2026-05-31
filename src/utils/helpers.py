@@ -7,6 +7,7 @@ Ce module centralise les fonctions reutilisees a travers le codebase :
 - parse_candidate / parse_candidates : conversion dict -> SearchResult
 """
 
+import re
 import unicodedata
 
 from src.core.ports.api_clients import SearchResult
@@ -107,6 +108,29 @@ def normalize_accents(text: str) -> str:
     return "".join(char for char in normalized if unicodedata.category(char) != "Mn")
 
 
+_TRAILING_YEAR_RE = re.compile(r"\s*\(\d{4}\)\s*$")
+
+
+def strip_trailing_year(title: str) -> str:
+    """
+    Retire une année entre parenthèses en fin de titre.
+
+    « Surface (2025) » -> « Surface ». Évite la double année dans les chemins et
+    noms de fichiers (ex. « Surface (2025) (2025) ») quand le titre stocké
+    embarque déjà l'année alors que celle-ci est rajoutée depuis le champ `year`.
+
+    Seule une année strictement finale entre parenthèses est retirée ; une
+    parenthèse non-année ou une année au milieu du titre est préservée.
+
+    Args:
+        title: Titre éventuellement suffixé de « (AAAA) ».
+
+    Returns:
+        Titre sans l'année finale, espaces de bord nettoyés.
+    """
+    return _TRAILING_YEAR_RE.sub("", title).strip()
+
+
 def strip_article(title: str) -> str:
     """
     Retire l'article initial d'un titre.
@@ -129,7 +153,7 @@ def strip_article(title: str) -> str:
     for article in IGNORED_ARTICLES:
         if article.endswith("'"):
             if title_lower.startswith(article):
-                rest = title[len(article):]
+                rest = title[len(article) :]
                 if rest:
                     return rest
 

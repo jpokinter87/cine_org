@@ -6,7 +6,6 @@ complets (poster, notes, genres, createurs, acteurs).
 """
 
 import asyncio
-import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Optional
@@ -19,19 +18,9 @@ from src.core.entities.media import Series
 from src.core.ports.api_clients import SearchResult
 from src.core.ports.repositories import IEpisodeRepository, ISeriesRepository
 
-# Annee entre parentheses en fin de titre (ex: « Utopia (2020) »), utilisee comme
-# desambiguisateur en base mais qui parasite la recherche TMDB par titre.
-_TRAILING_YEAR_RE = re.compile(r"\s*\(\d{4}\)\s*$")
-
-
-def strip_trailing_year(title: str) -> str:
-    """
-    Retire une annee entre parentheses en fin de titre.
-
-    « Utopia (2020) » -> « Utopia ». Permet une recherche TMDB par titre plus
-    fiable pour les series dont le titre stocke embarque l'annee.
-    """
-    return _TRAILING_YEAR_RE.sub("", title).strip()
+# Ré-export pour compat : la fonction vit désormais dans utils.helpers (réutilisée
+# par l'organizer et le renamer, sans dépendance à ce service).
+from src.utils.helpers import strip_trailing_year  # noqa: E402,F401
 
 
 async def resolve_tmdb_tv_by_external_id(
