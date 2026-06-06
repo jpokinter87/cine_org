@@ -9514,6 +9514,27 @@ details[open] > .maint-issue-toggle::before {
     background: var(--accent-amber-dim);
 }
 
+/* Bouton « Supprimer la fiche » (fiche fantôme) en accent danger rouge */
+.phantom-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.7rem;
+    font-family: 'DM Sans', sans-serif;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.phantom-delete-btn:hover {
+    color: #f87171;
+    border-color: #f87171;
+    background: rgba(248, 113, 113, 0.1);
+}
+
 /* Badge discret "✎ modifié" sur le poster ou inline */
 .override-badge {
     display: inline-flex;

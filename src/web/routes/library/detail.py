@@ -69,6 +69,9 @@ async def movie_detail(request: Request, movie_id: int):
     # Genre de rangement (prioritaire selon hiérarchie + dossier réel)
     storage_genre, storage_folder = _get_storage_genre_info(genres)
 
+    # Fiche fantôme : ni file_path en base, ni fichier retrouvé sur disque.
+    is_phantom = not movie.file_path and video_file is None and file_info is None
+
     return templates.TemplateResponse(
         request,
         "library/movie_detail.html",
@@ -86,6 +89,7 @@ async def movie_detail(request: Request, movie_id: int):
             "languages": languages,
             "storage_genre": storage_genre,
             "storage_folder": storage_folder,
+            "is_phantom": is_phantom,
         },
     )
 
@@ -171,6 +175,10 @@ async def series_detail(request: Request, series_id: int):
 
         total_episodes = len(episodes)
 
+        # Fiche fantôme : aucun épisode ne porte de fichier réel. Permet
+        # d'offrir la suppression d'un doublon laissé par un mauvais matching.
+        is_phantom = not any(ep.file_path for ep in episodes)
+
         # Agreger les metadonnees techniques des episodes
         ep_resolutions: set[str] = set()
         ep_codecs_video: set[str] = set()
@@ -206,6 +214,7 @@ async def series_detail(request: Request, series_id: int):
             "ep_codecs_audio": sorted(ep_codecs_audio),
             "ep_languages": sorted(ep_languages),
             "first_episode": episodes[0] if episodes else None,
+            "is_phantom": is_phantom,
         },
     )
 

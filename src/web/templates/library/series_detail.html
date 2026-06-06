@@ -69,6 +69,12 @@
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                     Éditer
                 </button>
+                {% if is_phantom %}
+                <button class="phantom-delete-btn" hx-post="/library/series/{{ series.id }}/delete-phantom" hx-confirm="Doublon fantôme : aucun fichier n'est rattaché à cette fiche. Elle (et ses épisodes) sera déplacée dans la corbeille. Les fichiers physiques éventuels ne sont pas touchés." title="Supprimer cette fiche fantôme (sans fichiers)">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    Supprimer la fiche
+                </button>
+                {% endif %}
                 {% if has_any_override %}
                 <span class="override-badge override-badge-inline" title="Contient des modifications manuelles">✎ modifié</span>
                 {% endif %}
@@ -229,6 +235,9 @@
 
 <!-- Container pour l'overlay d'edition des metadonnees (phase 42-02) -->
 <div id="edit-metadata-container"></div>
+
+<!-- Confirmation à la charte pour la suppression de fiche fantôme -->
+<script src="/static/js/phantom_delete.js"></script>
 
 <!-- Lightbox zoom jaquette -->
 <div class="poster-lightbox" id="poster-lightbox" onclick="this.classList.remove('active')">
