@@ -1133,6 +1133,14 @@ Lorsqu'un film ou une série est mal identifié par TMDB, le bouton **Corriger**
 3. **Sélection** — Cliquer sur « Associer » pour remplacer l'association TMDB
 4. Les métadonnées (titre, synopsis, genres, notes, jaquette) sont automatiquement mises à jour
 
+#### Suppression d'une fiche fantôme (doublon)
+
+Une **fiche fantôme** est une fiche sans aucun fichier rattaché (série dont aucun épisode n'a de fichier, ou film sans fichier). Elle résulte typiquement d'un mauvais matching laissé en place après une re-analyse (ex. une série associée à tort à un mauvais résultat, puis re-validée vers la bonne fiche, l'ancienne fiche restant orpheline).
+
+Dans ce cas seulement, un bouton **Supprimer la fiche** apparaît sur le détail. Il supprime la fiche (et ses épisodes pour une série) vers la corbeille — les fichiers physiques (`storage/`) éventuels ne sont jamais touchés. Le bouton n'apparaît **pas** sur une fiche porteuse de fichiers, et le serveur refuse la suppression dans ce cas (garde-fou).
+
+> Pour prévenir ce type de doublon, les séries documentaires sont désormais exclues des candidats lors du matching (le dossier de téléchargement `Séries` n'en contient jamais), et la déduplication des séries se fait aussi par `tmdb_id` (et plus seulement `tvdb_id`).
+
 ### Lecteur vidéo intégré
 
 Le bouton **Visionner** (films) ou le bouton **play** (épisodes) lance la lecture du fichier via le lecteur configuré. Un indicateur de statut s'affiche pendant la lecture.
