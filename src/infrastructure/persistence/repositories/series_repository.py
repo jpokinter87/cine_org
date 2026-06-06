@@ -130,13 +130,24 @@ class SQLModelSeriesRepository(ISeriesRepository):
         if series.original_title:
             series.original_title = clean_title(series.original_title)
 
-        # Verifier si la serie existe deja (par ID ou tvdb_id)
+        # Verifier si la serie existe deja (par ID, tvdb_id, puis tmdb_id)
         existing = None
         if series.id:
             existing = self._session.get(SeriesModel, int(series.id))
-        elif series.tvdb_id:
-            statement = select(SeriesModel).where(SeriesModel.tvdb_id == series.tvdb_id)
-            existing = self._session.exec(statement).first()
+        else:
+            if series.tvdb_id:
+                statement = select(SeriesModel).where(
+                    SeriesModel.tvdb_id == series.tvdb_id
+                )
+                existing = self._session.exec(statement).first()
+            # Repli : deduplication par tmdb_id. Indispensable pour les series
+            # venant de la source tmdb_tv (tvdb_id NULL) — sinon un nouveau
+            # transfert de la meme serie cree une fiche en double.
+            if existing is None and series.tmdb_id:
+                statement = select(SeriesModel).where(
+                    SeriesModel.tmdb_id == series.tmdb_id
+                )
+                existing = self._session.exec(statement).first()
 
         if existing:
             # Mise a jour
@@ -155,9 +166,7 @@ class SQLModelSeriesRepository(ISeriesRepository):
             existing.imdb_rating = series.imdb_rating
             existing.imdb_votes = series.imdb_votes
             existing.director = series.director
-            existing.cast_json = (
-                json.dumps(list(series.cast)) if series.cast else None
-            )
+            existing.cast_json = json.dumps(list(series.cast)) if series.cast else None
             self._session.add(existing)
             self._session.commit()
             self._session.refresh(existing)
