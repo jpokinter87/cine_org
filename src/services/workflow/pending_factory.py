@@ -219,6 +219,10 @@ async def _search_and_score_series(
         candidates = matcher.score_results(
             api_results, title, year, None, is_series=True
         )
+        # Exclusion stricte des séries documentaires : le dossier temp/Séries
+        # n'en contient jamais, un candidat documentaire ne peut donc pas être
+        # le bon résultat (cas « Sous ses yeux » mal associée à « Il Testimonio »).
+        candidates = await filter_documentary_series(tvdb_client, candidates)
     except Exception as e:
         logger.warning(f"Erreur TVDB pour {title}: {e}")
 
@@ -227,6 +231,54 @@ async def _search_and_score_series(
         series_cache[cache_key] = candidates
 
     return candidates
+
+
+# Genres identifiant une série documentaire (TVDB renvoie l'anglais,
+# TMDB le français selon la langue de la requête).
+_DOCUMENTARY_GENRES = {"documentaire", "documentary"}
+
+
+def _is_documentary_genres(genres) -> bool:
+    """Vrai si les genres dénotent une série documentaire (FR ou EN)."""
+    return any((g or "").lower() in _DOCUMENTARY_GENRES for g in (genres or ()))
+
+
+async def filter_documentary_series(tvdb_client, candidates: list) -> list:
+    """Écarte strictement les candidats séries documentaires.
+
+    Récupère les genres de chaque candidat via ``get_details()`` et exclut
+    ceux marqués « Documentaire »/« Documentary ». En cas d'erreur API ou
+    d'absence de genres, le candidat est conservé par précaution : on
+    n'exclut que ce qu'on identifie formellement comme documentaire.
+
+    Args:
+        tvdb_client: Client TVDB exposant ``get_details(id)`` -> MediaDetails.
+        candidates: Liste de SearchResult scorés.
+
+    Returns:
+        Liste filtrée (potentiellement vide si tous les candidats sont des
+        documentaires — comportement voulu : pas de repli sur un documentaire).
+    """
+    if not tvdb_client or not candidates:
+        return candidates
+
+    kept = []
+    for candidate in candidates:
+        try:
+            details = await tvdb_client.get_details(candidate.id)
+            if details is not None and _is_documentary_genres(details.genres):
+                logger.info(
+                    "Candidat documentaire écarté : « {} » (id {})",
+                    candidate.title,
+                    candidate.id,
+                )
+                continue
+        except Exception:
+            # Erreur API : conserver par précaution.
+            pass
+        kept.append(candidate)
+
+    return kept
 
 
 async def filter_by_episode_count(
