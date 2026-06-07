@@ -11,10 +11,12 @@ from sqlmodel import select
 
 from ....infrastructure.persistence.database import get_session
 from ....infrastructure.persistence.models import MovieModel, SeriesModel
-from ....utils.helpers import title_sort_key
+from ....utils.helpers import normalize_accents, title_sort_key
 from ...deps import templates
 from .helpers import (
     ITEMS_PER_PAGE,
+    _akas_table_exists,
+    _matched_french_aliases,
     _best_rating,
     _genre_json_escaped,
     _parse_genres,
@@ -83,13 +85,19 @@ async def library_index(
     try:
         items = []
 
+        # Recherche par titre alternatif (akas IMDb) si la table est présente
+        akas_available = bool(q) and _akas_table_exists(session)
+
         # --- Films ---
         if type in ("all", "movie"):
             movie_stmt = select(MovieModel)
             if q:
                 movie_stmt = movie_stmt.where(
                     _title_search_filter(
-                        MovieModel, q, extended=(search_mode == "extended")
+                        MovieModel,
+                        q,
+                        extended=(search_mode == "extended"),
+                        include_akas=akas_available,
                     )
                 )
             if year_int:
@@ -153,6 +161,7 @@ async def library_index(
                         "id": m.id,
                         "type": "movie",
                         "title": m.title,
+                        "imdb_id": m.imdb_id,
                         "year": m.year,
                         "genres": _parse_genres(m.genres_json),
                         "poster_url": _effective_poster_url(
@@ -188,7 +197,10 @@ async def library_index(
             if q:
                 series_stmt = series_stmt.where(
                     _title_search_filter(
-                        SeriesModel, q, extended=(search_mode == "extended")
+                        SeriesModel,
+                        q,
+                        extended=(search_mode == "extended"),
+                        include_akas=akas_available,
                     )
                 )
             if year_int:
@@ -232,6 +244,7 @@ async def library_index(
                         "id": s.id,
                         "type": "series",
                         "title": s.title,
+                        "imdb_id": s.imdb_id,
                         "year": s.year,
                         "genres": _parse_genres(s.genres_json),
                         "poster_url": _effective_poster_url(
@@ -303,6 +316,26 @@ async def library_index(
         page = max(1, min(page, total_pages))
         start = (page - 1) * ITEMS_PER_PAGE
         page_items = items[start : start + ITEMS_PER_PAGE]
+
+        # Si un résultat n'apparaît que via un titre alternatif (akas IMDb),
+        # afficher l'alias français qui a matché pour expliquer sa présence.
+        if q and akas_available:
+            norm_q = normalize_accents(q).lower().replace("-", " ")
+            need = [
+                it
+                for it in page_items
+                if it.get("imdb_id")
+                and norm_q
+                not in normalize_accents(it["title"]).lower().replace("-", " ")
+            ]
+            if need:
+                aliases = _matched_french_aliases(
+                    session, [it["imdb_id"] for it in need], q
+                )
+                for it in need:
+                    alias = aliases.get(it["imdb_id"])
+                    if alias:
+                        it["matched_alias"] = alias
 
         # --- Genres distincts pour le filtre (normalisés EN→FR) ---
         raw_genres: set[str] = set()
