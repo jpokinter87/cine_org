@@ -57,3 +57,7 @@ data/
 
 drame.txt
 player_profiles.json
+
+# Skills Claude Code — paquets de packaging (.skill)
+# Déjà couverts par la règle générique dist/ ci-dessus ; entrée explicite par clarté.
+.claude/skills/dist/
