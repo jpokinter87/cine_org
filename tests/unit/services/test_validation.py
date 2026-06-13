@@ -545,6 +545,81 @@ class TestSearchByExternalId:
         result = await service.search_by_external_id("tmdb", "19995")
         assert result is None
 
+    # --- Comportement série-aware (is_series=True) ---
+
+    @pytest.mark.asyncio
+    async def test_series_tmdb_id_uses_tv_details(
+        self, validation_service, mock_tmdb_client, sample_media_details
+    ):
+        """Série + id_type=tmdb -> get_tv_details (et non get_details film)."""
+        mock_tmdb_client.get_tv_details = AsyncMock(return_value=sample_media_details)
+        mock_tmdb_client.get_details = AsyncMock(return_value=None)
+
+        result = await validation_service.search_by_external_id(
+            "tmdb", "245078", is_series=True
+        )
+
+        mock_tmdb_client.get_tv_details.assert_called_once_with("245078")
+        mock_tmdb_client.get_details.assert_not_called()
+        assert result == sample_media_details
+
+    @pytest.mark.asyncio
+    async def test_series_tvdb_id_resolves_to_tmdb(
+        self, validation_service, mock_tmdb_client
+    ):
+        """Série + id_type=tvdb -> résolution TVDB->TMDB puis get_tv_details.
+
+        Le MediaDetails renvoyé doit porter l'ID TMDB (pas l'ID TVDB), afin que
+        la confirmation (POST get_tv_details) fonctionne.
+        """
+        tmdb_details = MediaDetails(id="245078", title="Deep", year=2026, is_tv=True)
+        mock_tmdb_client.find_by_external_id = AsyncMock(
+            return_value=[
+                SearchResult(id="245078", title="Deep", year=2026, source="tmdb")
+            ]
+        )
+        mock_tmdb_client.get_tv_details = AsyncMock(return_value=tmdb_details)
+
+        result = await validation_service.search_by_external_id(
+            "tvdb", "478436", is_series=True
+        )
+
+        mock_tmdb_client.find_by_external_id.assert_called_once_with(
+            "478436", "tvdb_id"
+        )
+        mock_tmdb_client.get_tv_details.assert_called_once_with("245078")
+        assert result is tmdb_details
+        assert result.id == "245078"
+
+    @pytest.mark.asyncio
+    async def test_series_tvdb_id_no_tmdb_match_returns_none(
+        self, validation_service, mock_tmdb_client
+    ):
+        """Série + id_type=tvdb sans correspondance TMDB -> None."""
+        mock_tmdb_client.find_by_external_id = AsyncMock(return_value=[])
+        mock_tmdb_client.get_tv_details = AsyncMock()
+
+        result = await validation_service.search_by_external_id(
+            "tvdb", "999999", is_series=True
+        )
+
+        assert result is None
+        mock_tmdb_client.get_tv_details.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_series_imdb_id_uses_find_by_imdb(
+        self, validation_service, mock_tmdb_client, sample_media_details
+    ):
+        """Série + id_type=imdb -> find_by_imdb_id (inchangé)."""
+        mock_tmdb_client.find_by_imdb_id = AsyncMock(return_value=sample_media_details)
+
+        result = await validation_service.search_by_external_id(
+            "imdb", "tt33093141", is_series=True
+        )
+
+        mock_tmdb_client.find_by_imdb_id.assert_called_once_with("tt33093141")
+        assert result == sample_media_details
+
 
 # ============================================================================
 # Tests: list_validated
