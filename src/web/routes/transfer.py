@@ -489,8 +489,14 @@ def _update_db_paths(
     container, transfer: dict, destination: Path, symlink_dest
 ) -> None:
     """Met à jour file_path et symlink_path en DB après un transfert réussi."""
+    from sqlmodel import select
+
     from src.infrastructure.persistence.database import get_session
-    from src.infrastructure.persistence.models import EpisodeModel, MovieModel
+    from src.infrastructure.persistence.models import (
+        EpisodeModel,
+        MovieModel,
+        MoviePartModel,
+    )
 
     session = next(get_session())
     try:
@@ -498,7 +504,31 @@ def _update_db_paths(
         symlink_str = str(symlink_dest) if symlink_dest else None
 
         movie_id = transfer.get("movie_id")
-        if movie_id:
+        part_number = transfer.get("movie_part_number")
+        if movie_id and part_number is not None:
+            # Partie non primaire : enregistrer une MoviePart, ne pas
+            # ecraser le file_path de la fiche (porte par la Partie 1).
+            existing_part = session.exec(
+                select(MoviePartModel).where(
+                    MoviePartModel.movie_id == int(movie_id),
+                    MoviePartModel.part_number == int(part_number),
+                )
+            ).first()
+            if existing_part:
+                existing_part.file_path = storage_str
+                existing_part.symlink_path = symlink_str
+                session.add(existing_part)
+            else:
+                session.add(
+                    MoviePartModel(
+                        movie_id=int(movie_id),
+                        part_number=int(part_number),
+                        file_path=storage_str,
+                        symlink_path=symlink_str,
+                    )
+                )
+            session.commit()
+        elif movie_id:
             movie = session.get(MovieModel, int(movie_id))
             if movie:
                 movie.file_path = storage_str
