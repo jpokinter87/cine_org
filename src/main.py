@@ -49,6 +49,7 @@ import logging as _logging
 from .config import Settings
 from .container import Container
 from .logging_config import configure_logging
+from .version import get_version
 
 
 class _LoguruInterceptHandler(_logging.Handler):
@@ -160,7 +161,7 @@ def info() -> None:
 @app.command()
 def version() -> None:
     """Affiche les informations de version."""
-    typer.echo("CineOrg v0.1.0")
+    typer.echo(f"CineOrg v{get_version()}")
 
 
 @app.command()
