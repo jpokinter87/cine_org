@@ -287,7 +287,7 @@ def main() -> None:
     # Initialise la base de données (crée les tables si nécessaire)
     container.database.init()
 
-    logger.info("Démarrage de CineOrg", version="0.1.0")
+    logger.info("Démarrage de CineOrg", version=get_version())
 
     # Lance la CLI
     app()
