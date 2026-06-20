@@ -51,6 +51,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Maintenance](#maintenance)
   - [Configuration](#configuration-web)
 - [Stack technique](#stack-technique)
+- [Versioning & releases](#versioning--releases)
 
 ## Installation
 
@@ -1369,6 +1370,31 @@ src/
 Câblage centralisé dans `src/container.py` via `dependency-injector` (Singleton pour les composants stateless, Factory pour les sessions/services stateful). Persistance SQLite avec `NullPool` (évite l'épuisement des connexions avec les Factory).
 
 > 📖 Architecture détaillée (couches, DI, persistance, pipeline, CLI, web, décisions structurantes) : [docs/architecture.md](docs/architecture.md).
+
+## Versioning & releases
+
+La version du projet est stockée dans `pyproject.toml` (`[project].version`) — **source
+unique de vérité**. Le footer web et la commande `cineorg version` l'affichent
+dynamiquement (helper `src/version.py`).
+
+### Règles SemVer (basées sur les commits conventionnels)
+
+| Type de commit | Effet sur la version | Exemple |
+|---|---|---|
+| `feat:` | **MINOR** | 2.0.0 → 2.1.0 |
+| `fix:` | **PATCH** | 2.0.0 → 2.0.1 |
+| `feat!:` ou bloc `BREAKING CHANGE:` | **MAJOR** | 2.0.0 → 3.0.0 |
+| `docs:`, `chore:`, `refactor:`, `test:`, `style:` | aucun bump | — |
+
+### Publier une nouvelle version
+
+```bash
+uv run cz bump          # calcule le numéro depuis les commits, met à jour
+                        # pyproject.toml + CHANGELOG.md, commit et crée le tag
+git push --follow-tags  # publie le commit de version et le tag
+```
+
+`uv run cz bump --dry-run` permet de prévisualiser le numéro sans rien modifier.
 
 ## Dépannage
 

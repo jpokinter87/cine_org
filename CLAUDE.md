@@ -187,6 +187,13 @@ TV: `{Title} ({Year}) - {SxxExx} - {EpisodeTitle} - {Language} {AudioCodec} {Vid
 
 Après chaque nouvelle fonctionnalité intégrée (nouvelle commande CLI, nouveau service, changement de comportement visible), **mettre à jour le README.md** : documenter la commande/fonctionnalité (usage, options, exemples, explication du fonctionnement). Ajouter une entrée dans la table des matières si pertinent, et mentionner la fonctionnalité dans la section Dépannage si applicable.
 
+## Versioning
+
+La version vit dans `pyproject.toml` (`[project].version`), lue par `src/version.py`
+(web + CLI). Pour publier : `uv run cz bump` (commitizen calcule le SemVer depuis les
+commits conventionnels, écrit pyproject + CHANGELOG, tag). Règles : `feat:` → minor,
+`fix:` → patch, `BREAKING CHANGE:`/`feat!:` → major. Ne pas bumper à la main.
+
 ## Testing Strategy (TDD)
 
 - Write tests BEFORE implementation code
