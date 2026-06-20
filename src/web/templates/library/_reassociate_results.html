@@ -87,6 +87,10 @@
     </div>
 </div>
 <script>
+window.hideReassociateConfirm = function () {
+    var overlay = document.getElementById('reassociate-confirm-overlay');
+    if (overlay) overlay.classList.remove('active');
+};
 document.querySelectorAll('.reassociate-select-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
         var title = this.getAttribute('data-title');

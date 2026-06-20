@@ -159,6 +159,11 @@
         <h3 class="delete-dialog-title">Supprimer définitivement ?</h3>
         <p class="delete-dialog-text">Les fichiers sélectionnés seront <strong>supprimés physiquement</strong>. Cette action est irréversible.</p>
         <div class="delete-dialog-warning" id="sandbox-delete-count-msg">0 fichier(s) sélectionné(s)</div>
+        <div id="sandbox-delete-unique-warn" class="sandbox-delete-unique-warn" style="display:none;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span id="sandbox-delete-unique-msg"></span>
+        </div>
+        <ul class="sandbox-delete-list" id="sandbox-delete-list"></ul>
         <div class="delete-dialog-actions">
             <button class="reject-dialog-cancel" onclick="document.getElementById('sandbox-delete-overlay').classList.remove('active')">Annuler</button>
             <button class="reject-dialog-confirm" onclick="sandboxSubmit('delete')">
@@ -361,8 +366,11 @@ function sandboxMoveOrphansConfirmed() {
 }
 
 function sandboxToggleAll(master) {
-    var cbs = document.querySelectorAll('.sandbox-cb');
-    cbs.forEach(function(cb) { cb.checked = master.checked; });
+    document.querySelectorAll('.sandbox-row').forEach(function(row) {
+        if (row.style.display === 'none') return;
+        var cb = row.querySelector('.sandbox-cb');
+        if (cb) cb.checked = master.checked;
+    });
     sandboxUpdateActions();
 }
 
@@ -377,7 +385,61 @@ function sandboxUpdateActions() {
     if (countEl) countEl.textContent = count + ' sélectionné(s)';
     if (btnDel) btnDel.disabled = count === 0;
     if (btnReinject) btnReinject.disabled = count === 0;
-    if (countMsg) countMsg.textContent = count + ' fichier(s) sélectionné(s)';
+
+    // Récap suppression : nombre + taille totale + noms + avertissement unique
+    var totalBytes = 0, uniques = 0, names = [];
+    checked.forEach(function(cb) {
+        var row = cb.closest('tr');
+        totalBytes += parseInt(row.getAttribute('data-size-bytes') || '0', 10);
+        if (row.getAttribute('data-kept') === 'no') uniques++;
+        var nameEl = row.querySelector('.sandbox-td-name');
+        if (nameEl) names.push(nameEl.textContent.trim());
+    });
+    if (countMsg) {
+        countMsg.textContent = count + ' fichier(s) — ' + sandboxFmtSize(totalBytes) + ' libéré(s)';
+    }
+    var warn = document.getElementById('sandbox-delete-unique-warn');
+    var warnMsg = document.getElementById('sandbox-delete-unique-msg');
+    if (warn && warnMsg) {
+        if (uniques > 0) {
+            warnMsg.textContent = uniques + ' fichier(s) sans autre copie connue dans la vidéothèque.';
+            warn.style.display = '';
+        } else {
+            warn.style.display = 'none';
+        }
+    }
+    var list = document.getElementById('sandbox-delete-list');
+    if (list) {
+        list.innerHTML = names.slice(0, 10).map(function(n) {
+            return '<li>' + sandboxEscHtml(n) + '</li>';
+        }).join('') + (names.length > 10 ? '<li>… +' + (names.length - 10) + '</li>' : '');
+    }
+}
+
+function sandboxEscHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function sandboxFmtSize(b) {
+    if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' Go';
+    if (b >= 1048576) return (b / 1048576).toFixed(1) + ' Mo';
+    if (b >= 1024) return (b / 1024).toFixed(1) + ' Ko';
+    return b + ' o';
+}
+
+function sandboxFilter(btn, cat) {
+    document.querySelectorAll('.sandbox-filter-btn').forEach(function(b) {
+        b.classList.toggle('active', b === btn);
+    });
+    document.querySelectorAll('.sandbox-row').forEach(function(row) {
+        var show = cat === 'all' || row.getAttribute('data-category') === cat;
+        row.style.display = show ? '' : 'none';
+        if (!show) {
+            var cb = row.querySelector('.sandbox-cb');
+            if (cb && cb.checked) { cb.checked = false; }
+        }
+    });
+    sandboxUpdateActions();
 }
 
 function sandboxSubmit(action) {
@@ -757,5 +819,21 @@ function startFix(type) {
     background: rgba(168, 130, 255, 0.18) !important;
     border-color: rgba(168, 130, 255, 0.4) !important;
 }
+.sandbox-filter { display: flex; gap: 0.4rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
+.sandbox-filter-btn { font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 6px;
+    border: 1px solid var(--border-subtle, #333); background: transparent; color: var(--text-muted, #aaa); cursor: pointer; }
+.sandbox-filter-btn.active { background: rgba(168,130,255,0.15); border-color: #a882ff; color: #c9b3ff; }
+.sandbox-badge { font-size: 0.7rem; padding: 0.12rem 0.45rem; border-radius: 5px; white-space: nowrap; }
+.sandbox-badge-orphelin { background: rgba(120,160,255,0.15); color: #8fb3ff; }
+.sandbox-badge-ancienne_version { background: rgba(168,130,255,0.15); color: #c9b3ff; }
+.sandbox-badge-rejet_doublon { background: rgba(232,93,117,0.15); color: #f08ca0; }
+.sandbox-badge-autre { background: rgba(150,150,150,0.15); color: #aaa; }
+.sandbox-kept { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; }
+.sandbox-kept-yes { color: #4caf78; }
+.sandbox-kept-no { color: #e8a14d; }
+.sandbox-delete-unique-warn { display: flex; align-items: center; gap: 0.4rem; color: #e8a14d;
+    font-size: 0.8rem; margin: 0.5rem 0; }
+.sandbox-delete-list { text-align: left; max-height: 140px; overflow-y: auto; margin: 0.4rem 0 0;
+    padding-left: 1.1rem; font-size: 0.78rem; color: var(--text-muted, #aaa); }
 </style>
 {% endblock %}

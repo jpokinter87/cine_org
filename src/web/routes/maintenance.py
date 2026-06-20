@@ -91,6 +91,27 @@ def _get_sandbox_service(container) -> SandboxService:
     )
 
 
+def _build_sandbox_items(sandbox_svc: SandboxService, video_dir: Path) -> list[dict]:
+    """Liste les fichiers sandboxés + annote la version conservée pour l'UI."""
+    files = sandbox_svc.list_sandboxed()
+    sandbox_svc.annotate_kept_versions(files, video_dir)
+    return [
+        {
+            "path": str(f.path),
+            "name": f.name,
+            "size": _format_size(f.size),
+            "size_bytes": f.size,
+            "modified": f.modified.strftime("%d/%m/%Y"),
+            "original_path": _relative_from_root(f.original_path),
+            "category": f.category,
+            "kept_version": _relative_from_root(f.kept_version)
+            if f.kept_version
+            else None,
+        }
+        for f in files
+    ]
+
+
 def _format_size(size_bytes: int) -> str:
     """Formate une taille en octets en unité lisible."""
     if size_bytes < 1024:
@@ -149,20 +170,10 @@ async def maintenance_page(request: Request):
         session.close()
 
     # Charger les fichiers sandbox
+    settings = container.config()
     sandbox_svc = _get_sandbox_service(container)
-    sandboxed_files = sandbox_svc.list_sandboxed()
-    sandbox_total_size = sum(f.size for f in sandboxed_files)
-    sandbox_items = [
-        {
-            "path": str(f.path),
-            "name": f.name,
-            "size": _format_size(f.size),
-            "size_bytes": f.size,
-            "modified": f.modified.strftime("%d/%m/%Y"),
-            "original_path": _relative_from_root(f.original_path),
-        }
-        for f in sandboxed_files
-    ]
+    sandbox_items = _build_sandbox_items(sandbox_svc, settings.video_dir)
+    sandbox_total_size = sum(it["size_bytes"] for it in sandbox_items)
 
     return templates.TemplateResponse(
         request,
@@ -1445,19 +1456,9 @@ async def sandbox_move_orphans_sse(request: Request):
         _analysis_cache.pop("check_orphans", None)
 
         # Construire le HTML final
-        sandboxed = sandbox_svc.list_sandboxed()
-        total_size = sum(f.size for f in sandboxed)
-        sandbox_items = [
-            {
-                "path": str(f.path),
-                "name": f.name,
-                "size": _format_size(f.size),
-                "size_bytes": f.size,
-                "modified": f.modified.strftime("%d/%m/%Y"),
-                "original_path": _relative_from_root(f.original_path),
-            }
-            for f in sandboxed
-        ]
+        settings = container.config()
+        sandbox_items = _build_sandbox_items(sandbox_svc, settings.video_dir)
+        total_size = sum(it["size_bytes"] for it in sandbox_items)
 
         html = templates.env.get_template("maintenance/_sandbox_section.html").render(
             sandbox_items=sandbox_items,
@@ -1502,19 +1503,9 @@ async def sandbox_delete(request: Request):
     deleted = await asyncio.to_thread(sandbox_svc.delete_files, paths)
 
     # Retourner la section mise à jour
-    sandboxed = sandbox_svc.list_sandboxed()
-    total_size = sum(f.size for f in sandboxed)
-    sandbox_items = [
-        {
-            "path": str(f.path),
-            "name": f.name,
-            "size": _format_size(f.size),
-            "size_bytes": f.size,
-            "modified": f.modified.strftime("%d/%m/%Y"),
-            "original_path": _relative_from_root(f.original_path),
-        }
-        for f in sandboxed
-    ]
+    settings = container.config()
+    sandbox_items = _build_sandbox_items(sandbox_svc, settings.video_dir)
+    total_size = sum(it["size_bytes"] for it in sandbox_items)
 
     html = templates.env.get_template("maintenance/_sandbox_section.html").render(
         sandbox_items=sandbox_items,
@@ -1549,19 +1540,9 @@ async def sandbox_reinject(request: Request):
     reinjected = await asyncio.to_thread(sandbox_svc.reinject_files, paths)
 
     # Retourner la section mise à jour
-    sandboxed = sandbox_svc.list_sandboxed()
-    total_size = sum(f.size for f in sandboxed)
-    sandbox_items = [
-        {
-            "path": str(f.path),
-            "name": f.name,
-            "size": _format_size(f.size),
-            "size_bytes": f.size,
-            "modified": f.modified.strftime("%d/%m/%Y"),
-            "original_path": _relative_from_root(f.original_path),
-        }
-        for f in sandboxed
-    ]
+    settings = container.config()
+    sandbox_items = _build_sandbox_items(sandbox_svc, settings.video_dir)
+    total_size = sum(it["size_bytes"] for it in sandbox_items)
 
     html = templates.env.get_template("maintenance/_sandbox_section.html").render(
         sandbox_items=sandbox_items,

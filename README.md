@@ -21,7 +21,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Validation automatique et manuelle](#validation-automatique-et-manuelle)
   - [Détection des doublons](#détection-des-doublons)
   - [Hardlinks et seeding](#hardlinks-et-seeding)
-  - [Sandbox des orphelins](#sandbox-des-orphelins)
+  - [Sandbox](#sandbox)
 - [Peupler la base de données séries](#peupler-la-base-de-données-séries)
 - [Notes et évaluations](#notes-et-évaluations)
   - [Notes TMDB](#notes-tmdb)
@@ -433,8 +433,8 @@ Normalisation bitrate par codec : AV1 × 3.0, HEVC × 2.0, VP9 × 1.8, x264 × 1
 
 **Décisions disponibles** :
 
-- `keep_new` — remplacer l'existant par le nouveau fichier.
-- `keep_old` — skip le nouveau (reste en `downloads/`).
+- `keep_new` — remplacer l'existant par le nouveau fichier ; l'ancienne version est déplacée dans `.sandbox/anciennes_versions/`.
+- `keep_old` — conserver l'existant ; le nouveau fichier est automatiquement déplacé dans `.sandbox/rejets_doublons/` et **ne sera plus re-proposé** lors des traitements suivants.
 - `sandbox` — déplacer le nouveau dans `.sandbox/` pour décision ultérieure.
 
 Le bouton de transfert reste **grisé** tant que tous les conflits ne sont pas tranchés.
@@ -450,13 +450,21 @@ Pour préserver le seeding BitTorrent après transfert, CineOrg crée un **hardl
 
 > 📖 Installation du timer et détails : [docs/hardlinks.md](docs/hardlinks.md).
 
-### Sandbox des orphelins
+### Sandbox
 
-Les **orphelins** (fichiers physiques sans symlink les référençant) peuvent être déplacés vers un répertoire `.sandbox/` (sur le même volume que `storage/` pour éviter les copies réseau) avant suppression ou réinjection :
+Le répertoire `.sandbox/` (même volume que `storage/`) regroupe tous les fichiers mis de côté, organisés en sous-dossiers selon leur origine :
 
-- Détection via comparaison storage ↔ symlinks.
-- Déplacement non destructif (l'arborescence d'origine est préservée dans la sandbox).
-- Réinjection possible via le workflow (scan → match → transfer) pour les fichiers valables.
+| Sous-dossier | Contenu |
+|---|---|
+| `orphans/` | Fichiers storage détectés sans symlink les référençant |
+| `anciennes_versions/` | Anciennes versions remplacées lors d'un « Garder le nouveau » |
+| `rejets_doublons/` | Nouveaux fichiers rejetés lors d'un « Garder l'ancien » |
+
+Les fichiers déplacés manuellement à la racine du sandbox apparaissent en catégorie **Autre**.
+
+- Déplacement non destructif (l'arborescence d'origine est préservée).
+- Les fichiers dans `rejets_doublons/` ne sont plus re-proposés lors des traitements suivants (le scanner les ignore).
+- Réinjection possible via le workflow (scan → match → transfer) pour les fichiers valables (restreint à la machine maître).
 
 ## Notes et évaluations
 
@@ -1317,10 +1325,15 @@ La suppression est restreinte à **localhost** — le bouton est masqué depuis 
 
 > ![Page de maintenance](docs/screenshots/maintenance.png)
 
-La page **Maintenance** (`/maintenance`) fournit deux diagnostics en lecture seule :
+La page **Maintenance** (`/maintenance`) fournit deux diagnostics et la gestion du sandbox :
 
-- **Vérification d'intégrité** — Détecte les symlinks cassés, les fichiers storage orphelins, les entrées DB sans fichier correspondant
-- **Analyse de nettoyage** — Détecte les symlinks cassés dans `video/`, les répertoires vides, les symlinks mal placés (mauvais genre, mauvaise subdivision), les problèmes de case
+- **Vérification d'intégrité** — Détecte les symlinks cassés, les fichiers storage orphelins, les entrées DB sans fichier correspondant.
+- **Analyse de nettoyage** — Détecte les symlinks cassés dans `video/`, les répertoires vides, les symlinks mal placés (mauvais genre, mauvaise subdivision), les problèmes de case.
+- **Sandbox** — Liste tous les fichiers sandboxés avec leur catégorie (badge : *Orphelin*, *Ancienne version*, *Doublon rejeté*, *Autre*), un indicateur de présence dans la vidéothèque (vert = une version est conservée en bibliothèque ; orange = aucune copie trouvée, fichier potentiellement unique), et un filtre par catégorie.
+
+> **Limitation de l'indicateur « version conservée »** : cet indicateur repose sur l'extraction du titre et de l'année depuis le nom de fichier (pattern `Titre (AAAA)`). Pour des noms de release bruts ne contenant pas ce pattern (ex. noms pointés type `Octobre.2021.S01E01.x265.mkv`), l'indicateur peut afficher *orange* par prudence même si une copie existe dans la vidéothèque — c'est une dégradation sûre (jamais de fausse confirmation verte).
+
+La **suppression définitive** (overlay sécurisé) affiche un récapitulatif du nombre de fichiers, de la taille libérée et des noms concernés, avec un avertissement explicite si un fichier semble unique (aucune version dans la vidéothèque). La suppression et la réinjection sont restreintes à la **machine maître** (localhost).
 
 Chaque diagnostic s'exécute avec une barre de progression en temps réel (SSE) et affiche un rapport détaillé avec compteurs. Les actions correctives restent disponibles via le CLI (`uv run cineorg cleanup --fix`).
 
@@ -1449,6 +1462,12 @@ uv run cineorg repair-links --auto
 mv cineorg.db cineorg.db.backup
 uv run cineorg import  # Réimporter la vidéothèque
 ```
+
+### Un doublon rejeté est re-proposé à chaque traitement
+
+Si vous choisissez « Garder l'ancien » lors de la détection de doublons, le nouveau fichier est automatiquement déplacé dans `.sandbox/rejets_doublons/`. Il ne sera plus détecté par le scanner lors des traitements suivants.
+
+Si vous observez malgré tout ce comportement avec d'anciennes versions de l'application, déplacez manuellement le fichier concerné dans le répertoire `.sandbox/rejets_doublons/` ou supprimez-le.
 
 ### Fichier classé dans le mauvais genre
 

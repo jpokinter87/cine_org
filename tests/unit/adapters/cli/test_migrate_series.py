@@ -1,10 +1,8 @@
 """Tests unitaires pour la commande migrate-series."""
 
 import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 
 from src.adapters.cli.commands.migrate_series_command import (
     _DB_REPLACEMENTS,
@@ -254,6 +252,7 @@ class TestRemainingSeriesRefs:
             "src/adapters/cli/commands/reconcile_command.py",  # Detection "/séries/" + fallback
             "src/adapters/cli/commands/import_commands.py",  # Import ancienne biblio
             "src/adapters/cli/commands/migrate_series_command.py",  # Migration elle-meme
+            "src/services/sandbox_service.py",  # Detection catégorie série (Series/Séries) dans les chemins sandbox
         }
 
         violations = []
@@ -265,5 +264,5 @@ class TestRemainingSeriesRefs:
                 violations.append(line)
 
         assert not violations, (
-            f"References 'Séries' fonctionnelles trouvees :\n" + "\n".join(violations)
+            "References 'Séries' fonctionnelles trouvees :\n" + "\n".join(violations)
         )

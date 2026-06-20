@@ -19,6 +19,7 @@ from starlette.responses import StreamingResponse
 
 from loguru import logger
 
+from src.services.sandbox_service import REPLACED_SUBDIR
 from ..deps import templates
 
 router = APIRouter(prefix="/transfer")
@@ -93,6 +94,23 @@ def _get_sandbox_dir(settings) -> Path:
     if storage:
         return Path(storage) / ".sandbox"
     return Path("/tmp/cineorg_sandbox")
+
+
+def _reject_source_to_sandbox(container, settings, source: Path) -> None:
+    """Déplace un nouveau fichier rejeté (« Garder l'ancien ») vers le sandbox.
+
+    Sort le fichier de downloads/ pour qu'il ne soit plus re-détecté aux
+    traitements suivants. Échec → log, on ne bloque pas le transfert.
+    """
+    try:
+        sandbox_svc = container.sandbox_service(
+            sandbox_dir=settings.resolved_sandbox_dir,
+            storage_dir=settings.storage_dir,
+            downloads_dir=settings.downloads_dir,
+        )
+        sandbox_svc.sandbox_rejected([source])
+    except Exception as e:
+        logger.warning("Échec sandbox du rejet {}: {}", source, e)
 
 
 def _resolve_storage_path(existing_dir: Path, storage_dir: Path) -> Path | None:
@@ -237,7 +255,7 @@ def _sandbox_existing(
         for item in storage_path.rglob("*"):
             if item.is_file() and pattern.search(item.name):
                 item_rel = item.relative_to(storage_dir)
-                dest = sandbox_dir / item_rel
+                dest = sandbox_dir / REPLACED_SUBDIR / item_rel
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(item), str(dest))
                 moved += 1
@@ -252,8 +270,8 @@ def _sandbox_existing(
                 "Sandbox: aucun fichier {} trouvé dans {}", episode_key, storage_path
             )
     else:
-        # Films : déplacer tout le dossier (comportement original)
-        dest = sandbox_dir / relative
+        # Films : déplacer tout le dossier sous la catégorie « ancienne version »
+        dest = sandbox_dir / REPLACED_SUBDIR / relative
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(storage_path), str(dest))
         logger.info("Sandbox (storage) : {} → {}", storage_path, dest)
@@ -632,6 +650,8 @@ async def _run_web_transfer(
             # Résolution pré-faite au résumé batch → exécuter sans SSE pause
             if transfer.get("has_duplicate") and duplicate_match and pre_resolution:
                 if pre_resolution == "keep_old":
+                    if not dry_run:
+                        _reject_source_to_sandbox(container, settings, source)
                     progress.conflicts_resolved += 1
                     progress.message = (
                         f"Doublon résolu (pré) : ancien conservé pour {display_name}"
@@ -832,6 +852,8 @@ async def _run_web_transfer(
                 progress.conflict_choice = None
 
                 if choice == "keep_old":
+                    if not dry_run:
+                        _reject_source_to_sandbox(container, settings, source)
                     progress.conflicts_resolved += 1
                     progress.message = (
                         f"Doublon résolu : ancien conservé pour {display_name}"
@@ -997,6 +1019,8 @@ async def _run_web_transfer(
                     progress.conflict_choice = None
 
                     if choice == "keep_old":
+                        if not dry_run:
+                            _reject_source_to_sandbox(container, settings, source)
                         progress.conflicts_resolved += 1
                         progress.message = (
                             f"Conflit résolu : ancien conservé pour {display_name}"

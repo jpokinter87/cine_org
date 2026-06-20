@@ -550,7 +550,9 @@ async def series_reassociate_search_by_id(
     if id_type == "imdb" and id_value.isdigit():
         id_value = f"tt{id_value}"
 
-    details = await validation_service.search_by_external_id(id_type, id_value)
+    details = await validation_service.search_by_external_id(
+        id_type, id_value, is_series=True
+    )
 
     if details is None:
         return HTMLResponse(
