@@ -89,7 +89,13 @@ class TransferStepMixin:
 
     def _update_file_paths(self, transfers: list[dict], results: list[dict]) -> None:
         """Met a jour file_path et symlink_path sur Movie/Episode apres transfert reussi."""
-        from src.infrastructure.persistence.models import EpisodeModel, MovieModel
+        from sqlmodel import select
+
+        from src.infrastructure.persistence.models import (
+            EpisodeModel,
+            MovieModel,
+            MoviePartModel,
+        )
 
         session = self._container.session()
         updated = 0
@@ -107,7 +113,31 @@ class TransferStepMixin:
             symlink_str = str(symlink_path) if symlink_path else None
 
             movie_id = transfer.get("movie_id")
-            if movie_id:
+            part_number = transfer.get("movie_part_number")
+            if movie_id and part_number is not None:
+                # Partie non primaire : enregistrer une MoviePart, ne pas
+                # ecraser le file_path de la fiche (porte par la Partie 1).
+                existing_part = session.exec(
+                    select(MoviePartModel).where(
+                        MoviePartModel.movie_id == int(movie_id),
+                        MoviePartModel.part_number == int(part_number),
+                    )
+                ).first()
+                if existing_part:
+                    existing_part.file_path = storage_str
+                    existing_part.symlink_path = symlink_str
+                    session.add(existing_part)
+                else:
+                    session.add(
+                        MoviePartModel(
+                            movie_id=int(movie_id),
+                            part_number=int(part_number),
+                            file_path=storage_str,
+                            symlink_path=symlink_str,
+                        )
+                    )
+                updated += 1
+            elif movie_id:
                 movie = session.get(MovieModel, int(movie_id))
                 if movie:
                     movie.file_path = storage_str
