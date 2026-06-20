@@ -10,6 +10,7 @@ from ....infrastructure.persistence.database import get_session
 from ....infrastructure.persistence.models import (
     EpisodeModel,
     MovieModel,
+    MoviePartModel,
     SeriesModel,
     VideoFileModel,
 )
@@ -51,6 +52,13 @@ async def movie_detail(request: Request, movie_id: int):
                 select(VideoFileModel).where(VideoFileModel.path == movie.file_path)
             ).first()
 
+        # Charger les parties supplementaires (>= Partie 2)
+        parts = session.exec(
+            select(MoviePartModel)
+            .where(MoviePartModel.movie_id == movie_id)
+            .order_by(MoviePartModel.part_number)
+        ).all()
+
     finally:
         session.close()
 
@@ -78,6 +86,7 @@ async def movie_detail(request: Request, movie_id: int):
         {
             "movie": movie,
             "movie_id": movie.id,
+            "parts": parts,
             "watched": movie.watched,
             "personal_rating": movie.personal_rating,
             "genres": genres,

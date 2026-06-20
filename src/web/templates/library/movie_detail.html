@@ -241,6 +241,34 @@
                 </div>
             </details>
             {% endif %}
+
+            {% if parts %}
+            <div class="lib-detail-parts">
+                <h3 class="lib-detail-section-title">Parties</h3>
+                <div class="lib-episode-list">
+                    {% if movie.file_path %}
+                    <div class="lib-episode-row{% if movie.file_path %} lib-episode-playable{% endif %}">
+                        <span class="lib-episode-num">Partie 1</span>
+                        <span class="lib-episode-title">{{ movie.file_path.split('/')|last }}</span>
+                        {% with play_entity_type="movies", play_entity_id=movie.id, play_btn_class="lib-episode-play-btn", play_show_label=false %}
+                        {% include "library/_play_btn.html" %}
+                        {% endwith %}
+                    </div>
+                    {% endif %}
+                    {% for part in parts %}
+                    <div class="lib-episode-row{% if part.file_path or part.symlink_path %} lib-episode-playable{% endif %}">
+                        <span class="lib-episode-num">Partie {{ part.part_number }}</span>
+                        <span class="lib-episode-title">{{ (part.file_path or part.symlink_path or '').split('/')|last }}</span>
+                        {% if part.file_path or part.symlink_path %}
+                        {% with play_entity_type="movie-parts", play_entity_id=part.id, play_btn_class="lib-episode-play-btn", play_show_label=false %}
+                        {% include "library/_play_btn.html" %}
+                        {% endwith %}
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
