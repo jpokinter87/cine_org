@@ -14,7 +14,12 @@ from fastapi.responses import HTMLResponse, Response
 from sqlmodel import select
 
 from ....infrastructure.persistence.database import get_session
-from ....infrastructure.persistence.models import EpisodeModel, MovieModel, SeriesModel
+from ....infrastructure.persistence.models import (
+    EpisodeModel,
+    MovieModel,
+    MoviePartModel,
+    SeriesModel,
+)
 from ....player_profiles import get_active_profile, get_profile_by_name, load_profiles
 from ....services.player.dunehd_player import DuneHDPlayer
 from .helpers import _find_movie_file
@@ -353,6 +358,30 @@ async def movie_play(
 
     pid, _, pname = _launch_player(resolved, profile_name=profile)
     return HTMLResponse(_playing_html(pid, "movies", movie_id, pname))
+
+
+@router.post("/movie-parts/{part_id}/play")
+async def movie_part_play(
+    request: Request, part_id: int, profile: Optional[str] = None
+):
+    """Lance le lecteur pour une partie d'un film multi-parties."""
+    session = next(get_session())
+    try:
+        part = session.get(MoviePartModel, part_id)
+        if not part:
+            return Response(status_code=404)
+        file_path = part.file_path or part.symlink_path
+    finally:
+        session.close()
+
+    resolved = _resolve_video_path(file_path)
+    if not resolved:
+        return HTMLResponse(
+            _error_html("Fichier vidéo introuvable", "movie-parts", part_id)
+        )
+
+    pid, _, pname = _launch_player(resolved, profile_name=profile)
+    return HTMLResponse(_playing_html(pid, "movie-parts", part_id, pname))
 
 
 @router.post("/episodes/{episode_id}/play")

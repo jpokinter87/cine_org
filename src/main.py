@@ -31,6 +31,7 @@ from .adapters.cli.commands import (
     enrich_tech,
     enrich_tvdb_ids,
     import_library,
+    link_movie_parts,
     link_movies,
     pending,
     populate_movies,
@@ -103,6 +104,7 @@ app.command()(enrich)
 app.command(name="populate-movies")(populate_movies)
 app.command(name="populate-series")(populate_series)
 app.command(name="link-movies")(link_movies)
+app.command(name="link-movie-parts")(link_movie_parts)
 app.command(name="enrich-ratings")(enrich_ratings)
 app.command(name="enrich-imdb-ids")(enrich_imdb_ids)
 app.command(name="enrich-series")(enrich_series)

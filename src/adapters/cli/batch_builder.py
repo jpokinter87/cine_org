@@ -878,6 +878,20 @@ def _fix_duplicate_filenames(
 
             console.print(f"    [green]✓[/green] {old_filename} → {new_filename}")
 
+        # Annoter les parties d'un film multi-parties : la plus petite partie
+        # reste primaire (porte la fiche Movie), les autres deviennent des
+        # MoviePart (cf. transfer_step._update_file_paths).
+        film_parts = [
+            (idx, part_num)
+            for idx, part_num in parts_found
+            if part_num is not None and not transfers[idx].get("is_series")
+        ]
+        if len(film_parts) >= 2:
+            primary_idx = min(film_parts, key=lambda p: p[1])[0]
+            for idx, part_num in film_parts:
+                if idx != primary_idx:
+                    transfers[idx]["movie_part_number"] = part_num
+
     return transfers
 
 

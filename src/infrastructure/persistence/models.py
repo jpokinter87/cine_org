@@ -243,6 +243,25 @@ class EpisodeModel(SQLModel, table=True):
         self.languages_json = json.dumps(value)
 
 
+class MoviePartModel(SQLModel, table=True):
+    """
+    Partie supplementaire d'un film multi-parties (ex. film en 2 parties).
+
+    La Partie 1 reste portee par MovieModel (file_path/symlink_path).
+    Cette table ne contient que les parties >= 2, liees au film via movie_id.
+    """
+
+    __tablename__ = "movie_parts"
+    __table_args__ = (Index("ix_movie_parts_movie_part", "movie_id", "part_number"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    movie_id: int = Field(foreign_key="movies.id", index=True)
+    part_number: int
+    file_path: str | None = Field(default=None, index=True)
+    symlink_path: str | None = Field(default=None, index=True)
+    created_at: datetime | None = Field(default_factory=datetime.utcnow)
+
+
 class VideoFileModel(SQLModel, table=True):
     """
     Modele representant un fichier video scanne.
