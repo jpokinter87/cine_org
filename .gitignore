@@ -63,3 +63,7 @@ player_profiles.json
 migration/
 sc/
 .understand-anything/
+
+# Tooling / docs locaux
+.claude/
+docs/superpowers/
