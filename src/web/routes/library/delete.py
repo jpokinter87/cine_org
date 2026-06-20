@@ -19,6 +19,7 @@ from ....infrastructure.persistence.database import get_session
 from ....infrastructure.persistence.models import (
     EpisodeModel,
     MovieModel,
+    MoviePartModel,
     SeriesModel,
     TrashModel,
     VideoFileModel,
@@ -77,6 +78,14 @@ def _delete_movie_record(session, movie, file_system, reason: str) -> None:
         ).first()
         if vf:
             session.delete(vf)
+    # Cascade : parties supplementaires (storage conserve, symlink retire)
+    parts = session.exec(
+        select(MoviePartModel).where(MoviePartModel.movie_id == movie.id)
+    ).all()
+    for part in parts:
+        if part.symlink_path:
+            file_system.remove_symlink(Path(part.symlink_path))
+        session.delete(part)
     session.add(
         TrashModel(
             entity_type="movie",
