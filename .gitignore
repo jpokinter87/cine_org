@@ -44,6 +44,7 @@ logs/
 # Database
 data/
 *.db
+*.db.bak.*
 
 # Cache
 .cache/
@@ -57,3 +58,8 @@ data/
 
 drame.txt
 player_profiles.json
+
+# Working dirs / scratch (local only)
+migration/
+sc/
+.understand-anything/
