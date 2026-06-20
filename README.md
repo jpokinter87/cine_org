@@ -34,6 +34,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Consolidation des fichiers externes](#consolidation-des-fichiers-externes)
   - [Migration depuis anciens NAS](#migration-depuis-anciens-nas)
   - [Purge des hardlinks](#purge-des-hardlinks)
+  - [Films multi-parties](#films-multi-parties)
 - [Format de nommage](#format-de-nommage)
 - [Interface web](#interface-web)
   - [Lancement du serveur](#lancement-du-serveur)
@@ -959,6 +960,26 @@ sudo systemctl enable --now cineorg-purge.timer
 ```
 
 > 📖 Détails et diagnostic : [docs/hardlinks.md](docs/hardlinks.md).
+
+### Films multi-parties
+
+Certains films rares sont distribués en plusieurs parties indépendantes (ex. : *Nos meilleures années*, *Docteur Mabuse le joueur*). CineOrg les gère comme une **fiche unique** : lors du transfert, la Partie 1 reste attachée à la fiche film principale tandis que les parties suivantes (Partie 2, Partie 3…) sont enregistrées dans la table `movie_parts`, liées à la même fiche par leur `movie_id`.
+
+**Dans l'interface web**, la fiche film affiche un bloc **Parties** listant chaque partie avec son nom de fichier et un bouton de lecture individuel. Le bouton **Visionner** en tête de fiche lance toujours la Partie 1.
+
+**Au transfert**, la détection est automatique : si plusieurs fichiers d'un même lot partagent un titre identique et portent un suffixe `Partie N`, la plus petite partie devient le fichier principal et les autres sont annotées `movie_part_number` dans le batch avant d'être enregistrées comme `MoviePart`.
+
+**Rattacher des parties déjà transférées** (films traités avant l'activation de cette fonctionnalité) :
+
+```bash
+# Rapport : liste les symlinks « Partie N » (N >= 2) sans entrée en base
+uv run python -m src.main link-movie-parts
+
+# Écriture : crée les lignes MoviePart manquantes
+uv run python -m src.main link-movie-parts --apply
+```
+
+La commande `link-movie-parts` parcourt la zone `video/` à la recherche de symlinks contenant `Partie N` (N ≥ 2), retrouve le film propriétaire via son symlink de Partie 1, et crée les enregistrements `MoviePart` manquants. **Le storage n'est jamais modifié.** La commande est idempotente : une partie déjà enregistrée est ignorée.
 
 ## Format de nommage
 
