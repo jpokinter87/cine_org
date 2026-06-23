@@ -64,6 +64,7 @@ async def library_index(
     language: Optional[str] = None,
     no_file: Optional[str] = None,
     no_poster: Optional[str] = None,
+    incomplete_series: Optional[str] = None,
     search_mode: str = "title",
     unwatched: Optional[str] = None,
     sort: str = "title",
@@ -223,6 +224,10 @@ async def library_index(
                 series_stmt = series_stmt.where(SeriesModel.poster_path.is_(None))
             if unwatched == "1":
                 series_stmt = series_stmt.where(SeriesModel.watched == False)  # noqa: E712
+            if incomplete_series == "1":
+                series_stmt = series_stmt.where(
+                    SeriesModel.completeness_status == "incomplete"
+                )
 
             all_series = session.exec(series_stmt).all()
             for s in all_series:
@@ -415,6 +420,7 @@ async def library_index(
         "current_language": language or "",
         "current_no_file": no_file == "1",
         "current_no_poster": no_poster == "1",
+        "current_incomplete_series": incomplete_series == "1",
         "current_search_mode": search_mode,
         "current_unwatched": unwatched == "1",
         "current_sort": sort,

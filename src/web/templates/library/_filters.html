@@ -92,6 +92,12 @@
             Sans poster
         </label>
 
+        <label class="lib-filter-checkbox lib-filter-checkbox-sm">
+            <input type="checkbox" name="incomplete_series" value="1"
+                   {{ 'checked' if current_incomplete_series }}>
+            Séries incomplètes
+        </label>
+
         <button type="button" class="lib-tech-toggle" data-target="lib-filters-tech-panel">
             <svg class="lib-tech-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             <span>Techniques</span>
@@ -152,10 +158,11 @@
     {% set unwatched_param = "&unwatched=1" if current_unwatched else "" %}
     {% set no_file_param = "&no_file=1" if current_no_file else "" %}
     {% set no_poster_param = "&no_poster=1" if current_no_poster else "" %}
+    {% set incomplete_series_param = "&incomplete_series=1" if current_incomplete_series else "" %}
     {% set language_param = "&language=" ~ current_language %}
-    {% set base_params = "type=" ~ current_type ~ "&genre=" ~ (current_genre or '') ~ "&year=" ~ (current_year or '') ~ "&q=" ~ current_q ~ person_params ~ "&resolution=" ~ current_resolution ~ "&codec_video=" ~ current_codec_video ~ "&codec_audio=" ~ current_codec_audio ~ language_param ~ "&search_mode=" ~ current_search_mode ~ "&sort=" ~ current_sort ~ "&order=" ~ current_order ~ unwatched_param ~ no_file_param ~ no_poster_param %}
+    {% set base_params = "type=" ~ current_type ~ "&genre=" ~ (current_genre or '') ~ "&year=" ~ (current_year or '') ~ "&q=" ~ current_q ~ person_params ~ "&resolution=" ~ current_resolution ~ "&codec_video=" ~ current_codec_video ~ "&codec_audio=" ~ current_codec_audio ~ language_param ~ "&search_mode=" ~ current_search_mode ~ "&sort=" ~ current_sort ~ "&order=" ~ current_order ~ unwatched_param ~ no_file_param ~ no_poster_param ~ incomplete_series_param %}
 
-    {% if current_genre or current_year or current_q or current_type != 'all' or current_person or current_resolution or current_codec_video or current_codec_audio or current_language %}
+    {% if current_genre or current_year or current_q or current_type != 'all' or current_person or current_resolution or current_codec_video or current_codec_audio or current_language or current_incomplete_series %}
     <div class="lib-active-filters">
         {% if current_type != 'all' %}
         <span class="lib-filter-tag">
@@ -222,6 +229,13 @@
         <span class="lib-filter-tag lib-filter-tag-tech">
             Langue: {{ current_language }}
             <a href="/library/?type={{ current_type }}&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q={{ current_q }}&person={{ current_person }}&person_role={{ current_person_role }}&resolution={{ current_resolution }}&codec_video={{ current_codec_video }}&codec_audio={{ current_codec_audio }}&language=&search_mode={{ current_search_mode }}&sort={{ current_sort }}&order={{ current_order }}"
+               class="lib-filter-tag-remove">&times;</a>
+        </span>
+        {% endif %}
+        {% if current_incomplete_series %}
+        <span class="lib-filter-tag">
+            Incomplètes
+            <a href="/library/?type={{ current_type }}&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q={{ current_q }}&person={{ current_person }}&person_role={{ current_person_role }}&resolution={{ current_resolution }}&codec_video={{ current_codec_video }}&codec_audio={{ current_codec_audio }}&language={{ current_language }}&search_mode={{ current_search_mode }}&sort={{ current_sort }}&order={{ current_order }}"
                class="lib-filter-tag-remove">&times;</a>
         </span>
         {% endif %}
