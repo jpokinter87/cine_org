@@ -81,6 +81,9 @@ from src.adapters.cli.commands.rename_canonical_command import (
 from src.adapters.cli.commands.link_movie_parts_command import (
     link_movie_parts,
 )
+from src.adapters.cli.commands.completeness_command import (
+    check_completeness,
+)
 
 __all__ = [
     # workflow
@@ -130,4 +133,5 @@ __all__ = [
     "purge_hardlinks",
     "rename_canonical",
     "link_movie_parts",
+    "check_completeness",
 ]

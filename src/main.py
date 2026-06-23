@@ -11,6 +11,7 @@ from loguru import logger
 
 from .adapters.cli.commands import (
     check,
+    check_completeness,
     cleanup,
     consolidate,
     enrich,
@@ -128,6 +129,7 @@ app.command(name="fix-series-symlinks")(fix_series_symlinks)
 app.command(name="check-duplicates")(check_duplicates)
 app.command(name="purge-hardlinks")(purge_hardlinks)
 app.command(name="rename-canonical")(rename_canonical)
+app.command(name="check-completeness")(check_completeness)
 
 # Monter validate_app comme sous-commande
 app.add_typer(validate_app, name="validate")
