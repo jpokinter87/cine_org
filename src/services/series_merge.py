@@ -113,6 +113,131 @@ class SeriesMergeService:
         self._series_repo = series_repo
         self._episode_repo = episode_repo
 
+    # Champs de métadonnées complétables (on ne touche jamais au titre du récipiendaire)
+    _FILLABLE_FIELDS = (
+        "tvdb_id", "tmdb_id", "imdb_id", "year", "overview", "poster_path",
+        "director", "genres_json", "cast_json", "vote_average", "vote_count",
+        "imdb_rating", "imdb_votes",
+    )
+
+    def _load_models(self, recipient_id, absorbed_id):
+        """Charge les deux modèles SeriesModel depuis la DB et valide la requête."""
+        from src.infrastructure.persistence.models import SeriesModel
+
+        recipient = self._session.get(SeriesModel, recipient_id)
+        absorbed = self._session.get(SeriesModel, absorbed_id)
+        if recipient is None or absorbed is None:
+            raise ValueError("Fiche série introuvable.")
+        if recipient_id == absorbed_id:
+            raise ValueError("Impossible de fusionner une fiche avec elle-même.")
+        return recipient, absorbed
+
+    def _episodes_of(self, series_id):
+        """Retourne tous les EpisodeModel d'une série."""
+        from sqlmodel import select
+        from src.infrastructure.persistence.models import EpisodeModel
+
+        return list(
+            self._session.exec(
+                select(EpisodeModel).where(EpisodeModel.series_id == series_id)
+            ).all()
+        )
+
+    def _compute_metadata_completion(self, recipient, absorbed):
+        """Retourne les champs que l'absorbée apporte et le récipiendaire n'a pas."""
+        completed = {}
+        for fieldname in self._FILLABLE_FIELDS:
+            current = getattr(recipient, fieldname)
+            incoming = getattr(absorbed, fieldname)
+            if (current is None or current == "") and incoming not in (None, ""):
+                completed[fieldname] = incoming
+        return completed
+
+    def _compute_warnings(self, recipient, absorbed):
+        """Retourne les avertissements sur des incohérences entre les deux fiches."""
+        warnings = []
+        if recipient.tmdb_id and absorbed.tmdb_id and recipient.tmdb_id != absorbed.tmdb_id:
+            warnings.append(
+                "Les deux fiches ont des tmdb_id différents — vérifiez qu'il "
+                "s'agit bien de la même série."
+            )
+        if recipient.year and absorbed.year and recipient.year != absorbed.year:
+            warnings.append("Les deux fiches ont des années différentes.")
+        return warnings
+
+    def _detect_conflicts(self, recipient_eps, absorbed_eps):
+        """Détecte les épisodes présents dans les deux fiches (même saison/numéro)."""
+        by_key = {(e.season_number, e.episode_number): e for e in recipient_eps}
+        conflicts = []
+        for ep in absorbed_eps:
+            match = by_key.get((ep.season_number, ep.episode_number))
+            if match is not None:
+                conflicts.append(
+                    EpisodeConflict(
+                        season_number=ep.season_number,
+                        episode_number=ep.episode_number,
+                        recipient_episode_id=match.id,
+                        absorbed_episode_id=ep.id,
+                        kept=self._pick_better(match, ep),
+                    )
+                )
+        return conflicts
+
+    def _pick_better(self, recipient_ep, absorbed_ep):
+        """Choisit l'épisode de meilleure qualité entre le récipiendaire et l'absorbé."""
+        from src.services.transferer import ExistingFileInfo
+
+        def info(model):
+            return ExistingFileInfo(
+                path=Path(model.file_path or ""),
+                size_bytes=model.file_size_bytes or 0,
+                resolution=model.resolution,
+                video_codec=model.codec_video,
+                audio_codec=model.codec_audio,
+                duration_seconds=model.duration_seconds,
+            )
+
+        comparison = self._dup.compare_quality(
+            existing_files=[info(recipient_ep)], new_file=info(absorbed_ep)
+        )
+        return "absorbed" if comparison.recommended == "new" else "recipient"
+
+    def preview(self, recipient_id, absorbed_id) -> MergePreview:
+        """Calcule un aperçu de la fusion sans effectuer aucune mutation.
+
+        Args:
+            recipient_id: ID de la fiche qui conserve les épisodes.
+            absorbed_id: ID de la fiche à absorber.
+
+        Retourne:
+            MergePreview décrivant ce que la fusion ferait.
+        """
+        recipient, absorbed = self._load_models(recipient_id, absorbed_id)
+        recipient_eps = self._episodes_of(recipient_id)
+        absorbed_eps = self._episodes_of(absorbed_id)
+        conflicts = self._detect_conflicts(recipient_eps, absorbed_eps)
+        conflict_keys = {(c.season_number, c.episode_number) for c in conflicts}
+        to_attach = sum(
+            1 for e in absorbed_eps
+            if (e.season_number, e.episode_number) not in conflict_keys
+        )
+        recipient_entity = self._series_repo._to_entity(recipient)
+        folder = (
+            f"{recipient_entity.title} ({recipient_entity.year})"
+            if recipient_entity.year else recipient_entity.title
+        )
+        return MergePreview(
+            recipient_id=recipient_id,
+            absorbed_id=absorbed_id,
+            recipient_title=recipient.title,
+            absorbed_title=absorbed.title,
+            episodes_to_attach=to_attach,
+            conflicts=conflicts,
+            metadata_completed=self._compute_metadata_completion(recipient, absorbed),
+            target_series_folder=folder,
+            warnings=self._compute_warnings(recipient, absorbed),
+        )
+
     def regenerate_symlink(
         self,
         series: Series,

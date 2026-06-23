@@ -1,10 +1,14 @@
 import json
 
 import pytest
+from sqlmodel import SQLModel, Session, create_engine
 
 from src.core.value_objects.media_info import MediaInfo
-from src.infrastructure.persistence.models import EpisodeModel
-from src.services.series_merge import build_media_info_from_episode
+from src.infrastructure.persistence.models import EpisodeModel, SeriesModel
+from src.infrastructure.persistence.repositories.series_repository import SQLModelSeriesRepository
+from src.infrastructure.persistence.repositories.episode_repository import SQLModelEpisodeRepository
+from src.services.duplicate_detector import DuplicateDetector
+from src.services.series_merge import build_media_info_from_episode, SeriesMergeService
 
 
 def _episode_model(**kw):
@@ -58,6 +62,47 @@ from src.services.organizer import OrganizerService
 from src.services.renamer import RenamerService
 
 
+@pytest.fixture
+def session():
+    engine = create_engine("sqlite:///:memory:")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as s:
+        yield s
+
+
+def _make_series(session, **kw):
+    defaults = dict(title="Doctor Who", year=2005, tmdb_id=57243, genres_json='["Drama"]')
+    defaults.update(kw)
+    model = SeriesModel(**defaults)
+    session.add(model)
+    session.commit()
+    session.refresh(model)
+    return model
+
+
+def _make_episode(session, series_id, season, ep, **kw):
+    defaults = dict(
+        title=f"E{ep}", resolution="1920x1080", codec_video="x265",
+        codec_audio="AAC", languages_json='["fr"]', file_path=f"/storage/s{season}e{ep}.mkv",
+    )
+    defaults.update(kw)
+    model = EpisodeModel(series_id=series_id, season_number=season, episode_number=ep, **defaults)
+    session.add(model)
+    session.commit()
+    session.refresh(model)
+    return model
+
+
+def _service(session, tmp_path):
+    return SeriesMergeService(
+        session=session, video_dir=tmp_path / "video", file_system=FileSystemAdapter(),
+        organizer=OrganizerService(), renamer=RenamerService(),
+        duplicate_detector=DuplicateDetector(),
+        series_repo=SQLModelSeriesRepository(session),
+        episode_repo=SQLModelEpisodeRepository(session),
+    )
+
+
 def test_regenerate_symlink_creates_canonical_link(tmp_path):
     storage = tmp_path / "storage"
     video = tmp_path / "video"
@@ -88,3 +133,43 @@ def test_regenerate_symlink_creates_canonical_link(tmp_path):
     assert "Doctor Who (2005)" in str(new_link)
     assert "Saison 08" in str(new_link)
     assert new_link.name.startswith("Doctor Who (2005) - S08E01")
+
+
+def test_preview_counts_episodes_and_completes_metadata(session, tmp_path):
+    recipient = _make_series(session, title="Doctor Who", tvdb_id=None, tmdb_id=57243)
+    absorbed = _make_series(session, title="Doctor Who (2005)", tvdb_id=78804, tmdb_id=57243)
+    _make_episode(session, recipient.id, 1, 1)
+    _make_episode(session, absorbed.id, 8, 1)
+    _make_episode(session, absorbed.id, 8, 2)
+
+    preview = _service(session, tmp_path).preview(recipient.id, absorbed.id)
+
+    assert preview.episodes_to_attach == 2
+    assert preview.conflicts == []
+    assert preview.metadata_completed.get("tvdb_id") == 78804
+    assert preview.target_series_folder == "Doctor Who (2005)"
+    assert preview.warnings == []
+
+
+def test_preview_detects_conflict(session, tmp_path):
+    recipient = _make_series(session)
+    absorbed = _make_series(session, title="Doctor Who (2005)", tmdb_id=57243)
+    _make_episode(session, recipient.id, 9, 6)
+    _make_episode(session, absorbed.id, 9, 6)
+
+    preview = _service(session, tmp_path).preview(recipient.id, absorbed.id)
+
+    assert len(preview.conflicts) == 1
+    assert preview.conflicts[0].season_number == 9
+    assert preview.conflicts[0].episode_number == 6
+    assert preview.episodes_to_attach == 0
+
+
+def test_preview_warns_on_different_tmdb_and_year(session, tmp_path):
+    recipient = _make_series(session, title="Doctor Who", year=2005, tmdb_id=57243)
+    absorbed = _make_series(session, title="Doctor Who", year=2024, tmdb_id=239770)
+
+    preview = _service(session, tmp_path).preview(recipient.id, absorbed.id)
+
+    assert any("tmdb" in w.lower() for w in preview.warnings)
+    assert any("année" in w.lower() for w in preview.warnings)
