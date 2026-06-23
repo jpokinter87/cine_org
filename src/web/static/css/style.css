@@ -10050,3 +10050,66 @@ details[open] > .maint-issue-toggle::before {
     }
 }
 
+/* Badge complétude (phase série-completeness) */
+.badge-incomplete,
+.lib-card-incomplete {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #1a1a1a;
+    background: #f59e0b;
+}
+
+.lib-card-incomplete {
+    font-size: 0.625rem;
+    border-radius: 100px;
+    backdrop-filter: blur(8px);
+}
+
+.completeness-block {
+    margin: 1.5rem 0;
+    padding: 1rem 1.25rem;
+    border-left: 4px solid #f59e0b;
+    background: rgba(245, 158, 11, 0.08);
+    border-radius: 8px;
+}
+
+.completeness-title {
+    font-size: 1.05rem;
+    margin: 0 0 0.5rem;
+}
+
+.completeness-missing-list {
+    margin: 0.5rem 0 0;
+    padding-left: 1rem;
+    list-style: none;
+}
+
+.completeness-missing-list li {
+    padding: 0.15rem 0;
+}
+
+.completeness-code,
+.completeness-tag {
+    font-family: monospace;
+    font-weight: 700;
+    margin-right: 0.4rem;
+}
+
+.completeness-ep-date {
+    color: var(--text-muted, #888);
+    margin-left: 0.3rem;
+}
+
+.maint-result-card {
+    margin-top: 1rem;
+    padding: 1rem 1.25rem;
+    border-left: 4px solid #f59e0b;
+    background: rgba(245, 158, 11, 0.08);
+    border-radius: 8px;
+}
+

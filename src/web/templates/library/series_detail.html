@@ -41,6 +41,9 @@
         <div class="lib-detail-info">
             <div class="lib-detail-badges">
                 <span class="type-badge badge-series">Serie</span>
+                {% if completeness_status == 'incomplete' %}
+                <span class="badge-incomplete" title="Des épisodes déjà diffusés manquent">Incomplet</span>
+                {% endif %}
                 {% if series.imdb_rating %}
                 <span class="lib-rating-badge lib-rating-imdb">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -192,6 +195,35 @@
             {% endif %}
         </div>
     </div>
+
+    {% if completeness_status == 'incomplete' and completeness_detail %}
+    <section class="completeness-block">
+        <h2 class="completeness-title">Pourquoi cette série est incomplète</h2>
+        <p class="completeness-summary">
+            {{ completeness_detail.owned }} / {{ completeness_detail.expected_aired }}
+            épisode(s) diffusé(s) présent(s).
+        </p>
+        {% if completeness_detail.missing_seasons %}
+        <p class="completeness-missing-seasons">
+            Saison(s) entièrement absente(s) :
+            {% for s in completeness_detail.missing_seasons %}
+            <span class="completeness-tag">Saison {{ '%02d'|format(s) }}</span>
+            {% endfor %}
+        </p>
+        {% endif %}
+        {% if completeness_detail.missing_episodes %}
+        <ul class="completeness-missing-list">
+            {% for ep in completeness_detail.missing_episodes %}
+            <li>
+                <span class="completeness-code">S{{ '%02d'|format(ep.season) }}E{{ '%02d'|format(ep.episode) }}</span>
+                {% if ep.title %}<span class="completeness-ep-title">{{ ep.title }}</span>{% endif %}
+                {% if ep.air_date %}<span class="completeness-ep-date">({{ ep.air_date }})</span>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </section>
+    {% endif %}
 
     <!-- Saisons et episodes -->
     <div class="lib-seasons">

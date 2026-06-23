@@ -2,6 +2,8 @@
 Routes de détail — fiches film et série.
 """
 
+import json
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 from sqlmodel import select
@@ -206,12 +208,22 @@ async def series_detail(request: Request, series_id: int):
     finally:
         session.close()
 
+    # Détail de complétude (phase série-completeness) pour la fiche série
+    completeness_detail = None
+    if series.completeness_missing_json:
+        try:
+            completeness_detail = json.loads(series.completeness_missing_json)
+        except (ValueError, TypeError):
+            completeness_detail = None
+
     return templates.TemplateResponse(
         request,
         "library/series_detail.html",
         {
             "series": series,
             "series_id": series.id,
+            "completeness_status": series.completeness_status,
+            "completeness_detail": completeness_detail,
             "watched": series.watched,
             "personal_rating": series.personal_rating,
             "genres": genres,

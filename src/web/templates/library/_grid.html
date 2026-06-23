@@ -27,6 +27,9 @@
                 <span class="lib-card-type {{ 'badge-film' if item.type == 'movie' else 'badge-series' }}">
                     {{ 'Film' if item.type == 'movie' else 'Serie' }}
                 </span>
+                {% if item.type == 'series' and item.completeness_status == 'incomplete' %}
+                <span class="lib-card-incomplete" title="Série incomplète">Incomplet</span>
+                {% endif %}
             </div>
             {% if item.rating %}
             <span class="lib-card-rating {% if item.rating >= 7 %}rating-good{% elif item.rating >= 5 %}rating-ok{% else %}rating-low{% endif %}">
