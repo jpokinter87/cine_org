@@ -48,6 +48,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Transfert](#transfert)
   - [Qualité et doublons](#qualité-et-doublons)
   - [Corbeille](#corbeille)
+  - [Fusion de fiches séries dupliquées](#fusion-de-fiches-séries-dupliquées)
   - [Maintenance](#maintenance)
   - [Configuration](#configuration-web)
 - [Stack technique](#stack-technique)
@@ -1313,6 +1314,36 @@ La **corbeille** (`/library/trash`) est une poubelle réversible : les fichiers 
 
 La suppression est restreinte à **localhost** — le bouton est masqué depuis une machine distante, et la route DELETE retourne 403. Évite les suppressions accidentelles depuis un client non supervisé.
 
+### Fusion de fiches séries dupliquées
+
+Après le téléchargement de nouveaux épisodes, il arrive que ceux-ci soient rattachés à une **fiche distincte** au lieu de la fiche existante (ex. « Doctor Who » et « Doctor Who (2005) » coexistent en base). La fusion permet de réunifier les deux fiches en une seule sans toucher aux fichiers physiques.
+
+> Cette opération est restreinte à **localhost** (même restriction que la suppression).
+
+#### Utilisation
+
+1. Ouvrir la **Bibliothèque** (`/library/`), filtrer sur « Séries » et rechercher le titre concerné.
+2. Cliquer sur le bouton **Suppression** pour passer en mode sélection.
+3. Cocher **exactement deux** fiches de type Série (le bouton **Fusionner** n'apparaît que pour cette combinaison ; il reste masqué pour les films ou si le nombre de sélections est différent de 2).
+4. Cliquer sur **Fusionner** dans la barre flottante.
+5. Un overlay s'ouvre avec les deux fiches côte à côte. Un bouton radio **Conserver celle-ci** permet de choisir quelle fiche est conservée (la plus ancienne est pré-sélectionnée). Un aperçu calculé affiche :
+   - le nombre d'épisodes qui seront rattachés à la fiche conservée ;
+   - les champs de métadonnées récupérés depuis la fiche absorbée (ex. `tvdb_id` manquant) ;
+   - les éventuels conflits d'épisodes (même saison + même numéro dans les deux fiches) ;
+   - un avertissement si les deux fiches ont des `tmdb_id` ou des années différents (risque de fusionner deux séries distinctes).
+   
+   Modifier la sélection radio recalcule l'aperçu dans l'autre sens.
+6. Cliquer sur **Fusionner ▶** pour exécuter. La page redirige vers la fiche unifiée.
+
+#### Ce que fait la fusion
+
+- Les épisodes de la fiche absorbée sont **rattachés à la fiche conservée**.
+- Les **conflits** (même épisode présent des deux côtés) sont résolus automatiquement en conservant la version de meilleure qualité (score qualité : résolution, codec vidéo/audio, bitrate). Le fichier physique de la version écartée est conservé ; seul son symlink et sa ligne en base sont supprimés.
+- Les métadonnées manquantes sur la fiche conservée (ex. `tvdb_id` nul) sont complétées par celles de la fiche absorbée.
+- Les **symlinks** dans `video/` sont régénérés sous le dossier canonique de la fiche conservée (`Titre (Année)/Saison XX/…`).
+- La fiche absorbée est envoyée en **corbeille** pour traçabilité.
+- Les fichiers physiques dans `storage/` ne sont **jamais déplacés ni renommés**.
+
 ### Maintenance
 
 > ![Page de maintenance](docs/screenshots/maintenance.png)
@@ -1441,6 +1472,12 @@ uv run cineorg repair-links --auto
 rm ~/.cineorg/file_index.json
 uv run cineorg repair-links --auto
 ```
+
+### Nouveaux épisodes d'une série sur une fiche distincte
+
+Après un téléchargement, les épisodes apparaissent dans la bibliothèque sous une deuxième fiche (ex. « Doctor Who » et « Doctor Who (2005) ») au lieu d'être rattachés à la fiche existante. Cela se produit quand le matching TMDB/TVDB a créé une nouvelle entrée légèrement différente.
+
+→ Utiliser la **fusion de fiches séries** depuis la bibliothèque web (voir [Fusion de fiches séries dupliquées](#fusion-de-fiches-séries-dupliquées)).
 
 ### Base de données corrompue
 
