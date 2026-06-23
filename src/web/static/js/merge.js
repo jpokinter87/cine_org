@@ -77,6 +77,7 @@
         }
     };
 
+    // Clic sur le bouton « Fusionner » (aucun stopPropagation en amont ici).
     document.addEventListener('click', function (e) {
         if (e.target.closest && e.target.closest('#merge-confirm-btn')) {
             var series = selectedSeries();
@@ -84,11 +85,18 @@
                 openOverlay(series[0].id, series[1].id);
             }
         }
-        if (e.target.closest && e.target.closest('.delete-checkbox')) {
-            setTimeout(refreshButton, 0);
-        }
     });
 
+    // Rafraîchir la visibilité du bouton après chaque clic. En phase CAPTURE :
+    // delete.js appelle e.stopPropagation() sur les cases à cocher, ce qui
+    // empêcherait un écouteur en phase de bulle de voir l'événement. Le
+    // setTimeout lit l'état une fois que delete.js l'a écrit dans sessionStorage.
+    document.addEventListener('click', function () {
+        setTimeout(refreshButton, 0);
+    }, true);
+
     document.addEventListener('DOMContentLoaded', refreshButton);
-    document.body.addEventListener('htmx:afterSwap', refreshButton);
+    document.body.addEventListener('htmx:afterSwap', function () {
+        setTimeout(refreshButton, 0);
+    });
 })();
