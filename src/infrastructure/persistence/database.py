@@ -369,3 +369,29 @@ def _run_migrations() -> None:
                 )
             )
             conn.commit()
+
+        # Migration 13: Colonnes de complétude sur series (phase série-completeness)
+        result = conn.execute(text("PRAGMA table_info(series)"))
+        series_columns = [row[1] for row in result.fetchall()]
+
+        if "completeness_status" not in series_columns:
+            conn.execute(
+                text("ALTER TABLE series ADD COLUMN completeness_status VARCHAR")
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_series_completeness_status "
+                    "ON series(completeness_status)"
+                )
+            )
+            conn.commit()
+        if "completeness_checked_at" not in series_columns:
+            conn.execute(
+                text("ALTER TABLE series ADD COLUMN completeness_checked_at DATETIME")
+            )
+            conn.commit()
+        if "completeness_missing_json" not in series_columns:
+            conn.execute(
+                text("ALTER TABLE series ADD COLUMN completeness_missing_json VARCHAR")
+            )
+            conn.commit()

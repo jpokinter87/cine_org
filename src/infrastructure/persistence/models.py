@@ -153,6 +153,11 @@ class SeriesModel(SQLModel, table=True):
     overview_override: str | None = None
     cast_override_json: str | None = None
     preserve_overrides: bool = Field(default=False, index=True)
+    # Complétude (phase série-completeness) : verdict issu de la confrontation
+    # avec TVDB. None = jamais vérifié ou non vérifiable (pas de tvdb_id).
+    completeness_status: str | None = Field(default=None, index=True)
+    completeness_checked_at: datetime | None = None
+    completeness_missing_json: str | None = None
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 
