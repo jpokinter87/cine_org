@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 
+from src.core.entities.media import Episode, Series
 from src.core.value_objects.media_info import (
     AudioCodec,
     Language,
@@ -86,3 +88,49 @@ def build_media_info_from_episode(model: EpisodeModel) -> MediaInfo:
         audio_languages=audio_languages,
         duration_seconds=model.duration_seconds,
     )
+
+
+class SeriesMergeService:
+    """Fusionne deux fiches séries en une seule (symlinks uniquement)."""
+
+    def __init__(
+        self,
+        session,
+        video_dir: Path,
+        file_system,
+        organizer,
+        renamer,
+        duplicate_detector,
+        series_repo,
+        episode_repo,
+    ) -> None:
+        self._session = session
+        self._video_dir = Path(video_dir)
+        self._fs = file_system
+        self._organizer = organizer
+        self._renamer = renamer
+        self._dup = duplicate_detector
+        self._series_repo = series_repo
+        self._episode_repo = episode_repo
+
+    def regenerate_symlink(
+        self,
+        series: Series,
+        episode: Episode,
+        media_info: MediaInfo,
+        storage_path: Path,
+    ) -> Path:
+        """(Re)crée le symlink d'un épisode sous le dossier canonique de `series`.
+
+        Le fichier physique `storage_path` n'est jamais déplacé.
+        """
+        dest_dir = self._organizer.get_series_video_destination(
+            series, episode.season_number, self._video_dir
+        )
+        extension = storage_path.suffix
+        filename = self._renamer.generate_series_filename(
+            series=series, episode=episode, media_info=media_info, extension=extension
+        )
+        new_link = dest_dir / filename
+        self._fs.create_symlink(storage_path, new_link)
+        return new_link
