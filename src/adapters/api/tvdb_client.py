@@ -534,6 +534,49 @@ class TVDBClient(IMediaAPIClient):
         # Si la saison n'existe pas (0 épisodes retournés par le bulk)
         return len(episodes) if episodes else None
 
+    async def get_all_episodes(self, series_id: str) -> list[EpisodeDetails]:
+        """
+        Recupere tous les episodes d'une serie (saisons >= 1).
+
+        Boucle sur les saisons a partir de 1 et s'arrete a la premiere
+        saison vide (les saisons TVDB sont numerotees de facon contigue).
+        Utilise le fetch brut FR (titres en francais, vides tolere).
+
+        Args:
+            series_id: ID TVDB de la serie
+
+        Returns:
+            Liste d'EpisodeDetails (season_number, episode_number, air_date, title)
+        """
+        await self._ensure_token()
+        client = await self._get_client()
+
+        episodes: list[EpisodeDetails] = []
+        season = 1
+        while True:
+            raw = await self._fetch_all_season_episodes_raw(
+                client, series_id, season, language="fr"
+            )
+            if not raw:
+                break
+            for ep_data in raw:
+                ep_num = ep_data.get("airedEpisodeNumber")
+                if ep_num is None:
+                    continue
+                episodes.append(
+                    EpisodeDetails(
+                        id=str(ep_data.get("id", "")),
+                        title=ep_data.get("episodeName", "") or "",
+                        season_number=ep_data.get("airedSeason", season),
+                        episode_number=ep_num,
+                        overview=ep_data.get("overview"),
+                        air_date=ep_data.get("firstAired"),
+                    )
+                )
+            season += 1
+
+        return episodes
+
     @property
     def source(self) -> str:
         """Retourne l'identifiant de la source API."""
