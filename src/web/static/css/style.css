@@ -8412,6 +8412,43 @@ details[open] > .maint-issue-toggle::before {
     gap: 0.5rem;
 }
 
+/* --- Fusion de séries --- */
+.merge-bar-btn {
+    background: var(--accent-emerald-dim, rgba(52, 211, 153, 0.12));
+    color: var(--accent-emerald, #34d399);
+    border: 1px solid rgba(52, 211, 153, 0.3);
+    appearance: none;
+}
+.merge-bar-btn:hover { background: rgba(52, 211, 153, 0.22); }
+
+.merge-overlay {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center;
+}
+.merge-overlay.active { display: flex; }
+.merge-dialog {
+    background: var(--bg-surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 1.75rem; max-width: 640px; width: 92%;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+}
+.merge-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.merge-title { font-family: var(--font-display); font-size: 1.2rem; color: var(--text-primary); }
+.merge-close { background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1rem; }
+.merge-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem; }
+.merge-card { display: block; padding: 0.9rem; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
+.merge-card-selected { border-color: var(--accent-emerald, #34d399); }
+.merge-card input { margin-right: 0.4rem; }
+.merge-card-keep { font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); }
+.merge-card-meta { font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem; }
+.merge-badge { display: inline-block; margin-top: 0.4rem; font-size: 0.7rem; color: var(--accent-emerald, #34d399); }
+.merge-preview { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem; }
+.merge-preview h3 { font-size: 0.95rem; color: var(--text-primary); margin-bottom: 0.4rem; }
+.merge-warning { color: var(--accent-rose, #e85d75); margin-top: 0.4rem; }
+.merge-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.merge-cancel { padding: 0.55rem 1.1rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--text-secondary); cursor: pointer; }
+.merge-apply { padding: 0.55rem 1.1rem; border: 1px solid rgba(52, 211, 153, 0.3); border-radius: var(--radius-sm); background: var(--accent-emerald-dim, rgba(52, 211, 153, 0.12)); color: var(--accent-emerald, #34d399); font-weight: 600; cursor: pointer; }
+
 /* ═══════════════════════════════════════════
    Page Corbeille
    ═══════════════════════════════════════════ */
