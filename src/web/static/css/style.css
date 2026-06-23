@@ -8448,6 +8448,15 @@ details[open] > .maint-issue-toggle::before {
 .merge-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
 .merge-cancel { padding: 0.55rem 1.1rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--text-secondary); cursor: pointer; }
 .merge-apply { padding: 0.55rem 1.1rem; border: 1px solid rgba(52, 211, 153, 0.3); border-radius: var(--radius-sm); background: var(--accent-emerald-dim, rgba(52, 211, 153, 0.12)); color: var(--accent-emerald, #34d399); font-weight: 600; cursor: pointer; }
+.merge-apply:disabled, .merge-cancel:disabled { opacity: 0.6; cursor: not-allowed; }
+.merge-apply.is-loading { display: inline-flex; align-items: center; gap: 0.45rem; }
+.merge-spinner {
+    display: inline-block; width: 0.85em; height: 0.85em;
+    border: 2px solid currentColor; border-right-color: transparent;
+    border-radius: 50%; vertical-align: -1px;
+    animation: merge-spin 0.6s linear infinite;
+}
+@keyframes merge-spin { to { transform: rotate(360deg); } }
 
 /* ═══════════════════════════════════════════
    Page Corbeille

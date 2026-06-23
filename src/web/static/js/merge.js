@@ -60,6 +60,28 @@
             var b = parseInt(form.dataset.absorbed, 10);
             var absorbed = parseInt(keep, 10) === a ? b : a;
             var body = new URLSearchParams({ absorbed_id: absorbed });
+
+            // État de chargement : la fusion peut être longue (régénération des
+            // symlinks). On désactive les boutons et on affiche un indicateur.
+            var applyBtn = document.querySelector('.merge-apply');
+            var cancelBtn = document.querySelector('.merge-cancel');
+            if (applyBtn) {
+                applyBtn.disabled = true;
+                applyBtn.classList.add('is-loading');
+                applyBtn.innerHTML =
+                    '<span class="merge-spinner"></span> Fusion en cours…';
+            }
+            if (cancelBtn) { cancelBtn.disabled = true; }
+
+            function restoreButtons() {
+                if (applyBtn) {
+                    applyBtn.disabled = false;
+                    applyBtn.classList.remove('is-loading');
+                    applyBtn.textContent = 'Fusionner ▶';
+                }
+                if (cancelBtn) { cancelBtn.disabled = false; }
+            }
+
             fetch('/library/series/' + keep + '/merge', { method: 'POST', body: body })
                 .then(function (res) {
                     if (!res.ok) {
@@ -70,10 +92,17 @@
                         });
                     }
                     var redirect = res.headers.get('HX-Redirect');
-                    if (redirect) { window.location.href = redirect; }
+                    if (redirect) {
+                        // Succès : on garde l'indicateur jusqu'à la redirection.
+                        if (applyBtn) { applyBtn.innerHTML = '<span class="merge-spinner"></span> Redirection…'; }
+                        window.location.href = redirect;
+                    }
                     return res.json();
                 })
-                .catch(function () { /* feedback déjà affiché via alert */ });
+                .catch(function () {
+                    // Échec : feedback déjà affiché via alert, on réactive l'UI.
+                    restoreButtons();
+                });
         }
     };
 
