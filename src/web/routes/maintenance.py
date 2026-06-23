@@ -467,6 +467,75 @@ async def run_check_sse(request: Request):
 
 
 # ---------------------------------------------------------------------------
+# SSE — Vérification de complétude des séries (TVDB)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/maintenance/completeness")
+async def run_completeness_sse(request: Request):
+    """SSE endpoint : vérification de complétude des séries (TVDB)."""
+    from datetime import date
+
+    from ...infrastructure.persistence.database import get_session
+    from ...infrastructure.persistence.models import SeriesModel
+    from ...services.completeness.completeness_checker import (
+        CompletenessChecker,
+        check_series_model,
+    )
+
+    container = request.app.state.container
+    tvdb_client = container.tvdb_client()
+    checker = CompletenessChecker(tvdb_client)
+    today = date.today()
+
+    async def event_stream():
+        session = next(get_session())
+        try:
+            series_list = session.exec(select(SeriesModel)).all()
+            total = len(series_list)
+            tally = {"complete": 0, "incomplete": 0, "unverifiable": 0}
+
+            yield _sse_progress(0, total, "Initialisation…")
+
+            for i, series in enumerate(series_list):
+                yield _sse_progress(i + 1, total, series.title)
+                try:
+                    verdict = await check_series_model(
+                        session, checker, series, today
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Complétude : échec sur '{}' : {}", series.title, e
+                    )
+                    verdict = "unverifiable"
+                tally[verdict] = tally.get(verdict, 0) + 1
+
+            html = (
+                '<div class="maint-result-card">'
+                "<h3>Vérification terminée</h3>"
+                f"<p><strong>{tally['incomplete']}</strong> série(s) incomplète(s), "
+                f"<strong>{tally['complete']}</strong> complète(s), "
+                f"<strong>{tally['unverifiable']}</strong> non vérifiable(s).</p>"
+                '<p><a href="/library/?type=series&incomplete_series=1">'
+                "Voir les séries incomplètes</a></p>"
+                "</div>"
+            )
+            yield _sse_complete(html)
+        finally:
+            session.close()
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # SSE — Analyse nettoyage
 # ---------------------------------------------------------------------------
 

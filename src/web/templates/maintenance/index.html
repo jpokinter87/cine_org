@@ -60,6 +60,30 @@
             <div id="cleanup-results"></div>
         </div>
 
+        <!-- Complétude des séries -->
+        <div class="maint-card">
+            <div class="maint-card-header">
+                <div class="maint-card-icon maint-icon-check">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg>
+                </div>
+                <div>
+                    <h2 class="maint-card-title">Complétude des séries{{ hint_icon("Confronte chaque série à TVDB pour détecter les épisodes ou saisons déjà diffusés (date de diffusion passée) mais absents de la vidéothèque. La saison 0, les épisodes numérotés 0 et les contenus hors canon sont ignorés. Le verdict (complète / incomplète / non vérifiable) est enregistré sur chaque série et consultable depuis la bibliothèque via le filtre « Séries incomplètes ». Opération de lecture seule (aucun fichier modifié).") }}</h2>
+                    <p class="maint-card-desc">Compare chaque série à TVDB pour détecter les épisodes ou saisons déjà diffusés mais absents de la vidéothèque.</p>
+                </div>
+            </div>
+            <button class="maint-analyze-btn" id="btn-completeness" onclick="startAnalysis('completeness')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                Vérifier la complétude
+            </button>
+            <div class="maint-progress" id="completeness-progress" style="display: none;">
+                <div class="maint-progress-bar-track">
+                    <div class="maint-progress-bar-fill" id="completeness-bar"></div>
+                </div>
+                <div class="maint-progress-phase" id="completeness-phase"></div>
+            </div>
+            <div id="completeness-results"></div>
+        </div>
+
         <!-- Sandbox -->
         <div class="maint-card maint-card-sandbox">
             <div class="maint-card-header">
