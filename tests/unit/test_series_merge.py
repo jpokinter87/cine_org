@@ -265,3 +265,31 @@ def test_merge_keeps_best_quality_on_conflict(session, tmp_path):
     assert remaining[0].series_id == recipient.id
     assert remaining[0].resolution == "1920x1080"
     assert f_low.exists() and f_high.exists()
+
+
+def test_cleanup_empty_dirs_removes_emptied_branch_only(tmp_path):
+    video = tmp_path / "video"
+    empty_branch = video / "Series" / "TV" / "D" / "Doctor Who" / "Saison 01"
+    empty_branch.mkdir(parents=True)
+    # Dossier frère non vide → doit être conservé.
+    keep = video / "Series" / "TV" / "D" / "Autre Serie"
+    keep.mkdir(parents=True)
+    (keep / "ep.mkv").write_text("x")
+
+    svc = SeriesMergeService(
+        session=None,
+        video_dir=video,
+        file_system=None,
+        organizer=None,
+        renamer=None,
+        duplicate_detector=None,
+        series_repo=None,
+        episode_repo=None,
+    )
+    svc._cleanup_empty_dirs({empty_branch})
+
+    assert not empty_branch.exists()
+    assert not (video / "Series" / "TV" / "D" / "Doctor Who").exists()
+    assert (video / "Series" / "TV" / "D").exists()  # conservé (contient 'Autre Serie')
+    assert keep.exists()
+    assert video.exists()  # racine jamais supprimée

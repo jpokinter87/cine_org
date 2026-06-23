@@ -256,6 +256,23 @@ class SeriesMergeService:
         ep_model.updated_at = datetime.utcnow()
         return 1
 
+    def _cleanup_empty_dirs(self, dirs) -> None:
+        """Supprime les dossiers de symlinks devenus vides (et leurs parents vides).
+
+        Remonte jusqu'au répertoire `video/` racine, sans jamais le supprimer.
+        `rmdir()` ne supprime qu'un dossier vide : aucun média n'est touché — dès
+        qu'un dossier n'est pas vide, on s'arrête pour cette branche.
+        """
+        video_root = self._video_dir.resolve()
+        for start in dirs:
+            current = start
+            while video_root in current.parents:
+                try:
+                    current.rmdir()
+                except OSError:
+                    break  # dossier non vide (ou inexistant) → on s'arrête
+                current = current.parent
+
     def _resolve_conflicts(self, conflicts, recipient_eps, absorbed_eps, recipient_id) -> int:
         """Conserve la meilleure version de chaque conflit, supprime le perdant.
 
@@ -314,6 +331,14 @@ class SeriesMergeService:
             ep.series_id = recipient_id
             attached += 1
 
+        # Mémoriser les dossiers des anciens symlinks (avant régénération) pour
+        # nettoyer ensuite ceux qui se retrouvent vides.
+        old_dirs = {
+            Path(ep.symlink_path).parent
+            for ep in recipient_eps + absorbed_eps
+            if ep.symlink_path
+        }
+
         # 4. Régénérer les symlinks de TOUS les épisodes désormais sous R
         self._session.flush()
         recipient_entity = self._series_repo._to_entity(recipient)
@@ -325,6 +350,9 @@ class SeriesMergeService:
         self._archive_series(absorbed)
         self._session.delete(absorbed)
         self._session.commit()
+
+        # 6. Nettoyer les dossiers de symlinks devenus vides
+        self._cleanup_empty_dirs(old_dirs)
 
         return MergeResult(
             recipient_id=recipient_id,
