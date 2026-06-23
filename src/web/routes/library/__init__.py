@@ -12,6 +12,7 @@ from . import (
     delete,
     detail,
     edit_metadata,
+    merge,
     player,
     reassociate,
     suggest,
@@ -27,5 +28,6 @@ router.include_router(detail.router)
 router.include_router(player.router)
 router.include_router(reassociate.router)
 router.include_router(delete.router)
+router.include_router(merge.router)
 router.include_router(trash.router)
 router.include_router(edit_metadata.router)

@@ -1,0 +1,45 @@
+<div class="merge-overlay active" id="merge-overlay">
+  <div class="merge-dialog">
+    <div class="merge-header">
+      <h2 class="merge-title">Fusionner deux fiches « {{ recipient.title }} »</h2>
+      <button class="merge-close" onclick="CineMerge.close()" aria-label="Fermer">✕</button>
+    </div>
+
+    <form id="merge-form" class="merge-choices"
+          data-recipient="{{ recipient.id }}" data-absorbed="{{ absorbed.id }}">
+      {% for card in [recipient, absorbed] %}
+      <label class="merge-card {% if loop.first %}merge-card-selected{% endif %}">
+        <input type="radio" name="keep" value="{{ card.id }}" {% if loop.first %}checked{% endif %}>
+        <span class="merge-card-keep">Conserver</span>
+        <strong>{{ card.title }}{% if card.year %} ({{ card.year }}){% endif %}</strong>
+        <div class="merge-card-meta">
+          tmdb {{ card.tmdb_id or "—" }} · tvdb {{ card.tvdb_id or "—" }}
+        </div>
+        {% if loop.first %}<span class="merge-badge">recommandée (plus ancienne)</span>{% endif %}
+      </label>
+      {% endfor %}
+    </form>
+
+    <div class="merge-preview">
+      <h3>Aperçu de la fusion</h3>
+      <ul>
+        <li>{{ preview.episodes_to_attach }} épisode(s) rattaché(s) à la fiche conservée</li>
+        {% for fieldname, value in preview.metadata_completed.items() %}
+        <li>{{ fieldname }} récupéré depuis la fiche absorbée : {{ value }}</li>
+        {% endfor %}
+        {% if preview.conflicts %}
+        <li>⚠ {{ preview.conflicts|length }} conflit(s) d'épisode → on garde la meilleure qualité</li>
+        {% endif %}
+        <li>Symlinks regroupés sous « {{ preview.target_series_folder }}/ », storage physique intouché</li>
+      </ul>
+      {% for w in preview.warnings %}
+      <div class="merge-warning">⚠ {{ w }}</div>
+      {% endfor %}
+    </div>
+
+    <div class="merge-actions">
+      <button type="button" class="merge-cancel" onclick="CineMerge.close()">Annuler</button>
+      <button type="button" class="merge-apply" onclick="CineMerge.apply()">Fusionner ▶</button>
+    </div>
+  </div>
+</div>
