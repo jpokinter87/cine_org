@@ -173,3 +173,34 @@ def test_preview_warns_on_different_tmdb_and_year(session, tmp_path):
 
     assert any("tmdb" in w.lower() for w in preview.warnings)
     assert any("année" in w.lower() for w in preview.warnings)
+
+
+def test_merge_attaches_episodes_and_archives_absorbed(session, tmp_path):
+    from src.infrastructure.persistence.models import SeriesModel, EpisodeModel, TrashModel
+    storage = tmp_path / "storage"
+    storage.mkdir()
+    recipient = _make_series(session, title="Doctor Who", tvdb_id=None, tmdb_id=57243)
+    absorbed = _make_series(session, title="Doctor Who (2005)", tvdb_id=78804, tmdb_id=57243)
+
+    f_r = storage / "r_s01e01.mkv"; f_r.write_text("x")
+    f_a = storage / "a_s08e01.mkv"; f_a.write_text("x")
+    _make_episode(session, recipient.id, 1, 1, file_path=str(f_r))
+    ep_a = _make_episode(session, absorbed.id, 8, 1, file_path=str(f_a))
+
+    result = _service(session, tmp_path).merge(recipient.id, absorbed.id)
+
+    assert result.episodes_attached == 1
+    assert result.conflicts_resolved == 0
+    assert result.absorbed_archived is True
+    session.refresh(ep_a)
+    assert ep_a.series_id == recipient.id
+    session.refresh(recipient)
+    assert recipient.tvdb_id == 78804
+    assert session.get(SeriesModel, absorbed.id) is None
+    from sqlmodel import select
+    trashed = session.exec(
+        select(TrashModel).where(TrashModel.entity_type == "series")
+    ).all()
+    assert any(t.original_id == absorbed.id for t in trashed)
+    assert ep_a.symlink_path is not None
+    assert "Doctor Who (2005)" in ep_a.symlink_path

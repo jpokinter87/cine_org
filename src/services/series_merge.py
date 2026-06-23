@@ -202,6 +202,106 @@ class SeriesMergeService:
         )
         return "absorbed" if comparison.recommended == "new" else "recipient"
 
+    def _serialize_series(self, model) -> str:
+        """Sérialise un SeriesModel en JSON (pour archivage corbeille)."""
+        data = {c.name: getattr(model, c.name) for c in model.__table__.columns}
+        return json.dumps(data, default=str, ensure_ascii=False)
+
+    def _archive_series(self, absorbed) -> None:
+        """Archive la fiche absorbée dans la corbeille avant suppression."""
+        from src.infrastructure.persistence.models import TrashModel
+
+        self._session.add(
+            TrashModel(
+                entity_type="series",
+                original_id=absorbed.id,
+                metadata_json=self._serialize_series(absorbed),
+                deletion_reason="merge",
+            )
+        )
+
+    def _apply_metadata_completion(self, recipient, completed) -> None:
+        """Applique sur le récipiendaire les champs complétés depuis l'absorbée."""
+        from datetime import datetime
+
+        for fieldname, value in completed.items():
+            setattr(recipient, fieldname, value)
+        recipient.updated_at = datetime.utcnow()
+
+    def _regenerate_for_episode(self, recipient_entity, ep_model) -> int:
+        """Régénère le symlink d'un épisode ; retourne 1 si créé, 0 sinon."""
+        from datetime import datetime
+
+        if not ep_model.file_path:
+            return 0
+        storage_path = Path(ep_model.file_path)
+        if not storage_path.exists():
+            return 0
+        if ep_model.symlink_path:
+            self._fs.remove_symlink(Path(ep_model.symlink_path))
+        ep_entity = self._episode_repo._to_entity(ep_model)
+        media_info = build_media_info_from_episode(ep_model)
+        new_link = self.regenerate_symlink(
+            recipient_entity, ep_entity, media_info, storage_path
+        )
+        ep_model.symlink_path = str(new_link)
+        ep_model.updated_at = datetime.utcnow()
+        return 1
+
+    def _resolve_conflicts(self, conflicts, recipient_eps, absorbed_eps) -> int:
+        """Résolution des conflits — complétée en Task 5 (stub minimal)."""
+        return 0
+
+    def merge(self, recipient_id, absorbed_id) -> MergeResult:
+        """Fusionne la fiche absorbée dans la fiche récipiendaire.
+
+        Rattache les épisodes, complète les métadonnées, régénère les symlinks
+        sous le dossier canonique, archive puis supprime la fiche absorbée.
+        Le storage physique n'est jamais modifié.
+        """
+        recipient, absorbed = self._load_models(recipient_id, absorbed_id)
+        self._merge_recipient_id = recipient_id
+        recipient_eps = self._episodes_of(recipient_id)
+        absorbed_eps = self._episodes_of(absorbed_id)
+        conflicts = self._detect_conflicts(recipient_eps, absorbed_eps)
+        conflict_by_key = {(c.season_number, c.episode_number): c for c in conflicts}
+
+        # 1. Compléter les métadonnées de R
+        self._apply_metadata_completion(
+            recipient, self._compute_metadata_completion(recipient, absorbed)
+        )
+
+        # 2. Résoudre les conflits (complété en Task 5)
+        resolved = self._resolve_conflicts(conflicts, recipient_eps, absorbed_eps)
+
+        # 3. Rattacher les épisodes de A sans conflit
+        attached = 0
+        for ep in absorbed_eps:
+            if (ep.season_number, ep.episode_number) in conflict_by_key:
+                continue
+            ep.series_id = recipient_id
+            attached += 1
+
+        # 4. Régénérer les symlinks de TOUS les épisodes désormais sous R
+        self._session.flush()
+        recipient_entity = self._series_repo._to_entity(recipient)
+        regenerated = 0
+        for ep in self._episodes_of(recipient_id):
+            regenerated += self._regenerate_for_episode(recipient_entity, ep)
+
+        # 5. Archiver puis supprimer la fiche A
+        self._archive_series(absorbed)
+        self._session.delete(absorbed)
+        self._session.commit()
+
+        return MergeResult(
+            recipient_id=recipient_id,
+            episodes_attached=attached,
+            conflicts_resolved=resolved,
+            symlinks_regenerated=regenerated,
+            absorbed_archived=True,
+        )
+
     def preview(self, recipient_id, absorbed_id) -> MergePreview:
         """Calcule un aperçu de la fusion sans effectuer aucune mutation.
 
