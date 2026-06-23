@@ -252,6 +252,7 @@ async def library_index(
                         "codec_audio": None,
                         "watched": s.watched,
                         "created_at": s.created_at,
+                        "completeness_status": s.completeness_status,
                     }
                 )
 
