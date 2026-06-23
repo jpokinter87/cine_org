@@ -249,8 +249,29 @@ class SeriesMergeService:
         return 1
 
     def _resolve_conflicts(self, conflicts, recipient_eps, absorbed_eps) -> int:
-        """Résolution des conflits — complétée en Task 5 (stub minimal)."""
-        return 0
+        """Conserve la meilleure version de chaque conflit, supprime le perdant.
+
+        Le perdant perd son symlink (video) et son entrée DB ; le fichier
+        physique storage est conservé (jamais supprimé).
+        """
+        recipient_by_id = {e.id: e for e in recipient_eps}
+        absorbed_by_id = {e.id: e for e in absorbed_eps}
+        resolved = 0
+        for c in conflicts:
+            if c.kept == "absorbed":
+                loser = recipient_by_id.get(c.recipient_episode_id)
+                keeper = absorbed_by_id.get(c.absorbed_episode_id)
+                if keeper is not None:
+                    keeper.series_id = self._merge_recipient_id
+            else:  # "recipient"
+                loser = absorbed_by_id.get(c.absorbed_episode_id)
+            if loser is not None:
+                if loser.symlink_path:
+                    self._fs.remove_symlink(Path(loser.symlink_path))
+                self._session.delete(loser)
+            resolved += 1
+        self._session.flush()
+        return resolved
 
     def merge(self, recipient_id, absorbed_id) -> MergeResult:
         """Fusionne la fiche absorbée dans la fiche récipiendaire.

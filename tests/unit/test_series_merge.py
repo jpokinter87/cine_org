@@ -204,3 +204,30 @@ def test_merge_attaches_episodes_and_archives_absorbed(session, tmp_path):
     assert any(t.original_id == absorbed.id for t in trashed)
     assert ep_a.symlink_path is not None
     assert "Doctor Who (2005)" in ep_a.symlink_path
+
+
+def test_merge_keeps_best_quality_on_conflict(session, tmp_path):
+    from src.infrastructure.persistence.models import EpisodeModel
+    from sqlmodel import select
+    storage = tmp_path / "storage"; storage.mkdir()
+    recipient = _make_series(session, title="Doctor Who", tmdb_id=57243)
+    absorbed = _make_series(session, title="Doctor Who (2005)", tmdb_id=57243)
+
+    f_low = storage / "low.mkv"; f_low.write_text("x")
+    f_high = storage / "high.mkv"; f_high.write_text("x")
+    ep_r = _make_episode(session, recipient.id, 9, 6, file_path=str(f_low),
+                         resolution="720x576", codec_video="x264")
+    ep_a = _make_episode(session, absorbed.id, 9, 6, file_path=str(f_high),
+                         resolution="1920x1080", codec_video="x265")
+
+    result = _service(session, tmp_path).merge(recipient.id, absorbed.id)
+
+    assert result.conflicts_resolved == 1
+    remaining = session.exec(
+        select(EpisodeModel).where(EpisodeModel.season_number == 9,
+                                   EpisodeModel.episode_number == 6)
+    ).all()
+    assert len(remaining) == 1
+    assert remaining[0].series_id == recipient.id
+    assert remaining[0].resolution == "1920x1080"
+    assert f_low.exists() and f_high.exists()
