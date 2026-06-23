@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse
+from loguru import logger
 
 from ....infrastructure.persistence.database import get_session
 from ....infrastructure.persistence.models import SeriesModel
@@ -61,7 +62,10 @@ async def merge_overlay(request: Request, a: int, b: int):
             and sb.created_at < sa.created_at
         ):
             sa, sb = sb, sa
-        preview = _build_service(session, container).preview(sa.id, sb.id)
+        try:
+            preview = _build_service(session, container).preview(sa.id, sb.id)
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
         return templates.TemplateResponse(
             request,
             "library/_merge_overlay.html",
@@ -86,6 +90,11 @@ async def merge_apply(request: Request, recipient_id: int, absorbed_id: int = Fo
         result = _build_service(session, container).merge(recipient_id, absorbed_id)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
+    except Exception as exc:
+        logger.exception("Échec de la fusion de séries")
+        return JSONResponse(
+            {"error": f"Échec de la fusion : {exc}"}, status_code=500
+        )
     finally:
         session.close()
     return JSONResponse(

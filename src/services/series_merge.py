@@ -203,9 +203,17 @@ class SeriesMergeService:
         return "absorbed" if comparison.recommended == "new" else "recipient"
 
     def _serialize_series(self, model) -> str:
-        """Sérialise un SeriesModel en JSON (pour archivage corbeille)."""
-        data = {c.name: getattr(model, c.name) for c in model.__table__.columns}
-        return json.dumps(data, default=str, ensure_ascii=False)
+        """Sérialise un SeriesModel en JSON (pour archivage corbeille).
+
+        Les dates sont écrites au format ISO 8601, comme dans `delete.py`.
+        """
+        data = {}
+        for col in model.__table__.columns:
+            value = getattr(model, col.name)
+            if value is not None and hasattr(value, "isoformat"):
+                value = value.isoformat()
+            data[col.name] = value
+        return json.dumps(data, ensure_ascii=False)
 
     def _archive_series(self, absorbed) -> None:
         """Archive la fiche absorbée dans la corbeille avant suppression."""
@@ -248,11 +256,13 @@ class SeriesMergeService:
         ep_model.updated_at = datetime.utcnow()
         return 1
 
-    def _resolve_conflicts(self, conflicts, recipient_eps, absorbed_eps) -> int:
+    def _resolve_conflicts(self, conflicts, recipient_eps, absorbed_eps, recipient_id) -> int:
         """Conserve la meilleure version de chaque conflit, supprime le perdant.
 
         Le perdant perd son symlink (video) et son entrée DB ; le fichier
-        physique storage est conservé (jamais supprimé).
+        physique storage est conservé (jamais supprimé). Le gagnant issu de la
+        fiche absorbée est rattaché au récipiendaire ; son symlink est régénéré
+        par la suite, dans l'étape de régénération globale de `merge()`.
         """
         recipient_by_id = {e.id: e for e in recipient_eps}
         absorbed_by_id = {e.id: e for e in absorbed_eps}
@@ -262,7 +272,7 @@ class SeriesMergeService:
                 loser = recipient_by_id.get(c.recipient_episode_id)
                 keeper = absorbed_by_id.get(c.absorbed_episode_id)
                 if keeper is not None:
-                    keeper.series_id = self._merge_recipient_id
+                    keeper.series_id = recipient_id
             else:  # "recipient"
                 loser = absorbed_by_id.get(c.absorbed_episode_id)
             if loser is not None:
@@ -281,7 +291,6 @@ class SeriesMergeService:
         Le storage physique n'est jamais modifié.
         """
         recipient, absorbed = self._load_models(recipient_id, absorbed_id)
-        self._merge_recipient_id = recipient_id
         recipient_eps = self._episodes_of(recipient_id)
         absorbed_eps = self._episodes_of(absorbed_id)
         conflicts = self._detect_conflicts(recipient_eps, absorbed_eps)
@@ -292,8 +301,10 @@ class SeriesMergeService:
             recipient, self._compute_metadata_completion(recipient, absorbed)
         )
 
-        # 2. Résoudre les conflits (complété en Task 5)
-        resolved = self._resolve_conflicts(conflicts, recipient_eps, absorbed_eps)
+        # 2. Résoudre les conflits (garde la meilleure qualité)
+        resolved = self._resolve_conflicts(
+            conflicts, recipient_eps, absorbed_eps, recipient_id
+        )
 
         # 3. Rattacher les épisodes de A sans conflit
         attached = 0

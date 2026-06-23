@@ -62,14 +62,18 @@
             var body = new URLSearchParams({ absorbed_id: absorbed });
             fetch('/library/series/' + keep + '/merge', { method: 'POST', body: body })
                 .then(function (res) {
-                    if (res.status === 403) {
-                        return res.json().then(function (d) { alert(d.error); throw new Error('forbidden'); });
+                    if (!res.ok) {
+                        // 403 (machine non maître), 400 (fiche supprimée entre-temps), 500…
+                        return res.json().then(function (d) {
+                            alert(d.error || 'Échec de la fusion.');
+                            throw new Error('merge-failed');
+                        });
                     }
                     var redirect = res.headers.get('HX-Redirect');
                     if (redirect) { window.location.href = redirect; }
                     return res.json();
                 })
-                .catch(function () { /* déjà géré */ });
+                .catch(function () { /* feedback déjà affiché via alert */ });
         }
     };
 
