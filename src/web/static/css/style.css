@@ -7819,6 +7819,10 @@ details[open] > .maint-issue-toggle::before {
 /* ── Badge "Vu" sur jaquette grille ── */
 
 .lib-card-watched {
+    position: absolute;
+    bottom: 0.5rem;
+    right: 0.5rem;
+    z-index: 2;
     display: flex;
     align-items: center;
     justify-content: center;

@@ -19,11 +19,6 @@
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
                 </span>
                 {% endif %}
-                {% if item.watched %}
-                <span class="lib-card-watched" title="Déjà vu">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                </span>
-                {% endif %}
                 <span class="lib-card-type {{ 'badge-film' if item.type == 'movie' else 'badge-series' }}">
                     {{ 'Film' if item.type == 'movie' else 'Serie' }}
                 </span>
@@ -36,6 +31,11 @@
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                 {{ '%.1f'|format(item.rating) }}
                 <span class="lib-card-rating-source">{{ item.rating_source }}</span>
+            </span>
+            {% endif %}
+            {% if item.watched %}
+            <span class="lib-card-watched" title="Déjà vu">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </span>
             {% endif %}
             {% if item.type == 'movie' and (item.resolution_label or item.codec_video or item.language_label) %}
