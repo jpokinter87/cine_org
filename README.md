@@ -35,6 +35,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Migration depuis anciens NAS](#migration-depuis-anciens-nas)
   - [Purge des hardlinks](#purge-des-hardlinks)
   - [Films multi-parties](#films-multi-parties)
+  - [Surveillance de complétude des séries](#surveillance-de-complétude-des-séries)
 - [Format de nommage](#format-de-nommage)
 - [Interface web](#interface-web)
   - [Lancement du serveur](#lancement-du-serveur)
@@ -983,6 +984,39 @@ uv run python -m src.main link-movie-parts --apply
 
 La commande `link-movie-parts` parcourt la zone `video/` à la recherche de symlinks contenant `Partie N` (N ≥ 2), retrouve le film propriétaire via son symlink de Partie 1, et crée les enregistrements `MoviePart` manquants. **Le storage n'est jamais modifié.** La commande est idempotente : une partie déjà enregistrée est ignorée.
 
+### Surveillance de complétude des séries
+
+**Objectif** : détecter les séries **incomplètes** — celles dont il manque des épisodes ou des saisons déjà diffusés, suite à un téléchargement raté/interrompu ou à la perte d'un fichier. La vérification compare la liste des épisodes attendus (déjà diffusés) à ceux réellement présents en vidéothèque.
+
+**Critère d'incomplétude** : une série est considérée incomplète s'il lui manque **au moins un épisode dont la date de diffusion est déjà passée**. Le statut « en cours / terminée » renvoyé par TMDB n'est **pas** utilisé (jugé peu fiable). Sont exclus du décompte :
+
+- la **saison 0** (spéciaux, hors-séries) ;
+- les épisodes numérotés `SxxE00` (pilotes, récaps) ;
+- les épisodes **hors-canon** (marqués `is_extra`) ;
+- les épisodes **non encore diffusés** (date de diffusion future ou absente).
+
+**Source des données** : **TVDB uniquement** en V1. Les séries sans `tvdb_id` ne sont pas évaluées et reçoivent le statut **« non vérifiable »**.
+
+**Usage CLI :**
+
+```bash
+# Vérifier la complétude de toutes les séries
+uv run python -m src.main check-completeness
+
+# Vérifier une seule série par son ID
+uv run python -m src.main check-completeness --series-id <ID>
+```
+
+**Usage web** — un bouton **« Vérifier la complétude »** est disponible sur la page **Maintenance**. Il lance une vérification par lots de toutes les séries avec une barre de progression en temps réel (SSE). Le récapitulatif final propose un lien direct vers les séries incomplètes dans la bibliothèque.
+
+**Filtre & badge dans la bibliothèque** :
+
+- une case **« Séries incomplètes »** (URL `/library/?type=series&incomplete_series=1`) restreint la grille aux seules séries détectées comme incomplètes ;
+- un **badge ambre « Incomplet »** apparaît sur les cartes et la fiche des séries concernées ;
+- la **fiche série** détaille les saisons et épisodes manquants (numéro, titre, date de diffusion).
+
+**Limite connue (V1)** : seules les séries disposant d'un `tvdb_id` sont évaluées. Un repli sur TMDB est prévu ultérieurement pour couvrir les séries sans identifiant TVDB.
+
 ## Format de nommage
 
 ### Films
@@ -1348,10 +1382,11 @@ Après le téléchargement de nouveaux épisodes, il arrive que ceux-ci soient r
 
 > ![Page de maintenance](docs/screenshots/maintenance.png)
 
-La page **Maintenance** (`/maintenance`) fournit deux diagnostics en lecture seule :
+La page **Maintenance** (`/maintenance`) fournit des diagnostics en lecture seule :
 
 - **Vérification d'intégrité** — Détecte les symlinks cassés, les fichiers storage orphelins, les entrées DB sans fichier correspondant
 - **Analyse de nettoyage** — Détecte les symlinks cassés dans `video/`, les répertoires vides, les symlinks mal placés (mauvais genre, mauvaise subdivision), les problèmes de case
+- **Vérifier la complétude** — Lance une vérification par lots de la [complétude des séries](#surveillance-de-complétude-des-séries) : détecte les séries auxquelles il manque des épisodes ou des saisons déjà diffusés. Le récapitulatif propose un lien vers les séries incomplètes dans la bibliothèque
 
 Chaque diagnostic s'exécute avec une barre de progression en temps réel (SSE) et affiche un rapport détaillé avec compteurs. Les actions correctives restent disponibles via le CLI (`uv run cineorg cleanup --fix`).
 
@@ -1478,6 +1513,20 @@ uv run cineorg repair-links --auto
 Après un téléchargement, les épisodes apparaissent dans la bibliothèque sous une deuxième fiche (ex. « Doctor Who » et « Doctor Who (2005) ») au lieu d'être rattachés à la fiche existante. Cela se produit quand le matching TMDB/TVDB a créé une nouvelle entrée légèrement différente.
 
 → Utiliser la **fusion de fiches séries** depuis la bibliothèque web (voir [Fusion de fiches séries dupliquées](#fusion-de-fiches-séries-dupliquées)).
+
+### Mes séries apparaissent toutes « non vérifiables »
+
+La [surveillance de complétude](#surveillance-de-complétude-des-séries) ne s'appuie que sur TVDB en V1. Si toutes les séries ressortent « non vérifiables », la cause probable est l'absence de `tvdb_id` sur les fiches, ou une clé API TVDB non configurée.
+
+```bash
+# Renseigner les tvdb_id manquants
+uv run cineorg enrich-tvdb-ids
+
+# Puis relancer la vérification
+uv run python -m src.main check-completeness
+```
+
+Vérifier aussi que la clé `CINEORG_TVDB_API_KEY` est bien définie dans `.env` (`uv run cineorg info` indique si l'API TVDB est activée).
 
 ### Base de données corrompue
 
