@@ -1,14 +1,29 @@
 import json
 
 import pytest
-from sqlmodel import SQLModel, Session, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 
+from src.adapters.file_system import FileSystemAdapter
+from src.core.entities.media import Episode, Series
 from src.core.value_objects.media_info import MediaInfo
-from src.infrastructure.persistence.models import EpisodeModel, SeriesModel
-from src.infrastructure.persistence.repositories.series_repository import SQLModelSeriesRepository
-from src.infrastructure.persistence.repositories.episode_repository import SQLModelEpisodeRepository
+from src.infrastructure.persistence.models import (
+    EpisodeModel,
+    SeriesModel,
+    TrashModel,
+)
+from src.infrastructure.persistence.repositories.episode_repository import (
+    SQLModelEpisodeRepository,
+)
+from src.infrastructure.persistence.repositories.series_repository import (
+    SQLModelSeriesRepository,
+)
 from src.services.duplicate_detector import DuplicateDetector
-from src.services.series_merge import build_media_info_from_episode, SeriesMergeService
+from src.services.organizer import OrganizerService
+from src.services.renamer import RenamerService
+from src.services.series_merge import (
+    SeriesMergeService,
+    build_media_info_from_episode,
+)
 
 
 def _episode_model(**kw):
@@ -53,15 +68,6 @@ def test_build_media_info_handles_missing_fields():
     assert info.audio_languages == ()
 
 
-from pathlib import Path
-
-from src.services.series_merge import SeriesMergeService
-from src.core.entities.media import Series, Episode
-from src.adapters.file_system import FileSystemAdapter
-from src.services.organizer import OrganizerService
-from src.services.renamer import RenamerService
-
-
 @pytest.fixture
 def session():
     engine = create_engine("sqlite:///:memory:")
@@ -82,11 +88,17 @@ def _make_series(session, **kw):
 
 def _make_episode(session, series_id, season, ep, **kw):
     defaults = dict(
-        title=f"E{ep}", resolution="1920x1080", codec_video="x265",
-        codec_audio="AAC", languages_json='["fr"]', file_path=f"/storage/s{season}e{ep}.mkv",
+        title=f"E{ep}",
+        resolution="1920x1080",
+        codec_video="x265",
+        codec_audio="AAC",
+        languages_json='["fr"]',
+        file_path=f"/storage/s{season}e{ep}.mkv",
     )
     defaults.update(kw)
-    model = EpisodeModel(series_id=series_id, season_number=season, episode_number=ep, **defaults)
+    model = EpisodeModel(
+        series_id=series_id, season_number=season, episode_number=ep, **defaults
+    )
     session.add(model)
     session.commit()
     session.refresh(model)
@@ -95,8 +107,11 @@ def _make_episode(session, series_id, season, ep, **kw):
 
 def _service(session, tmp_path):
     return SeriesMergeService(
-        session=session, video_dir=tmp_path / "video", file_system=FileSystemAdapter(),
-        organizer=OrganizerService(), renamer=RenamerService(),
+        session=session,
+        video_dir=tmp_path / "video",
+        file_system=FileSystemAdapter(),
+        organizer=OrganizerService(),
+        renamer=RenamerService(),
         duplicate_detector=DuplicateDetector(),
         series_repo=SQLModelSeriesRepository(session),
         episode_repo=SQLModelEpisodeRepository(session),
@@ -113,19 +128,31 @@ def test_regenerate_symlink_creates_canonical_link(tmp_path):
 
     series = Series(id="1", title="Doctor Who", year=2005, genres=("Drama",))
     episode = Episode(
-        id="10", series_id="1", season_number=8, episode_number=1, title="En apnée",
-        file_path=str(source), resolution="1920x1080", codec_video="x265",
-        codec_audio="AAC", languages=("fr", "en"),
+        id="10",
+        series_id="1",
+        season_number=8,
+        episode_number=1,
+        title="En apnée",
+        file_path=str(source),
+        resolution="1920x1080",
+        codec_video="x265",
+        codec_audio="AAC",
+        languages=("fr", "en"),
     )
 
     svc = SeriesMergeService(
-        session=None, video_dir=video, file_system=FileSystemAdapter(),
-        organizer=OrganizerService(), renamer=RenamerService(),
-        duplicate_detector=None, series_repo=None, episode_repo=None,
+        session=None,
+        video_dir=video,
+        file_system=FileSystemAdapter(),
+        organizer=OrganizerService(),
+        renamer=RenamerService(),
+        duplicate_detector=None,
+        series_repo=None,
+        episode_repo=None,
     )
-    media_info = build_media_info_from_episode(_episode_model(
-        season_number=8, episode_number=1, title="En apnée",
-    ))
+    media_info = build_media_info_from_episode(
+        _episode_model(season_number=8, episode_number=1, title="En apnée")
+    )
     new_link = svc.regenerate_symlink(series, episode, media_info, source)
 
     assert new_link.is_symlink()
@@ -176,14 +203,15 @@ def test_preview_warns_on_different_tmdb_and_year(session, tmp_path):
 
 
 def test_merge_attaches_episodes_and_archives_absorbed(session, tmp_path):
-    from src.infrastructure.persistence.models import SeriesModel, EpisodeModel, TrashModel
     storage = tmp_path / "storage"
     storage.mkdir()
     recipient = _make_series(session, title="Doctor Who", tvdb_id=None, tmdb_id=57243)
     absorbed = _make_series(session, title="Doctor Who (2005)", tvdb_id=78804, tmdb_id=57243)
 
-    f_r = storage / "r_s01e01.mkv"; f_r.write_text("x")
-    f_a = storage / "a_s08e01.mkv"; f_a.write_text("x")
+    f_r = storage / "r_s01e01.mkv"
+    f_r.write_text("x")
+    f_a = storage / "a_s08e01.mkv"
+    f_a.write_text("x")
     _make_episode(session, recipient.id, 1, 1, file_path=str(f_r))
     ep_a = _make_episode(session, absorbed.id, 8, 1, file_path=str(f_a))
 
@@ -197,7 +225,6 @@ def test_merge_attaches_episodes_and_archives_absorbed(session, tmp_path):
     session.refresh(recipient)
     assert recipient.tvdb_id == 78804
     assert session.get(SeriesModel, absorbed.id) is None
-    from sqlmodel import select
     trashed = session.exec(
         select(TrashModel).where(TrashModel.entity_type == "series")
     ).all()
@@ -207,25 +234,32 @@ def test_merge_attaches_episodes_and_archives_absorbed(session, tmp_path):
 
 
 def test_merge_keeps_best_quality_on_conflict(session, tmp_path):
-    from src.infrastructure.persistence.models import EpisodeModel
-    from sqlmodel import select
-    storage = tmp_path / "storage"; storage.mkdir()
+    storage = tmp_path / "storage"
+    storage.mkdir()
     recipient = _make_series(session, title="Doctor Who", tmdb_id=57243)
     absorbed = _make_series(session, title="Doctor Who (2005)", tmdb_id=57243)
 
-    f_low = storage / "low.mkv"; f_low.write_text("x")
-    f_high = storage / "high.mkv"; f_high.write_text("x")
-    ep_r = _make_episode(session, recipient.id, 9, 6, file_path=str(f_low),
-                         resolution="720x576", codec_video="x264")
-    ep_a = _make_episode(session, absorbed.id, 9, 6, file_path=str(f_high),
-                         resolution="1920x1080", codec_video="x265")
+    f_low = storage / "low.mkv"
+    f_low.write_text("x")
+    f_high = storage / "high.mkv"
+    f_high.write_text("x")
+    _make_episode(
+        session, recipient.id, 9, 6, file_path=str(f_low),
+        resolution="720x576", codec_video="x264",
+    )
+    _make_episode(
+        session, absorbed.id, 9, 6, file_path=str(f_high),
+        resolution="1920x1080", codec_video="x265",
+    )
 
     result = _service(session, tmp_path).merge(recipient.id, absorbed.id)
 
     assert result.conflicts_resolved == 1
     remaining = session.exec(
-        select(EpisodeModel).where(EpisodeModel.season_number == 9,
-                                   EpisodeModel.episode_number == 6)
+        select(EpisodeModel).where(
+            EpisodeModel.season_number == 9,
+            EpisodeModel.episode_number == 6,
+        )
     ).all()
     assert len(remaining) == 1
     assert remaining[0].series_id == recipient.id
