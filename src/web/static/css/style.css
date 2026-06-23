@@ -10050,66 +10050,144 @@ details[open] > .maint-issue-toggle::before {
     }
 }
 
-/* Badge complétude (phase série-completeness) */
+/* ── Complétude des séries (phase série-completeness) ── */
+
+/* Badge « Incomplet » : pill ambre translucide, dans l'idiome des pills
+   de notes/sources voisines (IMDb/TMDB) plutôt qu'un aplat criard. */
 .badge-incomplete,
 .lib-card-incomplete {
     display: inline-block;
-    padding: 0.15rem 0.5rem;
-    border-radius: 6px;
+    padding: 0.2rem 0.55rem;
+    border-radius: 100px;
     font-size: 0.7rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: #1a1a1a;
-    background: #f59e0b;
+    letter-spacing: 0.04em;
+    color: var(--accent-amber);
+    background: var(--accent-amber-dim);
+    border: 1px solid rgba(232, 168, 73, 0.25);
 }
 
 .lib-card-incomplete {
     font-size: 0.625rem;
-    border-radius: 100px;
+    padding: 0.15rem 0.45rem;
     backdrop-filter: blur(8px);
 }
 
+/* Cartouche d'explication : même surface douce que « Informations techniques »
+   (bg-surface, bord subtil, grand rayon, ombre de carte), agrémentée d'un
+   liseré ambre discret signalant le statut sans rompre la charte. */
 .completeness-block {
-    margin: 1.5rem 0;
-    padding: 1rem 1.25rem;
-    border-left: 4px solid #f59e0b;
-    background: rgba(245, 158, 11, 0.08);
-    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+    margin: 1.5rem 0 0;
+    padding: 1rem 1.1rem 1rem 1.25rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
 }
 
+.completeness-block::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: linear-gradient(var(--accent-amber), rgba(232, 168, 73, 0.2));
+    opacity: 0.8;
+}
+
+/* Titre dans l'idiome « label de section » de la fiche (capitales discrètes). */
 .completeness-title {
-    font-size: 1.05rem;
-    margin: 0 0 0.5rem;
+    margin: 0 0 0.45rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent-amber);
+}
+
+.completeness-summary {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+.completeness-missing-seasons {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0.75rem 0 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+/* Pastilles saison/épisode sur tokens, chiffres tabulaires alignés (pas de
+   monospace brut qui jure avec DM Sans). */
+.completeness-tag,
+.completeness-code {
+    font-family: var(--font-body);
+    font-feature-settings: "tnum";
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--accent-amber);
+    background: var(--accent-amber-dim);
+    border: 1px solid rgba(232, 168, 73, 0.18);
+    border-radius: var(--radius-sm);
+    padding: 0.1rem 0.4rem;
 }
 
 .completeness-missing-list {
-    margin: 0.5rem 0 0;
-    padding-left: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin: 0.75rem 0 0;
+    padding: 0;
     list-style: none;
 }
 
 .completeness-missing-list li {
-    padding: 0.15rem 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
 }
 
-.completeness-code,
-.completeness-tag {
-    font-family: monospace;
-    font-weight: 700;
-    margin-right: 0.4rem;
+.completeness-code {
+    flex-shrink: 0;
+}
+
+.completeness-ep-title {
+    color: var(--text-primary);
 }
 
 .completeness-ep-date {
-    color: var(--text-muted, #888);
-    margin-left: 0.3rem;
+    color: var(--text-muted);
+    font-size: 0.8rem;
 }
 
+/* Carte de résultat (page Maintenance) : surface de carte de la charte. */
 .maint-result-card {
     margin-top: 1rem;
-    padding: 1rem 1.25rem;
-    border-left: 4px solid #f59e0b;
-    background: rgba(245, 158, 11, 0.08);
-    border-radius: 8px;
+    padding: 1rem 1.1rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-left: 3px solid var(--accent-amber);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+}
+
+.maint-result-card h3 {
+    margin: 0 0 0.4rem;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+
+.maint-result-card a {
+    color: var(--accent-blue);
 }
 
