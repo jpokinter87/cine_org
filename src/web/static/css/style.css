@@ -10069,8 +10069,9 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .lib-card-incomplete {
-    font-size: 0.625rem;
-    padding: 0.15rem 0.45rem;
+    font-size: 0.5rem;
+    padding: 0.12rem 0.38rem;
+    letter-spacing: 0.02em;
     backdrop-filter: blur(8px);
 }
 
