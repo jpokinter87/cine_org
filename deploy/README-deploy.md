@@ -40,6 +40,47 @@ sudo systemctl start cineorg
 
 > **Note :** Adapter `User`, `Group`, `WorkingDirectory` et `EnvironmentFile` dans le fichier `.service` si les chemins diffèrent.
 
+## Purge automatique des hardlinks (seeding)
+
+Après transfert, un hardlink est conservé dans `downloads/` pour maintenir le
+partage BitTorrent (le fichier physique vit dans `storage/`). Ces hardlinks sont
+suivis en base avec une expiration (`hardlink_retention_days`, **30 jours** par
+défaut) et purgés par la commande `cineorg purge-hardlinks`. Le timer systemd
+`cineorg-purge.timer` automatise cette rotation **chaque jour**.
+
+```bash
+# Copier le service oneshot + son timer
+sudo cp deploy/cineorg-purge.service deploy/cineorg-purge.timer /etc/systemd/system/
+
+# Recharger systemd
+sudo systemctl daemon-reload
+
+# Activer + démarrer le timer
+sudo systemctl enable --now cineorg-purge.timer
+
+# Vérifier la planification (prochain déclenchement)
+systemctl list-timers cineorg-purge*
+```
+
+Le timer est `Persistent=true` : un déclenchement manqué (machine éteinte) est
+rattrapé au prochain démarrage. L'activation seule ne lance **pas** de purge
+immédiate ; pour résorber un arriéré tout de suite :
+
+```bash
+# Aperçu sans rien supprimer
+uv run cineorg purge-hardlinks --dry-run
+
+# Purge réelle (ou : sudo systemctl start cineorg-purge.service)
+uv run cineorg purge-hardlinks
+```
+
+> **À savoir :** purger un hardlink le supprime de `downloads/` — le client
+> torrent marquera alors le torrent correspondant en erreur « fichiers
+> manquants ». C'est le comportement attendu de la rotation ; le fichier reste
+> intact dans `storage/`. Retirer ces vieux torrents du client reste manuel.
+
+Logs de la purge : `journalctl -u cineorg-purge.service`.
+
 ## Commandes de gestion
 
 ```bash
@@ -112,3 +153,4 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:8000
 | Service crash en boucle | `journalctl -u cineorg -n 50` pour voir les erreurs |
 | Dépendances manquantes | `uv sync` pour réinstaller |
 | Base de données verrouillée | Vérifier qu'une seule instance tourne : `systemctl status cineorg` |
+| Hardlinks jamais purgés (vieux fichiers en seeding) | Vérifier que le timer est actif : `systemctl list-timers cineorg-purge*` ; sinon l'activer (voir « Purge automatique des hardlinks ») |
