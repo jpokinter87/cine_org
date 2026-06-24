@@ -127,7 +127,7 @@ EOF
 | `CINEORG_MIN_FILE_SIZE_MB` | `100` | Taille minimum en MB |
 | `CINEORG_MATCH_SCORE_THRESHOLD` | `85` | Seuil de validation auto (%) |
 | `CINEORG_MAX_FILES_PER_SUBDIR` | `50` | Max fichiers par sous-dossier |
-| `CINEORG_HARDLINK_RETENTION_DAYS` | `30` | TTL des hardlinks de seeding (jours) |
+| `CINEORG_HARDLINK_RETENTION_DAYS` | `60` | TTL des hardlinks de seeding (jours) |
 | `CINEORG_SANDBOX_DIR` | `{storage}/.sandbox` | Sandbox orphelins (même volume que storage) |
 | `CINEORG_LOG_LEVEL` | `INFO` | Niveau de log (DEBUG, INFO, WARNING, ERROR) |
 
@@ -445,7 +445,7 @@ Le bouton de transfert reste **grisé** tant que tous les conflits ne sont pas t
 
 Pour préserver le seeding BitTorrent après transfert, CineOrg crée un **hardlink** dans `downloads/` pointant vers le nouveau fichier dans `storage/`. Le client torrent voit toujours le fichier à son chemin d'origine, sans doubler l'occupation disque.
 
-- **TTL configurable** via `CINEORG_HARDLINK_RETENTION_DAYS` (défaut : 30 jours).
+- **TTL configurable** via `CINEORG_HARDLINK_RETENTION_DAYS` (défaut : 60 jours).
 - **Cross-device** géré : si `downloads/` et `storage/` sont sur des volumes différents, la création échoue silencieusement sans interrompre le transfert.
 - **Purge quotidienne** via un timer systemd (fichiers dans `deploy/`).
 - **Re-scan évité** : le scanner ignore les fichiers avec `st_nlink > 1`.
@@ -938,7 +938,7 @@ Le state store est un journal SQLite local (par défaut `<plan>.json.state.sqlit
 
 ### Purge des hardlinks
 
-La commande `purge-hardlinks` supprime les hardlinks de seeding expirés (TTL `CINEORG_HARDLINK_RETENTION_DAYS`, défaut 30 jours). Elle est généralement déclenchée automatiquement par un timer systemd, mais peut être lancée manuellement :
+La commande `purge-hardlinks` supprime les hardlinks de seeding expirés (TTL `CINEORG_HARDLINK_RETENTION_DAYS`, défaut 60 jours). Elle est généralement déclenchée automatiquement par un timer systemd, mais peut être lancée manuellement :
 
 ```bash
 # Purger les hardlinks expirés

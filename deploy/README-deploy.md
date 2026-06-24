@@ -44,7 +44,7 @@ sudo systemctl start cineorg
 
 Après transfert, un hardlink est conservé dans `downloads/` pour maintenir le
 partage BitTorrent (le fichier physique vit dans `storage/`). Ces hardlinks sont
-suivis en base avec une expiration (`hardlink_retention_days`, **30 jours** par
+suivis en base avec une expiration (`hardlink_retention_days`, **60 jours** par
 défaut) et purgés par la commande `cineorg purge-hardlinks`. Le timer systemd
 `cineorg-purge.timer` automatise cette rotation **chaque jour**.
 

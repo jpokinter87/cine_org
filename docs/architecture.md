@@ -175,7 +175,7 @@ Principales clés :
 | `min_file_size_mb` | `100` | Taille minimale considérée |
 | `max_files_per_subdir` | `50` | Déclenche subdivision alphabétique |
 | `match_score_threshold` | `85` | Seuil auto-validation |
-| `hardlink_retention_days` | `30` | TTL hardlinks seeding |
+| `hardlink_retention_days` | `60` | TTL hardlinks seeding |
 | `log_level` | `INFO` | Niveau loguru |
 
 Les chemins passent par `@field_validator` avec `expanduser()` (support `~`).

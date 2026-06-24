@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     sandbox_dir: Optional[Path] = Field(default=None)
 
     # Hardlinks seeding (durée de rétention des hardlinks dans downloads/)
-    hardlink_retention_days: int = Field(default=30, ge=1)
+    hardlink_retention_days: int = Field(default=60, ge=1)
 
     @property
     def resolved_sandbox_dir(self) -> Path:

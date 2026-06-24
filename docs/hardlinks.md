@@ -21,7 +21,7 @@ Un client BitTorrent (qBittorrent, Transmission, etc.) continue de partager un f
 
 **Solution** : créer un **hardlink** (lien physique) dans `downloads/` vers la nouvelle inode dans `storage/`. Le client BitTorrent voit le fichier à l'emplacement d'origine (seeding actif), tout en n'occupant l'espace disque qu'une seule fois.
 
-Après une période configurable (30 j par défaut), le hardlink dans `downloads/` est purgé ; le fichier reste dans `storage/`.
+Après une période configurable (60 j par défaut), le hardlink dans `downloads/` est purgé ; le fichier reste dans `storage/`.
 
 ## Principe
 
@@ -141,7 +141,7 @@ for path in candidates:
 
 | Variable d'environnement | Défaut | Rôle |
 |--------------------------|-------:|------|
-| `CINEORG_HARDLINK_RETENTION_DAYS` | `30` | Durée de vie d'un hardlink avant purge (minimum 1) |
+| `CINEORG_HARDLINK_RETENTION_DAYS` | `60` | Durée de vie d'un hardlink avant purge (minimum 1) |
 
 Pour désactiver le seeding, il suffit de mettre `downloads/` et `storage/` sur des volumes différents — les hardlinks échoueront silencieusement.
 
