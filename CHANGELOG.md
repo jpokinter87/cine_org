@@ -1,3 +1,31 @@
+## v2.1.0 (2026-06-24)
+
+### Feat
+
+- **hardlinks**: purger aussi les fichiers résiduels non-vidéo des dossiers vidés
+- **completeness**: badge 'Incomplet' et bloc justification sur la fiche série
+- **completeness**: filtre 'séries incomplètes' dans la bibliothèque
+- **completeness**: bouton + SSE de vérification sur la page Maintenance
+- **completeness**: commande CLI check-completeness
+- **completeness**: service de calcul CompletenessChecker
+- **completeness**: TVDBClient.get_all_episodes (agrégation multi-saisons)
+- **completeness**: colonnes de complétude sur SeriesModel + migration
+- **merge**: supprimer les dossiers de symlinks vidés après la fusion
+- **merge**: indicateur de chargement pendant la fusion (spinner + boutons désactivés)
+- **merge**: UI — bouton conditionnel, merge.js, styles
+- **merge**: routes web overlay + exécution de fusion
+- **merge**: résolution conflits d'épisodes par qualité
+- **merge**: merge() — rattachement, métadonnées, symlinks, archivage
+- **merge**: preview() — comptage, conflits, métadonnées, avertissements
+- **merge**: régénération du symlink canonique d'un épisode
+- **merge**: dataclasses fusion séries + reconstruction MediaInfo
+
+### Fix
+
+- **completeness**: exposer completeness_status dans le dict série de la grille
+- **merge**: afficher le bouton Fusionner (écouteur en capture) + libellé « Supprimer / Fusionner »
+- **merge**: robustesse suite revue — erreurs structurées, feedback front, conflits sans état d'instance
+
 ## v2.0.0 (2026-06-20)
 
 ### Feat
