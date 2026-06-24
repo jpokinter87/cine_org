@@ -95,13 +95,15 @@ Méthodes principales :
 | `purge_expired(force_all=False, dry_run=False)` | Supprime les hardlinks expirés (ou tous si `force_all`). Retourne un `PurgeResult`. |
 | `list_active()` | Liste les hardlinks non expirés (métadonnées affichables : `days_remaining`, `file_exists`). |
 | `get_stats()` | Statistiques (`total_active`, `total_expired`, `total_entries`). |
-| `_cleanup_empty_parents(file_path)` | Remonte les dossiers parents vides et les supprime (`rmdir()`) jusqu'à `downloads_dir`. |
+| `_cleanup_empty_parents(file_path)` | Nettoie les résidus non-vidéo du dossier (via `_remove_residual_files`) puis remonte et supprime les dossiers parents vides (`rmdir()`) jusqu'à `downloads_dir`. Retourne le nombre de résidus supprimés. |
+| `_remove_residual_files(directory)` | Supprime les fichiers non-vidéo (`.nfo`, etc.) d'un dossier de téléchargement **uniquement si plus aucun fichier vidéo n'y subsiste**. Ne touche jamais à la racine `downloads_dir`. |
 
 **Algorithme `purge_expired`** :
 
 1. Query DB : `expires_at < now` (ou tous si `force_all`).
 2. Pour chaque entrée :
    - `download_path.unlink()` — décrémente `st_nlink` (le fichier dans `storage/` n'est pas touché).
+   - Si le dossier ne contient plus aucun fichier vidéo, supprime les résidus non-vidéo (`.nfo`, etc.) qui empêcheraient le `rmdir`, comptés dans `PurgeResult.residuals_removed`.
    - Remonte et supprime les dossiers parents vides jusqu'à `downloads_dir`.
    - Supprime l'entrée DB.
 3. Collecte les erreurs (permissions, fichier absent, etc.) dans `PurgeResult.errors`.
@@ -200,6 +202,7 @@ journalctl -u cineorg-purge.service -n 100    # logs
 **Dossiers vides résiduels dans `downloads/`** :
 
 - La purge nettoie ascendant mais s'arrête à `downloads_dir`. Un dossier parent contenant plusieurs torrents ne sera supprimé qu'au purge du dernier fichier.
+- Les fichiers résiduels non-vidéo (`.nfo`, screenshots, `Sample/`…) sont supprimés automatiquement au purge **dès que le dossier ne contient plus aucune vidéo** ; un dossier qui resterait pollué signifie donc qu'il contient encore un fichier vidéo (téléchargement encore actif).
 - `find downloads/ -type d -empty -delete` peut être lancé manuellement si nécessaire (hors CineOrg).
 
 **TTL personnalisé par fichier** : non supporté. Le TTL est global via `CINEORG_HARDLINK_RETENTION_DAYS`.

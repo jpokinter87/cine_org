@@ -26,6 +26,7 @@ class PurgeResult:
     purged: int = 0
     errors: list[str] = field(default_factory=list)
     freed_paths: list[str] = field(default_factory=list)
+    residuals_removed: int = 0
 
 
 @dataclass
@@ -99,8 +100,8 @@ class HardlinkService:
                     result.errors.append(f"{download_path.name}: {e}")
                     continue
 
-                # Nettoyage des dossiers parents vides
-                self._cleanup_empty_parents(download_path)
+                # Nettoyage des résidus non-vidéo puis des dossiers parents vides
+                result.residuals_removed += self._cleanup_empty_parents(download_path)
 
                 # Supprimer l'entrée DB
                 session.delete(hardlink)
@@ -144,11 +145,21 @@ class HardlinkService:
                 total_entries=len(all_hardlinks),
             )
 
-    def _cleanup_empty_parents(self, file_path: Path) -> None:
-        """Remonte les dossiers parents et supprime les vides jusqu'à downloads_dir."""
-        downloads_dir = self._settings.downloads_dir
-        current = file_path.parent
+    def _cleanup_empty_parents(self, file_path: Path) -> int:
+        """
+        Nettoie le dossier du hardlink purgé puis supprime les parents vides.
 
+        Avant de remonter, retire les fichiers résiduels non-vidéo (ex. `.nfo`)
+        qui empêchent la suppression du dossier — mais uniquement si plus aucun
+        fichier vidéo ne subsiste dans l'arborescence (sinon le téléchargement
+        est encore actif et on n'y touche pas).
+
+        Retourne le nombre de fichiers résiduels supprimés.
+        """
+        downloads_dir = self._settings.downloads_dir
+        removed = self._remove_residual_files(file_path.parent)
+
+        current = file_path.parent
         while current != downloads_dir and current.is_relative_to(downloads_dir):
             try:
                 current.rmdir()  # Échoue si non vide
@@ -156,3 +167,52 @@ class HardlinkService:
                 current = current.parent
             except OSError:
                 break  # Dossier non vide, on s'arrête
+
+        return removed
+
+    def _remove_residual_files(self, directory: Path) -> int:
+        """
+        Supprime les fichiers non-vidéo d'un dossier de téléchargement résiduel.
+
+        Ne fait rien si le dossier est hors de downloads/, s'il s'agit de la
+        racine downloads/, ou s'il contient encore un fichier vidéo (le
+        téléchargement reste alors actif). Retourne le nombre de fichiers
+        supprimés.
+        """
+        downloads_dir = self._settings.downloads_dir
+        if (
+            not directory.is_dir()
+            or directory == downloads_dir
+            or not directory.is_relative_to(downloads_dir)
+        ):
+            return 0
+
+        if self._contains_video(directory):
+            return 0
+
+        removed = 0
+        # Parcours profondeur d'abord : fichiers puis sous-dossiers vidés
+        for entry in sorted(
+            directory.rglob("*"), key=lambda p: len(p.parts), reverse=True
+        ):
+            try:
+                if entry.is_dir():
+                    entry.rmdir()
+                else:
+                    entry.unlink()
+                    removed += 1
+                    logger.debug("Résidu non-vidéo supprimé : {}", entry.name)
+            except OSError as e:
+                logger.warning("Résidu non supprimé {} : {}", entry.name, e)
+
+        return removed
+
+    @staticmethod
+    def _contains_video(directory: Path) -> bool:
+        """Vrai si l'arborescence contient au moins un fichier vidéo."""
+        from src.utils.constants import VIDEO_EXTENSIONS
+
+        return any(
+            entry.is_file() and entry.suffix.lower() in VIDEO_EXTENSIONS
+            for entry in directory.rglob("*")
+        )

@@ -144,6 +144,81 @@ class TestPurgeExpired:
         # downloads/ reste (c'est la racine)
         assert downloads.exists()
 
+    def test_purge_removes_residual_non_video_files(
+        self, service, db_engine, tmp_path, monkeypatch
+    ):
+        """Les résidus non-vidéo (.nfo) bloquant le rmdir sont supprimés."""
+        monkeypatch.setattr(
+            "src.services.hardlink_service.get_engine", lambda: db_engine
+        )
+
+        downloads = tmp_path / "downloads"
+        torrent_dir = downloads / "Movie.2024.MULTI.1080p-GRP"
+        torrent_dir.mkdir(parents=True)
+        storage = tmp_path / "storage"
+        storage.mkdir(parents=True)
+
+        storage_file = storage / "movie.mkv"
+        storage_file.write_bytes(b"data")
+        download_file = torrent_dir / "Movie.2024.MULTI.1080p-GRP.mkv"
+        os.link(storage_file, download_file)
+        # Résidu non-vidéo qui empêchait la suppression du dossier
+        nfo = torrent_dir / "Movie.2024.MULTI.1080p-GRP.nfo"
+        nfo.write_text("info")
+
+        with Session(db_engine) as session:
+            _create_hardlink_entry(
+                session, str(download_file), str(storage_file), expired=True
+            )
+
+        result = service.purge_expired()
+
+        assert result.purged == 1
+        assert result.residuals_removed == 1
+        # Résidu et dossier supprimés
+        assert not nfo.exists()
+        assert not torrent_dir.exists()
+        # Fichier storage intact
+        assert storage_file.exists()
+
+    def test_purge_keeps_residual_when_video_remains(
+        self, service, db_engine, tmp_path, monkeypatch
+    ):
+        """Si un autre fichier vidéo subsiste, les résidus ne sont pas touchés."""
+        monkeypatch.setattr(
+            "src.services.hardlink_service.get_engine", lambda: db_engine
+        )
+
+        downloads = tmp_path / "downloads"
+        torrent_dir = downloads / "Season.Pack"
+        torrent_dir.mkdir(parents=True)
+        storage = tmp_path / "storage"
+        storage.mkdir(parents=True)
+
+        storage_file = storage / "ep1.mkv"
+        storage_file.write_bytes(b"data")
+        expired_link = torrent_dir / "ep1.mkv"
+        os.link(storage_file, expired_link)
+        # Un autre fichier vidéo non purgé + un résidu .nfo
+        other_video = torrent_dir / "ep2.mkv"
+        other_video.write_bytes(b"other")
+        nfo = torrent_dir / "pack.nfo"
+        nfo.write_text("info")
+
+        with Session(db_engine) as session:
+            _create_hardlink_entry(
+                session, str(expired_link), str(storage_file), expired=True
+            )
+
+        result = service.purge_expired()
+
+        assert result.residuals_removed == 0
+        # Hardlink purgé mais le reste du dossier actif est préservé
+        assert not expired_link.exists()
+        assert other_video.exists()
+        assert nfo.exists()
+        assert torrent_dir.exists()
+
     def test_purge_dry_run_no_delete(self, service, db_engine, tmp_path, monkeypatch):
         """dry_run=True n'efface rien."""
         monkeypatch.setattr(

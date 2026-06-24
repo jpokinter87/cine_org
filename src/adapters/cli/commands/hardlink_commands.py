@@ -66,3 +66,9 @@ def purge_hardlinks(
 
     action = "seraient purgés" if dry_run else "purgés"
     console.print(f"\n[bold green]{result.purged}[/bold green] hardlink(s) {action}")
+
+    if result.residuals_removed:
+        console.print(
+            f"[dim]{result.residuals_removed} fichier(s) résiduel(s) "
+            f"non-vidéo (.nfo, etc.) supprimé(s)[/dim]"
+        )
