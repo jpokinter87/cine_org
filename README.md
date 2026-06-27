@@ -438,6 +438,7 @@ Normalisation bitrate par codec : AV1 × 3.0, HEVC × 2.0, VP9 × 1.8, x264 × 1
 
 - `keep_new` — remplacer l'existant par le nouveau fichier.
 - `keep_old` — skip le nouveau (reste en `downloads/`).
+- `keep_old + corbeille` — skip le nouveau **et** déplacer la source dans `.trash/` (évite qu'elle soit re-détectée à chaque workflow ; le dossier parent vidé est nettoyé).
 - `sandbox` — déplacer le nouveau dans `.sandbox/` pour décision ultérieure.
 
 Le bouton de transfert reste **grisé** tant que tous les conflits ne sont pas tranchés.

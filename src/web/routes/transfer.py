@@ -95,6 +95,69 @@ def _get_sandbox_dir(settings) -> Path:
     return Path("/tmp/cineorg_sandbox")
 
 
+def _get_trash_dir(settings) -> Path:
+    """Retourne la corbeille pour les sources rejetées (« garder l'ancien »)."""
+    storage = getattr(settings, "storage_dir", None)
+    if storage:
+        return Path(storage) / ".trash"
+    return Path("/tmp/cineorg_trash")
+
+
+def _trash_source(
+    source: Path, trash_dir: Path, downloads_root: Optional[Path] = None
+) -> Path:
+    """Déplace une source rejetée (fichier ou dossier) vers la corbeille.
+
+    En cas de collision de nom, suffixe le nom. Nettoie ensuite les dossiers
+    parents devenus vides jusqu'à (sans l'inclure) downloads_root.
+
+    Returns:
+        Le chemin de destination dans la corbeille.
+    """
+    trash_dir.mkdir(parents=True, exist_ok=True)
+    dest = trash_dir / source.name
+    if dest.exists() or dest.is_symlink():
+        stem, suffix = source.stem, source.suffix
+        i = 1
+        while dest.exists() or dest.is_symlink():
+            dest = trash_dir / f"{stem}_{i}{suffix}"
+            i += 1
+
+    parent = source.parent
+    shutil.move(str(source), str(dest))
+
+    # Nettoyer les dossiers parents vidés, sans franchir downloads_root
+    if downloads_root is not None:
+        root = Path(downloads_root).resolve()
+        cur = parent.resolve()
+        while cur != root and root in cur.parents:
+            try:
+                cur.rmdir()  # ne supprime que si vide
+            except OSError:
+                break
+            cur = cur.parent
+
+    return dest
+
+
+def _maybe_trash_source(transfer: dict, choice: str, settings, dry_run: bool) -> None:
+    """Déplace la source en corbeille si le choix est « keep_old_trash »."""
+    if choice != "keep_old_trash" or dry_run:
+        return
+    source = transfer.get("source")
+    if not source:
+        return
+    try:
+        downloads = getattr(settings, "downloads_dir", None)
+        _trash_source(
+            Path(source),
+            _get_trash_dir(settings),
+            downloads_root=Path(downloads) if downloads else None,
+        )
+    except Exception as e:
+        logger.warning("Échec mise en corbeille de la source %s : %s", source, e)
+
+
 def _resolve_storage_path(existing_dir: Path, storage_dir: Path) -> Path | None:
     """
     Trouve le vrai chemin storage en suivant les symlinks dans existing_dir.
@@ -631,10 +694,17 @@ async def _run_web_transfer(
 
             # Résolution pré-faite au résumé batch → exécuter sans SSE pause
             if transfer.get("has_duplicate") and duplicate_match and pre_resolution:
-                if pre_resolution == "keep_old":
+                if pre_resolution in ("keep_old", "keep_old_trash"):
                     progress.conflicts_resolved += 1
+                    _maybe_trash_source(transfer, pre_resolution, settings, dry_run)
+                    suffix = (
+                        " + source en corbeille"
+                        if pre_resolution == "keep_old_trash"
+                        else ""
+                    )
                     progress.message = (
-                        f"Doublon résolu (pré) : ancien conservé pour {display_name}"
+                        f"Doublon résolu (pré) : ancien conservé{suffix} "
+                        f"pour {display_name}"
                     )
                     await asyncio.sleep(0.1)
                     continue
@@ -831,10 +901,16 @@ async def _run_web_transfer(
                 progress.conflict_data = None
                 progress.conflict_choice = None
 
-                if choice == "keep_old":
+                if choice in ("keep_old", "keep_old_trash"):
                     progress.conflicts_resolved += 1
+                    _maybe_trash_source(transfer, choice, settings, dry_run)
+                    suffix = (
+                        " + source en corbeille"
+                        if choice == "keep_old_trash"
+                        else ""
+                    )
                     progress.message = (
-                        f"Doublon résolu : ancien conservé pour {display_name}"
+                        f"Doublon résolu : ancien conservé{suffix} pour {display_name}"
                     )
                     await asyncio.sleep(0.1)
                     continue
@@ -996,10 +1072,17 @@ async def _run_web_transfer(
                     progress.conflict_data = None
                     progress.conflict_choice = None
 
-                    if choice == "keep_old":
+                    if choice in ("keep_old", "keep_old_trash"):
                         progress.conflicts_resolved += 1
+                        _maybe_trash_source(transfer, choice, settings, dry_run)
+                        suffix = (
+                            " + source en corbeille"
+                            if choice == "keep_old_trash"
+                            else ""
+                        )
                         progress.message = (
-                            f"Conflit résolu : ancien conservé pour {display_name}"
+                            f"Conflit résolu : ancien conservé{suffix} "
+                            f"pour {display_name}"
                         )
                         await asyncio.sleep(0.1)
                         continue

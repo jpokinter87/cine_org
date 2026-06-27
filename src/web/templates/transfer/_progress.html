@@ -160,6 +160,7 @@
         let oldLabel = "Garder l'ancien" + (recommended === 'old' ? ' ★' : '');
         let newLabel = 'Garder le nouveau' + (recommended === 'new' ? ' ★' : '');
         html += '<button class="' + oldBtnClass + '" onclick="resolveConflict(\'keep_old\')">' + oldLabel + '</button>';
+        html += '<button class="conflict-btn conflict-btn-old" onclick="resolveConflict(\'keep_old_trash\')">Garder l\'ancien + corbeille</button>';
         html += '<button class="' + newBtnClass + '" onclick="resolveConflict(\'keep_new\')">' + newLabel + '</button>';
         html += '<button class="conflict-btn conflict-btn-both" onclick="resolveConflict(\'keep_both\')">Garder les deux</button>';
         html += '<button class="conflict-btn conflict-btn-skip" onclick="resolveConflict(\'skip\')">Passer</button>';

@@ -2925,7 +2925,8 @@ a.pagination-btn:hover {
     border-radius: 4px;
 }
 
-.tree-leaf-resolved-badge.tree-leaf-resolved-keep_old {
+.tree-leaf-resolved-badge.tree-leaf-resolved-keep_old,
+.tree-leaf-resolved-badge.tree-leaf-resolved-keep_old_trash {
     background: rgba(244, 67, 54, 0.12);
     color: #f44336;
 }
