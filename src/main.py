@@ -40,6 +40,7 @@ from .adapters.cli.commands import (
     process,
     purge_hardlinks,
     rename_canonical,
+    relink_movies,
     reconcile,
     regroup,
     repair_links,
@@ -129,6 +130,7 @@ app.command(name="fix-series-symlinks")(fix_series_symlinks)
 app.command(name="check-duplicates")(check_duplicates)
 app.command(name="purge-hardlinks")(purge_hardlinks)
 app.command(name="rename-canonical")(rename_canonical)
+app.command(name="relink-movies")(relink_movies)
 app.command(name="check-completeness")(check_completeness)
 
 # Monter validate_app comme sous-commande

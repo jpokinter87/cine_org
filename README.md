@@ -31,6 +31,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Nettoyage et réorganisation](#nettoyage-et-réorganisation)
   - [Regroupement par préfixe de titre](#regroupement-par-préfixe-de-titre)
   - [Réparation des symlinks cassés](#réparation-des-symlinks-cassés)
+  - [Ré-association des fiches sans fichier](#ré-association-des-fiches-sans-fichier)
   - [Consolidation des fichiers externes](#consolidation-des-fichiers-externes)
   - [Migration depuis anciens NAS](#migration-depuis-anciens-nas)
   - [Purge des hardlinks](#purge-des-hardlinks)
@@ -838,6 +839,43 @@ uv run cineorg repair-links --min-score 60
    - `~` jaune : candidat trouvé mais score insuffisant
 
 **Mode interactif** : Sans `--auto`, chaque symlink est présenté avec ses candidats et vous pouvez choisir l'action (réparer, supprimer, ignorer).
+
+### Ré-association des fiches sans fichier
+
+`repair-links` part des symlinks cassés ; `relink-movies` part de l'autre bout : les **fiches films en base sans `file_path`/`symlink_path`** (import d'une vidéothèque, matching incomplet) dont le fichier existe pourtant sur le disque. Ces fiches apparaissent dans le filtre web « Sans fichier ». La commande retrouve le fichier et renseigne la base.
+
+```bash
+# Simulation (lecture seule, par défaut)
+uv run cineorg relink-movies
+
+# Appliquer les liens sûrs
+uv run cineorg relink-movies --execute
+
+# Ajuster le seuil canonique d'auto-liaison (défaut : 85)
+uv run cineorg relink-movies --execute --min-score 90
+
+# Liens sûrs PUIS revue interactive des cas litigieux (implique l'exécution)
+uv run cineorg relink-movies --suggest
+```
+
+**Fonctionnement :**
+
+1. **Tier 1 — `video/`** : si un symlink formaté existe déjà pour le titre + année, il est réutilisé tel quel (`file_path` = sa cible, `symlink_path` = le symlink).
+
+2. **Tier 2 — `storage/`** : sinon, recherche floue du fichier physique en utilisant le **titre localisé, le titre original et les titres alternatifs (AKA)** récupérés via TMDB (utile pour les films rangés sous leur titre international, ex. « Ukryta gra » → « The Coldest Game »). Chaque candidat est scoré avec la formule canonique du workflow `process` (**titre 50 % + année 25 % + durée 25 %**) et n'est lié qu'au-dessus du seuil (85 par défaut). Un symlink au nom canonique est alors créé à la bonne destination ; le fichier physique brut n'est pas renommé (voir `rename-canonical` pour cela).
+
+   Le **garde-fou durée** écarte automatiquement les featurettes (« making-of » bien plus court que le film) et les mauvais films de même année.
+
+3. **Coquilles vides** : les fiches dont aucun fichier n'est trouvé restent intactes (supprimables via le bouton « fiche fantôme » de l'interface web).
+
+**Mode `--suggest`** : après application des liens sûrs (non proposés), chaque fiche restante est présentée en interactif avec les candidats de la bande litigieuse (score 60-85). Pour chaque fiche :
+
+- `<n>` — lier au candidat numéro *n* ;
+- `v<n>` — **visionner** le candidat *n* via mpv (lecteur configuré) pour vérifier à l'écran ;
+- `t` — saisir un **titre manuel** : relance la recherche storage **sans garde-fou** (classée par similarité de titre), pour les fichiers au nom corrompu (ex. un recut « Inversion intégrale » d'année différente) ;
+- `Entrée` — passer ; `q` — quitter.
+
+> ⚠️ `--suggest` implique l'exécution : les liens sûrs **et** les choix manuels sont écrits en base.
 
 ### Consolidation des fichiers externes
 

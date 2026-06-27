@@ -78,6 +78,9 @@ from src.adapters.cli.commands.hardlink_commands import (
 from src.adapters.cli.commands.rename_canonical_command import (
     rename_canonical,
 )
+from src.adapters.cli.commands.relink_command import (
+    relink_movies,
+)
 from src.adapters.cli.commands.link_movie_parts_command import (
     link_movie_parts,
 )
@@ -132,6 +135,7 @@ __all__ = [
     "check_duplicates",
     "purge_hardlinks",
     "rename_canonical",
+    "relink_movies",
     "link_movie_parts",
     "check_completeness",
 ]
