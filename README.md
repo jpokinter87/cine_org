@@ -1198,13 +1198,13 @@ Chaque film dispose d'une fiche complète affichant :
 - **Badges techniques** — résolution (bleu), codec vidéo et audio (violet), langues (vert). Chaque badge est cliquable pour filtrer toute la bibliothèque sur ce critère
 - **Crédits** — réalisateur et acteurs sous forme de liens. Un clic affiche tous les films de cette personne dans la bibliothèque
 - **Synopsis** complet
-- **Bouton Visionner** — lance la lecture via mpv
-- **Bouton Corriger** — ré-association TMDB (voir section dédiée)
+- **Bouton Visionner** — placé sous la jaquette, mis en valeur en vert ; lance la lecture via mpv (ou le profil de lecteur choisi)
+- **Menu « Modifier la fiche »** — sous la jaquette, un menu déroulant discret regroupe les actions rares **Corriger** (ré-association TMDB, voir section dédiée) et **Éditer** (affiche, synopsis, casting). Masquées par défaut, elles ne peuvent être déclenchées par erreur. Pour les fiches fantômes (sans fichier), ce menu propose aussi **Supprimer la fiche**.
 - **Informations fichier** — panneau dépliable avec chemin storage, chemin symlink, codec, résolution, taille du fichier et IDs externes (TMDB, IMDb)
 
 > ![Fiche détaillée série](docs/screenshots/series-detail.png)
 
-Pour les **séries**, la fiche affiche en plus :
+Pour les **séries**, le menu **« Modifier la fiche »** (Corriger / Éditer) figure également sous la jaquette ; il n'y a pas de bouton Visionner global, la lecture se faisant épisode par épisode. La fiche affiche en plus :
 
 - Le nombre de **saisons** et d'**épisodes**
 - Les **badges techniques agrégés** à partir de l'ensemble des épisodes (valeurs distinctes)
