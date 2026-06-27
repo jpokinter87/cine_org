@@ -1,0 +1,42 @@
+{#
+  Actions placées sous la jaquette dans la colonne de gauche de la fiche détaillée.
+
+  Variables attendues :
+    - action_entity_type: "movies" | "series"
+    - action_entity_id: int
+    - action_is_phantom: bool (fiche fantôme sans fichier → bouton de suppression)
+    - action_show_play: bool (afficher le bouton « Visionner » — films uniquement)
+    - action_phantom_confirm: str (message de confirmation de suppression — optionnel)
+#}
+{% set _phantom_confirm = action_phantom_confirm if action_phantom_confirm is defined else "Doublon fantôme : aucun fichier n'est rattaché à cette fiche. Elle sera déplacée dans la corbeille. Les fichiers physiques éventuels ne sont pas touchés." %}
+<div class="lib-detail-poster-actions">
+    {% if action_show_play %}
+    {% with play_entity_type=action_entity_type, play_entity_id=action_entity_id, play_btn_class="play-btn", play_show_label=true %}
+    {% include "library/_play_btn.html" %}
+    {% endwith %}
+    {% endif %}
+
+    <details class="lib-detail-edit-menu">
+        <summary class="lib-detail-edit-toggle">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            Modifier la fiche
+            <svg class="lib-detail-edit-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </summary>
+        <div class="lib-detail-edit-actions">
+            <button class="reassociate-btn" hx-get="/library/{{ action_entity_type }}/{{ action_entity_id }}/reassociate" hx-target="#reassociate-container" hx-swap="innerHTML" title="Corriger l'association TMDB">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Corriger
+            </button>
+            <button class="edit-metadata-btn" hx-get="/library/{{ action_entity_type }}/{{ action_entity_id }}/edit" hx-target="#edit-metadata-container" hx-swap="innerHTML" title="Éditer affiche, synopsis, casting">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                Éditer
+            </button>
+            {% if action_is_phantom %}
+            <button class="phantom-delete-btn" hx-post="/library/{{ action_entity_type }}/{{ action_entity_id }}/delete-phantom" hx-confirm="{{ _phantom_confirm }}" title="Supprimer cette fiche fantôme (sans fichiers)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                Supprimer la fiche
+            </button>
+            {% endif %}
+        </div>
+    </details>
+</div>

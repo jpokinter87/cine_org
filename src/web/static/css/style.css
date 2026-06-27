@@ -4027,9 +4027,17 @@ a.pagination-btn:hover {
     animation: fadeInUp 0.4s ease 0.05s both;
 }
 
-.lib-detail-poster {
+/* Colonne de gauche : jaquette + actions (Visionner, menu Modifier) */
+.lib-detail-aside {
     flex-shrink: 0;
     width: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.lib-detail-poster {
+    width: 100%;
     border-radius: var(--radius-md);
     overflow: hidden;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
@@ -4665,7 +4673,7 @@ a.tech-badge-codec:hover {
         gap: 1.25rem;
     }
 
-    .lib-detail-poster {
+    .lib-detail-aside {
         width: 100%;
         max-width: 300px;
     }
@@ -9543,6 +9551,106 @@ details[open] > .maint-issue-toggle::before {
    (phase 42-02) : bouton fiche,
    overlay edition, badges override.
    ─────────────────────────────────── */
+
+/* ── Actions sous la jaquette (fiche détaillée) ── */
+
+.lib-detail-poster-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* Bouton « Visionner » mis en valeur (vert charte), pleine largeur */
+.lib-detail-poster-actions .play-wrapper {
+    display: flex;
+    width: 100%;
+}
+
+/* Cible par CONTEXTE (et non par .play-btn-hero) pour couvrir aussi le bouton
+   re-rendu par HTMX après lecture, qui revient avec la classe .play-btn seule. */
+.lib-detail-poster-actions .play-btn {
+    width: 100%;
+    justify-content: center;
+    gap: 0.45rem;
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--bg-deep);
+    background: var(--accent-emerald);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.lib-detail-poster-actions .play-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.lib-detail-poster-actions .play-btn:hover {
+    color: var(--bg-deep);
+    background: #62d79c;
+    box-shadow: 0 6px 20px rgba(78, 203, 141, 0.3);
+}
+
+/* Menu déroulant « Modifier la fiche » : actions rares masquées par défaut */
+.lib-detail-edit-menu {
+    position: relative;
+}
+
+.lib-detail-edit-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    width: 100%;
+    padding: 0.5rem 0.85rem;
+    font-size: 0.78rem;
+    font-family: var(--font-body);
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    list-style: none;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.lib-detail-edit-toggle::-webkit-details-marker {
+    display: none;
+}
+
+.lib-detail-edit-toggle:hover {
+    color: var(--text-primary);
+    border-color: var(--border);
+    background: var(--bg-card);
+}
+
+.lib-detail-edit-chevron {
+    transition: transform 0.2s ease;
+}
+
+.lib-detail-edit-menu[open] .lib-detail-edit-chevron {
+    transform: rotate(180deg);
+}
+
+.lib-detail-edit-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 0.4rem;
+    animation: fadeInUp 0.2s ease both;
+}
+
+.lib-detail-edit-actions .reassociate-btn,
+.lib-detail-edit-actions .edit-metadata-btn,
+.lib-detail-edit-actions .phantom-delete-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.75rem;
+}
 
 /* Bouton « Éditer » en accent ambré, aligné avec .reassociate-btn */
 .edit-metadata-btn {
