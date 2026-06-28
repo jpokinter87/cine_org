@@ -37,6 +37,18 @@ def test_plusieurs_profils_bouton_scinde(monkeypatch):
     assert "/library/movies/5/play?profile=Willow" in html
 
 
+def test_episodes_utilise_classe_episode(monkeypatch):
+    monkeypatch.setattr(
+        player,
+        "load_profiles",
+        lambda: _profiles(("Local", "mpv", "local"), ("Salon", "mpv", "remote")),
+    )
+    html = player._play_button_html("episodes", 42)
+    assert "lib-episode-play-btn" in html
+    assert "play-wrapper-episode" in html
+    assert "/library/episodes/42/play" in html
+
+
 def test_popover_liste_dunehd(monkeypatch):
     monkeypatch.setattr(
         player,

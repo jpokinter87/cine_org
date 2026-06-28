@@ -8,6 +8,7 @@ import html
 import subprocess
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
@@ -205,7 +206,8 @@ def _play_button_html(entity_type: str, entity_id: int) -> str:
 
     options_html = ""
     for p in profiles:
-        name_esc = html.escape(p["name"])
+        name_url = quote(p["name"], safe="")  # valeur de query-string
+        name_esc = html.escape(p["name"])  # affichage du label
         if p.get("type") == "dunehd":
             icon = icon_cast
             suffix = ' <span class="play-profile-default">→ mediacenter</span>'
@@ -217,7 +219,7 @@ def _play_button_html(entity_type: str, entity_id: int) -> str:
             suffix = ""
         options_html += (
             f'<button class="play-profile-option"'
-            f' hx-post="{base}?profile={name_esc}"'
+            f' hx-post="{base}?profile={name_url}"'
             f' hx-swap="outerHTML" hx-target="closest .play-wrapper"'
             f' onclick="event.stopPropagation()">'
             f"{icon} {name_esc}{suffix}</button>"
@@ -231,7 +233,8 @@ def _play_button_html(entity_type: str, entity_id: int) -> str:
         f' hx-target="closest .play-wrapper" title="Visionner sur votre profil">'
         f"{play_icon}{label}</button>"
         f'<button class="{btn_class} play-btn-caret play-popover-trigger"'
-        f' title="Choisir le lecteur" onclick="togglePlayPopover(this)">'
+        f' title="Choisir le lecteur" aria-label="Choisir le lecteur"'
+        f' onclick="togglePlayPopover(this)">'
         f"{caret}</button>"
         f'<div class="play-profile-popover">{options_html}</div>'
         f"</span>"

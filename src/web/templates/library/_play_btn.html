@@ -32,7 +32,7 @@
           {% if play_show_label %} Visionner{% endif %}
       </button>
       <button class="{{ play_btn_class }} play-btn-caret play-popover-trigger"
-          title="Choisir le lecteur" onclick="togglePlayPopover(this)">
+          title="Choisir le lecteur" aria-label="Choisir le lecteur" onclick="togglePlayPopover(this)">
           <svg class="play-caret-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="play-profile-popover">
