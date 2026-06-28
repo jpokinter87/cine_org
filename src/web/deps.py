@@ -27,7 +27,11 @@ def _asset_version() -> str:
 
 templates.env.globals["asset_version"] = _asset_version
 
-# Profils lecteur accessibles dans tous les templates (pour le sélecteur de profil)
-from ..player_profiles import load_profiles as _load_profiles  # noqa: E402
+# Profils lecteur accessibles dans tous les templates (sélecteur de profil + identité)
+from ..player_profiles import (  # noqa: E402
+    get_personal_profiles as _personal_profiles,
+    load_profiles as _load_profiles,
+)
 
 templates.env.globals["get_player_profiles"] = _load_profiles
+templates.env.globals["get_personal_profiles"] = _personal_profiles

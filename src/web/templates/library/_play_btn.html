@@ -1,47 +1,54 @@
 {#
-  Bouton Visionner avec sélecteur de profil.
+  Bouton « Visionner » : lancement direct sur l'identité du navigateur (un clic)
+  + chevron ▾ pour un choix ponctuel (autre profil, DuneHD).
 
   Variables attendues :
-    - play_entity_type: "movies" | "episodes" | "series"
+    - play_entity_type: "movies" | "movie-parts" | "episodes" | "series"
     - play_entity_id: int
-    - play_btn_class: "play-btn" | "lib-episode-play-btn" | "play-btn suggest-play-btn"
-    - play_show_label: true/false (afficher "Visionner" ou juste l'icône)
+    - play_btn_class: classe CSS du bouton (ex. "play-btn", "lib-episode-play-btn", "dup-btn-play")
+    - play_show_label: true/false (afficher « Visionner » ou juste l'icône)
 #}
 {% set _pdata = get_player_profiles() %}
 {% set _profiles = _pdata.get('profiles', []) %}
-{% set _active = _pdata.get('active', 'Local') %}
+{% set _icon_sz = '14' if not play_show_label else '12' %}
 
 {% if _profiles | length <= 1 %}
   {# Un seul profil : bouton direct #}
   <button class="{{ play_btn_class }}"
       hx-post="/library/{{ play_entity_type }}/{{ play_entity_id }}/play"
       hx-swap="outerHTML"
-      title="Ouvrir dans {{ (_profiles[0].command if _profiles else 'mpv') }}">
-      <svg width="{{ '14' if not play_show_label else '12' }}" height="{{ '14' if not play_show_label else '12' }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      title="Visionner">
+      <svg width="{{ _icon_sz }}" height="{{ _icon_sz }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
       {% if play_show_label %} Visionner{% endif %}
   </button>
 {% else %}
-  {# Plusieurs profils : bouton avec popover sélecteur #}
+  {# Plusieurs profils : bouton scindé (lancement direct + chevron popover) #}
   <span class="play-wrapper{% if 'episode' in play_btn_class %} play-wrapper-episode{% endif %}">
-      <button class="{{ play_btn_class }} play-popover-trigger"
-          title="Choisir le lecteur"
-          onclick="togglePlayPopover(this)">
-          <svg width="{{ '14' if not play_show_label else '12' }}" height="{{ '14' if not play_show_label else '12' }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      <button class="{{ play_btn_class }} play-btn-launch"
+          hx-post="/library/{{ play_entity_type }}/{{ play_entity_id }}/play"
+          hx-swap="outerHTML" hx-target="closest .play-wrapper"
+          title="Visionner sur votre profil">
+          <svg width="{{ _icon_sz }}" height="{{ _icon_sz }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           {% if play_show_label %} Visionner{% endif %}
+      </button>
+      <button class="{{ play_btn_class }} play-btn-caret play-popover-trigger"
+          title="Choisir le lecteur" aria-label="Choisir le lecteur" onclick="togglePlayPopover(this)">
+          <svg class="play-caret-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="play-profile-popover">
           {% for p in _profiles %}
-          <button class="play-profile-option{% if p.name == _active %} default{% endif %}"
+          <button class="play-profile-option"
               hx-post="/library/{{ play_entity_type }}/{{ play_entity_id }}/play?profile={{ p.name | urlencode }}"
               hx-swap="outerHTML" hx-target="closest .play-wrapper"
               onclick="event.stopPropagation()">
-              {% if p.target == 'remote' %}
+              {% if p.type == 'dunehd' %}
+              <svg class="play-profile-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><line x1="2" y1="20" x2="2.01" y2="20"/></svg>
+              {% elif p.target == 'remote' %}
               <svg class="play-profile-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2"/><polyline points="17 2 12 7 7 2"/></svg>
               {% else %}
               <svg class="play-profile-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
               {% endif %}
-              {{ p.name }}
-              {% if p.name == _active %}<span class="play-profile-default">(défaut)</span>{% endif %}
+              {{ p.name }}{% if p.type == 'dunehd' %} <span class="play-profile-default">→ mediacenter</span>{% endif %}
           </button>
           {% endfor %}
       </div>

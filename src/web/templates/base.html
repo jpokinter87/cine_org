@@ -17,6 +17,17 @@
 <body>
     <nav class="main-nav">
         <a href="/" class="nav-brand">Ciné<span class="brand-accent">Org</span></a>
+        {% set _personal = get_personal_profiles() %}
+        {% if _personal | length > 1 %}
+        <div class="viewer-select-wrap">
+            <label for="viewer-select" class="viewer-select-label">Vous regardez sur</label>
+            <select id="viewer-select" class="viewer-select" onchange="setViewerProfile(this.value)">
+                {% for p in _personal %}
+                <option value="{{ p.name }}">{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
         <ul class="nav-links">
             <li><a href="/" class="nav-link {% block nav_home %}{% endblock %}">Accueil</a></li>
             <li><a href="/workflow" class="nav-link {% block nav_workflow %}{% endblock %}">Traitement</a></li>
@@ -67,6 +78,37 @@
             }
         }
     }
+    /* Identité « qui regarde » mémorisée dans CE navigateur (jamais côté serveur) */
+    var VIEWER_KEY = 'cineorg.viewer';
+    function getViewerProfile() {
+        try { return localStorage.getItem(VIEWER_KEY) || 'Local'; }
+        catch (e) { return 'Local'; }
+    }
+    function setViewerProfile(name) {
+        try { localStorage.setItem(VIEWER_KEY, name); } catch (e) {}
+    }
+    /* Initialiser le sélecteur depuis localStorage ; repli sur Local si profil disparu */
+    document.addEventListener('DOMContentLoaded', function() {
+        var sel = document.getElementById('viewer-select');
+        if (!sel) return;
+        var stored = getViewerProfile();
+        var found = false;
+        for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === stored) { found = true; break; }
+        }
+        if (!found) { stored = 'Local'; setViewerProfile('Local'); }
+        sel.value = stored;
+    });
+    /* « Visionner » en un clic : injecter l'identité dans les requêtes /play
+       qui n'ont pas déjà un profil explicite (les options du ▾ en portent un). */
+    document.body.addEventListener('htmx:configRequest', function(evt) {
+        var path = evt.detail.path || '';
+        if (evt.detail.verb === 'post' && /\/play(\?|$)/.test(path)
+            && path.indexOf('profile=') === -1) {
+            var sep = path.indexOf('?') === -1 ? '?' : '&';
+            evt.detail.path = path + sep + 'profile=' + encodeURIComponent(getViewerProfile());
+        }
+    });
     /* Tooltip résultats workflow : click-to-toggle (évite le problème de scroll hover) */
     function toggleResultTooltip(el) {
         var wasOpen = el.classList.contains('tooltip-open');

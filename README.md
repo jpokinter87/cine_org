@@ -1241,6 +1241,19 @@ Dans ce cas seulement, un bouton **Supprimer la fiche** apparaît sur le détail
 
 Le bouton **Visionner** (films) ou le bouton **play** (épisodes) lance la lecture du fichier via le lecteur configuré. Un indicateur de statut s'affiche pendant la lecture.
 
+#### Visionner en un clic (identité par navigateur)
+
+Chaque navigateur mémorise « qui regarde » via le sélecteur **« Vous regardez sur »**
+de l'en-tête (stockage local, propre à chaque appareil — aucun réglage côté serveur,
+donc plusieurs personnes peuvent regarder en même temps sans interférence).
+
+- **Clic sur « Visionner »** : lance la vidéo directement sur votre profil, en un seul clic.
+- **Chevron ▾** : choix ponctuel d'un autre lecteur ou envoi vers le mediacenter **DuneHD**,
+  sans changer votre identité.
+
+DuneHD n'apparaît pas dans le sélecteur d'identité (il *envoie* au mediacenter plutôt que
+de « regarder ») : il reste accessible uniquement via le menu ▾.
+
 **Trois modes de lecture** sont disponibles via les profils lecteur (`/config` > Lecteur) :
 
 | Mode | Target | Description |

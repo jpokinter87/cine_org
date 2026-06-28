@@ -86,6 +86,16 @@ def get_active_profile() -> dict:
     return dict(_DEFAULT_PROFILE)
 
 
+def get_personal_profiles() -> list[dict]:
+    """Retourne les profils « personnes/écrans » (hors DuneHD).
+
+    Sert au sélecteur d'identité de l'en-tête : on ne « devient » pas un DuneHD,
+    qui reste une action ponctuelle « envoyer au mediacenter » dans le menu ▾.
+    """
+    data = load_profiles()
+    return [p for p in data.get("profiles", []) if p.get("type") != "dunehd"]
+
+
 def set_active_profile(name: str) -> None:
     """Change le profil actif."""
     data = load_profiles()
