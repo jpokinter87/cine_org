@@ -168,3 +168,22 @@ def test_legacy_mpv_profile_still_works(isolated_profiles: Path) -> None:
     assert profile["type"] == "mpv"
     assert profile["ssh_host"] == "192.168.1.20"
     assert profile["ip"] is None
+
+
+def test_get_personal_profiles_exclut_dunehd(tmp_path, monkeypatch):
+    """get_personal_profiles ne renvoie que les profils personnes/écrans (hors DuneHD)."""
+    import src.player_profiles as pp
+
+    fake = {
+        "active": "Local",
+        "profiles": [
+            {"name": "Local", "type": "mpv", "target": "local"},
+            {"name": "Willow", "type": "mpv", "target": "remote"},
+            {"name": "Salon", "type": "dunehd", "target": "remote"},
+        ],
+    }
+    monkeypatch.setattr(pp, "load_profiles", lambda: fake)
+
+    names = [p["name"] for p in pp.get_personal_profiles()]
+    assert names == ["Local", "Willow"]
+    assert "Salon" not in names
