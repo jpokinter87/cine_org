@@ -85,7 +85,9 @@ async def library_index(
         items = []
 
         # --- Films ---
-        if type in ("all", "movie"):
+        # « Séries incomplètes » est un filtre propre aux séries : quand il est
+        # actif, aucun film ne doit apparaître (sinon « Tous » les laisse passer).
+        if type in ("all", "movie") and incomplete_series != "1":
             movie_stmt = select(MovieModel)
             if q:
                 movie_stmt = movie_stmt.where(

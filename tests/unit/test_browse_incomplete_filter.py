@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 
 import src.infrastructure.persistence.database as db_module
 from src.infrastructure.persistence.database import get_session, init_db
-from src.infrastructure.persistence.models import SeriesModel
+from src.infrastructure.persistence.models import MovieModel, SeriesModel
 from src.web.app import app
 
 
@@ -57,6 +57,25 @@ def test_incomplete_filter_returns_only_incomplete(isolated_db):
     assert "ZZZ Broken Show" in body
     assert "ZZZ Complete Show" not in body
     assert "ZZZ Unknown Show" not in body
+
+
+def test_incomplete_filter_excludes_movies_when_type_all(isolated_db):
+    """incomplete_series=1 avec type=all n'affiche aucun film (le filtre est
+    propre aux séries) — régression : les films passaient sans être filtrés."""
+    _seed_series()
+    session = next(get_session())
+    try:
+        session.add(MovieModel(title="ZZZ Some Movie", year=2024))
+        session.commit()
+    finally:
+        session.close()
+    with TestClient(app) as client:
+        resp = client.get("/library/?type=all&incomplete_series=1")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "ZZZ Broken Show" in body
+    assert "ZZZ Some Movie" not in body
+    assert "ZZZ Complete Show" not in body
 
 
 def test_no_incomplete_filter_returns_all_series(isolated_db):
