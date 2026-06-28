@@ -37,6 +37,9 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Purge des hardlinks](#purge-des-hardlinks)
   - [Films multi-parties](#films-multi-parties)
   - [Surveillance de complétude des séries](#surveillance-de-complétude-des-séries)
+- [Intégration Jellyfin](#intégration-jellyfin)
+  - [Synchronisation Jellyfin](#synchronisation-jellyfin)
+  - [Brancher Jellyfin](#brancher-jellyfin)
 - [Format de nommage](#format-de-nommage)
 - [Interface web](#interface-web)
   - [Lancement du serveur](#lancement-du-serveur)
@@ -130,6 +133,7 @@ EOF
 | `CINEORG_MAX_FILES_PER_SUBDIR` | `50` | Max fichiers par sous-dossier |
 | `CINEORG_HARDLINK_RETENTION_DAYS` | `60` | TTL des hardlinks de seeding (jours) |
 | `CINEORG_SANDBOX_DIR` | `{storage}/.sandbox` | Sandbox orphelins (même volume que storage) |
+| `CINEORG_JELLYFIN_DIR` | `/media/Serveur/JellyfinLib` | Répertoire de l'arbre Jellyfin (symlinks + NFO) |
 | `CINEORG_LOG_LEVEL` | `INFO` | Niveau de log (DEBUG, INFO, WARNING, ERROR) |
 
 ## Architecture
@@ -1056,6 +1060,110 @@ uv run python -m src.main check-completeness --series-id <ID>
 
 **Limite connue (V1)** : seules les séries disposant d'un `tvdb_id` sont évaluées. Un repli sur TMDB est prévu ultérieurement pour couvrir les séries sans identifiant TVDB.
 
+## Intégration Jellyfin
+
+CineOrg peut générer un arbre de symlinks dédié à Jellyfin, accompagné de fichiers de métadonnées NFO, pour que le mediacenter identifie chaque film et chaque série de façon fiable sans requête réseau.
+
+### Synchronisation Jellyfin
+
+La commande `jellyfin-sync` génère un **arbre de symlinks dédié** ainsi que des fichiers **NFO** (métadonnées XML) à partir de la base CineOrg. Jellyfin lit les IDs TMDB/TVDB/IMDb directement dans les NFO — sans deviner, sans série zappée.
+
+**Répertoire cible** : variable d'environnement `CINEORG_JELLYFIN_DIR` (défaut : `/media/Serveur/JellyfinLib`).
+
+```bash
+# Générer l'arbre Jellyfin complet (films + séries)
+uv run cineorg jellyfin-sync
+
+# Simuler sans écrire aucun fichier
+uv run cineorg jellyfin-sync --dry-run
+
+# Films uniquement
+uv run cineorg jellyfin-sync --movies-only
+
+# Séries uniquement
+uv run cineorg jellyfin-sync --series-only
+
+# Supprimer de l'arbre Jellyfin les entrées absentes de la base
+uv run cineorg jellyfin-sync --prune
+```
+
+**Options :**
+
+| Option | Description |
+|--------|-------------|
+| `--movies-only` | Traite uniquement les films |
+| `--series-only` | Traite uniquement les séries |
+| `--dry-run` | Simule sans modifier ni créer aucun fichier |
+| `--prune` | Supprime de l'arbre Jellyfin les entrées absentes de la base CineOrg |
+
+**Exemple de sortie (dry-run) :**
+
+```
+Films liés : 5853 / Séries liées : 1022 (épisodes : 20572) / Ignorés : 39
+```
+
+**Structure générée :**
+
+```
+JellyfinLib/
+├── Films/
+│   └── Inception (2010)/
+│       ├── Inception (2010).mkv        → symlink vers storage/
+│       └── movie.nfo                   # IDs TMDB/IMDb + métadonnées complètes
+│
+└── Séries/
+    └── Breaking Bad (2008)/
+        ├── tvshow.nfo                  # métadonnées série + IDs
+        └── Saison 01/
+            ├── Breaking Bad (2008) S01E01.mkv   → symlink vers storage/
+            └── Breaking Bad (2008) S01E01.nfo   # métadonnées épisode
+```
+
+La structure est **à plat** : un dossier par film (indépendant de la classification genre/subdivision de `video/`), une arborescence `Saison NN/` par série. Les films multi-parties utilisent le suffixe `- cd2`, `- cd3`, etc.
+
+**Contenu des NFO :** titre, année, synopsis, genres, durée, notes TMDB et IMDb, note personnelle, réalisateur(s), casting, affiche, collection/saga. Les corrections manuelles CineOrg (`*_override`) priment sur les valeurs API.
+
+**Chaîne de repli pour les sources :**
+1. `realpath(symlink_path)` — cible résolue du symlink `video/`
+2. `file_path` — chemin physique direct issu de la base
+3. Entrée ignorée et listée dans le rapport (sans interruption de la commande)
+
+La commande est **idempotente** : elle peut être relancée à tout moment pour intégrer le nouveau contenu ou recréer des fichiers manquants.
+
+**Périmètre :** films et séries gérés par CineOrg uniquement (documentaires, musiques et autres types non inclus).
+
+### Brancher Jellyfin
+
+**1. Lancer le conteneur Docker :**
+
+```bash
+docker run -d \
+  --name jellyfin \
+  --restart=unless-stopped \
+  -p 8096:8096 \
+  -v /home/jp/jellyfin/config:/config \
+  -v /home/jp/jellyfin/cache:/cache \
+  -v /media/Serveur/JellyfinLib:/media/Serveur/JellyfinLib:ro \
+  -v /media/NAS64:/media/NAS64:ro \
+  -v /media/Serveur:/media/Serveur:ro \
+  jellyfin/jellyfin
+```
+
+Les montages `/media/NAS64` et `/media/Serveur` en lecture seule permettent à Jellyfin de résoudre les symlinks de `JellyfinLib/` vers les fichiers physiques stockés sur ces volumes.
+
+**2. Configurer les bibliothèques (interface web `http://<serveur>:8096`) :**
+
+| Bibliothèque | Type Jellyfin | Répertoire |
+|---|---|---|
+| Films | *Films* | `/media/Serveur/JellyfinLib/Films` |
+| Séries | *Séries/Émissions* | `/media/Serveur/JellyfinLib/Séries` |
+
+**3. Activer la lecture des NFO locaux :**
+
+Dans les paramètres de chaque bibliothèque Jellyfin, activer **« Lecture des fichiers de métadonnées locaux NFO »** comme source prioritaire, et régler la langue des métadonnées sur **fr**.
+
+Avec les NFO actifs, Jellyfin n'interroge pas les serveurs distants pour identifier les contenus : les IDs TMDB/TVDB/IMDb inscrits dans les fichiers garantissent une identification fiable, même pour les titres ambigus ou les séries peu connues.
+
 ## Format de nommage
 
 ### Films
@@ -1579,6 +1687,17 @@ uv run python -m src.main check-completeness
 ```
 
 Vérifier aussi que la clé `CINEORG_TVDB_API_KEY` est bien définie dans `.env` (`uv run cineorg info` indique si l'API TVDB est activée).
+
+### Un contenu n'apparaît pas dans Jellyfin
+
+- Relancer `jellyfin-sync` : la commande est idempotente et rattrape tout nouveau contenu en base.
+  ```bash
+  uv run cineorg jellyfin-sync
+  ```
+- Utiliser `--dry-run` pour diagnostiquer les ignorés (entrées sans fichier source résolvable).
+- Vérifier que les montages Docker (`/media/NAS64`, `/media/Serveur`) sont accessibles depuis le conteneur et que les symlinks de `JellyfinLib/` se résolvent bien vers les fichiers physiques.
+- Si le contenu est présent dans `JellyfinLib/` mais absent de l'interface Jellyfin, forcer un scan de la bibliothèque concernée depuis `http://<serveur>:8096` (Tableau de bord → bibliothèque → scanner).
+- Vérifier que la variable `CINEORG_JELLYFIN_DIR` pointe vers le bon répertoire (`uv run cineorg info`).
 
 ### Base de données corrompue
 

@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     downloads_dir: Path = Field(default=Path("~/Downloads"))
     storage_dir: Path = Field(default=Path("~/Videos/storage"))
     video_dir: Path = Field(default=Path("~/Videos/video"))
+    jellyfin_dir: Path = Field(default=Path("/media/Serveur/JellyfinLib"))
 
     # Base de données
     database_url: str = Field(default="sqlite:///cineorg.db")
@@ -76,6 +77,7 @@ class Settings(BaseSettings):
         "downloads_dir",
         "storage_dir",
         "video_dir",
+        "jellyfin_dir",
         "sandbox_dir",
         "log_file",
         mode="before",

@@ -87,6 +87,9 @@ from src.adapters.cli.commands.link_movie_parts_command import (
 from src.adapters.cli.commands.completeness_command import (
     check_completeness,
 )
+from src.adapters.cli.commands.jellyfin_sync_command import (
+    jellyfin_sync,
+)
 
 __all__ = [
     # workflow
@@ -138,4 +141,5 @@ __all__ = [
     "relink_movies",
     "link_movie_parts",
     "check_completeness",
+    "jellyfin_sync",
 ]
