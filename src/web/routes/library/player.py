@@ -149,48 +149,39 @@ def _launch_player(
 
 
 def _play_button_html(entity_type: str, entity_id: int) -> str:
-    """Genere le bouton Visionner avec sélecteur de profil si nécessaire."""
+    """Génère le bouton « Visionner » (bouton scindé) pour restaurer après lecture.
+
+    Doit rester cohérent avec le template library/_play_btn.html : le corps lance
+    directement (l'identité est injectée côté client), le chevron ▾ ouvre le popover
+    pour un choix ponctuel (autre profil, DuneHD).
+    """
     data = load_profiles()
     profiles = data.get("profiles", [])
-    active_name = data.get("active", "Local")
+
+    is_episode = entity_type == "episodes"
+    btn_class = "lib-episode-play-btn" if is_episode else "play-btn"
+    label = "" if is_episode else " Visionner"
+    icon_sz = "14" if is_episode else "12"
+    base = f"/library/{entity_type}/{entity_id}/play"
+
+    play_icon = (
+        f'<svg width="{icon_sz}" height="{icon_sz}" viewBox="0 0 24 24" fill="none"'
+        f' stroke="currentColor" stroke-width="2">'
+        f'<polygon points="5 3 19 12 5 21 5 3"/></svg>'
+    )
 
     if len(profiles) <= 1:
-        # Un seul profil : bouton direct sans popover
-        profile = profiles[0] if profiles else {"command": "mpv", "name": "Local"}
-        if entity_type == "episodes":
-            return (
-                f'<button class="lib-episode-play-btn"'
-                f' hx-post="/library/episodes/{entity_id}/play"'
-                f' hx-swap="outerHTML"'
-                f' title="Ouvrir dans {html.escape(profile["command"])}">'
-                f'<svg width="14" height="14" viewBox="0 0 24 24" fill="none"'
-                f' stroke="currentColor" stroke-width="2">'
-                f'<polygon points="5 3 19 12 5 21 5 3"/></svg></button>'
-            )
         return (
-            f'<button class="play-btn"'
-            f' hx-post="/library/{entity_type}/{entity_id}/play"'
-            f' hx-swap="outerHTML"'
-            f' title="Ouvrir dans {html.escape(profile["command"])}">'
-            f'<svg width="12" height="12" viewBox="0 0 24 24" fill="none"'
-            f' stroke="currentColor" stroke-width="2">'
-            f'<polygon points="5 3 19 12 5 21 5 3"/></svg>'
-            f" Visionner</button>"
+            f'<button class="{btn_class}"'
+            f' hx-post="{base}" hx-swap="outerHTML" title="Visionner">'
+            f"{play_icon}{label}</button>"
         )
 
-    # Plusieurs profils : bouton avec popover sélecteur
-    play_icon = (
-        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"'
-        ' stroke="currentColor" stroke-width="2">'
-        '<polygon points="5 3 19 12 5 21 5 3"/></svg>'
+    caret = (
+        '<svg class="play-caret-icon" width="11" height="11" viewBox="0 0 24 24"'
+        ' fill="none" stroke="currentColor" stroke-width="2">'
+        '<polyline points="6 9 12 15 18 9"/></svg>'
     )
-    play_icon_small = (
-        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"'
-        ' stroke="currentColor" stroke-width="2">'
-        '<polygon points="5 3 19 12 5 21 5 3"/></svg>'
-    )
-
-    # Icônes cible
     icon_local = (
         '<svg class="play-profile-icon" width="14" height="14" viewBox="0 0 24 24"'
         ' fill="none" stroke="currentColor" stroke-width="2">'
@@ -204,49 +195,46 @@ def _play_button_html(entity_type: str, entity_id: int) -> str:
         '<rect x="2" y="7" width="20" height="15" rx="2"/>'
         '<polyline points="17 2 12 7 7 2"/></svg>'
     )
+    icon_cast = (
+        '<svg class="play-profile-icon" width="14" height="14" viewBox="0 0 24 24"'
+        ' fill="none" stroke="currentColor" stroke-width="2">'
+        '<path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20'
+        'M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/>'
+        '<line x1="2" y1="20" x2="2.01" y2="20"/></svg>'
+    )
 
-    # Options du popover
     options_html = ""
     for p in profiles:
         name_esc = html.escape(p["name"])
-        icon = icon_remote if p.get("target") == "remote" else icon_local
-        default_mark = ' <span class="play-profile-default">(défaut)</span>' if p["name"] == active_name else ""
-        css_class = "play-profile-option default" if p["name"] == active_name else "play-profile-option"
-
-        if entity_type == "episodes":
-            post_url = f"/library/episodes/{entity_id}/play?profile={html.escape(p['name'])}"
+        if p.get("type") == "dunehd":
+            icon = icon_cast
+            suffix = ' <span class="play-profile-default">→ mediacenter</span>'
+        elif p.get("target") == "remote":
+            icon = icon_remote
+            suffix = ""
         else:
-            post_url = f"/library/{entity_type}/{entity_id}/play?profile={html.escape(p['name'])}"
-
+            icon = icon_local
+            suffix = ""
         options_html += (
-            f'<button class="{css_class}"'
-            f' hx-post="{post_url}"'
+            f'<button class="play-profile-option"'
+            f' hx-post="{base}?profile={name_esc}"'
             f' hx-swap="outerHTML" hx-target="closest .play-wrapper"'
             f' onclick="event.stopPropagation()">'
-            f'{icon} {name_esc}{default_mark}</button>'
+            f"{icon} {name_esc}{suffix}</button>"
         )
 
-    popover = (
-        f'<div class="play-profile-popover">{options_html}</div>'
-    )
-
-    toggle = "onclick=\"this.parentElement.classList.toggle('popover-open')\""
-
-    if entity_type == "episodes":
-        return (
-            f'<span class="play-wrapper play-wrapper-episode">'
-            f'<button class="lib-episode-play-btn play-popover-trigger"'
-            f' title="Choisir le lecteur" {toggle}>'
-            f'{play_icon_small}</button>'
-            f'{popover}</span>'
-        )
-
+    wrapper_class = "play-wrapper play-wrapper-episode" if is_episode else "play-wrapper"
     return (
-        f'<span class="play-wrapper">'
-        f'<button class="play-btn play-popover-trigger"'
-        f' title="Choisir le lecteur" {toggle}>'
-        f'{play_icon} Visionner</button>'
-        f'{popover}</span>'
+        f'<span class="{wrapper_class}">'
+        f'<button class="{btn_class} play-btn-launch"'
+        f' hx-post="{base}" hx-swap="outerHTML"'
+        f' hx-target="closest .play-wrapper" title="Visionner sur votre profil">'
+        f"{play_icon}{label}</button>"
+        f'<button class="{btn_class} play-btn-caret play-popover-trigger"'
+        f' title="Choisir le lecteur" onclick="togglePlayPopover(this)">'
+        f"{caret}</button>"
+        f'<div class="play-profile-popover">{options_html}</div>'
+        f"</span>"
     )
 
 
