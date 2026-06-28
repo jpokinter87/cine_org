@@ -170,7 +170,7 @@ def test_legacy_mpv_profile_still_works(isolated_profiles: Path) -> None:
     assert profile["ip"] is None
 
 
-def test_get_personal_profiles_exclut_dunehd(tmp_path, monkeypatch):
+def test_get_personal_profiles_exclut_dunehd(monkeypatch):
     """get_personal_profiles ne renvoie que les profils personnes/écrans (hors DuneHD)."""
     import src.player_profiles as pp
 
