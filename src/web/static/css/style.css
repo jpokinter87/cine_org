@@ -7862,17 +7862,17 @@ details[open] > .maint-issue-toggle::before {
 /* ── Bouton suppression discret (rouge sombre) ── */
 
 .delete-mode-btn-subtle {
-    border-color: rgba(232, 93, 117, 0.2);
+    border-color: rgba(232, 93, 117, 0.55);
     color: var(--accent-rose);
     font-size: 0.75rem;
     padding: 0.3rem 0.55rem;
-    opacity: 0.7;
+    opacity: 0.85;
 }
 
 .delete-mode-btn-subtle:hover {
     opacity: 1;
     background: var(--accent-rose-dim);
-    border-color: rgba(232, 93, 117, 0.35);
+    border-color: var(--accent-rose);
     color: var(--accent-rose);
 }
 

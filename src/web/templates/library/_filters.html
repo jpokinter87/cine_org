@@ -48,6 +48,8 @@
     {# ── Ligne 2 : tri+flèches, checkboxes, filtres techniques toggle, suppression ── #}
     {% set tech_active = current_resolution or current_codec_video or current_codec_audio or current_language %}
     {% set tech_count = (1 if current_resolution else 0) + (1 if current_codec_video else 0) + (1 if current_codec_audio else 0) + (1 if current_language else 0) %}
+    {% set state_active = current_unwatched or current_no_file or current_no_poster or current_incomplete_series %}
+    {% set state_count = (1 if current_unwatched else 0) + (1 if current_no_file else 0) + (1 if current_no_poster else 0) + (1 if current_incomplete_series else 0) %}
     <div class="lib-filters-secondary">
         <div class="lib-sort-group">
             <select name="sort" class="lib-filter-select lib-sort-select">
@@ -74,29 +76,13 @@
             </button>
         </div>
 
-        <label class="lib-filter-checkbox lib-filter-checkbox-sm">
-            <input type="checkbox" name="unwatched" value="1"
-                   {{ 'checked' if current_unwatched }}>
-            Non-vus
-        </label>
-
-        <label class="lib-filter-checkbox lib-filter-checkbox-sm">
-            <input type="checkbox" name="no_file" value="1"
-                   {{ 'checked' if current_no_file }}>
-            Sans fichier
-        </label>
-
-        <label class="lib-filter-checkbox lib-filter-checkbox-sm">
-            <input type="checkbox" name="no_poster" value="1"
-                   {{ 'checked' if current_no_poster }}>
-            Sans poster
-        </label>
-
-        <label class="lib-filter-checkbox lib-filter-checkbox-sm">
-            <input type="checkbox" name="incomplete_series" value="1"
-                   {{ 'checked' if current_incomplete_series }}>
-            Séries incomplètes
-        </label>
+        <button type="button" class="lib-tech-toggle" data-target="lib-filters-state-panel">
+            <svg class="lib-tech-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            <span>État</span>
+            {% if state_count > 0 %}
+            <span class="lib-tech-badge">{{ state_count }}</span>
+            {% endif %}
+        </button>
 
         <button type="button" class="lib-tech-toggle" data-target="lib-filters-tech-panel">
             <svg class="lib-tech-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
@@ -112,6 +98,35 @@
             Supprimer / Fusionner
         </button>
         {% endif %}
+    </div>
+
+    {# ── Panneau état dépliable (sous la ligne 2) ── #}
+    <div id="lib-filters-state-panel" class="lib-filters-tech{{ '' if state_active else ' collapsed' }}">
+        <div class="lib-tech-content">
+            <label class="lib-filter-checkbox lib-filter-checkbox-sm">
+                <input type="checkbox" name="unwatched" value="1"
+                       {{ 'checked' if current_unwatched }}>
+                Non-vus
+            </label>
+
+            <label class="lib-filter-checkbox lib-filter-checkbox-sm">
+                <input type="checkbox" name="no_file" value="1"
+                       {{ 'checked' if current_no_file }}>
+                Sans fichier
+            </label>
+
+            <label class="lib-filter-checkbox lib-filter-checkbox-sm">
+                <input type="checkbox" name="no_poster" value="1"
+                       {{ 'checked' if current_no_poster }}>
+                Sans poster
+            </label>
+
+            <label class="lib-filter-checkbox lib-filter-checkbox-sm">
+                <input type="checkbox" name="incomplete_series" value="1"
+                       {{ 'checked' if current_incomplete_series }}>
+                Séries incomplètes
+            </label>
+        </div>
     </div>
 
     {# ── Panneau technique dépliable (sous la ligne 2) ── #}
