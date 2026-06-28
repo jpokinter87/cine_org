@@ -36,6 +36,16 @@ def test_resolve_handles_none_inputs():
     assert resolve_source(None, None) is None
 
 
+def test_resolve_returns_none_for_broken_symlink(tmp_path):
+    target = tmp_path / "target.mkv"
+    target.write_text("x")
+    link = tmp_path / "link.mkv"
+    link.symlink_to(target)
+    target.unlink()  # brise le symlink
+
+    assert resolve_source(str(link), None) is None
+
+
 def test_folder_name_with_year():
     assert folder_name("Inception", 2010) == "Inception (2010)"
 
@@ -87,3 +97,28 @@ def test_ensure_symlink_replaces_wrong_target(tmp_path):
 
     ensure_symlink(new, link)
     assert link.resolve() == new.resolve()
+
+
+def test_ensure_symlink_replaces_regular_file(tmp_path):
+    target = tmp_path / "target.mkv"
+    target.write_text("x")
+    link = tmp_path / "link.mkv"
+    link.write_text("fichier ordinaire")  # pas un symlink
+
+    ensure_symlink(target, link)
+
+    assert link.is_symlink()
+    assert link.resolve() == target.resolve()
+
+
+def test_ensure_symlink_replaces_directory(tmp_path):
+    target = tmp_path / "target.mkv"
+    target.write_text("x")
+    link = tmp_path / "link.mkv"
+    link.mkdir()  # un répertoire à la place du lien attendu
+    (link / "parasite.txt").write_text("résidu")
+
+    ensure_symlink(target, link)
+
+    assert link.is_symlink()
+    assert link.resolve() == target.resolve()

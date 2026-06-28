@@ -4,6 +4,7 @@ Résolution de la source (chaîne de repli), calcul des noms à plat, création
 idempotente des symlinks.
 """
 
+import shutil
 from pathlib import Path
 
 from src.services.renamer import sanitize_for_filesystem
@@ -29,7 +30,7 @@ def folder_name(
 ) -> str:
     """Nom de dossier à plat : `Titre (Année)`, avec suffixe `[tmdbid-N]` en cas de collision."""
     base = sanitize_for_filesystem(title)
-    if year:
+    if year is not None:
         base = f"{base} ({year})"
     if with_id and tmdb_id is not None:
         base = f"{base} [tmdbid-{tmdb_id}]"
@@ -40,19 +41,27 @@ def episode_filename(
     title: str, year: int | None, season: int, episode: int, ext: str
 ) -> str:
     """Nom de fichier d'épisode : `Titre (Année) SxxExx.ext`."""
+    ext = ext if ext.startswith(".") else f".{ext}"
     base = sanitize_for_filesystem(title)
-    if year:
+    if year is not None:
         base = f"{base} ({year})"
     return f"{base} S{season:02d}E{episode:02d}{ext}"
 
 
 def ensure_symlink(target: Path, link_path: Path) -> None:
-    """Crée (ou corrige) un symlink `link_path -> target`, de façon idempotente."""
+    """Crée (ou corrige) un symlink `link_path -> target`, de façon idempotente.
+
+    `target` doit être un chemin absolu (résolu). Gère le remplacement d'un
+    lien incorrect, d'un fichier régulier ou d'un répertoire déjà présent à
+    l'emplacement du lien (l'arbre Jellyfin est entièrement régénérable).
+    """
     link_path.parent.mkdir(parents=True, exist_ok=True)
     if link_path.is_symlink():
-        if link_path.readlink() == target:
+        if link_path.resolve() == target.resolve():
             return
         link_path.unlink()
+    elif link_path.is_dir():
+        shutil.rmtree(link_path)
     elif link_path.exists():
         link_path.unlink()
     link_path.symlink_to(target)
