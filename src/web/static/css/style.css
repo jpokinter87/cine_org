@@ -4753,7 +4753,14 @@ a.tech-badge-codec:hover {
     cursor: pointer;
 }
 .viewer-select:hover {
-    border-color: var(--accent-emerald);
+    border-color: var(--accent-amber);
+}
+/* État actif/focus : ambre raccord à la charte (remplace le contour blanc épais du navigateur) */
+.viewer-select:focus,
+.viewer-select:focus-visible {
+    outline: none;
+    border-color: var(--accent-amber);
+    box-shadow: 0 0 0 2px var(--accent-amber-dim);
 }
 
 /* Page layout */
