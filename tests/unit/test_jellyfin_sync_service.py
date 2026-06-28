@@ -5,7 +5,12 @@ from pathlib import Path
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
-from src.infrastructure.persistence.models import MovieModel, MoviePartModel
+from src.infrastructure.persistence.models import (
+    EpisodeModel,
+    MovieModel,
+    MoviePartModel,
+    SeriesModel,
+)
 from src.services.jellyfin.jellyfin_sync_service import JellyfinSyncService
 
 
@@ -145,3 +150,76 @@ def test_sync_continues_on_item_error(engine, tmp_path, monkeypatch):
     assert report.movies == 1  # "Bon" traité malgré l'échec de "Mauvais"
     assert len(report.errors) == 1
     assert "Mauvais" in report.errors[0]
+
+
+def test_sync_series_and_episodes(engine, tmp_path):
+    ep_phys = _make_physical(tmp_path, "ep1.mkv")
+    with Session(engine) as session:
+        s = SeriesModel(title="12 Monkeys", year=2015, tvdb_id=272644, tmdb_id=60948)
+        session.add(s)
+        session.commit()
+        session.refresh(s)
+        session.add(
+            EpisodeModel(
+                series_id=s.id,
+                season_number=1,
+                episode_number=1,
+                title="Fragmentation",
+                symlink_path=str(ep_phys),
+            )
+        )
+        session.commit()
+
+    jf = tmp_path / "JellyfinLib"
+    report = JellyfinSyncService(Session(engine), jf).sync(movies_only=False)
+
+    show_dir = jf / "Séries" / "12 Monkeys (2015)"
+    assert (show_dir / "tvshow.nfo").exists()
+    season_dir = show_dir / "Saison 01"
+    assert (season_dir / "12 Monkeys (2015) S01E01.mkv").is_symlink()
+    assert (season_dir / "12 Monkeys (2015) S01E01.nfo").exists()
+    assert report.series == 1
+    assert report.episodes == 1
+
+
+def test_sync_series_skips_missing_episode(engine, tmp_path):
+    with Session(engine) as session:
+        s = SeriesModel(title="Sérieuse", year=2020, tvdb_id=1)
+        session.add(s)
+        session.commit()
+        session.refresh(s)
+        session.add(
+            EpisodeModel(
+                series_id=s.id,
+                season_number=1,
+                episode_number=1,
+                title="Absent",
+                symlink_path="/pas/la.mkv",
+            )
+        )
+        session.commit()
+
+    jf = tmp_path / "JellyfinLib"
+    report = JellyfinSyncService(Session(engine), jf).sync()
+    assert report.episodes == 0
+    assert len(report.skipped) == 1
+
+
+def test_prune_removes_stale_entries(engine, tmp_path):
+    phys = _make_physical(tmp_path, "ok.mkv")
+    with Session(engine) as session:
+        session.add(
+            MovieModel(title="Garde", year=2000, tmdb_id=1, symlink_path=str(phys))
+        )
+        session.commit()
+
+    jf = tmp_path / "JellyfinLib"
+    stale = jf / "Films" / "Vieux Film (1990)"
+    stale.mkdir(parents=True)
+    (stale / "x.nfo").write_text("vieux")
+
+    report = JellyfinSyncService(Session(engine), jf).sync(prune=True)
+
+    assert (jf / "Films" / "Garde (2000)").exists()
+    assert not stale.exists()
+    assert any("Vieux Film" in p for p in report.pruned)

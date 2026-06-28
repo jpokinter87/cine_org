@@ -1,17 +1,25 @@
 """Orchestration de la synchronisation CineOrg -> Jellyfin."""
 
+import shutil
 from pathlib import Path
 
 from sqlmodel import Session, select
 
 from src.infrastructure.persistence.models import (
+    EpisodeModel,
     MovieModel,
     MoviePartModel,
+    SeriesModel,
 )
 from src.services.jellyfin.dataclasses import JellyfinSyncReport
-from src.services.jellyfin.nfo_builder import build_movie_nfo
+from src.services.jellyfin.nfo_builder import (
+    build_episode_nfo,
+    build_movie_nfo,
+    build_tvshow_nfo,
+)
 from src.services.jellyfin.tree_builder import (
     ensure_symlink,
+    episode_filename,
     folder_name,
     resolve_source,
 )
@@ -110,11 +118,80 @@ class JellyfinSyncService:
     # --- Séries (étape B) --------------------------------------------------
 
     def _sync_series(self, report: JellyfinSyncReport, dry_run: bool) -> None:
-        # Implémenté à l'étape B.
-        pass
+        series_root = self._root / "Séries"
+        used_dirs: set[str] = set()
+        all_series = self._session.exec(select(SeriesModel)).all()
+        for series in all_series:
+            try:
+                self._sync_one_series(series, series_root, used_dirs, report, dry_run)
+            except Exception as exc:  # noqa: BLE001
+                report.errors.append(f"{series.title}: {exc}")
+
+    def _sync_one_series(
+        self,
+        series: SeriesModel,
+        series_root: Path,
+        used_dirs: set[str],
+        report: JellyfinSyncReport,
+        dry_run: bool,
+    ) -> None:
+        episodes = self._session.exec(
+            select(EpisodeModel).where(EpisodeModel.series_id == series.id)
+        ).all()
+        resolved = [
+            (ep, resolve_source(ep.symlink_path, ep.file_path)) for ep in episodes
+        ]
+        for ep, src in resolved:
+            if src is None:
+                report.skipped.append(ep.symlink_path or ep.file_path or ep.title)
+        available = [(ep, src) for ep, src in resolved if src is not None]
+        if not available:
+            return  # série sans aucun épisode présent : on ne crée rien
+
+        if series.tvdb_id is None and series.tmdb_id is None:
+            report.id_less.append(series.title)
+
+        name = folder_name(series.title, series.year)
+        if name in used_dirs:
+            name = folder_name(series.title, series.year, series.tmdb_id, with_id=True)
+        used_dirs.add(name)
+        show_dir = series_root / name
+
+        if not dry_run:
+            show_dir.mkdir(parents=True, exist_ok=True)
+            (show_dir / "tvshow.nfo").write_text(
+                build_tvshow_nfo(series), encoding="utf-8"
+            )
+            for ep, src in available:
+                season_dir = show_dir / f"Saison {ep.season_number:02d}"
+                link_name = episode_filename(
+                    series.title,
+                    series.year,
+                    ep.season_number,
+                    ep.episode_number,
+                    src.suffix,
+                )
+                ensure_symlink(src, season_dir / link_name)
+                (season_dir / f"{Path(link_name).stem}.nfo").write_text(
+                    build_episode_nfo(ep), encoding="utf-8"
+                )
+        self._expected_dirs.add(show_dir)
+        report.series += 1
+        report.episodes += len(available)
 
     def _prune(
         self, report: JellyfinSyncReport, movies_only: bool, series_only: bool
     ) -> None:
-        # Implémenté à l'étape B.
-        pass
+        """Supprime les dossiers de l'arbre Jellyfin absents de la base."""
+        roots = []
+        if not series_only:
+            roots.append(self._root / "Films")
+        if not movies_only:
+            roots.append(self._root / "Séries")
+        for root in roots:
+            if not root.exists():
+                continue
+            for entry in root.iterdir():
+                if entry.is_dir() and entry not in self._expected_dirs:
+                    shutil.rmtree(entry)
+                    report.pruned.append(str(entry))
