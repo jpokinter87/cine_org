@@ -1,3 +1,24 @@
+## v2.2.0 (2026-06-28)
+
+### Feat
+
+- **library**: menu déroulant « État » pour les filtres de la grille
+- **player**: bouton scindé côté serveur (restauration après lecture)
+- **player**: bouton « Visionner » scindé (lancement direct + chevron ▾)
+- **player**: sélecteur d'identité dans l'en-tête + injection profil HTMX
+- **player**: exposer get_personal_profiles aux templates
+- **player**: get_personal_profiles() pour le sélecteur d'identité
+- **library**: actions de la fiche détaillée sous la jaquette
+- **transfer**: option « Garder l'ancien + corbeille » pour les doublons
+- **relink**: ré-associer les fiches films sans fichier (relink-movies)
+- **hardlinks**: porter le TTL de rétention par défaut de 30 à 60 jours
+
+### Fix
+
+- **library**: exclure les films du filtre « séries incomplètes »
+- **player**: restaurer le bouton compact pour les parties de films
+- **player**: encoder le profil en URL + test épisode + aria-label chevron
+
 ## v2.1.0 (2026-06-24)
 
 ### Feat
