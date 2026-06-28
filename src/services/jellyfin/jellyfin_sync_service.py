@@ -32,7 +32,6 @@ class JellyfinSyncService:
     def __init__(self, session: Session, jellyfin_dir: Path) -> None:
         self._session = session
         self._root = Path(jellyfin_dir)
-        self._expected_dirs: set[Path] = set()
 
     def sync(
         self,
@@ -43,24 +42,28 @@ class JellyfinSyncService:
         prune: bool = False,
     ) -> JellyfinSyncReport:
         report = JellyfinSyncReport()
-        self._expected_dirs = set()
+        expected: set[Path] = set()
         if not series_only:
-            self._sync_movies(report, dry_run)
+            self._sync_movies(report, dry_run, expected)
         if not movies_only:
-            self._sync_series(report, dry_run)
+            self._sync_series(report, dry_run, expected)
         if prune and not dry_run:
-            self._prune(report, movies_only, series_only)
+            self._prune(report, movies_only, series_only, expected)
         return report
 
     # --- Films -------------------------------------------------------------
 
-    def _sync_movies(self, report: JellyfinSyncReport, dry_run: bool) -> None:
+    def _sync_movies(
+        self, report: JellyfinSyncReport, dry_run: bool, expected: set[Path]
+    ) -> None:
         films_root = self._root / "Films"
         used_dirs: set[str] = set()
-        movies = self._session.exec(select(MovieModel)).all()
+        movies = self._session.exec(select(MovieModel).order_by(MovieModel.id)).all()
         for movie in movies:
             try:
-                self._sync_one_movie(movie, films_root, used_dirs, report, dry_run)
+                self._sync_one_movie(
+                    movie, films_root, used_dirs, report, dry_run, expected
+                )
             except Exception as exc:  # noqa: BLE001
                 report.errors.append(f"{movie.title}: {exc}")
 
@@ -71,6 +74,7 @@ class JellyfinSyncService:
         used_dirs: set[str],
         report: JellyfinSyncReport,
         dry_run: bool,
+        expected: set[Path],
     ) -> None:
         parts = self._session.exec(
             select(MoviePartModel).where(MoviePartModel.movie_id == movie.id)
@@ -87,6 +91,8 @@ class JellyfinSyncService:
         movie_dir = films_root / name
 
         if not dry_run:
+            # Symlinks créés avant le NFO : si build_movie_nfo lève, le dossier partiel
+            # n'est pas ajouté à `expected` et sera élagué au prochain --prune.
             base = folder_name(movie.title, movie.year)
             for index, src in enumerate(sources):
                 if len(sources) == 1:
@@ -97,7 +103,7 @@ class JellyfinSyncService:
             (movie_dir / "movie.nfo").write_text(
                 build_movie_nfo(movie), encoding="utf-8"
             )
-        self._expected_dirs.add(movie_dir)
+        expected.add(movie_dir)
         report.movies += 1
 
     def _movie_sources(
@@ -116,13 +122,19 @@ class JellyfinSyncService:
 
     # --- Séries (étape B) --------------------------------------------------
 
-    def _sync_series(self, report: JellyfinSyncReport, dry_run: bool) -> None:
+    def _sync_series(
+        self, report: JellyfinSyncReport, dry_run: bool, expected: set[Path]
+    ) -> None:
         series_root = self._root / "Séries"
         used_dirs: set[str] = set()
-        all_series = self._session.exec(select(SeriesModel)).all()
+        all_series = self._session.exec(
+            select(SeriesModel).order_by(SeriesModel.id)
+        ).all()
         for series in all_series:
             try:
-                self._sync_one_series(series, series_root, used_dirs, report, dry_run)
+                self._sync_one_series(
+                    series, series_root, used_dirs, report, dry_run, expected
+                )
             except Exception as exc:  # noqa: BLE001
                 report.errors.append(f"{series.title}: {exc}")
 
@@ -133,9 +145,12 @@ class JellyfinSyncService:
         used_dirs: set[str],
         report: JellyfinSyncReport,
         dry_run: bool,
+        expected: set[Path],
     ) -> None:
         episodes = self._session.exec(
-            select(EpisodeModel).where(EpisodeModel.series_id == series.id)
+            select(EpisodeModel)
+            .where(EpisodeModel.series_id == series.id)
+            .order_by(EpisodeModel.season_number, EpisodeModel.episode_number)
         ).all()
         resolved = [
             (ep, resolve_source(ep.symlink_path, ep.file_path)) for ep in episodes
@@ -145,7 +160,9 @@ class JellyfinSyncService:
                 report.skipped.append(ep.symlink_path or ep.file_path or ep.title)
         available = [(ep, src) for ep, src in resolved if src is not None]
         if not available:
-            return  # série sans aucun épisode présent : on ne crée rien
+            # Série sans aucun épisode présent : on ne crée rien (ce n'est pas une erreur,
+            # donc pas d'ajout à report.skipped — contrairement aux épisodes introuvables).
+            return
 
         if series.tvdb_id is None and series.tmdb_id is None:
             report.id_less.append(series.title)
@@ -172,12 +189,16 @@ class JellyfinSyncService:
                 (season_dir / f"{Path(link_name).stem}.nfo").write_text(
                     build_episode_nfo(ep), encoding="utf-8"
                 )
-        self._expected_dirs.add(show_dir)
+        expected.add(show_dir)
         report.series += 1
         report.episodes += len(available)
 
     def _prune(
-        self, report: JellyfinSyncReport, movies_only: bool, series_only: bool
+        self,
+        report: JellyfinSyncReport,
+        movies_only: bool,
+        series_only: bool,
+        expected: set[Path],
     ) -> None:
         """Supprime les dossiers de l'arbre Jellyfin absents de la base."""
         roots = []
@@ -189,6 +210,6 @@ class JellyfinSyncService:
             if not root.exists():
                 continue
             for entry in root.iterdir():
-                if entry.is_dir() and entry not in self._expected_dirs:
+                if entry.is_dir() and entry not in expected:
                     shutil.rmtree(entry)
                     report.pruned.append(str(entry))
