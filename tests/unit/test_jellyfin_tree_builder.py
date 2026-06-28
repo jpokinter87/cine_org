@@ -45,7 +45,10 @@ def test_folder_name_without_year():
 
 
 def test_folder_name_with_tmdb_suffix():
-    assert folder_name("Doublon", 2010, tmdb_id=42, with_id=True) == "Doublon (2010) [tmdbid-42]"
+    assert (
+        folder_name("Doublon", 2010, tmdb_id=42, with_id=True)
+        == "Doublon (2010) [tmdbid-42]"
+    )
 
 
 def test_folder_name_sanitizes_illegal_chars():
@@ -55,7 +58,10 @@ def test_folder_name_sanitizes_illegal_chars():
 
 
 def test_episode_filename():
-    assert episode_filename("12 Monkeys", 2015, 1, 3, ".mkv") == "12 Monkeys (2015) S01E03.mkv"
+    assert (
+        episode_filename("12 Monkeys", 2015, 1, 3, ".mkv")
+        == "12 Monkeys (2015) S01E03.mkv"
+    )
 
 
 def test_ensure_symlink_creates_and_is_idempotent(tmp_path):
