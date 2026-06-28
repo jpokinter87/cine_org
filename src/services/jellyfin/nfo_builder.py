@@ -5,7 +5,6 @@ absents sont omis (pas de balise vide). Les valeurs surchargées (`*_override`)
 priment sur les valeurs d'origine.
 """
 
-import json
 import xml.etree.ElementTree as ET
 
 from src.infrastructure.persistence.models import (
@@ -17,7 +16,7 @@ from src.infrastructure.persistence.models import (
 _XML_DECL = '<?xml version="1.0" encoding="utf-8" standalone="yes"?>\n'
 
 
-def _text(parent: ET.Element, tag: str, value) -> None:
+def _text(parent: ET.Element, tag: str, value: object) -> None:
     """Ajoute <tag>value</tag> si value est non vide/non None."""
     if value is None:
         return
@@ -27,7 +26,13 @@ def _text(parent: ET.Element, tag: str, value) -> None:
     ET.SubElement(parent, tag).text = s
 
 
-def _add_ratings(root: ET.Element, tmdb_avg, tmdb_votes, imdb_avg, imdb_votes) -> None:
+def _add_ratings(
+    root: ET.Element,
+    tmdb_avg: float | None,
+    tmdb_votes: int | None,
+    imdb_avg: float | None,
+    imdb_votes: int | None,
+) -> None:
     """Ajoute un bloc <ratings> + un <rating> de tête (compat Jellyfin)."""
     entries = []
     if tmdb_avg is not None:
@@ -44,14 +49,13 @@ def _add_ratings(root: ET.Element, tmdb_avg, tmdb_votes, imdb_avg, imdb_votes) -
         ET.SubElement(r, "value").text = f"{value:.1f}"
         if votes is not None:
             ET.SubElement(r, "votes").text = str(votes)
+    # compat Jellyfin : note de tête = premier fournisseur (TMDB si présent)
     _text(root, "rating", f"{entries[0][1]:.1f}")
 
 
-def _add_actors(root: ET.Element, model) -> None:
+def _add_actors(root: ET.Element, model: "MovieModel | SeriesModel") -> None:
     """Ajoute les <actor>. Priorité au cast surchargé (avec rôles)."""
-    override = []
-    if getattr(model, "cast_override_json", None):
-        override = json.loads(model.cast_override_json)
+    override = getattr(model, "cast_override", [])
     if override:
         for entry in override:
             actor = ET.SubElement(root, "actor")
@@ -63,7 +67,7 @@ def _add_actors(root: ET.Element, model) -> None:
         _text(actor, "name", name)
 
 
-def _add_common(root: ET.Element, model) -> None:
+def _add_common(root: ET.Element, model: "MovieModel | SeriesModel") -> None:
     """Champs communs film/série : titres, année, plot, genres, notes, etc."""
     _text(root, "title", model.title)
     _text(root, "originaltitle", model.original_title)
@@ -71,7 +75,7 @@ def _add_common(root: ET.Element, model) -> None:
     plot = model.overview_override or model.overview
     _text(root, "plot", plot)
     duration = getattr(model, "duration_seconds", None)
-    if duration:
+    if duration is not None:
         _text(root, "runtime", duration // 60)
     for genre in model.genres:
         _text(root, "genre", genre)
@@ -106,7 +110,7 @@ def build_movie_nfo(movie: MovieModel) -> str:
     if movie.collection_name:
         s = ET.SubElement(root, "set")
         _text(s, "name", movie.collection_name)
-    if getattr(movie, "watched", False):
+    if movie.watched:
         _text(root, "playcount", 1)
         _text(root, "watched", "true")
     return _serialize(root)

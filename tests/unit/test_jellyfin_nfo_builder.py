@@ -89,6 +89,62 @@ def test_movie_nfo_escapes_special_chars():
     assert root.findtext("title") == "Tom & Jerry <Le film>"
 
 
+def test_movie_nfo_watched_sets_playcount():
+    movie = MovieModel(title="Vu", year=2000, tmdb_id=7, watched=True)
+    root = _parse(build_movie_nfo(movie))
+    assert root.findtext("playcount") == "1"
+    assert root.findtext("watched") == "true"
+
+
+def test_movie_nfo_unwatched_omits_watched():
+    movie = MovieModel(title="Pas vu", year=2000, tmdb_id=8, watched=False)
+    root = _parse(build_movie_nfo(movie))
+    assert root.find("watched") is None
+    assert root.find("playcount") is None
+
+
+def test_movie_nfo_multiple_directors():
+    movie = MovieModel(
+        title="Co-réalisé",
+        year=2001,
+        tmdb_id=9,
+        director="Steven Spielberg, Stanley Kubrick",
+    )
+    root = _parse(build_movie_nfo(movie))
+    assert [d.text for d in root.findall("director")] == [
+        "Steven Spielberg",
+        "Stanley Kubrick",
+    ]
+
+
+def test_movie_nfo_rating_tmdb_only():
+    movie = MovieModel(title="TMDB seul", year=2002, tmdb_id=10, vote_average=8.4)
+    root = _parse(build_movie_nfo(movie))
+    assert root.findtext("rating") == "8.4"
+    ratings = root.find("ratings")
+    assert [r.get("name") for r in ratings.findall("rating")] == ["themoviedb"]
+
+
+def test_movie_nfo_rating_imdb_only():
+    movie = MovieModel(title="IMDb seul", year=2003, tmdb_id=11, imdb_rating=7.0)
+    root = _parse(build_movie_nfo(movie))
+    assert root.findtext("rating") == "7.0"
+    ratings = root.find("ratings")
+    assert [r.get("name") for r in ratings.findall("rating")] == ["imdb"]
+
+
+def test_episode_nfo_without_air_date():
+    ep = EpisodeModel(
+        series_id=1,
+        season_number=2,
+        episode_number=5,
+        title="Sans date",
+        air_date=None,
+    )
+    root = _parse(build_episode_nfo(ep))
+    assert root.find("aired") is None
+
+
 def test_tvshow_nfo_uniqueids():
     series = SeriesModel(
         title="12 Monkeys",
