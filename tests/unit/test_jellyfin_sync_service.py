@@ -192,7 +192,7 @@ def test_sync_series_and_episodes(engine, tmp_path):
     jf = tmp_path / "JellyfinLib"
     report = JellyfinSyncService(Session(engine), jf).sync(movies_only=False)
 
-    show_dir = jf / "Séries" / "12 Monkeys (2015)"
+    show_dir = jf / "Series" / "12 Monkeys (2015)"
     assert (show_dir / "tvshow.nfo").exists()
     season_dir = show_dir / "Saison 01"
     assert (season_dir / "12 Monkeys (2015) S01E01.mkv").is_symlink()

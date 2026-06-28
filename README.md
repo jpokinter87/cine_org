@@ -1111,7 +1111,7 @@ JellyfinLib/
 │       ├── Inception (2010).mkv        → symlink vers storage/
 │       └── movie.nfo                   # IDs TMDB/IMDb + métadonnées complètes
 │
-└── Séries/
+└── Series/
     └── Breaking Bad (2008)/
         ├── tvshow.nfo                  # métadonnées série + IDs
         └── Saison 01/
@@ -1156,7 +1156,9 @@ Les montages `/media/NAS64` et `/media/Serveur` en lecture seule permettent à J
 | Bibliothèque | Type Jellyfin | Répertoire |
 |---|---|---|
 | Films | *Films* | `/media/Serveur/JellyfinLib/Films` |
-| Séries | *Séries/Émissions* | `/media/Serveur/JellyfinLib/Séries` |
+| Séries | *Séries/Émissions* | `/media/Serveur/JellyfinLib/Series` |
+
+> Le dossier généré s'appelle `Series` (sans accent, par cohérence avec le stockage CineOrg) ; le nom d'affichage de la bibliothèque dans Jellyfin peut rester « Séries ».
 
 **3. Activer la lecture des NFO locaux :**
 

@@ -125,7 +125,7 @@ class JellyfinSyncService:
     def _sync_series(
         self, report: JellyfinSyncReport, dry_run: bool, expected: set[Path]
     ) -> None:
-        series_root = self._root / "Séries"
+        series_root = self._root / "Series"
         used_dirs: set[str] = set()
         all_series = self._session.exec(
             select(SeriesModel).order_by(SeriesModel.id)
@@ -205,7 +205,7 @@ class JellyfinSyncService:
         if not series_only:
             roots.append(self._root / "Films")
         if not movies_only:
-            roots.append(self._root / "Séries")
+            roots.append(self._root / "Series")
         for root in roots:
             if not root.exists():
                 continue
