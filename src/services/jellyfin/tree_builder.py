@@ -65,3 +65,21 @@ def ensure_symlink(target: Path, link_path: Path) -> None:
     elif link_path.exists():
         link_path.unlink()
     link_path.symlink_to(target)
+
+
+def unique_folder_name(
+    title: str, year: int | None, tmdb_id: int | None, used: set[str]
+) -> str:
+    """Nom de dossier unique dans `used` : `Titre (Année)`, sinon suffixe
+    `[tmdbid-N]`, sinon suffixe numérique ` [n]` (cas homonymes sans tmdb_id)."""
+    candidate = folder_name(title, year)
+    if candidate not in used:
+        return candidate
+    candidate = folder_name(title, year, tmdb_id, with_id=True)
+    if candidate not in used:
+        return candidate
+    base = folder_name(title, year)
+    n = 2
+    while f"{base} [{n}]" in used:
+        n += 1
+    return f"{base} [{n}]"

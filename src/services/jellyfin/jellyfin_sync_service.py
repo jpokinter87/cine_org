@@ -22,6 +22,7 @@ from src.services.jellyfin.tree_builder import (
     episode_filename,
     folder_name,
     resolve_source,
+    unique_folder_name,
 )
 
 
@@ -81,9 +82,7 @@ class JellyfinSyncService:
         if movie.tmdb_id is None:
             report.id_less.append(movie.title)
 
-        name = folder_name(movie.title, movie.year)
-        if name in used_dirs:
-            name = folder_name(movie.title, movie.year, movie.tmdb_id, with_id=True)
+        name = unique_folder_name(movie.title, movie.year, movie.tmdb_id, used_dirs)
         used_dirs.add(name)
         movie_dir = films_root / name
 
@@ -151,9 +150,7 @@ class JellyfinSyncService:
         if series.tvdb_id is None and series.tmdb_id is None:
             report.id_less.append(series.title)
 
-        name = folder_name(series.title, series.year)
-        if name in used_dirs:
-            name = folder_name(series.title, series.year, series.tmdb_id, with_id=True)
+        name = unique_folder_name(series.title, series.year, series.tmdb_id, used_dirs)
         used_dirs.add(name)
         show_dir = series_root / name
 

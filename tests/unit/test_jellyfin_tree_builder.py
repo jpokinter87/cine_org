@@ -5,6 +5,7 @@ from src.services.jellyfin.tree_builder import (
     episode_filename,
     folder_name,
     resolve_source,
+    unique_folder_name,
 )
 
 
@@ -109,6 +110,25 @@ def test_ensure_symlink_replaces_regular_file(tmp_path):
 
     assert link.is_symlink()
     assert link.resolve() == target.resolve()
+
+
+def test_unique_folder_name_no_collision():
+    assert unique_folder_name("Film", 2000, 1, set()) == "Film (2000)"
+
+
+def test_unique_folder_name_collision_with_tmdb():
+    used = {"Film (2000)"}
+    assert unique_folder_name("Film", 2000, 42, used) == "Film (2000) [tmdbid-42]"
+
+
+def test_unique_folder_name_collision_without_tmdb():
+    used = {"Film (2000)"}
+    assert unique_folder_name("Film", 2000, None, used) == "Film (2000) [2]"
+
+
+def test_unique_folder_name_triple_collision_without_tmdb():
+    used = {"Film (2000)", "Film (2000) [2]"}
+    assert unique_folder_name("Film", 2000, None, used) == "Film (2000) [3]"
 
 
 def test_ensure_symlink_replaces_directory(tmp_path):

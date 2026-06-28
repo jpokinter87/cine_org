@@ -109,6 +109,25 @@ def test_sync_collision_appends_tmdb_id(engine, tmp_path):
     assert names == ["Doublon (2000)", "Doublon (2000) [tmdbid-22]"]
 
 
+def test_sync_collision_idless_appends_index(engine, tmp_path):
+    p1 = _make_physical(tmp_path, "a.mkv")
+    p2 = _make_physical(tmp_path, "b.mkv")
+    with Session(engine) as session:
+        session.add(
+            MovieModel(title="Doublon", year=2000, tmdb_id=None, symlink_path=str(p1))
+        )
+        session.add(
+            MovieModel(title="Doublon", year=2000, tmdb_id=None, symlink_path=str(p2))
+        )
+        session.commit()
+
+    jf = tmp_path / "JellyfinLib"
+    JellyfinSyncService(Session(engine), jf).sync()
+
+    names = sorted(d.name for d in (jf / "Films").iterdir())
+    assert names == ["Doublon (2000)", "Doublon (2000) [2]"]
+
+
 def test_sync_dry_run_creates_nothing(engine, tmp_path):
     phys = _make_physical(tmp_path, "x.mkv")
     with Session(engine) as session:
