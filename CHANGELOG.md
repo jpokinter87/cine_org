@@ -1,3 +1,27 @@
+## v2.3.0 (2026-06-28)
+
+### Feat
+
+- **jellyfin**: commande CLI jellyfin-sync
+- **jellyfin**: synchronisation séries/épisodes et élagage --prune
+- **jellyfin**: orchestration des films (isolation des erreurs)
+- **jellyfin**: noms à plat et création idempotente des symlinks
+- **jellyfin**: résolution source avec chaîne de repli
+- **jellyfin**: génération NFO série et épisode
+- **jellyfin**: génération NFO film (IDs + métadonnées complètes)
+- **jellyfin**: dataclass JellyfinSyncReport
+- **jellyfin**: réglage jellyfin_dir dans la configuration
+
+### Fix
+
+- **jellyfin**: collisions de dossier sans tmdb_id (suffixe index) via unique_folder_name
+
+### Refactor
+
+- **jellyfin**: état expected en paramètre + ordre déterministe des requêtes
+- **jellyfin**: tree_builder robuste (année 0, ext, dir/symlink) + tests
+- **jellyfin**: revue NFO — propriété cast_override, typage, tests de couverture
+
 ## v2.2.0 (2026-06-28)
 
 ### Feat
