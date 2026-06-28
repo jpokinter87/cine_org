@@ -97,39 +97,45 @@ Cette chaîne récupère les ~111 éléments dont le `symlink_path` est périmé
 dont le fichier physique existe (voir §7), et ne laisse de côté que les rares
 fichiers réellement absents.
 
-### 3.3 Contenu des NFO (identité verrouillée par ID)
+### 3.3 Contenu des NFO (identité verrouillée par ID + métadonnées complètes)
 
-Grâce aux balises `<uniqueid>`, Jellyfin **n'interroge plus les API pour
-identifier** ; il ne les sollicite que pour récupérer affiches/fanarts via l'ID
-exact.
+Décision : tant qu'on génère des NFO, autant les faire **les plus complets
+possibles** à partir de tout ce que contient la base. Les `<uniqueid>` restent le
+cœur : Jellyfin **n'interroge plus les API pour identifier** ; il ne les
+sollicite que pour compléter affiches/fanarts via l'ID exact.
 
-- **Film** → `movie.nfo` :
-  ```xml
-  <movie>
-    <title>…</title>
-    <year>…</year>
-    <uniqueid type="tmdb" default="true">12345</uniqueid>
-    <uniqueid type="imdb">tt…</uniqueid>
-    <plot>…</plot>        <!-- si overview disponible -->
-    <genre>…</genre>      <!-- répété, si genres disponibles -->
-  </movie>
-  ```
-- **Série** → `tvshow.nfo` :
-  ```xml
-  <tvshow>
-    <title>…</title>
-    <year>…</year>
-    <uniqueid type="tvdb" default="true">…</uniqueid>
-    <uniqueid type="tmdb">…</uniqueid>
-    <uniqueid type="imdb">…</uniqueid>
-  </tvshow>
-  ```
+**Précédence des overrides :** chaque fois qu'un champ `*_override` est renseigné
+(et/ou `preserve_overrides` actif), le NFO utilise la **valeur surchargée**
+plutôt que la valeur d'origine : `overview_override` > `overview`,
+`poster_override` > `poster_path`, `cast_override_json` > `cast_json`. Les
+corrections manuelles faites dans CineOrg priment ainsi dans Jellyfin.
+
+- **Film** → `movie.nfo` (`<movie>`) :
+  - identité : `<uniqueid type="tmdb" default="true">`, `<uniqueid type="imdb">`
+  - titres : `<title>`, `<originaltitle>`
+  - `<year>`, `<plot>` (overview), `<runtime>` (minutes, depuis
+    `duration_seconds`)
+  - `<genre>` (répété, depuis `genres_json`)
+  - notes : `<rating>`/`<ratings>` (TMDB `vote_average`+`vote_count`, IMDb
+    `imdb_rating`+`imdb_votes`), `<userrating>` (`personal_rating`)
+  - `<director>` (un par réalisateur de `director`)
+  - `<actor><name>…</name></actor>` (depuis `cast_json` — **noms seuls**, pas de
+    rôle ni ordre dans la base)
+  - `<set><name>…</name></set>` si `collection_name` (saga)
+  - `<playcount>`/`<watched>` depuis `watched`
+  - `<art><poster>…</poster></art>` (URL `poster_path` ou `poster_override`)
+- **Série** → `tvshow.nfo` (`<tvshow>`) :
+  - identité : `<uniqueid type="tvdb" default="true">`, `<uniqueid type="tmdb">`,
+    `<uniqueid type="imdb">`
+  - `<title>`, `<originaltitle>`, `<year>`, `<plot>`, `<genre>` (répété)
+  - notes (TMDB/IMDb/perso), `<director>`, `<actor>` (noms), `<art><poster>`
 - **Épisode** → `{nom}.nfo` (`<episodedetails>`) : `<title>`, `<season>`,
-  `<episode>`, `<plot>` si dispo. La base n'a pas d'ID par épisode ; le matching
-  s'appuie sur le `SxxExx` du nom (fiable dans l'arbre à plat) et le `tvshow.nfo`
-  ancre la série.
+  `<episode>`, `<plot>` (overview), `<aired>` (`air_date`), `<runtime>`. La base
+  n'a pas d'ID par épisode ; le matching s'appuie sur le `SxxExx` du nom (fiable
+  dans l'arbre à plat) et le `tvshow.nfo` ancre la série.
 
-XML correctement échappé (accents, `&`, `<`, `>`, `"`).
+XML correctement échappé (accents, `&`, `<`, `>`, `"`). Les champs absents en
+base sont simplement omis (pas de balise vide).
 
 ## 4. Composants (unités isolées et testables)
 
@@ -158,10 +164,13 @@ tri alphabétique).
 ## 5. Flux de données
 
 1. Lire la config (`jellyfin_dir`).
-2. **Films** : requêter `movies` (titre, année, `tmdb_id`, `imdb_id`, genres,
-   overview, `symlink_path`, `file_path`) + `movie_parts`. Pour chacun :
-   résoudre la/les source(s) (§3.2), calculer `Films/{Titre} ({Année})/`, créer
-   le(s) symlink(s) + `movie.nfo`.
+2. **Films** : requêter `movies` (tous les champs NFO de §3.3 : titres, année,
+   `tmdb_id`, `imdb_id`, `genres_json`, `overview`, `duration_seconds`, notes,
+   `director`, `cast_json`, `collection_name`, `watched`, `poster_path`, les
+   champs `*_override` + `preserve_overrides`, `symlink_path`, `file_path`) +
+   `movie_parts`. Pour chacun : appliquer la précédence des overrides, résoudre
+   la/les source(s) (§3.2), calculer `Films/{Titre} ({Année})/`, créer le(s)
+   symlink(s) + `movie.nfo`.
 3. **Séries** : requêter `series` + `episodes`. Pour chaque série : créer
    `Séries/{Titre} ({Année})/` + `tvshow.nfo` ; pour chaque épisode :
    `Saison {NN}/{Titre} ({Année}) S{NN}E{NN}.{ext}` + `.nfo`.
@@ -232,8 +241,11 @@ Aucune erreur n'interrompt la synchronisation ; tout est compté et listé :
 ## 9. Tests (TDD, sans API)
 
 - `nfo_builder` (valeur la plus élevée, facile) : génération XML film/série/
-  épisode ; présence et type des `<uniqueid>` ; échappement des caractères
-  spéciaux (accents, `&`, `<`).
+  épisode ; présence et type des `<uniqueid>` ; champs riches (genres multiples,
+  acteurs multiples, notes, set/collection, runtime) ; **précédence des
+  overrides** (`overview_override`/`poster_override`/`cast_override_json`
+  l'emportent) ; **omission** des champs absents (pas de balise vide) ;
+  échappement des caractères spéciaux (accents, `&`, `<`).
 - `tree_builder` (`tmp_path`) : structure produite ; idempotence ; gestion des
   collisions ; source cassée correctement ignorée ; films multi-parties.
 - `jellyfin_sync_service` : DB SQLite `:memory:` ensemencée (films, séries,
