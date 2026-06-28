@@ -159,7 +159,9 @@ def _play_button_html(entity_type: str, entity_id: int) -> str:
     data = load_profiles()
     profiles = data.get("profiles", [])
 
-    is_episode = entity_type == "episodes"
+    # Épisodes et parties de films multi-parties s'affichent en mode compact
+    # (icône seule) ; restaurer la même apparence après lecture.
+    is_episode = entity_type in ("episodes", "movie-parts")
     btn_class = "lib-episode-play-btn" if is_episode else "play-btn"
     label = "" if is_episode else " Visionner"
     icon_sz = "14" if is_episode else "12"

@@ -49,6 +49,19 @@ def test_episodes_utilise_classe_episode(monkeypatch):
     assert "/library/episodes/42/play" in html
 
 
+def test_movie_parts_utilise_classe_episode(monkeypatch):
+    """Les parties de films se restaurent en mode compact, comme les épisodes."""
+    monkeypatch.setattr(
+        player,
+        "load_profiles",
+        lambda: _profiles(("Local", "mpv", "local"), ("Salon", "mpv", "remote")),
+    )
+    html = player._play_button_html("movie-parts", 3)
+    assert "lib-episode-play-btn" in html
+    assert "play-wrapper-episode" in html
+    assert "/library/movie-parts/3/play" in html
+
+
 def test_popover_liste_dunehd(monkeypatch):
     monkeypatch.setattr(
         player,
