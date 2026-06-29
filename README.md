@@ -1166,6 +1166,27 @@ Dans les paramètres de chaque bibliothèque Jellyfin, activer **« Lecture des 
 
 Avec les NFO actifs, Jellyfin n'interroge pas les serveurs distants pour identifier les contenus : les IDs TMDB/TVDB/IMDb inscrits dans les fichiers garantissent une identification fiable, même pour les titres ambigus ou les séries peu connues.
 
+**4. Accès distant via Tailscale (regarder hors du réseau local) :**
+
+Pour regarder la bibliothèque depuis un téléphone en 4G/5G ou sur un autre Wi-Fi, on relie le serveur et les appareils nomades par un **tailnet privé** [Tailscale](https://tailscale.com/). Le trafic passe par un tunnel WireGuard chiffré : **rien n'est exposé sur Internet** et le conteneur Docker reste inchangé (Jellyfin écoute déjà sur `0.0.0.0:8096`).
+
+1. **Créer un compte** sur [login.tailscale.com/start](https://login.tailscale.com/start) (offre *Personal* gratuite ; connexion via Google/GitHub/…). **Retenir le fournisseur d'identité choisi** : tous les appareils doivent utiliser le *même* compte pour former un seul tailnet.
+
+2. **Connecter le serveur** (Ubuntu) — installer le paquet si besoin, puis l'authentifier :
+   ```bash
+   curl -fsSL https://tailscale.com/install.sh | sh   # si Tailscale n'est pas déjà installé
+   sudo tailscale up --hostname=cineorg-server
+   ```
+   Ouvrir l'URL d'authentification affichée dans un navigateur connecté au même compte. Le serveur obtient alors une IP stable `100.x.x.x` (ex. `100.75.129.69`) et, si MagicDNS est actif, un nom lisible `cineorg-server`.
+
+3. **Connecter chaque appareil nomade** — installer l'appli Tailscale (Play Store / App Store), se connecter au **même compte**, vérifier que l'appareil voit le serveur dans la liste.
+
+4. **Pointer Jellyfin sur l'adresse du tailnet** — dans l'appli Jellyfin du téléphone, ajouter le serveur via son IP tailnet `http://100.x.x.x:8096` (ou son nom `http://cineorg-server:8096`). L'ancienne adresse locale `http://192.168.1.15:8096` ne fonctionne **que** sur le réseau domestique.
+
+5. **Vérifier hors réseau local** — couper le Wi-Fi du téléphone (passer en données mobiles), s'assurer que l'interrupteur Tailscale est **actif**, puis lancer une lecture. Si elle démarre, l'accès distant est opérationnel.
+
+> **Confort (optionnel)** : ajouter le sous-réseau Tailscale `100.64.0.0/10` aux « réseaux locaux » de Jellyfin (Tableau de bord → Réseau) pour que ces clients soient traités comme du LAN (lecture directe, moins de transcodage inutile).
+
 ## Format de nommage
 
 ### Films
@@ -1700,6 +1721,17 @@ Vérifier aussi que la clé `CINEORG_TVDB_API_KEY` est bien définie dans `.env`
 - Vérifier que les montages Docker (`/media/NAS64`, `/media/Serveur`) sont accessibles depuis le conteneur et que les symlinks de `JellyfinLib/` se résolvent bien vers les fichiers physiques.
 - Si le contenu est présent dans `JellyfinLib/` mais absent de l'interface Jellyfin, forcer un scan de la bibliothèque concernée depuis `http://<serveur>:8096` (Tableau de bord → bibliothèque → scanner).
 - Vérifier que la variable `CINEORG_JELLYFIN_DIR` pointe vers le bon répertoire (`uv run cineorg info`).
+
+### Jellyfin inaccessible à distance (4G / autre réseau)
+
+- Vérifier que l'interrupteur **Tailscale est actif** sur le téléphone (sans tunnel, pas d'accès hors LAN).
+- L'appli Jellyfin doit pointer sur l'**adresse du tailnet** (`http://100.x.x.x:8096` ou `http://cineorg-server:8096`), **pas** sur l'ancienne adresse locale `192.168.1.15:8096` (qui ne marche que sur le réseau domestique).
+- Confirmer côté serveur que les deux machines sont sous le **même compte** et que Jellyfin répond sur l'IP tailnet :
+  ```bash
+  tailscale status
+  curl -s -o /dev/null -w "%{http_code}\n" http://<IP-tailnet-serveur>:8096/System/Info/Public
+  ```
+  Un `200` confirme que Jellyfin est joignable via le tailnet.
 
 ### Base de données corrompue
 
