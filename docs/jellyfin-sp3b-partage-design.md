@@ -55,27 +55,42 @@ Nouveaux réglages (Settings/config CineOrg) :
 | `share_idle_timeout` | `30 min` | Démontage après fin de lecture |
 | `share_hard_cap` | `6 h` | Plafond de sécurité (filet) |
 
-Déjà en place depuis SP3a (aucune action de code) : bibliothèque « Partage » (type Films,
-dossier `/media/Serveur/JellyfinLib/Partage`, NFO activé), compte `Alex` non-admin restreint à
-Partage avec SyncPlay, opérateur Tailscale (`jp`), prérequis Funnel (HTTPS certs + Funnel activé).
+Prérequis ops (une fois), en partie hérités de SP3a :
+- **Deux bibliothèques Jellyfin** restreintes à `Alex` (à reconfigurer depuis SP3a qui n'en avait
+  qu'une) : « **Partage Films** » (type Films → `/media/Serveur/JellyfinLib/Partage/Films`) et
+  « **Partage Séries** » (type Séries/Shows → `/media/Serveur/JellyfinLib/Partage/Series`), NFO
+  activé, « Actualiser depuis Internet = Jamais ».
+- Compte `Alex` non-admin avec SyncPlay, accès limité à ces deux bibliothèques.
+- **Clé API Jellyfin** (déjà générée) → `CINEORG_JELLYFIN_API_KEY`.
+- Opérateur Tailscale (`jp`) + prérequis Funnel (HTTPS certs + Funnel activé) — déjà faits en SP3a.
 
 ## Composants (briques isolées)
 
 ### `JellyfinClient` — `src/adapters/api/jellyfin_client.py`
 Client httpx async authentifié par la clé API (en-tête `X-Emby-Token`).
-- `refresh_partage_library()` : scan **ciblé** de la seule bibliothèque Partage
-  (`POST /Items/{partageFolderId}/Refresh`, récursif), pas un scan de toute la vidéothèque.
-  L'ItemId de la lib Partage est résolu via `GET /Library/VirtualFolders` (et mis en cache mémoire).
+- `refresh_partage_library(media_type)` : scan **ciblé** de la seule bibliothèque concernée
+  (« Partage Films » ou « Partage Séries » selon le type), pas un scan de toute la vidéothèque.
+  L'ItemId de chaque lib est résolu par son nom via `GET /Library/VirtualFolders`, puis
+  `POST /Items/{itemId}/Refresh` (récursif).
 - `get_active_sessions()` : `GET /Sessions` → sessions avec `NowPlayingItem` (id + chemin),
   pour le watcher.
 
 ### `JellyfinShareService` — `src/services/share/`
-Réutilise les builders existants `tree_builder` / `nfo_builder` de `src/services/jellyfin/`
-pour émettre **un seul** titre dans le dossier Partage. La granularité dépend du type :
-- **film** → uniquement ce film : `Partage/{Titre (Année)}/` (symlink .mkv + `movie.nfo`) ;
-- **série** → la **série intégrale** : `Partage/{Titre (Année)}/Saison NN/` pour **toutes les
-  saisons et tous les épisodes** présents en base (symlinks + NFO). Le partage se fait toujours au
-  niveau de la série entière (jamais une saison ou un épisode isolé).
+Réutilise les briques pures existantes de `src/services/jellyfin/` (`resolve_source`,
+`folder_name`, `episode_filename`, `ensure_symlink` de `tree_builder` ; `build_movie_nfo`,
+`build_tvshow_nfo`, `build_episode_nfo` de `nfo_builder`) pour émettre **un seul** titre dans le
+dossier Partage, en interrogeant les models via une `Session` SQLModel (même approche que
+`jellyfin_sync_service`, qui passe par les models et non les repositories). La granularité dépend
+du type :
+- **film** → uniquement ce film : `Partage/Films/{Titre (Année)}/` (symlink + `movie.nfo`) ;
+- **série** → la **série intégrale** : `Partage/Series/{Titre (Année)}/Saison NN/` pour **toutes les
+  saisons et tous les épisodes** présents en base (symlinks + NFO sidecar par épisode + `tvshow.nfo`).
+  Le partage se fait toujours au niveau de la série entière (jamais une saison ou un épisode isolé).
+
+> **Deux bibliothèques typées** (au lieu d'une) : un dossier `Partage/Films` (bibliothèque Jellyfin
+> de type *Films*) et un dossier `Partage/Series` (type *Séries/Shows*). Une bibliothèque de type
+> *Films* n'afficherait pas correctement une série (chaque épisode deviendrait un « film » isolé).
+> On reproduit donc la séparation Films/Séries déjà en place dans la vidéothèque principale.
 
 Source du lien = même chaîne de repli que `jellyfin-sync` (`realpath(symlink_path)` → `file_path`).
 Méthodes : `populate(media_type, media_id)` et `clear()` (vide le dossier Partage).
