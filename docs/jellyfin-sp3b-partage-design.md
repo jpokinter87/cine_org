@@ -71,9 +71,11 @@ Client httpx async authentifié par la clé API (en-tête `X-Emby-Token`).
 
 ### `JellyfinShareService` — `src/services/share/`
 Réutilise les builders existants `tree_builder` / `nfo_builder` de `src/services/jellyfin/`
-pour émettre **un seul** titre dans le dossier Partage :
-- film → `Partage/{Titre (Année)}/` (symlink .mkv + `movie.nfo`),
-- série → `Partage/{Titre (Année)}/Saison NN/` (symlinks épisodes + NFO).
+pour émettre **un seul** titre dans le dossier Partage. La granularité dépend du type :
+- **film** → uniquement ce film : `Partage/{Titre (Année)}/` (symlink .mkv + `movie.nfo`) ;
+- **série** → la **série intégrale** : `Partage/{Titre (Année)}/Saison NN/` pour **toutes les
+  saisons et tous les épisodes** présents en base (symlinks + NFO). Le partage se fait toujours au
+  niveau de la série entière (jamais une saison ou un épisode isolé).
 
 Source du lien = même chaîne de repli que `jellyfin-sync` (`realpath(symlink_path)` → `file_path`).
 Méthodes : `populate(media_type, media_id)` et `clear()` (vide le dossier Partage).
