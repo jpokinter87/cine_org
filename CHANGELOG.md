@@ -1,3 +1,9 @@
+## v2.4.1 (2026-07-07)
+
+### Fix
+
+- **share**: robustesse teardown/erreurs Jellyfin + détection lecture Docker
+
 ## v2.4.0 (2026-07-07)
 
 ### Feat
