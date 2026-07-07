@@ -8,7 +8,7 @@ from src.infrastructure.persistence.models import MovieModel
 from src.infrastructure.persistence.repositories.share_session_repository import (
     ShareSessionRepository,
 )
-from src.services.share.exceptions import ShareConflict
+from src.services.share.exceptions import ShareConflict, ShareError
 from src.services.share.share_service import ShareService
 
 
@@ -154,3 +154,63 @@ async def test_reconcile_startup_disables_orphan_funnel(tmp_path):
     service = _service(session, tmp_path, funnel=funnel)
     await service.reconcile_on_startup()  # aucun partage actif mais funnel allumé
     funnel.disable.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_teardown_deactivates_in_db_even_if_jellyfin_refresh_fails(tmp_path):
+    # B1 : un Jellyfin injoignable au démontage ne doit pas laisser un partage
+    # « fantôme » actif en base (bandeau bloqué, Départager qui rejoue l'échec).
+    session = _session()
+    m = _movie(session, tmp_path)
+    funnel = MagicMock(
+        enable=MagicMock(return_value=True), disable=MagicMock(return_value=True)
+    )
+    jellyfin = AsyncMock()
+    service = _service(session, tmp_path, funnel=funnel, jellyfin=jellyfin)
+    await service.start_share("movie", m.id)  # refresh OK au démarrage
+    jellyfin.refresh_library.side_effect = RuntimeError("jellyfin down")
+    await service.stop_share()
+    assert ShareSessionRepository(session).get_active() is None
+    funnel.disable.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_start_share_raises_share_error_when_jellyfin_unreachable(tmp_path):
+    # B2 : une erreur réseau Jellyfin pendant « Partager » doit remonter en
+    # ShareError (message propre, pas de 500) et laisser un état nettoyé.
+    session = _session()
+    m = _movie(session, tmp_path)
+    funnel = MagicMock(
+        enable=MagicMock(return_value=True), disable=MagicMock(return_value=True)
+    )
+    jellyfin = AsyncMock()
+    jellyfin.refresh_library.side_effect = RuntimeError("jellyfin down")
+    service = _service(session, tmp_path, funnel=funnel, jellyfin=jellyfin)
+    with pytest.raises(ShareError):
+        await service.start_share("movie", m.id)
+    assert ShareSessionRepository(session).get_active() is None
+    funnel.enable.assert_not_called()
+    assert not (tmp_path / "Partage" / "Films").exists()
+
+
+@pytest.mark.asyncio
+async def test_tick_playing_detected_with_remapped_docker_prefix(tmp_path):
+    # R1 : Jellyfin (conteneur Docker) peut remonter un préfixe de montage
+    # différent de l'hôte ; la détection de lecture doit rester robuste tant que
+    # la structure .../<Partage>/Films|Series/ est préservée.
+    session = _session()
+    m = _movie(session, tmp_path)
+    jellyfin = AsyncMock()
+    jellyfin.get_active_sessions.return_value = [
+        {
+            "NowPlayingItem": {
+                "Path": "/data/JellyfinLib/Partage/Films/Inception (2010)/Inception (2010).mkv"
+            }
+        }
+    ]
+    service = _service(session, tmp_path, jellyfin=jellyfin)
+    active = await service.start_share("movie", m.id)
+    later = active.started_at + timedelta(minutes=31)
+    result = await service.run_monitor_tick(later)
+    assert result is None
+    assert ShareSessionRepository(session).get_active() is not None

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from loguru import logger
 
 from ..container import Container
 from ..services.share.monitor import share_monitor_loop
@@ -49,6 +50,11 @@ async def lifespan(app: FastAPI):
             await monitor_task
         except asyncio.CancelledError:
             pass
+        # Ferme proprement le client HTTP Jellyfin (best-effort au shutdown).
+        try:
+            await app.state.container.jellyfin_client().close()
+        except Exception as exc:  # container mocké en test / client déjà fermé
+            logger.debug("Fermeture du client Jellyfin ignorée : {}", exc)
 
 
 app = FastAPI(title="CineOrg", lifespan=lifespan)

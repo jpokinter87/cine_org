@@ -10,6 +10,22 @@ from src.services.share.exceptions import ShareConflict
 from src.web.app import app
 
 
+def test_lifespan_closes_jellyfin_client():
+    """Le shutdown ferme proprement le client HTTP Jellyfin (best-effort)."""
+    jellyfin = MagicMock()
+    jellyfin.close = AsyncMock()
+    container = MagicMock()
+    container.jellyfin_client = MagicMock(return_value=jellyfin)
+    previous = getattr(app.state, "container", None)
+    app.state.container = container
+    try:
+        with TestClient(app):
+            pass
+    finally:
+        app.state.container = previous
+    jellyfin.close.assert_awaited()
+
+
 @pytest.fixture
 def fake_service(monkeypatch):
     service = MagicMock()

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from loguru import logger
 from sqlmodel import Session
 
 from src.adapters.api.jellyfin_client import JellyfinClient
@@ -68,22 +69,31 @@ class ShareService:
             await self._teardown(active)
 
         self._builder.clear()
-        if media_type == "movie":
-            movie = self._session.get(MovieModel, media_id)
-            if movie is None:
-                raise ShareError(f"Film introuvable : {media_id}")
-            title = movie.title
-            folder = self._builder.populate_movie(media_id)
-            await self._jellyfin.refresh_library(LIB_FILMS)
-        elif media_type == "series":
-            series = self._session.get(SeriesModel, media_id)
-            if series is None:
-                raise ShareError(f"Série introuvable : {media_id}")
-            title = series.title
-            folder = self._builder.populate_series(media_id)
-            await self._jellyfin.refresh_library(LIB_SERIES)
-        else:
-            raise ShareError(f"Type de média inconnu : {media_type}")
+        try:
+            if media_type == "movie":
+                movie = self._session.get(MovieModel, media_id)
+                if movie is None:
+                    raise ShareError(f"Film introuvable : {media_id}")
+                title = movie.title
+                folder = self._builder.populate_movie(media_id)
+                await self._jellyfin.refresh_library(LIB_FILMS)
+            elif media_type == "series":
+                series = self._session.get(SeriesModel, media_id)
+                if series is None:
+                    raise ShareError(f"Série introuvable : {media_id}")
+                title = series.title
+                folder = self._builder.populate_series(media_id)
+                await self._jellyfin.refresh_library(LIB_SERIES)
+            else:
+                raise ShareError(f"Type de média inconnu : {media_type}")
+        except ShareError:
+            self._builder.clear()
+            raise
+        except Exception as exc:  # erreur réseau Jellyfin, etc. → message propre
+            self._builder.clear()
+            raise ShareError(
+                f"Échec de la préparation du partage Jellyfin : {exc}"
+            ) from exc
 
         if not self._funnel.enable():
             self._builder.clear()
@@ -103,12 +113,21 @@ class ShareService:
         await self._teardown(active)
 
     async def _teardown(self, active: ShareSessionModel) -> None:
-        """Désactive le Funnel, vide le dossier Partage, rafraîchit Jellyfin, désactive en DB."""
+        """Démonte le partage : coupe le Funnel, vide le dossier, désactive en base,
+        puis rafraîchit Jellyfin.
+
+        La désactivation en base précède le rafraîchissement Jellyfin (best-effort) :
+        un Jellyfin injoignable ne doit pas laisser un partage « fantôme » actif en
+        base (bandeau bloqué). Le contenu physique est déjà retiré par ``clear()``.
+        """
         self._funnel.disable()
         self._builder.clear()
-        await self._jellyfin.refresh_library(LIB_FILMS)
-        await self._jellyfin.refresh_library(LIB_SERIES)
         self._repo.deactivate(active)
+        try:
+            await self._jellyfin.refresh_library(LIB_FILMS)
+            await self._jellyfin.refresh_library(LIB_SERIES)
+        except Exception as exc:  # démontage déjà effectif ; Jellyfin best-effort
+            logger.warning("Rafraîchissement Jellyfin après démontage échoué : %s", exc)
 
     async def run_monitor_tick(self, now: datetime) -> str | None:
         """Surveillance périodique appelée par le planificateur.
@@ -146,11 +165,18 @@ class ShareService:
             self._funnel.disable()
 
     def _is_shared_playing(self, sessions: list[dict]) -> bool:
-        """Retourne True si au moins une session lit un fichier sous partage_dir."""
-        root = str(self._partage_dir)
+        """Retourne True si une session lit un fichier du partage éphémère.
+
+        La détection se fait par présence du segment ``/<Partage>/Films/`` ou
+        ``/<Partage>/Series/`` dans le chemin remonté par Jellyfin, plutôt que par
+        le préfixe absolu : Jellyfin tourne en conteneur Docker et peut remonter un
+        chemin dont le préfixe de montage diffère de l'hôte.
+        """
+        share_root = self._partage_dir.name
+        markers = (f"/{share_root}/Films/", f"/{share_root}/Series/")
         for sess in sessions:
             item = sess.get("NowPlayingItem") or {}
             path = item.get("Path") or ""
-            if path.startswith(root):
+            if any(marker in path for marker in markers):
                 return True
         return False
