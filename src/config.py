@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     storage_dir: Path = Field(default=Path("~/Videos/storage"))
     video_dir: Path = Field(default=Path("~/Videos/video"))
     jellyfin_dir: Path = Field(default=Path("/media/Serveur/JellyfinLib"))
+    jellyfin_partage_dir: Path = Field(default=Path("/media/Serveur/JellyfinLib/Partage"))
 
     # Base de données
     database_url: str = Field(default="sqlite:///cineorg.db")
@@ -48,6 +49,8 @@ class Settings(BaseSettings):
     # Clés API (OPTIONNELLES - fonctionnalités API désactivées si non définies)
     tmdb_api_key: Optional[str] = Field(default=None)
     tvdb_api_key: Optional[str] = Field(default=None)
+    jellyfin_url: str = Field(default="http://localhost:8096")
+    jellyfin_api_key: Optional[str] = Field(default=None)
 
     # Traitement
     min_file_size_mb: int = Field(default=100, ge=1)
@@ -78,6 +81,7 @@ class Settings(BaseSettings):
         "storage_dir",
         "video_dir",
         "jellyfin_dir",
+        "jellyfin_partage_dir",
         "sandbox_dir",
         "log_file",
         mode="before",
@@ -98,3 +102,8 @@ class Settings(BaseSettings):
     def tvdb_enabled(self) -> bool:
         """Vérifie si l'API TVDB est configurée."""
         return self.tvdb_api_key is not None
+
+    @property
+    def jellyfin_api_enabled(self) -> bool:
+        """Vérifie si la clé API Jellyfin est configurée (partage SP3b)."""
+        return self.jellyfin_api_key is not None
