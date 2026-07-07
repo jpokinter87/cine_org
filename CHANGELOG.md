@@ -1,3 +1,18 @@
+## v2.4.0 (2026-07-07)
+
+### Feat
+
+- **share**: surveillance asyncio (démontage auto idle/plafond + auto-réparation)
+- **share**: bouton sur les fiches film/série + bandeau global persistant
+- **share**: endpoints web /share + bouton Partager/Départager + bandeau
+- **share**: câblage DI (jellyfin_client, funnel_controller, share_service)
+- **share**: ShareService (start/stop/replace + tick surveillance idle/plafond)
+- **share**: JellyfinShareBuilder (émet 1 film/série dans l'arbre Partage)
+- **share**: contrôleur Funnel Tailscale (runner subprocess injectable)
+- **share**: client API Jellyfin (refresh bibliothèque + sessions)
+- **share**: table ShareSession + repository (un partage actif)
+- **share**: réglages config Jellyfin (url, clé API, dossier Partage)
+
 ## v2.3.0 (2026-06-28)
 
 ### Feat
