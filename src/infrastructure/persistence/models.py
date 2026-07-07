@@ -446,3 +446,19 @@ class HardlinkModel(SQLModel, table=True):
     storage_path: str = Field(index=True)  # Chemin renommé dans storage/
     created_at: datetime = Field(default_factory=datetime.utcnow)
     expires_at: datetime  # created_at + hardlink_retention_days
+
+
+class ShareSessionModel(SQLModel, table=True):
+    """État du partage Jellyfin actif (une seule ligne active à la fois)."""
+
+    __tablename__ = "share_sessions"
+
+    id: int | None = Field(default=None, primary_key=True)
+    media_type: str  # "movie" | "series"
+    media_id: int
+    title: str
+    folder_name: str  # nom du dossier créé sous Partage/Films ou Partage/Series
+    is_active: bool = Field(default=True, index=True)
+    started_at: datetime = Field(default_factory=datetime.utcnow)
+    last_played_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
