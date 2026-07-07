@@ -10376,3 +10376,41 @@ details[open] > .maint-issue-toggle::before {
     color: var(--accent-blue);
 }
 
+/* --- Partage Jellyfin (SP3b) --- */
+.action-btn-share,
+.action-btn-unshare {
+    appearance: none;
+    border: 1px solid;
+    border-radius: 6px;
+    padding: 0.35rem 0.75rem;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    opacity: 0.85;
+}
+.action-btn-share { color: #0ea5e9; border-color: #0ea5e9; }
+.action-btn-unshare { color: #ef4444; border-color: #ef4444; }
+.action-btn-share:hover,
+.action-btn-unshare:hover { opacity: 1; }
+
+.share-banner {
+    background: #7f1d1d;
+    color: #fff;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.share-banner-stop {
+    appearance: none;
+    border: 1px solid #fff;
+    background: transparent;
+    color: #fff;
+    border-radius: 5px;
+    padding: 0.2rem 0.6rem;
+    cursor: pointer;
+}
+.share-banner-empty { display: none; }
+

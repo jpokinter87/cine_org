@@ -29,6 +29,9 @@ from src.infrastructure.persistence.repositories.pending_validation_repository i
 from src.infrastructure.persistence.repositories.trash_repository import (
     SQLModelTrashRepository,
 )
+from src.infrastructure.persistence.repositories.share_session_repository import (
+    ShareSessionRepository,
+)
 
 __all__ = [
     "SQLModelMovieRepository",
@@ -37,4 +40,5 @@ __all__ = [
     "SQLModelVideoFileRepository",
     "SQLModelPendingValidationRepository",
     "SQLModelTrashRepository",
+    "ShareSessionRepository",
 ]

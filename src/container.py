@@ -8,8 +8,10 @@ Inclut les repositories SQLModel et les services de persistance.
 from dependency_injector import containers, providers
 
 from .adapters.api.cache import APICache
+from .adapters.api.jellyfin_client import JellyfinClient
 from .adapters.api.tmdb_client import TMDBClient
 from .adapters.api.tvdb_client import TVDBClient
+from .adapters.funnel import FunnelController
 from .adapters.file_system import FileSystemAdapter
 from .adapters.parsing.guessit_parser import GuessitFilenameParser
 from .adapters.parsing.mediainfo_extractor import MediaInfoExtractor
@@ -38,6 +40,7 @@ from .services.organizer import OrganizerService
 from .services.quality_scorer import QualityScorerService
 from .services.transferer import TransfererService
 from .services.validation import ValidationService
+from .services.share.share_service import ShareService
 from .services.workflow import WorkflowService
 
 
@@ -215,3 +218,20 @@ class Container(containers.DeclarativeContainer):
     # Service de workflow - Factory pour nouvelle instance a chaque execution
     # Orchestre le workflow complet de traitement des videos
     workflow_service = providers.Factory(WorkflowService)
+
+    # Partage éphémère SP3b — client Jellyfin, contrôleur Funnel, service de partage
+    jellyfin_client = providers.Singleton(
+        JellyfinClient,
+        base_url=config.provided.jellyfin_url,
+        api_key=config.provided.jellyfin_api_key,
+    )
+
+    funnel_controller = providers.Singleton(FunnelController)
+
+    share_service = providers.Factory(
+        ShareService,
+        session=session,
+        partage_dir=config.provided.jellyfin_partage_dir,
+        jellyfin_client=jellyfin_client,
+        funnel=funnel_controller,
+    )

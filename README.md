@@ -1187,6 +1187,34 @@ Pour regarder la bibliothèque depuis un téléphone en 4G/5G ou sur un autre Wi
 
 > **Confort (optionnel)** : ajouter le sous-réseau Tailscale `100.64.0.0/10` aux « réseaux locaux » de Jellyfin (Tableau de bord → Réseau) pour que ces clients soient traités comme du LAN (lecture directe, moins de transcodage inutile).
 
+### Partage SyncPlay (Partager / Départager)
+
+Depuis une fiche film ou série de la bibliothèque web, le bouton **« Partager »** expose *temporairement* ce seul titre à un ami distant pour une séance de visionnage synchronisé ([SyncPlay](https://jellyfin.org/docs/general/server/syncplay/)). Le film (fichier unique) ou la série (intégrale, toutes saisons) est publié dans une bibliothèque Jellyfin éphémère, et le **[Tailscale Funnel](https://tailscale.com/kb/1223/funnel)** ouvre une URL *publique* le temps de la séance — l'ami n'a donc **pas** besoin d'installer Tailscale (contrairement à l'accès distant ci-dessus, qui reste réservé au propriétaire).
+
+Le bouton **« Départager »** (sur la fiche ou via le bandeau rouge « Partage en cours » présent en haut de toutes les pages) referme le partage : la bibliothèque éphémère est vidée et le Funnel coupé. Le démontage est aussi **automatique** — après **30 min sans lecture** ou au bout d'un **plafond de 6 h**. Un seul titre peut être partagé à la fois (partager un nouveau titre propose de remplacer le partage courant).
+
+**Prérequis (à faire une fois) :**
+
+1. **Deux bibliothèques Jellyfin dédiées**, restreintes au compte de l'ami, NFO activés, « Actualiser depuis Internet = Jamais » :
+
+   | Bibliothèque | Type Jellyfin | Répertoire |
+   |---|---|---|
+   | Partage Films | *Films* | `/media/Serveur/JellyfinLib/Partage/Films` |
+   | Partage Séries | *Séries/Émissions* | `/media/Serveur/JellyfinLib/Partage/Series` |
+
+2. **Un compte invité** (ex. `Alex`) : non-administrateur, accès limité à ces deux bibliothèques uniquement, **SyncPlay activé**.
+3. **Une clé API Jellyfin** (Tableau de bord → Avancé → Clés API), renseignée dans le fichier `.env` du projet :
+
+   ```bash
+   CINEORG_JELLYFIN_URL=http://localhost:8096          # URL du serveur Jellyfin (défaut)
+   CINEORG_JELLYFIN_API_KEY=<clé_générée>              # active la fonctionnalité de partage
+   CINEORG_JELLYFIN_PARTAGE_DIR=/media/Serveur/JellyfinLib/Partage   # dossier des biblio éphémères (défaut)
+   ```
+
+4. **Opérateur Tailscale + Funnel** : le service web tourne sous l'utilisateur déclaré opérateur Tailscale (pas de `sudo`), avec le Funnel autorisé sur le tailnet (Admin console → Access controls → `nodeAttrs`/`funnel`).
+
+**Côté ami :** lui communiquer l'URL publique du Funnel (ex. `https://cineorg-server.tail592482.ts.net`) et les identifiants du compte invité. Client recommandé : **Jellyfin Media Player** (Windows) ou l'appli Jellyfin, en rejoignant le groupe SyncPlay une fois connecté.
+
 ## Format de nommage
 
 ### Films
@@ -1732,6 +1760,14 @@ Vérifier aussi que la clé `CINEORG_TVDB_API_KEY` est bien définie dans `.env`
   curl -s -o /dev/null -w "%{http_code}\n" http://<IP-tailnet-serveur>:8096/System/Info/Public
   ```
   Un `200` confirme que Jellyfin est joignable via le tailnet.
+
+### Le partage (« Partager ») ne s'expose pas
+
+Si le bouton « Partager » échoue ou si l'ami n'atteint pas l'URL publique :
+
+- **Clé API manquante** : vérifier que `CINEORG_JELLYFIN_API_KEY` est bien défini dans `.env` (sans cette clé, le partage est désactivé). Tester la clé : `curl -s -o /dev/null -w "%{http_code}\n" -H "X-Emby-Token: <clé>" http://localhost:8096/System/Info` doit renvoyer `200`.
+- **Funnel indisponible** : le service doit tourner sous l'utilisateur opérateur Tailscale. Vérifier l'état du Funnel : `tailscale funnel status`. Si la commande échoue, contrôler l'autorisation Funnel dans la console d'administration Tailscale.
+- **L'ami ne voit rien** : s'assurer que le compte invité a bien accès aux bibliothèques *Partage Films* / *Partage Séries* (et à elles seules), et que la séance n'a pas été démontée automatiquement (30 min sans lecture / plafond 6 h) — dans ce cas, relancer « Partager ».
 
 ### Base de données corrompue
 
