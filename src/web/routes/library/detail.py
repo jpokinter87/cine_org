@@ -82,6 +82,16 @@ async def movie_detail(request: Request, movie_id: int):
     # Fiche fantôme : ni file_path en base, ni fichier retrouvé sur disque.
     is_phantom = not movie.file_path and video_file is None and file_info is None
 
+    # Partage Jellyfin : ce film est-il le partage actif ?
+    share_is_active = False
+    if hasattr(request.app.state, "container"):
+        active_share = request.app.state.container.share_service().get_active_share()
+        share_is_active = bool(
+            active_share
+            and active_share.media_type == "movie"
+            and active_share.media_id == movie.id
+        )
+
     return templates.TemplateResponse(
         request,
         "library/movie_detail.html",
@@ -101,6 +111,7 @@ async def movie_detail(request: Request, movie_id: int):
             "storage_genre": storage_genre,
             "storage_folder": storage_folder,
             "is_phantom": is_phantom,
+            "share_is_active": share_is_active,
         },
     )
 
@@ -216,6 +227,16 @@ async def series_detail(request: Request, series_id: int):
         except (ValueError, TypeError):
             completeness_detail = None
 
+    # Partage Jellyfin : cette série est-elle le partage actif ?
+    share_is_active = False
+    if hasattr(request.app.state, "container"):
+        active_share = request.app.state.container.share_service().get_active_share()
+        share_is_active = bool(
+            active_share
+            and active_share.media_type == "series"
+            and active_share.media_id == series.id
+        )
+
     return templates.TemplateResponse(
         request,
         "library/series_detail.html",
@@ -236,6 +257,7 @@ async def series_detail(request: Request, series_id: int):
             "ep_languages": sorted(ep_languages),
             "first_episode": episodes[0] if episodes else None,
             "is_phantom": is_phantom,
+            "share_is_active": share_is_active,
         },
     )
 

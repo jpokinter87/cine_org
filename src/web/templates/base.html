@@ -48,6 +48,7 @@
         </button>
     </nav>
     <main class="content">
+        <div id="share-banner" hx-get="/share/status" hx-trigger="load" hx-swap="outerHTML"></div>
         {% block content %}{% endblock %}
     </main>
     <footer class="main-footer">
