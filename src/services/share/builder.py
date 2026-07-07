@@ -108,7 +108,11 @@ class JellyfinShareBuilder:
         for ep, src in available:
             season_dir = show_dir / f"Saison {ep.season_number:02d}"
             link_name = episode_filename(
-                series.title, series.year, ep.season_number, ep.episode_number, src.suffix
+                series.title,
+                series.year,
+                ep.season_number,
+                ep.episode_number,
+                src.suffix,
             )
             ensure_symlink(src, season_dir / link_name)
             (season_dir / f"{Path(link_name).stem}.nfo").write_text(
@@ -116,7 +120,9 @@ class JellyfinShareBuilder:
             )
         return name
 
-    def _movie_sources(self, movie: MovieModel, parts: list[MoviePartModel]) -> list[Path]:
+    def _movie_sources(
+        self, movie: MovieModel, parts: list[MoviePartModel]
+    ) -> list[Path]:
         """Résout les fichiers physiques d'un film (simple ou multi-parties)."""
         if parts:
             out: list[Path] = []

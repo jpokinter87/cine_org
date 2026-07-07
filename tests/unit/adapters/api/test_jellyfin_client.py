@@ -41,7 +41,14 @@ async def test_get_active_sessions_returns_list():
     respx.get(f"{BASE}/Sessions").mock(
         return_value=httpx.Response(
             200,
-            json=[{"NowPlayingItem": {"Id": "x", "Path": "/media/.../Partage/Films/a.mkv"}}],
+            json=[
+                {
+                    "NowPlayingItem": {
+                        "Id": "x",
+                        "Path": "/media/.../Partage/Films/a.mkv",
+                    }
+                }
+            ],
         )
     )
     client = JellyfinClient(base_url=BASE, api_key="k")
@@ -52,7 +59,9 @@ async def test_get_active_sessions_returns_list():
 @pytest.mark.asyncio
 @respx.mock
 async def test_auth_header_sent():
-    route = respx.get(f"{BASE}/Sessions").mock(return_value=httpx.Response(200, json=[]))
+    route = respx.get(f"{BASE}/Sessions").mock(
+        return_value=httpx.Response(200, json=[])
+    )
     client = JellyfinClient(base_url=BASE, api_key="secret-token")
     await client.get_active_sessions()
     assert route.calls.last.request.headers["X-Emby-Token"] == "secret-token"

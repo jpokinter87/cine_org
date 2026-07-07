@@ -41,10 +41,10 @@ def _replace_overlay(entity_type: str, entity_id: int, active_title: str) -> str
         ' onclick="if(event.target===this)this.remove()">'
         '<div class="reject-dialog">'
         '<h3 class="reject-dialog-title">Remplacer le partage en cours ?</h3>'
-        f'<p>Un partage est déjà actif : <strong>{active_title}</strong>. '
+        f"<p>Un partage est déjà actif : <strong>{active_title}</strong>. "
         "Le remplacer arrêtera ce partage et exposera le nouveau titre.</p>"
         '<div class="reject-dialog-actions">'
-        "<button class=\"reject-dialog-cancel\" onclick=\"document.getElementById('share-overlay').remove()\">Annuler</button>"
+        '<button class="reject-dialog-cancel" onclick="document.getElementById(\'share-overlay\').remove()">Annuler</button>'
         f'<button class="reject-dialog-confirm" hx-post="/share/{entity_type}/{entity_id}"'
         f' hx-vals=\'{{"replace": "true"}}\' hx-target="#share-zone-{entity_id}" hx-swap="innerHTML"'
         " onclick=\"document.getElementById('share-overlay').remove()\">Oui, remplacer</button>"
@@ -82,7 +82,9 @@ async def start_share(
 
 
 @router.post("/stop", response_class=HTMLResponse)
-async def stop_share(request: Request, entity_type: str = Form("movies"), entity_id: int = Form(0)):
+async def stop_share(
+    request: Request, entity_type: str = Form("movies"), entity_id: int = Form(0)
+):
     """Arrête le partage actif et renvoie le bouton Partager."""
     service = _service(request)
     await service.stop_share()
@@ -96,7 +98,9 @@ async def share_status(request: Request):
     active = service.get_active_share()
     poll = 'hx-get="/share/status" hx-trigger="load delay:60s" hx-swap="outerHTML"'
     if active is None:
-        return HTMLResponse(f'<div id="share-banner" class="share-banner-empty" {poll}></div>')
+        return HTMLResponse(
+            f'<div id="share-banner" class="share-banner-empty" {poll}></div>'
+        )
     return HTMLResponse(
         f'<div id="share-banner" class="share-banner" {poll}>'
         f"🔴 Partage en cours : <strong>{active.title}</strong> "

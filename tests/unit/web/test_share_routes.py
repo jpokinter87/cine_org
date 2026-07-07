@@ -33,7 +33,10 @@ def test_status_empty_when_no_share(fake_service):
 
 def test_status_shows_title_when_active(fake_service):
     fake_service.get_active_share.return_value = ShareSessionModel(
-        media_type="movie", media_id=1, title="Inception", folder_name="Inception (2010)"
+        media_type="movie",
+        media_id=1,
+        title="Inception",
+        folder_name="Inception (2010)",
     )
     with TestClient(app) as client:
         resp = client.get("/share/status")
@@ -53,7 +56,9 @@ def test_share_success_returns_unshare_button(fake_service):
 
 
 def test_share_conflict_returns_confirm_overlay(fake_service):
-    active = ShareSessionModel(media_type="series", media_id=9, title="Autre", folder_name="Autre (2020)")
+    active = ShareSessionModel(
+        media_type="series", media_id=9, title="Autre", folder_name="Autre (2020)"
+    )
     fake_service.start_share.side_effect = ShareConflict(active)
     with TestClient(app) as client:
         resp = client.post("/share/movies/5")

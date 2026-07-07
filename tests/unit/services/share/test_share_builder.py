@@ -22,7 +22,13 @@ def _physical(tmp_path: Path, name: str) -> Path:
 def test_populate_movie_creates_symlink_and_nfo(tmp_path):
     src = _physical(tmp_path, "film.mkv")
     session = _session()
-    movie = MovieModel(title="Inception", year=2010, tmdb_id=27205, file_path=str(src), symlink_path=None)
+    movie = MovieModel(
+        title="Inception",
+        year=2010,
+        tmdb_id=27205,
+        file_path=str(src),
+        symlink_path=None,
+    )
     session.add(movie)
     session.commit()
     session.refresh(movie)
@@ -61,8 +67,26 @@ def test_populate_series_creates_seasons(tmp_path):
     session.add(series)
     session.commit()
     session.refresh(series)
-    session.add(EpisodeModel(series_id=series.id, season_number=1, episode_number=1, title="P", file_path=str(s1), symlink_path=None))
-    session.add(EpisodeModel(series_id=series.id, season_number=1, episode_number=2, title="D", file_path=str(s2), symlink_path=None))
+    session.add(
+        EpisodeModel(
+            series_id=series.id,
+            season_number=1,
+            episode_number=1,
+            title="P",
+            file_path=str(s1),
+            symlink_path=None,
+        )
+    )
+    session.add(
+        EpisodeModel(
+            series_id=series.id,
+            season_number=1,
+            episode_number=2,
+            title="D",
+            file_path=str(s2),
+            symlink_path=None,
+        )
+    )
     session.commit()
 
     partage = tmp_path / "Partage"

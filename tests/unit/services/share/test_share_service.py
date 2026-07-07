@@ -1,5 +1,4 @@
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -22,7 +21,9 @@ def _session() -> Session:
 def _movie(session, tmp_path) -> MovieModel:
     f = tmp_path / "film.mkv"
     f.write_bytes(b"x")
-    m = MovieModel(title="Inception", year=2010, tmdb_id=1, file_path=str(f), symlink_path=None)
+    m = MovieModel(
+        title="Inception", year=2010, tmdb_id=1, file_path=str(f), symlink_path=None
+    )
     session.add(m)
     session.commit()
     session.refresh(m)
@@ -34,7 +35,12 @@ def _service(session, tmp_path, *, funnel=None, jellyfin=None) -> ShareService:
         session=session,
         partage_dir=tmp_path / "Partage",
         jellyfin_client=jellyfin or AsyncMock(),
-        funnel=funnel or MagicMock(enable=MagicMock(return_value=True), disable=MagicMock(return_value=True), is_on=MagicMock(return_value=False)),
+        funnel=funnel
+        or MagicMock(
+            enable=MagicMock(return_value=True),
+            disable=MagicMock(return_value=True),
+            is_on=MagicMock(return_value=False),
+        ),
         idle_timeout=timedelta(minutes=30),
         hard_cap=timedelta(hours=6),
     )
@@ -44,7 +50,9 @@ def _service(session, tmp_path, *, funnel=None, jellyfin=None) -> ShareService:
 async def test_start_share_movie_records_state_and_enables_funnel(tmp_path):
     session = _session()
     m = _movie(session, tmp_path)
-    funnel = MagicMock(enable=MagicMock(return_value=True), disable=MagicMock(return_value=True))
+    funnel = MagicMock(
+        enable=MagicMock(return_value=True), disable=MagicMock(return_value=True)
+    )
     jellyfin = AsyncMock()
     service = _service(session, tmp_path, funnel=funnel, jellyfin=jellyfin)
 
@@ -70,7 +78,9 @@ async def test_start_when_active_without_replace_raises_conflict(tmp_path):
 async def test_start_with_replace_tears_down_previous(tmp_path):
     session = _session()
     m = _movie(session, tmp_path)
-    funnel = MagicMock(enable=MagicMock(return_value=True), disable=MagicMock(return_value=True))
+    funnel = MagicMock(
+        enable=MagicMock(return_value=True), disable=MagicMock(return_value=True)
+    )
     service = _service(session, tmp_path, funnel=funnel)
     await service.start_share("movie", m.id)
     await service.start_share("movie", m.id, replace=True)
@@ -82,7 +92,9 @@ async def test_start_with_replace_tears_down_previous(tmp_path):
 async def test_stop_share_disables_funnel_and_clears(tmp_path):
     session = _session()
     m = _movie(session, tmp_path)
-    funnel = MagicMock(enable=MagicMock(return_value=True), disable=MagicMock(return_value=True))
+    funnel = MagicMock(
+        enable=MagicMock(return_value=True), disable=MagicMock(return_value=True)
+    )
     service = _service(session, tmp_path, funnel=funnel)
     await service.start_share("movie", m.id)
     await service.stop_share()
@@ -136,7 +148,9 @@ async def test_tick_playing_keeps_share_and_touches(tmp_path):
 @pytest.mark.asyncio
 async def test_reconcile_startup_disables_orphan_funnel(tmp_path):
     session = _session()
-    funnel = MagicMock(is_on=MagicMock(return_value=True), disable=MagicMock(return_value=True))
+    funnel = MagicMock(
+        is_on=MagicMock(return_value=True), disable=MagicMock(return_value=True)
+    )
     service = _service(session, tmp_path, funnel=funnel)
     await service.reconcile_on_startup()  # aucun partage actif mais funnel allumé
     funnel.disable.assert_called_once()

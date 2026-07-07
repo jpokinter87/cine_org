@@ -41,7 +41,9 @@ class Settings(BaseSettings):
     storage_dir: Path = Field(default=Path("~/Videos/storage"))
     video_dir: Path = Field(default=Path("~/Videos/video"))
     jellyfin_dir: Path = Field(default=Path("/media/Serveur/JellyfinLib"))
-    jellyfin_partage_dir: Path = Field(default=Path("/media/Serveur/JellyfinLib/Partage"))
+    jellyfin_partage_dir: Path = Field(
+        default=Path("/media/Serveur/JellyfinLib/Partage")
+    )
 
     # Base de données
     database_url: str = Field(default="sqlite:///cineorg.db")
