@@ -18,6 +18,7 @@ from .routes.maintenance import router as maintenance_router
 from .routes.library import router as library_router
 from .routes.duplicates import router as duplicates_router
 from .routes.quality import router as quality_router
+from .routes.share import router as share_router
 from .routes.transfer import router as transfer_router
 from .routes.validation import router as validation_router
 from .routes.workflow import router as workflow_router
@@ -27,10 +28,16 @@ _WEB_DIR = Path(__file__).parent
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialise le Container DI au démarrage et le ferme à l'arrêt."""
-    container = Container()
-    container.database.init()
-    app.state.container = container
+    """Initialise le Container DI au démarrage et le ferme à l'arrêt.
+
+    La garde ``if getattr(app.state, "container", None) is None`` préserve
+    un container déjà injecté (ex. mock de test) sans écraser le vrai Container
+    en production — le comportement normal reste inchangé.
+    """
+    if getattr(app.state, "container", None) is None:
+        container = Container()
+        container.database.init()
+        app.state.container = container
     yield
 
 
@@ -49,3 +56,4 @@ app.include_router(quality_router)
 app.include_router(duplicates_router)
 app.include_router(config_router)
 app.include_router(maintenance_router)
+app.include_router(share_router)
