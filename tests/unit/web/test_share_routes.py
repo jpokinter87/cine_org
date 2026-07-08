@@ -88,3 +88,17 @@ def test_stop_returns_share_button(fake_service):
         resp = client.post("/share/stop")
     assert resp.status_code == 200
     fake_service.stop_share.assert_awaited()
+
+
+def test_stop_regenerates_correct_share_button_from_entity(fake_service):
+    # Bug re-partage : le départage doit régénérer un bouton Partager pointant
+    # sur la bonne entité (pas /share/movies/0) grâce à entity_type/entity_id.
+    with TestClient(app) as client:
+        resp = client.post(
+            "/share/stop", data={"entity_type": "series", "entity_id": "42"}
+        )
+    assert resp.status_code == 200
+    assert "/share/series/42" in resp.text
+    assert "Partager" in resp.text
+    # Bandeau rafraîchi immédiatement (n'attend pas le poll 60 s).
+    assert resp.headers.get("HX-Trigger") == "shareChanged"

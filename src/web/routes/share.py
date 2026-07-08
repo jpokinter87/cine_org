@@ -27,9 +27,12 @@ def _share_button(entity_type: str, entity_id: int) -> str:
 
 
 def _unshare_button(entity_type: str, entity_id: int) -> str:
+    # hx-vals transmet l'entité à /share/stop pour régénérer le bon bouton
+    # Partager au départage (sinon retombe sur /share/movies/0 → introuvable).
     return (
         f'<span id="share-zone-{entity_id}">'
         f'<button class="action-btn-unshare" hx-post="/share/stop"'
+        f' hx-vals=\'{{"entity_type": "{entity_type}", "entity_id": "{entity_id}"}}\''
         f' hx-target="#share-zone-{entity_id}" hx-swap="innerHTML">Départager</button>'
         f"</span>"
     )

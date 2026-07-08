@@ -4,6 +4,7 @@
 <span id="share-zone-{{ share_entity_id }}">
   {% if share_is_active %}
   <button class="action-btn-unshare" hx-post="/share/stop"
+          hx-vals='{"entity_type": "{{ share_entity_type }}", "entity_id": "{{ share_entity_id }}"}'
           hx-target="#share-zone-{{ share_entity_id }}" hx-swap="innerHTML">Départager</button>
   {% else %}
   <button class="action-btn-share" hx-post="/share/{{ share_entity_type }}/{{ share_entity_id }}"
