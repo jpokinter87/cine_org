@@ -76,12 +76,17 @@ async def start_share(
             + _replace_overlay(entity_type, entity_id, conflict.active.title)
         )
     except ShareError as exc:
-        logger.error("Échec partage : %s", exc)
+        logger.error("Échec partage : {}", exc)
         return HTMLResponse(
             _share_button(entity_type, entity_id)
             + f'<div class="action-msg play-error">{exc}</div>'
         )
-    return HTMLResponse(_unshare_button(entity_type, entity_id))
+    # HX-Trigger : le bandeau global se rafraîchit immédiatement (sans attendre
+    # son poll de 60 s) pour afficher « Partage en cours ».
+    return HTMLResponse(
+        _unshare_button(entity_type, entity_id),
+        headers={"HX-Trigger": "shareChanged"},
+    )
 
 
 @router.post("/stop", response_class=HTMLResponse)
@@ -91,7 +96,12 @@ async def stop_share(
     """Arrête le partage actif et renvoie le bouton Partager."""
     service = _service(request)
     await service.stop_share()
-    return HTMLResponse(_share_button(entity_type, entity_id))
+    # HX-Trigger : le bandeau global disparaît immédiatement (sans attendre son
+    # poll de 60 s).
+    return HTMLResponse(
+        _share_button(entity_type, entity_id),
+        headers={"HX-Trigger": "shareChanged"},
+    )
 
 
 @router.get("/status", response_class=HTMLResponse)
@@ -99,15 +109,23 @@ async def share_status(request: Request):
     """Bandeau de statut auto-rafraîchi (poll toutes les 60 s)."""
     service = _service(request)
     active = service.get_active_share()
-    poll = 'hx-get="/share/status" hx-trigger="load delay:60s" hx-swap="outerHTML"'
+    # Le bandeau se rafraîchit sur poll (filet de sécurité) ET immédiatement sur
+    # l'évènement `shareChanged` émis par Partager/Départager (HX-Trigger).
+    poll = (
+        'hx-get="/share/status" hx-trigger="load delay:60s, shareChanged from:body"'
+        ' hx-swap="outerHTML"'
+    )
     if active is None:
         return HTMLResponse(
             f'<div id="share-banner" class="share-banner-empty" {poll}></div>'
         )
+    # Le bouton du bandeau utilise hx-swap="none" : sa réponse (bouton Partager
+    # d'une fiche) ne doit pas remplacer le bandeau ; c'est `shareChanged` qui le
+    # rafraîchit proprement en bandeau vide.
     return HTMLResponse(
         f'<div id="share-banner" class="share-banner" {poll}>'
         f"🔴 Partage en cours : <strong>{active.title}</strong> "
         '<button class="share-banner-stop" hx-post="/share/stop"'
-        ' hx-target="#share-banner" hx-swap="outerHTML">Départager</button>'
+        ' hx-swap="none">Départager</button>'
         "</div>"
     )

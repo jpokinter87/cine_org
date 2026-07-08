@@ -68,6 +68,11 @@ def test_share_success_returns_unshare_button(fake_service):
         resp = client.post("/share/movies/5")
     assert resp.status_code == 200
     assert "Départager" in resp.text
+    # Le bouton Départager transporte l'entité pour régénérer le bon bouton
+    # Partager au départage (sinon /share/movies/0 → « Film introuvable »).
+    assert "movies" in resp.text and "5" in resp.text
+    # Le bandeau global se rafraîchit immédiatement via l'évènement HTMX.
+    assert resp.headers.get("HX-Trigger") == "shareChanged"
     fake_service.start_share.assert_awaited_with("movie", 5, replace=False)
 
 
@@ -102,3 +107,9 @@ def test_stop_regenerates_correct_share_button_from_entity(fake_service):
     assert "Partager" in resp.text
     # Bandeau rafraîchi immédiatement (n'attend pas le poll 60 s).
     assert resp.headers.get("HX-Trigger") == "shareChanged"
+
+
+def test_status_banner_listens_for_share_changed_event(fake_service):
+    with TestClient(app) as client:
+        resp = client.get("/share/status")
+    assert "shareChanged from:body" in resp.text
