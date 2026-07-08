@@ -39,25 +39,34 @@ class JellyfinClient:
             if folder.get("Name") == name and folder.get("ItemId"):
                 self._library_ids[name] = folder["ItemId"]
                 return folder["ItemId"]
-        logger.warning("Bibliothèque Jellyfin introuvable : %s", name)
+        logger.warning("Bibliothèque Jellyfin introuvable : {}", name)
         return None
 
-    async def refresh_library(self, name: str) -> None:
-        """Lance un scan ciblé de la bibliothèque nommée (no-op si absente)."""
+    async def scan_libraries(self) -> None:
+        """Déclenche un scan des médiathèques (POST /Library/Refresh).
+
+        C'est le seul déclencheur qui fait découvrir à Jellyfin les fichiers
+        fraîchement ajoutés : le refresh ciblé ``POST /Items/{id}/Refresh`` ne
+        rafraîchit que les métadonnées des enfants déjà connus, sans ré-énumérer
+        le dossier. Le scan est asynchrone côté Jellyfin (≈ 45 s en incrémental) ;
+        interroger ``library_item_count`` permet d'attendre l'indexation.
+        """
+        client = self._get_client()
+        await request_with_retry(client, "POST", "/Library/Refresh")
+
+    async def library_item_count(self, name: str) -> int:
+        """Nombre d'items indexés dans la bibliothèque nommée (0 si absente)."""
         item_id = await self._library_id(name)
         if item_id is None:
-            return
+            return 0
         client = self._get_client()
-        await request_with_retry(
+        resp = await request_with_retry(
             client,
-            "POST",
-            f"/Items/{item_id}/Refresh",
-            params={
-                "Recursive": "true",
-                "MetadataRefreshMode": "Default",
-                "ImageRefreshMode": "Default",
-            },
+            "GET",
+            "/Items",
+            params={"ParentId": item_id, "Recursive": "true", "Limit": "0"},
         )
+        return int(resp.json().get("TotalRecordCount", 0))
 
     async def get_active_sessions(self) -> list[dict]:
         """Retourne la liste des sessions de lecture actives."""

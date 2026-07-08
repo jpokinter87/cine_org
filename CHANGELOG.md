@@ -1,3 +1,11 @@
+## v2.4.2 (2026-07-08)
+
+### Fix
+
+- **share**: rafraîchir le bandeau immédiatement via HX-Trigger
+- **share**: régénérer le bon bouton Partager après un départage
+- **share**: indexer le partage via un scan de médiathèque Jellyfin
+
 ## v2.4.1 (2026-07-07)
 
 ### Fix
