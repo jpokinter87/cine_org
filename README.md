@@ -1191,7 +1191,11 @@ Pour regarder la bibliothèque depuis un téléphone en 4G/5G ou sur un autre Wi
 
 Depuis une fiche film ou série de la bibliothèque web, le bouton **« Partager »** expose *temporairement* ce seul titre à un ami distant pour une séance de visionnage synchronisé ([SyncPlay](https://jellyfin.org/docs/general/server/syncplay/)). Le film (fichier unique) ou la série (intégrale, toutes saisons) est publié dans une bibliothèque Jellyfin éphémère, et le **[Tailscale Funnel](https://tailscale.com/kb/1223/funnel)** ouvre une URL *publique* le temps de la séance — l'ami n'a donc **pas** besoin d'installer Tailscale (contrairement à l'accès distant ci-dessus, qui reste réservé au propriétaire).
 
-Le bouton **« Départager »** (sur la fiche ou via le bandeau rouge « Partage en cours » présent en haut de toutes les pages) referme le partage : la bibliothèque éphémère est vidée et le Funnel coupé. Le démontage est aussi **automatique** — après **30 min sans lecture** ou au bout d'un **plafond de 6 h**. Un seul titre peut être partagé à la fois (partager un nouveau titre propose de remplacer le partage courant).
+Au clic sur « Partager », le titre est publié puis **CineOrg attend que Jellyfin l'ait indexé** avant de valider : le bouton affiche une **bordure animée** (« en cours de préparation ») pendant le scan Jellyfin (~45 s), puis se transforme en **« Départager »** une fois le contenu réellement visible pour l'ami. Cette attente garantit que l'ami ne tombe pas sur une bibliothèque vide. Si Jellyfin n'indexe rien dans le délai imparti, un message d'erreur invite à réessayer (aucun faux « partage » n'est enregistré).
+
+> ℹ️ Le scan est déclenché via `POST /Library/Refresh` (scan des médiathèques). Le refresh ciblé `POST /Items/{id}/Refresh` ne ré-énumère **pas** le dossier et laissait donc la bibliothèque de partage vide — c'est pourquoi le scan global est utilisé.
+
+Le bouton **« Départager »** (sur la fiche ou via le bandeau rouge « Partage en cours » présent en haut de toutes les pages) referme le partage : la bibliothèque éphémère est vidée, le contenu dé-indexé côté Jellyfin et le Funnel coupé. Le bandeau apparaît/disparaît **immédiatement** (évènement HTMX `shareChanged`, sans attendre le rafraîchissement périodique). Le démontage est aussi **automatique** — après **30 min sans lecture** ou au bout d'un **plafond de 6 h**. Un seul titre peut être partagé à la fois (partager un nouveau titre propose de remplacer le partage courant).
 
 **Prérequis (à faire une fois) :**
 
@@ -1767,7 +1771,7 @@ Si le bouton « Partager » échoue ou si l'ami n'atteint pas l'URL publique :
 
 - **Clé API manquante** : vérifier que `CINEORG_JELLYFIN_API_KEY` est bien défini dans `.env` (sans cette clé, le partage est désactivé). Tester la clé : `curl -s -o /dev/null -w "%{http_code}\n" -H "X-Emby-Token: <clé>" http://localhost:8096/System/Info` doit renvoyer `200`.
 - **Funnel indisponible** : le service doit tourner sous l'utilisateur opérateur Tailscale. Vérifier l'état du Funnel : `tailscale funnel status`. Si la commande échoue, contrôler l'autorisation Funnel dans la console d'administration Tailscale.
-- **L'ami ne voit rien** : s'assurer que le compte invité a bien accès aux bibliothèques *Partage Films* / *Partage Séries* (et à elles seules), et que la séance n'a pas été démontée automatiquement (30 min sans lecture / plafond 6 h) — dans ce cas, relancer « Partager ».
+- **L'ami ne voit rien** : s'assurer que le compte invité a bien accès aux bibliothèques *Partage Films* / *Partage Séries* (et à elles seules), et que la séance n'a pas été démontée automatiquement (30 min sans lecture / plafond 6 h) — dans ce cas, relancer « Partager ». Depuis la correction de l'indexation, « Partager » attend que le contenu soit réellement indexé avant de basculer sur « Départager » ; si le bouton reste en attente puis affiche une erreur, c'est que le scan Jellyfin n'a pas abouti dans le délai — vérifier que le scan des médiathèques n'est pas déjà en cours/bloqué (Jellyfin → Tableau de bord → Tâches planifiées → *Analyser la médiathèque*).
 
 ### Base de données corrompue
 

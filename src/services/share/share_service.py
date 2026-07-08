@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -37,6 +38,8 @@ class ShareService:
         funnel: FunnelController,
         idle_timeout: timedelta = timedelta(minutes=30),
         hard_cap: timedelta = timedelta(hours=6),
+        scan_poll_interval: float = 3.0,
+        scan_max_attempts: int = 40,
     ) -> None:
         self._session = session
         self._partage_dir = Path(partage_dir)
@@ -44,6 +47,8 @@ class ShareService:
         self._funnel = funnel
         self._idle_timeout = idle_timeout
         self._hard_cap = hard_cap
+        self._scan_poll_interval = scan_poll_interval
+        self._scan_max_attempts = scan_max_attempts
         self._repo = ShareSessionRepository(session)
         self._builder = JellyfinShareBuilder(session, partage_dir)
 
@@ -60,7 +65,8 @@ class ShareService:
         - sans replace → lève ShareConflict
         - avec replace → démonte l'existant avant de démarrer
 
-        Ordre des opérations : populate → refresh Jellyfin → enable Funnel → persist.
+        Ordre des opérations : populate → scan Jellyfin → attendre l'indexation →
+        enable Funnel → persist.
         """
         active = self._repo.get_active()
         if active is not None:
@@ -76,16 +82,18 @@ class ShareService:
                     raise ShareError(f"Film introuvable : {media_id}")
                 title = movie.title
                 folder = self._builder.populate_movie(media_id)
-                await self._jellyfin.refresh_library(LIB_FILMS)
+                library = LIB_FILMS
             elif media_type == "series":
                 series = self._session.get(SeriesModel, media_id)
                 if series is None:
                     raise ShareError(f"Série introuvable : {media_id}")
                 title = series.title
                 folder = self._builder.populate_series(media_id)
-                await self._jellyfin.refresh_library(LIB_SERIES)
+                library = LIB_SERIES
             else:
                 raise ShareError(f"Type de média inconnu : {media_type}")
+            await self._jellyfin.scan_libraries()
+            indexed = await self._await_indexed(library)
         except ShareError:
             self._builder.clear()
             raise
@@ -95,6 +103,12 @@ class ShareService:
                 f"Échec de la préparation du partage Jellyfin : {exc}"
             ) from exc
 
+        if not indexed:
+            self._builder.clear()
+            raise ShareError(
+                "Jellyfin n'a pas indexé le partage dans le délai imparti ; réessaie."
+            )
+
         if not self._funnel.enable():
             self._builder.clear()
             raise ShareError("Le Funnel n'a pas pu être activé")
@@ -102,6 +116,20 @@ class ShareService:
         return self._repo.start(
             media_type=media_type, media_id=media_id, title=title, folder_name=folder
         )
+
+    async def _await_indexed(self, library: str) -> bool:
+        """Attend que Jellyfin ait indexé le contenu fraîchement peuplé.
+
+        Le scan Jellyfin est asynchrone : on interroge le nombre d'items de la
+        bibliothèque jusqu'à ce qu'il devienne non nul, ou expiration du délai
+        (``scan_max_attempts`` × ``scan_poll_interval``).
+        """
+        for attempt in range(self._scan_max_attempts):
+            if await self._jellyfin.library_item_count(library) > 0:
+                return True
+            if attempt < self._scan_max_attempts - 1:
+                await asyncio.sleep(self._scan_poll_interval)
+        return False
 
     async def stop_share(self) -> None:
         """Arrête le partage actif. Si aucun partage actif, désactive quand même
@@ -124,10 +152,9 @@ class ShareService:
         self._builder.clear()
         self._repo.deactivate(active)
         try:
-            await self._jellyfin.refresh_library(LIB_FILMS)
-            await self._jellyfin.refresh_library(LIB_SERIES)
+            await self._jellyfin.scan_libraries()  # dé-indexe le contenu retiré
         except Exception as exc:  # démontage déjà effectif ; Jellyfin best-effort
-            logger.warning("Rafraîchissement Jellyfin après démontage échoué : %s", exc)
+            logger.warning("Rafraîchissement Jellyfin après démontage échoué : {}", exc)
 
     async def run_monitor_tick(self, now: datetime) -> str | None:
         """Surveillance périodique appelée par le planificateur.
