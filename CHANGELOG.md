@@ -1,3 +1,9 @@
+## v2.5.0 (2026-07-09)
+
+### Fix
+
+- **library**: conserver le filtre séries incomplètes et recalculer la complétude
+
 ## v2.4.2 (2026-07-08)
 
 ### Fix
