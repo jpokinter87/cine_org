@@ -3,7 +3,7 @@ Routes de ré-association TMDB — correction manuelle des associations films et
 """
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Form, Query, Request
@@ -111,6 +111,42 @@ def _rename_symlink_if_needed(movie: MovieModel) -> None:
         logger.info("Symlink renommé : {} → {}", old_symlink.name, new_name)
     except OSError as e:
         logger.error("Erreur renommage symlink : {}", e)
+
+
+async def _refresh_series_completeness(
+    session, series: SeriesModel, tvdb_client, today: date
+) -> None:
+    """
+    Recalcule le verdict de complétude après une ré-association de série.
+
+    L'ancien verdict portait sur la mauvaise fiche : il doit disparaître.
+    Le ``tvdb_id`` ayant été invalidé, on tente de le retrouver via l'IMDb ID
+    de la nouvelle fiche. Sans ID TVDB — ou si TVDB est injoignable — la série
+    redevient « non vérifiable » et le drapeau « incomplet » est effacé.
+    """
+    from ....services.completeness.completeness_checker import (
+        CompletenessChecker,
+        check_series_model,
+    )
+
+    try:
+        if series.imdb_id:
+            resolved = await tvdb_client.find_series_id_by_imdb_id(series.imdb_id)
+            series.tvdb_id = int(resolved) if resolved else None
+        await check_series_model(
+            session, CompletenessChecker(tvdb_client), series, today
+        )
+    except Exception as e:
+        logger.warning(
+            "Complétude non recalculée après ré-association de '{}' : {}",
+            series.title,
+            e,
+        )
+        series.completeness_status = None
+        series.completeness_checked_at = datetime.utcnow()
+        series.completeness_missing_json = None
+        session.add(series)
+        session.commit()
 
 
 router = APIRouter()
@@ -721,6 +757,11 @@ async def series_reassociate_apply(
                         pass
             if updated_eps:
                 session.commit()
+
+        # L'ancien verdict de complétude portait sur la mauvaise fiche.
+        await _refresh_series_completeness(
+            session, series, container.tvdb_client(), date.today()
+        )
     finally:
         session.close()
 

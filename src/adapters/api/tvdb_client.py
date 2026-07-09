@@ -214,6 +214,37 @@ class TVDBClient(IMediaAPIClient):
         await self._cache.set_search(cache_key, results)
         return results
 
+    async def find_series_id_by_imdb_id(self, imdb_id: str) -> Optional[str]:
+        """
+        Retrouve l'ID TVDB d'une serie a partir de son ID IMDb.
+
+        Args:
+            imdb_id: ID IMDb de la serie (format "tt1234567")
+
+        Returns:
+            ID TVDB sous forme de chaine, ou None si aucune correspondance
+        """
+        await self._ensure_token()
+        client = await self._get_client()
+
+        try:
+            response = await request_with_retry(
+                client,
+                "GET",
+                "/search/series",
+                params={"imdbId": imdb_id},
+                headers=self._get_auth_headers(),
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            raise
+
+        data = response.json().get("data") or []
+        if not data:
+            return None
+        return str(data[0]["id"])
+
     async def get_details(self, media_id: str) -> Optional[MediaDetails]:
         """
         Recupere les details complets d'une serie.

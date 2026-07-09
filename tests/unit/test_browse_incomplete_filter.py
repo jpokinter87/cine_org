@@ -8,7 +8,7 @@ ce simple basculement suffit. On utilise ``with TestClient(app)`` pour déclench
 le lifespan (init du Container DI).
 """
 
-import os
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -76,6 +76,29 @@ def test_incomplete_filter_excludes_movies_when_type_all(isolated_db):
     assert "ZZZ Broken Show" in body
     assert "ZZZ Some Movie" not in body
     assert "ZZZ Complete Show" not in body
+
+
+def test_pagination_links_keep_incomplete_filter(isolated_db):
+    """Les liens de pagination conservent incomplete_series=1 — régression :
+    passer à la page 2 retombait sur la bibliothèque non filtrée."""
+    session = next(get_session())
+    try:
+        for i in range(30):
+            session.add(
+                SeriesModel(title=f"ZZZ Broken {i:02d}", completeness_status="incomplete")
+            )
+        session.commit()
+    finally:
+        session.close()
+
+    with TestClient(app) as client:
+        resp = client.get("/library/?type=series&incomplete_series=1")
+    assert resp.status_code == 200
+
+    page2_links = re.findall(r'href="([^"]*[?&]page=2[^"]*)"', resp.text)
+    assert page2_links, "aucun lien vers la page 2 dans la pagination"
+    for href in page2_links:
+        assert "incomplete_series=1" in href
 
 
 def test_no_incomplete_filter_returns_all_series(isolated_db):
