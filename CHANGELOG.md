@@ -1,3 +1,11 @@
+## v2.8.0 (2026-08-05)
+
+### Feat
+
+- **web**: recalcul complétude en fin de transfert web
+- **workflow**: recalcul complétude en fin de transfert CLI
+- **completeness**: helper recompute_completeness_for_series
+
 ## v2.7.0 (2026-08-05)
 
 ### Feat
