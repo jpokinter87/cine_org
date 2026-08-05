@@ -1,3 +1,14 @@
+## v2.6.0 (2026-08-05)
+
+### Feat
+
+- **library**: lien maintenance vers filtres granulaires + doc README
+- **library**: deux cases 'Épisodes manquants'/'Saisons manquantes'
+- **library**: filtres missing_episodes/missing_seasons dans browse
+- **completeness**: migration 14 + backfill des flags de granularité
+- **completeness**: check_series_model persiste has_missing_episodes/seasons
+- **completeness**: colonnes has_missing_episodes/seasons sur SeriesModel
+
 ## v2.5.0 (2026-07-09)
 
 ### Fix
