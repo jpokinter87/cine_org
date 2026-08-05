@@ -3,6 +3,7 @@ Routes de ré-association TMDB — correction manuelle des associations films et
 """
 
 import json
+import re
 from datetime import date, datetime
 from pathlib import Path
 
@@ -111,6 +112,143 @@ def _rename_symlink_if_needed(movie: MovieModel) -> None:
         logger.info("Symlink renommé : {} → {}", old_symlink.name, new_name)
     except OSError as e:
         logger.error("Erreur renommage symlink : {}", e)
+
+
+_PLACEHOLDER_EPISODE_TITLE = re.compile(r"^[ée]pisode\s+\d+$", re.IGNORECASE)
+
+
+def _is_placeholder_episode_title(title: str | None) -> bool:
+    """Vrai si le titre n'est qu'un gabarit numéroté (« Épisode 7 »), pas un vrai titre."""
+    if not title:
+        return True
+    return bool(_PLACEHOLDER_EPISODE_TITLE.match(title.strip()))
+
+
+async def _refresh_episode_titles(
+    session, series: SeriesModel, tmdb_id: str, tmdb_client, tvdb_client
+) -> int:
+    """
+    Met à jour les titres des épisodes après une ré-association.
+
+    TMDB est la source primaire. Pour certaines séries il ne renvoie en fr-FR
+    qu'un gabarit « Épisode N » : TVDB sert alors de repli, car il possède
+    souvent les titres français. Un appel TVDB n'est fait que si au moins un
+    titre reste en gabarit.
+
+    Args:
+        session: session SQLModel active.
+        series: la série ré-associée (``tvdb_id`` déjà résolu si possible).
+        tmdb_id: ID TMDB de la nouvelle fiche.
+        tmdb_client: client TMDB (pour la clé d'API).
+        tvdb_client: client TVDB exposant ``get_all_episodes(series_id)``.
+
+    Returns:
+        Le nombre d'épisodes dont le titre a changé.
+    """
+    import httpx
+
+    episodes = session.exec(
+        select(EpisodeModel).where(EpisodeModel.series_id == series.id)
+    ).all()
+    if not episodes:
+        return 0
+
+    new_titles: dict[int, str] = {}
+    placeholders: list[EpisodeModel] = []
+
+    async with httpx.AsyncClient(timeout=15.0) as http:
+        for ep in episodes:
+            if ep.season_number is None or ep.episode_number is None:
+                continue
+            title = None
+            try:
+                resp = await http.get(
+                    f"https://api.themoviedb.org/3/tv/{tmdb_id}"
+                    f"/season/{ep.season_number}"
+                    f"/episode/{ep.episode_number}",
+                    params={"api_key": tmdb_client._api_key, "language": "fr-FR"},
+                )
+                if resp.status_code == 200:
+                    title = resp.json().get("name")
+            except Exception:
+                pass
+
+            if _is_placeholder_episode_title(title):
+                placeholders.append(ep)
+            if title:
+                new_titles[ep.id] = title
+
+    # Repli TVDB pour les titres restés en gabarit (ou absents de TMDB).
+    if placeholders and series.tvdb_id:
+        try:
+            tvdb_episodes = await tvdb_client.get_all_episodes(str(series.tvdb_id))
+            by_key = {
+                (e.season_number, e.episode_number): e.title for e in tvdb_episodes
+            }
+            for ep in placeholders:
+                tvdb_title = by_key.get((ep.season_number, ep.episode_number))
+                if tvdb_title and not _is_placeholder_episode_title(tvdb_title):
+                    new_titles[ep.id] = tvdb_title
+        except Exception as e:
+            logger.warning(
+                "Titres d'épisodes non complétés via TVDB pour '{}' : {}",
+                series.title,
+                e,
+            )
+
+    updated = 0
+    for ep in episodes:
+        title = new_titles.get(ep.id)
+        if title and title != ep.title:
+            ep.title = title
+            session.add(ep)
+            updated += 1
+    if updated:
+        session.commit()
+
+    return updated
+
+
+def _rename_series_files(session, series: SeriesModel, media_info_extractor) -> int:
+    """
+    Réaligne fichiers et symlinks des épisodes sur le titre/année de la fiche.
+
+    Best-effort : une erreur disque (NAS injoignable, droits) est journalisée
+    sans faire échouer la ré-association, déjà enregistrée en base.
+
+    Returns:
+        Le nombre de fichiers effectivement renommés.
+    """
+    from ....services.series_renamer import SeriesRenamer
+
+    try:
+        outcomes = SeriesRenamer(session, media_info_extractor).rename_series(
+            series.id, dry_run=False
+        )
+    except Exception as e:
+        logger.warning(
+            "Fichiers non réalignés après ré-association de '{}' : {}",
+            series.title,
+            e,
+        )
+        return 0
+
+    renamed = sum(1 for o in outcomes if o.status == "renamed")
+    for outcome in outcomes:
+        if outcome.status not in ("renamed", "already_canonical"):
+            logger.warning(
+                "Épisode {} non renommé ({}) : {}",
+                outcome.episode_id,
+                outcome.status,
+                outcome.reason or outcome.old_name,
+            )
+    if renamed:
+        logger.info(
+            "Ré-association '{}' : {} fichier(s) d'épisode réaligné(s)",
+            series.title,
+            renamed,
+        )
+    return renamed
 
 
 async def _refresh_series_completeness(
@@ -723,45 +861,19 @@ async def series_reassociate_apply(
         session.add(series)
         session.commit()
 
-        # Mettre à jour les titres des épisodes via TMDB
-        episodes = session.exec(
-            select(EpisodeModel).where(EpisodeModel.series_id == series_id)
-        ).all()
-
-        if episodes:
-            import httpx
-
-            updated_eps = 0
-            async with httpx.AsyncClient(timeout=15.0) as http:
-                for ep in episodes:
-                    if ep.season_number is None or ep.episode_number is None:
-                        continue
-                    try:
-                        resp = await http.get(
-                            f"https://api.themoviedb.org/3/tv/{tmdb_id}"
-                            f"/season/{ep.season_number}"
-                            f"/episode/{ep.episode_number}",
-                            params={
-                                "api_key": tmdb_client._api_key,
-                                "language": "fr-FR",
-                            },
-                        )
-                        if resp.status_code == 200:
-                            ep_data = resp.json()
-                            new_title = ep_data.get("name")
-                            if new_title and new_title != ep.title:
-                                ep.title = new_title
-                                session.add(ep)
-                                updated_eps += 1
-                    except Exception:
-                        pass
-            if updated_eps:
-                session.commit()
-
         # L'ancien verdict de complétude portait sur la mauvaise fiche.
-        await _refresh_series_completeness(
-            session, series, container.tvdb_client(), date.today()
+        # Passe en premier : c'est elle qui re-résout le tvdb_id, dont le
+        # rafraîchissement des titres a besoin comme source de repli.
+        tvdb_client = container.tvdb_client()
+        await _refresh_series_completeness(session, series, tvdb_client, date.today())
+
+        # Titres des épisodes : TMDB en primaire, TVDB en repli.
+        await _refresh_episode_titles(
+            session, series, tmdb_id, tmdb_client, tvdb_client
         )
+
+        # Les fichiers portent encore le nom de l'ancienne association.
+        _rename_series_files(session, series, container.media_info_extractor())
     finally:
         session.close()
 
