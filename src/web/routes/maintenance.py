@@ -516,7 +516,8 @@ async def run_completeness_sse(request: Request):
                 f"<p><strong>{tally['incomplete']}</strong> série(s) incomplète(s), "
                 f"<strong>{tally['complete']}</strong> complète(s), "
                 f"<strong>{tally['unverifiable']}</strong> non vérifiable(s).</p>"
-                '<p><a href="/library/?type=series&incomplete_series=1">'
+                '<p><a href="/library/?type=series&missing_episodes=1'
+                '&missing_seasons=1">'
                 "Voir les séries incomplètes</a></p>"
                 "</div>"
             )

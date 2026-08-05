@@ -190,6 +190,37 @@ def test_pagination_keeps_missing_seasons_filter(isolated_db):
         assert "missing_seasons=1" in href
 
 
+def test_pagination_keeps_both_missing_filters(isolated_db):
+    """L'union missing_episodes=1&missing_seasons=1 (lien maintenance) est
+    conservée dans les liens de pagination."""
+    import re
+
+    session = next(get_session())
+    try:
+        for i in range(30):
+            session.add(
+                SeriesModel(
+                    title=f"ZZZ Incomplete {i:02d}",
+                    completeness_status="incomplete",
+                    has_missing_seasons=True,
+                )
+            )
+        session.commit()
+    finally:
+        session.close()
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/library/?type=series&missing_episodes=1&missing_seasons=1"
+        )
+    assert resp.status_code == 200
+    page2_links = re.findall(r'href="([^"]*[?&]page=2[^"]*)"', resp.text)
+    assert page2_links, "aucun lien vers la page 2"
+    for href in page2_links:
+        assert "missing_episodes=1" in href
+        assert "missing_seasons=1" in href
+
+
 def test_no_incomplete_filter_returns_all_series(isolated_db):
     """Sans le filtre, toutes les séries restent visibles (non-régression)."""
     _seed_series()

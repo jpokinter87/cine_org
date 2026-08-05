@@ -1054,7 +1054,11 @@ uv run python -m src.main check-completeness --series-id <ID>
 
 **Filtre & badge dans la bibliothèque** :
 
-- une case **« Séries incomplètes »** (URL `/library/?type=series&incomplete_series=1`) restreint la grille aux seules séries détectées comme incomplètes ;
+- deux cases indépendantes affinent la grille :
+  - **« Épisodes manquants »** (`missing_episodes=1`) — séries dont au moins une saison détenue a des trous (épisodes déjà diffusés absents) ;
+  - **« Saisons manquantes »** (`missing_seasons=1`) — séries dont au moins une saison entière est absente.
+
+  Cocher les deux affiche l'**union** de toutes les séries incomplètes (c'est la cible du lien « Voir les séries incomplètes » du récapitulatif de maintenance). La complétude est calculée via la commande `check-completeness` ou le bouton **« Vérifier la complétude »** de la page Maintenance (confrontation aux épisodes TVDB déjà diffusés).
 - un **badge ambre « Incomplet »** apparaît sur les cartes et la fiche des séries concernées ;
 - la **fiche série** détaille les saisons et épisodes manquants (numéro, titre, date de diffusion).
 
