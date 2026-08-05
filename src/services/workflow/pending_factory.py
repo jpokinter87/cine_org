@@ -5,6 +5,7 @@ Module partagé entre le CLI (matching_step.py) et le web (workflow.py)
 pour éviter la duplication du code de matching API + scoring.
 """
 
+from dataclasses import replace
 from typing import Optional
 
 from loguru import logger
@@ -188,6 +189,34 @@ async def _search_and_score_movie(
         logger.warning(f"Erreur TMDB pour {title}: {e}")
 
     return candidates
+
+
+async def _resolve_tvdb_candidates(scored: list, tmdb_client, limit: int = 8) -> list:
+    """Résout le tvdb_id des meilleurs candidats TMDB et les réécrit en forme TVDB.
+
+    Pour chaque candidat série trouvé via TMDB (parmi les ``limit`` meilleurs par
+    score), interroge ``get_tv_external_ids`` pour obtenir le tvdb_id. Les candidats
+    résolus sont réécrits avec ``source="tvdb"`` et ``id=<tvdb_id>`` afin que tout
+    l'aval (épisodes, complétude) reste sur TVDB par ID. Les candidats sans tvdb_id
+    (série absente de TVDB) ou en erreur sont écartés.
+    """
+    resolved = []
+    for cand in scored[:limit]:
+        try:
+            ext = await tmdb_client.get_tv_external_ids(cand.id)
+        except Exception as e:
+            logger.warning(
+                f"Erreur external_ids TMDB pour '{cand.title}' ({cand.id}): {e}"
+            )
+            continue
+        tvdb_id = ext.get("tvdb_id") if ext else None
+        if not tvdb_id:
+            logger.debug(
+                f"Série TMDB sans tvdb_id, écartée : '{cand.title}' ({cand.id})"
+            )
+            continue
+        resolved.append(replace(cand, id=str(tvdb_id), source="tvdb"))
+    return resolved
 
 
 async def _search_and_score_series(
