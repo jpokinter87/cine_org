@@ -2,6 +2,8 @@
 Etape de transfert du workflow : construction du batch, dry-run et execution.
 """
 
+from loguru import logger
+
 from .dataclasses import WorkflowConfig, WorkflowState
 
 
@@ -79,6 +81,28 @@ class TransferStepMixin:
 
         # Mettre a jour file_path sur les entites apres transfert reussi
         self._update_file_paths(state.transfers, results)
+
+        # Recalcul de la complétude des séries touchées : verdict à jour après
+        # transfert (sinon une série complétée reste affichée « incomplète »).
+        series_ids = {
+            t.get("series_id")
+            for t, r in zip(state.transfers, results)
+            if r.get("success") and t.get("series_id")
+        }
+        if series_ids:
+            from src.services.completeness.recompute import (
+                recompute_completeness_for_series,
+            )
+
+            session = self._container.session()
+            try:
+                await recompute_completeness_for_series(
+                    session, self._container.tvdb_client(), series_ids
+                )
+            except Exception as e:
+                logger.warning(f"Recalcul complétude post-transfert échoué : {e}")
+            finally:
+                session.close()
 
         # Log de transfert pour traçabilité
         self._write_transfer_log(state.transfers, results, config.storage_dir)
