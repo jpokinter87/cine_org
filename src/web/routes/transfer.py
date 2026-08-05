@@ -1210,6 +1210,31 @@ async def _run_web_transfer(
                             e,
                         )
 
+            # Recalcul de la complétude des séries touchées (verdict à jour).
+            series_ids = {
+                t.get("series_id")
+                for t in transfers
+                if t.get("series_id")
+                and t.get("destination")
+                and Path(str(t.get("destination"))).exists()
+            }
+            if series_ids:
+                from src.services.completeness.recompute import (
+                    recompute_completeness_for_series,
+                )
+
+                session = container.session()
+                try:
+                    await recompute_completeness_for_series(
+                        session, container.tvdb_client(), series_ids
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Recalcul complétude post-transfert échoué : %s", e
+                    )
+                finally:
+                    session.close()
+
         progress.message = "Simulation terminée" if dry_run else "Transfert terminé"
         progress.complete = True
 
