@@ -1,3 +1,9 @@
+## v2.8.1 (2026-08-06)
+
+### Fix
+
+- **reassociation**: titres d'épisodes et fichiers alignés sur la fiche corrigée
+
 ## v2.8.0 (2026-08-05)
 
 ### Feat
