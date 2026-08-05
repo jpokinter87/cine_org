@@ -217,3 +217,123 @@ async def test_check_series_model_no_tvdb_id_is_unverifiable():
         session.refresh(series)
         assert series.completeness_status is None
         assert series.completeness_checked_at is not None
+
+
+async def _run_check(session, series, episodes):
+    tvdb = _StubTVDB(episodes)
+    checker = CompletenessChecker(tvdb)
+    await check_series_model(session, checker, series, date(2026, 6, 23))
+    session.refresh(series)
+    return series
+
+
+@pytest.mark.asyncio
+async def test_flags_episodes_only():
+    """Trou d'épisodes dans une saison détenue → has_missing_episodes seul."""
+    engine = _make_engine()
+    with Session(engine) as session:
+        series = SeriesModel(title="S", tvdb_id=42)
+        session.add(series)
+        session.commit()
+        session.refresh(series)
+        session.add(
+            EpisodeModel(
+                series_id=series.id, season_number=1, episode_number=1,
+                title="e1", file_path="/s/e1.mkv",
+            )
+        )
+        session.commit()
+        # TVDB : (1,1) détenu, (1,2) manquant.
+        await _run_check(session, series, [_epd(1, 1, "2019-01-01"), _epd(1, 2, "2019-01-08")])
+        assert series.has_missing_episodes is True
+        assert series.has_missing_seasons is False
+
+
+@pytest.mark.asyncio
+async def test_flags_seasons_only():
+    """Saison 1 complète, saison 2 entièrement absente → has_missing_seasons seul."""
+    engine = _make_engine()
+    with Session(engine) as session:
+        series = SeriesModel(title="S", tvdb_id=42)
+        session.add(series)
+        session.commit()
+        session.refresh(series)
+        for ep in (1, 2):
+            session.add(
+                EpisodeModel(
+                    series_id=series.id, season_number=1, episode_number=ep,
+                    title=f"e{ep}", file_path=f"/s/e{ep}.mkv",
+                )
+            )
+        session.commit()
+        # TVDB : saison 1 (1,1),(1,2) détenue ; saison 2 (2,1),(2,2) absente.
+        await _run_check(
+            session, series,
+            [_epd(1, 1, "2019-01-01"), _epd(1, 2, "2019-01-08"),
+             _epd(2, 1, "2020-01-01"), _epd(2, 2, "2020-01-08")],
+        )
+        assert series.has_missing_episodes is False
+        assert series.has_missing_seasons is True
+
+
+@pytest.mark.asyncio
+async def test_flags_mixed():
+    """Trou d'épisodes ET saison entière absente → les deux flags True."""
+    engine = _make_engine()
+    with Session(engine) as session:
+        series = SeriesModel(title="S", tvdb_id=42)
+        session.add(series)
+        session.commit()
+        session.refresh(series)
+        session.add(
+            EpisodeModel(
+                series_id=series.id, season_number=1, episode_number=1,
+                title="e1", file_path="/s/e1.mkv",
+            )
+        )
+        session.commit()
+        # TVDB : saison 1 (1,1) détenu / (1,2) manquant ; saison 2 (2,1) absente.
+        await _run_check(
+            session, series,
+            [_epd(1, 1, "2019-01-01"), _epd(1, 2, "2019-01-08"), _epd(2, 1, "2020-01-01")],
+        )
+        assert series.has_missing_episodes is True
+        assert series.has_missing_seasons is True
+
+
+@pytest.mark.asyncio
+async def test_flags_complete_all_false():
+    """Série complète → les deux flags False."""
+    engine = _make_engine()
+    with Session(engine) as session:
+        series = SeriesModel(title="S", tvdb_id=42)
+        session.add(series)
+        session.commit()
+        session.refresh(series)
+        session.add(
+            EpisodeModel(
+                series_id=series.id, season_number=1, episode_number=1,
+                title="e1", file_path="/s/e1.mkv",
+            )
+        )
+        session.commit()
+        await _run_check(session, series, [_epd(1, 1, "2019-01-01")])
+        assert series.completeness_status == "complete"
+        assert series.has_missing_episodes is False
+        assert series.has_missing_seasons is False
+
+
+@pytest.mark.asyncio
+async def test_flags_reset_when_unverifiable():
+    """Une série sans tvdb_id voit ses flags remis à False."""
+    engine = _make_engine()
+    with Session(engine) as session:
+        series = SeriesModel(title="S", tvdb_id=None)
+        series.has_missing_episodes = True
+        series.has_missing_seasons = True
+        session.add(series)
+        session.commit()
+        session.refresh(series)
+        await _run_check(session, series, [])
+        assert series.has_missing_episodes is False
+        assert series.has_missing_seasons is False

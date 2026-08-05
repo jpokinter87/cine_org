@@ -161,6 +161,8 @@ async def check_series_model(
         series.completeness_status = None
         series.completeness_checked_at = now
         series.completeness_missing_json = None
+        series.has_missing_episodes = False
+        series.has_missing_seasons = False
         session.add(series)
         session.commit()
         return "unverifiable"
@@ -182,6 +184,8 @@ async def check_series_model(
     series.completeness_status = result.status
     series.completeness_checked_at = now
     series.completeness_missing_json = _result_to_json(result)
+    series.has_missing_episodes = bool(result.missing_episodes)
+    series.has_missing_seasons = bool(result.missing_seasons)
     session.add(series)
     session.commit()
 
