@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.core.entities.video import PendingValidation, ValidationStatus, VideoFile
-from src.core.ports.api_clients import SearchResult
+from src.core.ports.api_clients import MediaDetails, SearchResult
 from src.core.value_objects.parsed_info import MediaType, ParsedFilename
 from src.services.scanner import ScanResult
 from src.services.workflow import WorkflowService, WorkflowState
@@ -386,14 +386,33 @@ class TestSeriesCache:
     """Tests pour le cache mémoire série dans create_pending_validation."""
 
     @pytest.fixture
-    def tvdb_client(self) -> MagicMock:
-        """Client TVDB mocké retournant des résultats pour 'From'."""
+    def tmdb_client(self) -> MagicMock:
+        """Client TMDB mocké : recherche série + résolution du tvdb_id.
+
+        get_tv_external_ids mappe l'id TMDB (numérique) sur le même tvdb_id
+        pour préserver l'identité des candidats à travers la résolution.
+        """
         client = MagicMock()
         client._api_key = "fake-key"
-        client.search = AsyncMock(
+        client.search_tv = AsyncMock(
             return_value=[
-                SearchResult(id="374506", title="From", year=2022, source="tvdb"),
+                SearchResult(id="374506", title="From", year=2022, source="tmdb"),
             ]
+        )
+
+        async def _ext(cid):
+            return {"tvdb_id": int(cid)}
+
+        client.get_tv_external_ids = AsyncMock(side_effect=_ext)
+        return client
+
+    @pytest.fixture
+    def tvdb_client(self) -> MagicMock:
+        """Client TVDB mocké : détails (filtre doc) + comptage d'épisodes."""
+        client = MagicMock()
+        client._api_key = "fake-key"
+        client.get_details = AsyncMock(
+            return_value=MediaDetails(id="374506", title="From", genres=("Drama",))
         )
         client.get_season_episode_count = AsyncMock(return_value=10)
         return client
@@ -410,7 +429,9 @@ class TestSeriesCache:
         return m
 
     @pytest.mark.asyncio
-    async def test_cache_avoids_repeated_search_same_season(self, tvdb_client, matcher):
+    async def test_cache_avoids_repeated_search_same_season(
+        self, tmdb_client, tvdb_client, matcher
+    ):
         """Plusieurs épisodes de la même saison ne déclenchent qu'une seule recherche API."""
         series_cache: dict[tuple[str, int | None], list] = {}
 
@@ -419,18 +440,18 @@ class TestSeriesCache:
             await create_pending_validation(
                 scan,
                 matcher,
-                None,
+                tmdb_client,
                 tvdb_client,
                 series_cache=series_cache,
             )
 
-        # search() et score_results() appelés une seule fois
-        tvdb_client.search.assert_called_once_with("From", year=2022)
+        # search_tv() et score_results() appelés une seule fois
+        tmdb_client.search_tv.assert_called_once_with("From", year=2022)
         matcher.score_results.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_cache_avoids_repeated_search_across_seasons(
-        self, tvdb_client, matcher
+        self, tmdb_client, tvdb_client, matcher
     ):
         """Épisodes de saisons différentes partagent le même cache de recherche."""
         series_cache: dict[tuple[str, int | None], list] = {}
@@ -447,18 +468,18 @@ class TestSeriesCache:
             await create_pending_validation(
                 scan,
                 matcher,
-                None,
+                tmdb_client,
                 tvdb_client,
                 series_cache=series_cache,
             )
 
         # Recherche unique malgré 3 saisons différentes
-        tvdb_client.search.assert_called_once()
+        tmdb_client.search_tv.assert_called_once()
         matcher.score_results.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_filter_by_episode_count_still_called_per_episode(
-        self, tvdb_client, matcher
+        self, tmdb_client, tvdb_client, matcher
     ):
         """Le filtrage par episode count est toujours fait par épisode (dépend de la saison)."""
         series_cache: dict[tuple[str, int | None], list] = {}
@@ -468,7 +489,7 @@ class TestSeriesCache:
             await create_pending_validation(
                 scan,
                 matcher,
-                None,
+                tmdb_client,
                 tvdb_client,
                 series_cache=series_cache,
             )
@@ -477,18 +498,20 @@ class TestSeriesCache:
         assert tvdb_client.get_season_episode_count.call_count == 3
 
     @pytest.mark.asyncio
-    async def test_different_series_not_mixed_in_cache(self, tvdb_client, matcher):
+    async def test_different_series_not_mixed_in_cache(
+        self, tmdb_client, tvdb_client, matcher
+    ):
         """Deux séries différentes ont des entrées de cache distinctes."""
 
         # Configurer des réponses différentes par titre
         async def mock_search(title, year=None):
             if "From" in title:
                 return [
-                    SearchResult(id="374506", title="From", year=2022, source="tvdb")
+                    SearchResult(id="374506", title="From", year=2022, source="tmdb")
                 ]
-            return [SearchResult(id="999", title="Lost", year=2004, source="tvdb")]
+            return [SearchResult(id="999", title="Lost", year=2004, source="tmdb")]
 
-        tvdb_client.search = AsyncMock(side_effect=mock_search)
+        tmdb_client.search_tv = AsyncMock(side_effect=mock_search)
 
         def mock_score(results, title, year, duration, is_series=False):
             return [
@@ -512,44 +535,46 @@ class TestSeriesCache:
         vf1, p1 = await create_pending_validation(
             scan_from,
             matcher,
-            None,
+            tmdb_client,
             tvdb_client,
             series_cache=series_cache,
         )
         vf2, p2 = await create_pending_validation(
             scan_lost,
             matcher,
-            None,
+            tmdb_client,
             tvdb_client,
             series_cache=series_cache,
         )
         vf3, p3 = await create_pending_validation(
             scan_from2,
             matcher,
-            None,
+            tmdb_client,
             tvdb_client,
             series_cache=series_cache,
         )
 
         # 2 recherches : From + Lost (pas 3)
-        assert tvdb_client.search.call_count == 2
+        assert tmdb_client.search_tv.call_count == 2
         # From et Lost ont des candidats différents
         assert p1.candidates[0]["id"] == "374506"
         assert p2.candidates[0]["id"] == "999"
         assert p3.candidates[0]["id"] == "374506"
 
     @pytest.mark.asyncio
-    async def test_without_cache_search_repeated(self, tvdb_client, matcher):
+    async def test_without_cache_search_repeated(
+        self, tmdb_client, tvdb_client, matcher
+    ):
         """Sans series_cache, chaque épisode déclenche une recherche."""
         for ep in range(1, 4):
             scan = _make_scan_result("From", season=1, episode=ep)
             await create_pending_validation(
                 scan,
                 matcher,
-                None,
+                tmdb_client,
                 tvdb_client,
             )
 
         # 3 appels search sans cache
-        assert tvdb_client.search.call_count == 3
+        assert tmdb_client.search_tv.call_count == 3
         assert matcher.score_results.call_count == 3

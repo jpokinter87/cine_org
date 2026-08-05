@@ -59,7 +59,7 @@ async def create_pending_validation(
         )
     else:
         candidates = await _search_and_score_series(
-            title, year, matcher, tvdb_client, series_cache
+            title, year, matcher, tmdb_client, tvdb_client, series_cache
         )
 
         # Filtrer les candidats incompatibles par nombre d'épisodes
@@ -223,16 +223,21 @@ async def _search_and_score_series(
     title: str,
     year: Optional[int],
     matcher,
+    tmdb_client,
     tvdb_client,
     series_cache: Optional[dict[tuple[str, Optional[int]], list]] = None,
 ) -> list:
-    """Recherche et score les séries via TVDB.
+    """Recherche et score les séries via TMDB, puis résout le tvdb_id.
 
-    Utilise un cache mémoire par (titre, année) pour éviter les recherches
-    API et le scoring redondants quand plusieurs épisodes de la même série
-    sont traités dans le même batch.
+    La recherche par nom TVDB v3 (/search/series?name=) a été retirée par le
+    fournisseur (404). On cherche donc via TMDB (search_tv), puis on résout le
+    tvdb_id de chaque candidat (get_tv_external_ids) pour garder tout l'aval
+    (épisodes, complétude) sur TVDB par ID. Les candidats sans tvdb_id sont
+    écartés (choix : pas de chemin TMDB-natif dégradé).
+
+    Utilise un cache mémoire par (titre, année) pour éviter les recherches et le
+    scoring redondants quand plusieurs épisodes de la même série sont dans le batch.
     """
-    # Vérifier le cache mémoire (recherche + scoring déjà faits pour ce titre)
     cache_key = (title.lower(), year) if title else None
     if series_cache is not None and cache_key and cache_key in series_cache:
         logger.debug(f"Cache mémoire série hit pour '{title}' ({year})")
@@ -240,20 +245,18 @@ async def _search_and_score_series(
 
     candidates = []
 
-    if not tvdb_client or not getattr(tvdb_client, "_api_key", None):
+    if not tmdb_client or not getattr(tmdb_client, "_api_key", None):
         return candidates
 
     try:
-        api_results = await tvdb_client.search(title, year=year)
-        candidates = matcher.score_results(
-            api_results, title, year, None, is_series=True
-        )
-        # Exclusion stricte des séries documentaires : le dossier temp/Séries
-        # n'en contient jamais, un candidat documentaire ne peut donc pas être
-        # le bon résultat (cas « Sous ses yeux » mal associée à « Il Testimonio »).
+        api_results = await tmdb_client.search_tv(title, year=year)
+        scored = matcher.score_results(api_results, title, year, None, is_series=True)
+        candidates = await _resolve_tvdb_candidates(scored, tmdb_client)
+        # Exclusion stricte des séries documentaires (le dossier temp/Séries n'en
+        # contient jamais). Opère sur des candidats à id=tvdb_id → get_details TVDB OK.
         candidates = await filter_documentary_series(tvdb_client, candidates)
     except Exception as e:
-        logger.warning(f"Erreur TVDB pour {title}: {e}")
+        logger.warning(f"Erreur recherche série TMDB pour {title}: {e}")
 
     # Stocker dans le cache mémoire pour les prochains épisodes
     if series_cache is not None and cache_key:
