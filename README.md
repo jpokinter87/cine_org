@@ -1052,6 +1052,8 @@ uv run python -m src.main check-completeness --series-id <ID>
 
 **Usage web** — un bouton **« Vérifier la complétude »** est disponible sur la page **Maintenance**. Il lance une vérification par lots de toutes les séries avec une barre de progression en temps réel (SSE). Le récapitulatif final propose un lien direct vers les séries incomplètes dans la bibliothèque.
 
+**Recalcul automatique après transfert** : la complétude des séries est **recalculée automatiquement en fin de transfert**. Compléter une série incomplète (télécharger ses épisodes manquants et les transférer) met le verdict à jour sans action manuelle. La commande `check-completeness` et la maintenance web restent disponibles pour un recalcul global.
+
 **Filtre & badge dans la bibliothèque** :
 
 - deux cases indépendantes affinent la grille :
