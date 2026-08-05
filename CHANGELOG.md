@@ -1,3 +1,10 @@
+## v2.7.0 (2026-08-05)
+
+### Feat
+
+- **matching**: recherche séries via TMDB + résolution tvdb_id
+- **matching**: helper _resolve_tvdb_candidates (TMDB -> tvdb_id)
+
 ## v2.6.0 (2026-08-05)
 
 ### Feat
