@@ -1398,6 +1398,21 @@ Lorsqu'un film ou une série est mal identifié par TMDB, le bouton **Corriger**
 3. **Sélection** — Cliquer sur « Associer » pour remplacer l'association TMDB
 4. Les métadonnées (titre, synopsis, genres, notes, jaquette) sont automatiquement mises à jour
 
+Pour une **série**, la correction entraîne en plus trois mises à jour automatiques :
+
+- **Complétude recalculée** — l'ancien verdict portait sur la mauvaise fiche. Le `tvdb_id` est
+  re-résolu depuis l'IMDb ID de la nouvelle fiche, puis les épisodes détenus sont confrontés aux
+  épisodes réellement diffusés. Sans `tvdb_id` retrouvé, la série redevient « non vérifiable »
+  plutôt que de conserver un « incomplet » périmé.
+- **Titres d'épisodes rafraîchis** — TMDB est la source primaire ; quand il ne renvoie qu'un
+  gabarit numéroté (« Épisode 7 », fréquent en fr-FR), TVDB prend le relais car il possède
+  souvent les titres français.
+- **Fichiers et symlinks réalignés** — le dossier de série (`storage/` et `video/`), les fichiers
+  physiques et les symlinks sont renommés d'après le nouveau titre/année et les nouveaux titres
+  d'épisodes. Opération best-effort : un incident disque est journalisé sans annuler la correction,
+  déjà enregistrée. Si le dossier canonique existe déjà, les fichiers sont renommés sur place sans
+  déplacement de dossier.
+
 #### Suppression d'une fiche fantôme (doublon)
 
 Une **fiche fantôme** est une fiche sans aucun fichier rattaché (série dont aucun épisode n'a de fichier, ou film sans fichier). Elle résulte typiquement d'un mauvais matching laissé en place après une re-analyse (ex. une série associée à tort à un mauvais résultat, puis re-validée vers la bonne fiche, l'ancienne fiche restant orpheline).
