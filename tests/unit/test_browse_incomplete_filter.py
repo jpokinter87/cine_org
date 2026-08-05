@@ -47,6 +47,93 @@ def _seed_series():
         session.close()
 
 
+def _seed_granular():
+    session = next(get_session())
+    try:
+        session.add(
+            SeriesModel(
+                title="ZZZ Eps Gap", completeness_status="incomplete",
+                has_missing_episodes=True, has_missing_seasons=False,
+            )
+        )
+        session.add(
+            SeriesModel(
+                title="ZZZ Season Gap", completeness_status="incomplete",
+                has_missing_episodes=False, has_missing_seasons=True,
+            )
+        )
+        session.add(
+            SeriesModel(
+                title="ZZZ Both Gap", completeness_status="incomplete",
+                has_missing_episodes=True, has_missing_seasons=True,
+            )
+        )
+        session.add(
+            SeriesModel(
+                title="ZZZ Full Show", completeness_status="complete",
+                has_missing_episodes=False, has_missing_seasons=False,
+            )
+        )
+        session.commit()
+    finally:
+        session.close()
+
+
+def test_missing_episodes_filter(isolated_db):
+    """missing_episodes=1 → séries avec trous d'épisodes (dont mixtes)."""
+    _seed_granular()
+    with TestClient(app) as client:
+        resp = client.get("/library/?type=series&missing_episodes=1")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "ZZZ Eps Gap" in body
+    assert "ZZZ Both Gap" in body
+    assert "ZZZ Season Gap" not in body
+    assert "ZZZ Full Show" not in body
+
+
+def test_missing_seasons_filter(isolated_db):
+    """missing_seasons=1 → séries avec saisons entières manquantes (dont mixtes)."""
+    _seed_granular()
+    with TestClient(app) as client:
+        resp = client.get("/library/?type=series&missing_seasons=1")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "ZZZ Season Gap" in body
+    assert "ZZZ Both Gap" in body
+    assert "ZZZ Eps Gap" not in body
+    assert "ZZZ Full Show" not in body
+
+
+def test_both_filters_union(isolated_db):
+    """Les deux cases cochées → union (toute série remplissant un critère)."""
+    _seed_granular()
+    with TestClient(app) as client:
+        resp = client.get("/library/?type=series&missing_episodes=1&missing_seasons=1")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "ZZZ Eps Gap" in body
+    assert "ZZZ Season Gap" in body
+    assert "ZZZ Both Gap" in body
+    assert "ZZZ Full Show" not in body
+
+
+def test_granular_filter_excludes_movies(isolated_db):
+    """Un filtre granulaire actif exclut les films (comme incomplete_series)."""
+    _seed_granular()
+    session = next(get_session())
+    try:
+        session.add(MovieModel(title="ZZZ Some Movie", year=2024))
+        session.commit()
+    finally:
+        session.close()
+    with TestClient(app) as client:
+        resp = client.get("/library/?type=all&missing_seasons=1")
+    assert resp.status_code == 200
+    assert "ZZZ Some Movie" not in resp.text
+    assert "ZZZ Season Gap" in resp.text
+
+
 def test_incomplete_filter_returns_only_incomplete(isolated_db):
     """incomplete_series=1 ne renvoie que les séries au statut 'incomplete'."""
     _seed_series()

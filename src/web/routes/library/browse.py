@@ -65,6 +65,8 @@ async def library_index(
     no_file: Optional[str] = None,
     no_poster: Optional[str] = None,
     incomplete_series: Optional[str] = None,
+    missing_episodes: Optional[str] = None,
+    missing_seasons: Optional[str] = None,
     search_mode: str = "title",
     unwatched: Optional[str] = None,
     sort: str = "title",
@@ -82,12 +84,19 @@ async def library_index(
 
     session = next(get_session())
     try:
+        # Filtres propres aux séries : dès qu'un est actif, aucun film ne doit
+        # apparaître (sinon « Tous » les laisse passer).
+        series_only_filter = (
+            incomplete_series == "1"
+            or missing_episodes == "1"
+            or missing_seasons == "1"
+        )
         items = []
 
         # --- Films ---
         # « Séries incomplètes » est un filtre propre aux séries : quand il est
         # actif, aucun film ne doit apparaître (sinon « Tous » les laisse passer).
-        if type in ("all", "movie") and incomplete_series != "1":
+        if type in ("all", "movie") and not series_only_filter:
             movie_stmt = select(MovieModel)
             if q:
                 movie_stmt = movie_stmt.where(
@@ -230,6 +239,19 @@ async def library_index(
                 series_stmt = series_stmt.where(
                     SeriesModel.completeness_status == "incomplete"
                 )
+            if missing_episodes == "1" or missing_seasons == "1":
+                from sqlalchemy import or_ as sa_or
+
+                granular_conditions = []
+                if missing_episodes == "1":
+                    granular_conditions.append(
+                        SeriesModel.has_missing_episodes == True  # noqa: E712
+                    )
+                if missing_seasons == "1":
+                    granular_conditions.append(
+                        SeriesModel.has_missing_seasons == True  # noqa: E712
+                    )
+                series_stmt = series_stmt.where(sa_or(*granular_conditions))
 
             all_series = session.exec(series_stmt).all()
             for s in all_series:
@@ -424,6 +446,8 @@ async def library_index(
         "current_no_file": no_file == "1",
         "current_no_poster": no_poster == "1",
         "current_incomplete_series": incomplete_series == "1",
+        "current_missing_episodes": missing_episodes == "1",
+        "current_missing_seasons": missing_seasons == "1",
         "current_search_mode": search_mode,
         "current_unwatched": unwatched == "1",
         "current_sort": sort,
