@@ -158,6 +158,11 @@ class SeriesModel(SQLModel, table=True):
     completeness_status: str | None = Field(default=None, index=True)
     completeness_checked_at: datetime | None = None
     completeness_missing_json: str | None = None
+    # Granularité de la complétude (dérivée de completeness_missing_json) :
+    # True si au moins un épisode manque dans une saison détenue / au moins
+    # une saison entière manque. Indexées pour le filtrage bibliothèque.
+    has_missing_episodes: bool = Field(default=False, index=True)
+    has_missing_seasons: bool = Field(default=False, index=True)
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 

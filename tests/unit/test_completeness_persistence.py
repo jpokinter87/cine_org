@@ -55,6 +55,35 @@ def test_completeness_status_defaults_to_none():
         assert series.completeness_missing_json is None
 
 
+def test_series_model_missing_flags_default_false():
+    """Les deux flags de granularité valent False par défaut."""
+    engine = _make_engine()
+    with Session(engine) as session:
+        series = SeriesModel(title="Neuve")
+        session.add(series)
+        session.commit()
+        session.refresh(series)
+        assert series.has_missing_episodes is False
+        assert series.has_missing_seasons is False
+
+
+def test_series_model_missing_flags_persist():
+    """Les deux flags de granularité sont persistés et relus."""
+    engine = _make_engine()
+    with Session(engine) as session:
+        series = SeriesModel(title="Flags", tvdb_id=1)
+        series.has_missing_episodes = True
+        series.has_missing_seasons = True
+        session.add(series)
+        session.commit()
+    with Session(engine) as session:
+        loaded = session.exec(
+            select(SeriesModel).where(SeriesModel.title == "Flags")
+        ).first()
+        assert loaded.has_missing_episodes is True
+        assert loaded.has_missing_seasons is True
+
+
 class _StubTVDB:
     def __init__(self, episodes):
         self._episodes = episodes
