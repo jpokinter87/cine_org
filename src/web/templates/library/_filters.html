@@ -48,8 +48,8 @@
     {# ── Ligne 2 : tri+flèches, checkboxes, filtres techniques toggle, suppression ── #}
     {% set tech_active = current_resolution or current_codec_video or current_codec_audio or current_language %}
     {% set tech_count = (1 if current_resolution else 0) + (1 if current_codec_video else 0) + (1 if current_codec_audio else 0) + (1 if current_language else 0) %}
-    {% set state_active = current_unwatched or current_no_file or current_no_poster or current_incomplete_series %}
-    {% set state_count = (1 if current_unwatched else 0) + (1 if current_no_file else 0) + (1 if current_no_poster else 0) + (1 if current_incomplete_series else 0) %}
+    {% set state_active = current_unwatched or current_no_file or current_no_poster or current_missing_episodes or current_missing_seasons %}
+    {% set state_count = (1 if current_unwatched else 0) + (1 if current_no_file else 0) + (1 if current_no_poster else 0) + (1 if current_missing_episodes else 0) + (1 if current_missing_seasons else 0) %}
     <div class="lib-filters-secondary">
         <div class="lib-sort-group">
             <select name="sort" class="lib-filter-select lib-sort-select">
@@ -122,9 +122,15 @@
             </label>
 
             <label class="lib-filter-checkbox lib-filter-checkbox-sm">
-                <input type="checkbox" name="incomplete_series" value="1"
-                       {{ 'checked' if current_incomplete_series }}>
-                Séries incomplètes
+                <input type="checkbox" name="missing_episodes" value="1"
+                       {{ 'checked' if current_missing_episodes }}>
+                Épisodes manquants
+            </label>
+
+            <label class="lib-filter-checkbox lib-filter-checkbox-sm">
+                <input type="checkbox" name="missing_seasons" value="1"
+                       {{ 'checked' if current_missing_seasons }}>
+                Saisons manquantes
             </label>
         </div>
     </div>
@@ -173,11 +179,12 @@
     {% set unwatched_param = "&unwatched=1" if current_unwatched else "" %}
     {% set no_file_param = "&no_file=1" if current_no_file else "" %}
     {% set no_poster_param = "&no_poster=1" if current_no_poster else "" %}
-    {% set incomplete_series_param = "&incomplete_series=1" if current_incomplete_series else "" %}
+    {% set missing_episodes_param = "&missing_episodes=1" if current_missing_episodes else "" %}
+    {% set missing_seasons_param = "&missing_seasons=1" if current_missing_seasons else "" %}
     {% set language_param = "&language=" ~ current_language %}
-    {% set base_params = "type=" ~ current_type ~ "&genre=" ~ (current_genre or '') ~ "&year=" ~ (current_year or '') ~ "&q=" ~ current_q ~ person_params ~ "&resolution=" ~ current_resolution ~ "&codec_video=" ~ current_codec_video ~ "&codec_audio=" ~ current_codec_audio ~ language_param ~ "&search_mode=" ~ current_search_mode ~ "&sort=" ~ current_sort ~ "&order=" ~ current_order ~ unwatched_param ~ no_file_param ~ no_poster_param ~ incomplete_series_param %}
+    {% set base_params = "type=" ~ current_type ~ "&genre=" ~ (current_genre or '') ~ "&year=" ~ (current_year or '') ~ "&q=" ~ current_q ~ person_params ~ "&resolution=" ~ current_resolution ~ "&codec_video=" ~ current_codec_video ~ "&codec_audio=" ~ current_codec_audio ~ language_param ~ "&search_mode=" ~ current_search_mode ~ "&sort=" ~ current_sort ~ "&order=" ~ current_order ~ unwatched_param ~ no_file_param ~ no_poster_param ~ missing_episodes_param ~ missing_seasons_param %}
 
-    {% if current_genre or current_year or current_q or current_type != 'all' or current_person or current_resolution or current_codec_video or current_codec_audio or current_language or current_incomplete_series %}
+    {% if current_genre or current_year or current_q or current_type != 'all' or current_person or current_resolution or current_codec_video or current_codec_audio or current_language or current_missing_episodes or current_missing_seasons %}
     <div class="lib-active-filters">
         {% if current_type != 'all' %}
         <span class="lib-filter-tag">
@@ -247,10 +254,17 @@
                class="lib-filter-tag-remove">&times;</a>
         </span>
         {% endif %}
-        {% if current_incomplete_series %}
+        {% if current_missing_episodes %}
         <span class="lib-filter-tag">
-            Incomplètes
-            <a href="/library/?type={{ current_type }}&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q={{ current_q }}&person={{ current_person }}&person_role={{ current_person_role }}&resolution={{ current_resolution }}&codec_video={{ current_codec_video }}&codec_audio={{ current_codec_audio }}&language={{ current_language }}&search_mode={{ current_search_mode }}&sort={{ current_sort }}&order={{ current_order }}"
+            Épisodes manquants
+            <a href="/library/?type={{ current_type }}&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q={{ current_q }}&person={{ current_person }}&person_role={{ current_person_role }}&resolution={{ current_resolution }}&codec_video={{ current_codec_video }}&codec_audio={{ current_codec_audio }}&language={{ current_language }}&search_mode={{ current_search_mode }}&sort={{ current_sort }}&order={{ current_order }}{{ '&missing_seasons=1' if current_missing_seasons else '' }}"
+               class="lib-filter-tag-remove">&times;</a>
+        </span>
+        {% endif %}
+        {% if current_missing_seasons %}
+        <span class="lib-filter-tag">
+            Saisons manquantes
+            <a href="/library/?type={{ current_type }}&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q={{ current_q }}&person={{ current_person }}&person_role={{ current_person_role }}&resolution={{ current_resolution }}&codec_video={{ current_codec_video }}&codec_audio={{ current_codec_audio }}&language={{ current_language }}&search_mode={{ current_search_mode }}&sort={{ current_sort }}&order={{ current_order }}{{ '&missing_episodes=1' if current_missing_episodes else '' }}"
                class="lib-filter-tag-remove">&times;</a>
         </span>
         {% endif %}

@@ -8,8 +8,6 @@ ce simple basculement suffit. On utilise ``with TestClient(app)`` pour déclench
 le lifespan (init du Container DI).
 """
 
-import re
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -165,27 +163,31 @@ def test_incomplete_filter_excludes_movies_when_type_all(isolated_db):
     assert "ZZZ Complete Show" not in body
 
 
-def test_pagination_links_keep_incomplete_filter(isolated_db):
-    """Les liens de pagination conservent incomplete_series=1 — régression :
-    passer à la page 2 retombait sur la bibliothèque non filtrée."""
+def test_pagination_keeps_missing_seasons_filter(isolated_db):
+    """Les liens de pagination conservent missing_seasons=1."""
+    import re
+
     session = next(get_session())
     try:
         for i in range(30):
             session.add(
-                SeriesModel(title=f"ZZZ Broken {i:02d}", completeness_status="incomplete")
+                SeriesModel(
+                    title=f"ZZZ SeasonGap {i:02d}",
+                    completeness_status="incomplete",
+                    has_missing_seasons=True,
+                )
             )
         session.commit()
     finally:
         session.close()
 
     with TestClient(app) as client:
-        resp = client.get("/library/?type=series&incomplete_series=1")
+        resp = client.get("/library/?type=series&missing_seasons=1")
     assert resp.status_code == 200
-
     page2_links = re.findall(r'href="([^"]*[?&]page=2[^"]*)"', resp.text)
-    assert page2_links, "aucun lien vers la page 2 dans la pagination"
+    assert page2_links, "aucun lien vers la page 2"
     for href in page2_links:
-        assert "incomplete_series=1" in href
+        assert "missing_seasons=1" in href
 
 
 def test_no_incomplete_filter_returns_all_series(isolated_db):
