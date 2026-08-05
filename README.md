@@ -1713,6 +1713,10 @@ uv sync  # Réinstaller les dépendances
 - Vérifier que les clés API sont définies dans `.env`
 - Tester avec `uv run cineorg info` (affiche si les APIs sont activées)
 
+### Aucun candidat pour les séries
+
+L'API TheTVDB v3 a retiré son endpoint de recherche par nom (`/search/series?name=` → 404). La recherche de séries passe désormais par TMDB (`search_tv`), puis résout le `tvdb_id` via les identifiants externes TMDB pour conserver l'accès TVDB par ID (titres d'épisodes, complétude). Une série présente sur TMDB mais absente de TVDB n'est pas proposée automatiquement (validation manuelle par ID possible).
+
 ### Symlinks cassés après déplacement
 
 ```bash
