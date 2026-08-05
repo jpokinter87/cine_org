@@ -9,6 +9,7 @@ Ce module fournit :
 La base de donnees est configuree via CINEORG_DATABASE_URL (defaut: sqlite:///cineorg.db).
 """
 
+import json
 import sqlite3
 from collections.abc import Generator
 from pathlib import Path
@@ -123,6 +124,37 @@ def init_db() -> None:
 
     # Migrations automatiques
     _run_migrations()
+
+
+def _backfill_completeness_flags(conn) -> None:
+    """Rétro-remplit has_missing_episodes/seasons depuis completeness_missing_json.
+
+    Utilisé par la Migration 14 pour peupler les nouvelles colonnes sans exiger
+    une re-vérification complète (appels TVDB) de toutes les séries.
+    """
+    from sqlalchemy import text
+
+    rows = conn.execute(
+        text(
+            "SELECT id, completeness_missing_json FROM series "
+            "WHERE completeness_missing_json IS NOT NULL"
+        )
+    ).fetchall()
+    for row in rows:
+        series_id, raw = row[0], row[1]
+        try:
+            detail = json.loads(raw)
+        except (ValueError, TypeError):
+            continue
+        has_eps = 1 if detail.get("missing_episodes") else 0
+        has_seasons = 1 if detail.get("missing_seasons") else 0
+        conn.execute(
+            text(
+                "UPDATE series SET has_missing_episodes = :eps, "
+                "has_missing_seasons = :seasons WHERE id = :id"
+            ),
+            {"eps": has_eps, "seasons": has_seasons, "id": series_id},
+        )
 
 
 def _run_migrations() -> None:
@@ -394,4 +426,37 @@ def _run_migrations() -> None:
             conn.execute(
                 text("ALTER TABLE series ADD COLUMN completeness_missing_json VARCHAR")
             )
+            conn.commit()
+
+        # Migration 14: granularité de complétude (épisodes vs saisons manquantes)
+        result = conn.execute(text("PRAGMA table_info(series)"))
+        series_columns = [row[1] for row in result.fetchall()]
+
+        if "has_missing_episodes" not in series_columns:
+            conn.execute(
+                text(
+                    "ALTER TABLE series ADD COLUMN has_missing_episodes "
+                    "BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE series ADD COLUMN has_missing_seasons "
+                    "BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_series_has_missing_episodes "
+                    "ON series(has_missing_episodes)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_series_has_missing_seasons "
+                    "ON series(has_missing_seasons)"
+                )
+            )
+            conn.commit()
+            _backfill_completeness_flags(conn)
             conn.commit()
