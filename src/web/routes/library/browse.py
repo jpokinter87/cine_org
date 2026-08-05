@@ -445,7 +445,6 @@ async def library_index(
         "current_language": language or "",
         "current_no_file": no_file == "1",
         "current_no_poster": no_poster == "1",
-        "current_incomplete_series": incomplete_series == "1",
         "current_missing_episodes": missing_episodes == "1",
         "current_missing_seasons": missing_seasons == "1",
         "current_search_mode": search_mode,
