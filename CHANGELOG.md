@@ -1,3 +1,9 @@
+## v2.9.0 (2026-08-08)
+
+### Feat
+
+- **completude**: bouton « Revérifier » dans le cartouche de la fiche série
+
 ## v2.8.1 (2026-08-06)
 
 ### Fix
