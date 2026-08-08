@@ -16,6 +16,7 @@ from ....infrastructure.persistence.models import (
     SeriesModel,
     VideoFileModel,
 )
+from ....services.completeness.recompute import recompute_completeness_for_series
 from ...deps import templates
 from .helpers import (
     _find_movie_file,
@@ -164,6 +165,16 @@ async def rate_movie(request: Request, movie_id: int, rating: int = Form(...)):
     )
 
 
+def _parse_completeness_detail(series: SeriesModel) -> dict | None:
+    """Décode le détail de complétude persisté (None si absent ou illisible)."""
+    if not series.completeness_missing_json:
+        return None
+    try:
+        return json.loads(series.completeness_missing_json)
+    except (ValueError, TypeError):
+        return None
+
+
 @router.get("/series/{series_id}")
 async def series_detail(request: Request, series_id: int):
     """Page de detail d'une serie avec episodes groupes par saison."""
@@ -220,12 +231,7 @@ async def series_detail(request: Request, series_id: int):
         session.close()
 
     # Détail de complétude (phase série-completeness) pour la fiche série
-    completeness_detail = None
-    if series.completeness_missing_json:
-        try:
-            completeness_detail = json.loads(series.completeness_missing_json)
-        except (ValueError, TypeError):
-            completeness_detail = None
+    completeness_detail = _parse_completeness_detail(series)
 
     # Partage Jellyfin : cette série est-elle le partage actif ?
     share_is_active = False
@@ -281,6 +287,43 @@ async def toggle_series_watched(request: Request, series_id: int):
         request,
         "library/_watched_btn_series.html",
         {"series_id": series_id, "watched": watched},
+    )
+
+
+@router.post("/series/{series_id}/completeness/recheck")
+async def recheck_series_completeness(request: Request, series_id: int):
+    """Relance la vérification TVDB de complétude et rend le cartouche à jour.
+
+    Le verdict persisté devient périmé dès que la série gagne des épisodes hors
+    transfert (ré-association, import manuel) : ce endpoint le recalcule pour
+    cette seule série, sans attendre la vérification globale de maintenance.
+    """
+    session = next(get_session())
+    try:
+        series = session.get(SeriesModel, series_id)
+        if not series:
+            return HTMLResponse("Série non trouvée", status_code=404)
+
+        tvdb_client = request.app.state.container.tvdb_client()
+        recomputed = await recompute_completeness_for_series(
+            session, tvdb_client, [series_id]
+        )
+        session.refresh(series)
+        completeness_status = series.completeness_status
+        completeness_detail = _parse_completeness_detail(series)
+    finally:
+        session.close()
+
+    return templates.TemplateResponse(
+        request,
+        "library/_completeness_block.html",
+        {
+            "series_id": series_id,
+            "completeness_status": completeness_status,
+            "completeness_detail": completeness_detail,
+            "recheck_error": recomputed == 0,
+            "badge_oob": True,
+        },
     )
 
 

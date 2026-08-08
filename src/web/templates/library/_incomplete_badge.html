@@ -1,0 +1,4 @@
+{# Badge « Incomplet » de l'en-tête de fiche série.
+   Rendu avec badge_oob=true dans la réponse de revérification pour que le
+   badge suive le nouveau verdict sans recharger la page. #}
+<span id="incomplete-badge-zone"{% if badge_oob %} hx-swap-oob="true"{% endif %}>{% if completeness_status == 'incomplete' %}<span class="badge-incomplete" title="Des épisodes déjà diffusés manquent">Incomplet</span>{% endif %}</span>
