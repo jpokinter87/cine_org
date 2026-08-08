@@ -1064,6 +1064,8 @@ uv run python -m src.main check-completeness --series-id <ID>
 - un **badge ambre « Incomplet »** apparaît sur les cartes et la fiche des séries concernées ;
 - la **fiche série** détaille les saisons et épisodes manquants (numéro, titre, date de diffusion).
 
+**Revérifier une série depuis sa fiche** : le cartouche « Pourquoi cette série est incomplète » porte un bouton **« Revérifier »** qui relance la vérification TVDB pour cette seule série et met le cartouche (et le badge « Incomplet ») à jour sur place, sans recharger la page. Utile quand le verdict est **périmé** : il est persisté en base et n'est recalculé automatiquement qu'en fin de transfert, donc une série complétée par un autre chemin (ré-association, import manuel, correction de fiche) continue d'afficher d'anciens épisodes comme manquants alors qu'ils figurent bien dans la liste des saisons. Si TVDB ne répond pas, un message d'échec s'affiche et le verdict précédent est conservé.
+
 **Limite connue (V1)** : seules les séries disposant d'un `tvdb_id` sont évaluées. Un repli sur TMDB est prévu ultérieurement pour couvrir les séries sans identifiant TVDB.
 
 ## Intégration Jellyfin
