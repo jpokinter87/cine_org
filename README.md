@@ -1680,8 +1680,9 @@ Câblage centralisé dans `src/container.py` via `dependency-injector` (Singleto
 ## Versioning & releases
 
 La version du projet est stockée dans `pyproject.toml` (`[project].version`) — **source
-unique de vérité**. Le footer web et la commande `cineorg version` l'affichent
-dynamiquement (helper `src/version.py`).
+unique de vérité**. Le bandeau de navigation (à droite du sigle CinéOrg), le footer web et la
+commande `cineorg version` l'affichent dynamiquement (helper `src/version.py`) — pratique pour
+vérifier d'un coup d'œil quelle version tourne réellement après un déploiement.
 
 ### Règles SemVer (basées sur les commits conventionnels)
 

@@ -105,11 +105,23 @@ a {
     backdrop-filter: blur(12px);
 }
 
+.nav-brand-wrap {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+}
+
 .nav-brand {
     font-family: var(--font-display);
     font-size: 1.5rem;
     letter-spacing: -0.02em;
     color: var(--text-primary);
+}
+
+.nav-version {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    letter-spacing: 0.04em;
 }
 
 .brand-accent {
