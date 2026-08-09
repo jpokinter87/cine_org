@@ -16,6 +16,7 @@ from ....infrastructure.persistence.models import (
     SeriesModel,
     VideoFileModel,
 )
+from ....services.completeness.quality_profile import build_quality_targets
 from ....services.completeness.recompute import recompute_completeness_for_series
 from ...deps import templates
 from .helpers import (
@@ -165,6 +166,34 @@ async def rate_movie(request: Request, movie_id: int, rating: int = Form(...)):
     )
 
 
+def _quality_targets(episodes, detail: dict | None) -> list[dict]:
+    """Formate pour l'affichage les qualités à rechercher (résolution lisible)."""
+    targets = []
+    for profile in build_quality_targets(episodes, detail):
+        parts = []
+        if profile.resolution:
+            parts.append(_resolution_label(profile.resolution))
+        if profile.video_codec:
+            parts.append(profile.video_codec)
+        if profile.audio_codec:
+            parts.append(profile.audio_codec)
+        if profile.languages:
+            # Français en tête : c'est la langue de référence de la vidéothèque.
+            ordered = sorted(
+                profile.languages, key=lambda code: (code.lower() != "fr", code)
+            )
+            parts.append(" + ".join(code.upper() for code in ordered))
+        targets.append(
+            {
+                "scope": profile.scope_label,
+                "label": " · ".join(parts),
+                "sample_size": profile.sample_size,
+                "mixed": profile.mixed,
+            }
+        )
+    return targets
+
+
 def _parse_completeness_detail(series: SeriesModel) -> dict | None:
     """Décode le détail de complétude persisté (None si absent ou illisible)."""
     if not series.completeness_missing_json:
@@ -227,11 +256,13 @@ async def series_detail(request: Request, series_id: int):
             for lang in ep.languages:
                 ep_languages.add(lang)
 
+        # Détail de complétude (phase série-completeness) pour la fiche série,
+        # et qualités à rechercher qui en découlent (session encore ouverte).
+        completeness_detail = _parse_completeness_detail(series)
+        quality_targets = _quality_targets(episodes, completeness_detail)
+
     finally:
         session.close()
-
-    # Détail de complétude (phase série-completeness) pour la fiche série
-    completeness_detail = _parse_completeness_detail(series)
 
     # Partage Jellyfin : cette série est-elle le partage actif ?
     share_is_active = False
@@ -251,6 +282,7 @@ async def series_detail(request: Request, series_id: int):
             "series_id": series.id,
             "completeness_status": series.completeness_status,
             "completeness_detail": completeness_detail,
+            "quality_targets": quality_targets,
             "watched": series.watched,
             "personal_rating": series.personal_rating,
             "genres": genres,
@@ -311,6 +343,10 @@ async def recheck_series_completeness(request: Request, series_id: int):
         session.refresh(series)
         completeness_status = series.completeness_status
         completeness_detail = _parse_completeness_detail(series)
+        episodes = session.exec(
+            select(EpisodeModel).where(EpisodeModel.series_id == series_id)
+        ).all()
+        quality_targets = _quality_targets(episodes, completeness_detail)
     finally:
         session.close()
 
@@ -321,6 +357,7 @@ async def recheck_series_completeness(request: Request, series_id: int):
             "series_id": series_id,
             "completeness_status": completeness_status,
             "completeness_detail": completeness_detail,
+            "quality_targets": quality_targets,
             "recheck_error": recomputed == 0,
             "badge_oob": True,
         },
