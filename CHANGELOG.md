@@ -1,3 +1,9 @@
+## v2.13.1 (2026-08-09)
+
+### Fix
+
+- **validation**: cascade série après validation par ID externe
+
 ## v2.13.0 (2026-08-09)
 
 ### Feat
