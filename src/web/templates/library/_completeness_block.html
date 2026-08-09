@@ -36,6 +36,22 @@
         {% endfor %}
     </p>
     {% endif %}
+    {% if quality_targets %}
+    <div class="completeness-targets">
+        <span class="completeness-targets-label">Qualité à rechercher</span>
+        {% for target in quality_targets %}
+        <p class="completeness-target">
+            {% if quality_targets | length > 1 %}<span class="completeness-target-scope">{{ target.scope }}</span>{% endif %}
+            <span class="completeness-target-value{% if target.mixed %} is-mixed{% endif %}"
+                  title="D'après {{ target.sample_size }} épisode(s) déjà présent(s){% if target.mixed %} — qualité hétérogène, valeur majoritaire{% endif %}">
+                {{ target.label }}
+            </span>
+            {% if target.mixed %}<span class="completeness-target-warn">qualité hétérogène</span>{% endif %}
+        </p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     {% if completeness_detail.missing_episodes %}
     <ul class="completeness-missing-list">
         {% for ep in completeness_detail.missing_episodes %}

@@ -10413,6 +10413,55 @@ details[open] > .maint-issue-toggle::before {
     font-size: 0.8rem;
 }
 
+/* Qualité à rechercher : dérivée des épisodes déjà présents, elle indique
+   en quelle version chercher les manques (résolution, codecs, langues). */
+.completeness-targets {
+    margin: 0.9rem 0 0;
+    padding: 0.6rem 0.75rem;
+    background: var(--bg-elevated, rgba(255, 255, 255, 0.02));
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+}
+
+.completeness-targets-label {
+    display: block;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.35rem;
+}
+
+.completeness-target {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin: 0.2rem 0 0;
+    font-size: 0.85rem;
+}
+
+.completeness-target-scope {
+    font-size: 0.72rem;
+    font-feature-settings: "tnum";
+    color: var(--text-muted);
+    min-width: 5.5rem;
+}
+
+.completeness-target-value {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.completeness-target-value.is-mixed {
+    color: var(--text-secondary);
+}
+
+.completeness-target-warn {
+    font-size: 0.72rem;
+    color: var(--accent-amber);
+}
+
 /* Carte de résultat (page Maintenance) : surface de carte de la charte. */
 .maint-result-card {
     margin-top: 1rem;

@@ -1066,6 +1066,14 @@ uv run python -m src.main check-completeness --series-id <ID>
 - un **badge ambre « Incomplet »** apparaît sur les cartes et la fiche des séries concernées ;
 - la **fiche série** détaille les saisons et épisodes manquants (numéro, titre, date de diffusion).
 
+**Qualité à rechercher** : savoir qu'il manque « S01E12 » ne dit pas en quelle version le chercher. Le cartouche affiche donc la **qualité dominante des épisodes déjà présents** — résolution, codec vidéo, codec audio, langues :
+
+> **Qualité à rechercher** — `1080p · x264 · FR + EN`
+
+Le calcul se fait **par saison** (les saisons récentes sont souvent mieux encodées que les anciennes) : une saison dont les manques se cherchent dans une autre qualité que le reste de la série obtient sa propre ligne. Quand toutes les saisons concernées coïncident, une seule ligne « Série » est affichée. Une saison sans métadonnées emprunte le profil de la série, et les saisons entièrement absentes reçoivent ce même profil.
+
+Quand la valeur dominante représente moins des deux tiers du lot, la mention **« qualité hétérogène »** est ajoutée : la cible reste indicative, mais la saison mélange plusieurs encodages. Si aucune métadonnée technique n'est connue, l'encart n'apparaît pas du tout plutôt que d'afficher une cible vide.
+
 **Revérifier une série depuis sa fiche** : le cartouche « Pourquoi cette série est incomplète » porte un bouton **« Revérifier »** qui relance la vérification TVDB pour cette seule série et met le cartouche (et le badge « Incomplet ») à jour sur place, sans recharger la page. Utile quand le verdict est **périmé** : il est persisté en base et n'est recalculé automatiquement qu'en fin de transfert, donc une série complétée par un autre chemin (ré-association, import manuel, correction de fiche) continue d'afficher d'anciens épisodes comme manquants alors qu'ils figurent bien dans la liste des saisons. Si TVDB ne répond pas, un message d'échec s'affiche et le verdict précédent est conservé.
 
 **Limite connue (V1)** : seules les séries disposant d'un `tvdb_id` sont évaluées. Un repli sur TMDB est prévu ultérieurement pour couvrir les séries sans identifiant TVDB.
