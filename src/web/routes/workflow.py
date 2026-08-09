@@ -198,16 +198,26 @@ async def _run_web_workflow(
         progress.current = 0
         progress.total = len(pending_list)
 
+        # Fichiers d'un même titre dont l'auto-validation éclaterait la série
+        # sur deux fiches homonymes : laissés en validation manuelle.
+        ambiguous_ids = validation_service.collect_ambiguous_ids(pending_list)
+        if ambiguous_ids:
+            logger.info(
+                "Séries homonymes détectées : %d fichier(s) laissé(s) en validation manuelle",
+                len(ambiguous_ids),
+            )
+
         auto_count = 0
         for i, pend in enumerate(pending_list):
             progress.current = i + 1
             progress.filename = pend.video_file.filename if pend.video_file else ""
 
             fname = pend.video_file.filename if pend.video_file else "?"
-            result = await validation_service.process_auto_validation(pend)
-            if result.auto_validated:
-                auto_count += 1
-                progress.auto_validated_files.append(fname)
+            if pend.id not in ambiguous_ids:
+                result = await validation_service.process_auto_validation(pend)
+                if result.auto_validated:
+                    auto_count += 1
+                    progress.auto_validated_files.append(fname)
             progress.message = f"Auto-validation : {auto_count} validé(s)"
 
             if i % 5 == 0:
@@ -578,7 +588,7 @@ async def anomalies_trash(
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
         'width="18" height="18"><polyline points="3 6 5 6 21 6"/>'
         '<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'
-        '</svg>'
+        "</svg>"
         f"<span>{trashed} fichier(s) mis à la corbeille — "
         f"{group.series_title} S{season:02d}.</span>"
         "</div>"

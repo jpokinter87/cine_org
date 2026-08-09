@@ -578,3 +578,56 @@ class TestSeriesCache:
         # 3 appels search sans cache
         assert tmdb_client.search_tv.call_count == 3
         assert matcher.score_results.call_count == 3
+
+
+class TestAutoValidateSkipsAmbiguous:
+    """L'étape d'auto-validation doit épargner les lots homonymes."""
+
+    @pytest.fixture
+    def workflow(self) -> WorkflowService:
+        import io
+
+        from rich.console import Console
+
+        service = WorkflowService(MagicMock())
+        # Console réelle (silencieuse) : rich.Progress a besoin d'une horloge
+        service._console = Console(file=io.StringIO())
+        service._validation_service = MagicMock()
+        service._validation_service.process_auto_validation = AsyncMock(
+            return_value=MagicMock(auto_validated=True)
+        )
+        return service
+
+    @pytest.mark.asyncio
+    async def test_lot_homonyme_non_auto_valide(self, workflow: WorkflowService):
+        """Les fichiers signalés ambigus partent en validation manuelle."""
+        pendings = [
+            _make_pending("1", "The.Killing.S01E01.mkv", []),
+            _make_pending("2", "The.Killing.S01E14.mkv", []),
+        ]
+        workflow._validation_service.list_pending.return_value = pendings
+        workflow._validation_service.collect_ambiguous_ids.return_value = {"1", "2"}
+
+        state = WorkflowState()
+        await workflow._auto_validate(state)
+
+        workflow._validation_service.process_auto_validation.assert_not_called()
+        assert state.auto_validated_count == 0
+
+    @pytest.mark.asyncio
+    async def test_lot_coherent_auto_valide_normalement(
+        self, workflow: WorkflowService
+    ):
+        """Sans ambiguïté, l'auto-validation garde son comportement."""
+        pendings = [
+            _make_pending("1", "Fargo.S01E01.mkv", []),
+            _make_pending("2", "Fargo.S01E02.mkv", []),
+        ]
+        workflow._validation_service.list_pending.return_value = pendings
+        workflow._validation_service.collect_ambiguous_ids.return_value = set()
+
+        state = WorkflowState()
+        await workflow._auto_validate(state)
+
+        assert workflow._validation_service.process_auto_validation.await_count == 2
+        assert state.auto_validated_count == 2

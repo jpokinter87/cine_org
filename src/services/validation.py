@@ -26,6 +26,10 @@ from src.utils.helpers import parse_candidates
 THRESHOLD = 85
 # Seuil eleve pour auto-validation avec plusieurs candidats
 HIGH_CONFIDENCE_THRESHOLD = 95
+# Ecart en dessous duquel deux candidats sont consideres ex aequo (homonymes) :
+# le tri par score ne departage plus, seul l'ordre de l'API tranche, ce qui
+# n'est pas un critere fiable (TMDB classe par popularite).
+AMBIGUITY_MARGIN = 2.0
 
 
 class ValidationService:
@@ -81,6 +85,11 @@ class ValidationService:
         L'auto-validation est possible si:
         - Candidat unique avec score >= 85%
         - OU plusieurs candidats mais le premier a un score >= 95% (haute confiance)
+          ET le deuxieme est nettement en retrait (ecart >= AMBIGUITY_MARGIN)
+
+        Deux candidats ex aequo signalent des homonymes (ex: « The Killing »
+        danoise de 2007 et sa reprise americaine de 2011) : le score ne les
+        departage pas, la decision revient a l'utilisateur.
 
         Args:
             candidates: Liste des candidats avec leur score
@@ -99,9 +108,60 @@ class ValidationService:
 
         # Cas 2: Plusieurs candidats mais score tres eleve (>= 95%)
         if best_score >= HIGH_CONFIDENCE_THRESHOLD:
-            return True
+            return best_score - candidates[1].score >= AMBIGUITY_MARGIN
 
         return False
+
+    def collect_ambiguous_ids(self, pendings: list[PendingValidation]) -> set[str]:
+        """
+        Repere les fichiers d'un meme lot dont l'auto-validation eclaterait la serie.
+
+        Les fichiers sont regroupes par titre extrait du nom de fichier. Si, au
+        sein d'un groupe, les meilleurs candidats ne designent pas tous la meme
+        fiche, l'ensemble du groupe est renvoye : aucun de ces fichiers ne doit
+        etre auto-valide, la decision revient a l'utilisateur.
+
+        Cas type : une saison plus longue que le canon de la fiche retenue fait
+        basculer les derniers episodes sur une fiche homonyme (« The Killing »
+        2011 pour S01E01-E13, 2007 pour S01E14-E20).
+
+        Seuls les fichiers dont le meilleur candidat atteint le seuil de haute
+        confiance sont pris en compte : un matching douteux isole ne doit pas
+        bloquer tout un lot par ailleurs coherent. En revanche les fichiers
+        ecartes par l'ex aequo comptent, sans quoi le lot serait juge coherent
+        sur les seuls episodes hors canon.
+
+        Args:
+            pendings: Validations en attente du lot courant
+
+        Returns:
+            Ensemble des identifiants de PendingValidation a ne pas auto-valider
+        """
+        from guessit import guessit
+
+        groups: dict[str, list[tuple[str, tuple[str, str]]]] = {}
+
+        for pending in pendings:
+            if not pending.id:
+                continue
+            candidates = self._parse_candidates(pending.candidates)
+            if not candidates or candidates[0].score < HIGH_CONFIDENCE_THRESHOLD:
+                continue
+            filename = pending.video_file.filename if pending.video_file else ""
+            if not filename:
+                continue
+            title = str(guessit(filename).get("title", "")).lower().strip()
+            if not title:
+                continue
+            best = candidates[0]
+            groups.setdefault(title, []).append((pending.id, (best.id, best.source)))
+
+        ambiguous: set[str] = set()
+        for entries in groups.values():
+            if len({ref for _, ref in entries}) > 1:
+                ambiguous.update(pending_id for pending_id, _ in entries)
+
+        return ambiguous
 
     async def process_auto_validation(
         self, pending: PendingValidation
