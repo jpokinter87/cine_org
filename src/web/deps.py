@@ -16,6 +16,8 @@ templates = Jinja2Templates(directory=_WEB_DIR / "templates")
 
 # Version dynamique (source unique : src/version.py) — dispo dans tous les templates
 templates.env.globals["app_version"] = f"CineOrg v{get_version()}"
+# Numéro seul, pour le bandeau où le nom de l'app est déjà affiché
+templates.env.globals["app_version_number"] = get_version()
 
 # Cache-buster pour les assets statiques (invalidé à chaque modif de style.css)
 def _asset_version() -> str:

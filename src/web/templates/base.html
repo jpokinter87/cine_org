@@ -16,7 +16,10 @@
 </head>
 <body>
     <nav class="main-nav">
-        <a href="/" class="nav-brand">Ciné<span class="brand-accent">Org</span></a>
+        <div class="nav-brand-wrap">
+            <a href="/" class="nav-brand">Ciné<span class="brand-accent">Org</span></a>
+            <span class="nav-version" title="Version installée">v{{ app_version_number }}</span>
+        </div>
         {% set _personal = get_personal_profiles() %}
         {% if _personal | length > 1 %}
         <div class="viewer-select-wrap">
