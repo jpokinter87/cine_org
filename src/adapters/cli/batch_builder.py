@@ -20,6 +20,7 @@ from rich.console import Console
 from src.adapters.cli.helpers import (
     _extract_language_from_filename,
     _extract_part_from_filename,
+    _extract_episode_end,
     _extract_series_info,
     _extract_subtitle_language_from_filename,
 )
@@ -349,6 +350,7 @@ async def _build_series_transfer_data(
     # Extraire saison/episode
     filename = pending.video_file.filename if pending.video_file else ""
     season_num, episode_num = _extract_series_info(filename)
+    episode_end = _extract_episode_end(filename)
 
     # Construire les entites Series et Episode
     from src.core.entities.media import Series, Episode
@@ -361,6 +363,7 @@ async def _build_series_transfer_data(
     episode = Episode(
         season_number=season_num,
         episode_number=episode_num,
+        episode_end=episode_end,
         title="",  # Titre d'episode recuperé plus tard
     )
 
@@ -502,6 +505,7 @@ async def build_transfers_batch(
         if is_series:
             # === TRAITEMENT DES SERIES ===
             season_num, episode_num = _extract_series_info(original_filename)
+            episode_end = _extract_episode_end(original_filename)
 
             # Recuperer le titre d'episode et les genres depuis TVDB
             episode_title = ""
@@ -596,6 +600,7 @@ async def build_transfers_batch(
             episode = Episode(
                 season_number=season_num,
                 episode_number=episode_num,
+                episode_end=episode_end,
                 title=episode_title,
                 codec_video=codec_video,
                 codec_audio=codec_audio,
@@ -843,7 +848,10 @@ def _fix_duplicate_filenames(
                 season_num, episode_num = _extract_series_info(original_filename)
                 series = Series(title=t.get("title", ""), year=t.get("year"))
                 episode = Episode(
-                    season_number=season_num, episode_number=episode_num, title=""
+                    season_number=season_num,
+                    episode_number=episode_num,
+                    episode_end=_extract_episode_end(original_filename),
+                    title="",
                 )
                 new_filename = renamer.generate_series_filename(
                     series=series,

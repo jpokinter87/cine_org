@@ -1,3 +1,9 @@
+## v2.10.0 (2026-08-09)
+
+### Feat
+
+- **completude**: prendre en compte les fichiers multi-épisodes
+
 ## v2.9.0 (2026-08-08)
 
 ### Feat

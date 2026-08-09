@@ -1040,6 +1040,8 @@ La commande `link-movie-parts` parcourt la zone `video/` à la recherche de syml
 
 **Source des données** : **TVDB uniquement** en V1. Les séries sans `tvdb_id` ne sont pas évaluées et reçoivent le statut **« non vérifiable »**.
 
+**Fichiers multi-épisodes** : certains fichiers regroupent plusieurs épisodes consécutifs (pilotes ou finales en deux parties diffusés d'un bloc), nommés `SxxE01-E02`, `SxxE01-02` ou `SxxE19-20-21`. Le dernier épisode couvert est mémorisé en base (colonne `episode_end` de la table `episodes`, renseignée au transfert depuis le nom de fichier) et **toute la plage compte comme détenue** : sans cela, la seconde moitié du fichier serait signalée comme manquante à tort. Le nom canonique conserve la plage (`Terra Nova (2011) - S01E01-E02 - …`). Garde-fou : une plage de plus de 4 épisodes est ignorée, car il s'agit presque toujours d'un faux positif de parsing (un nombre dans le titre de l'épisode, par exemple). La colonne est rétro-remplie automatiquement au premier démarrage suivant la mise à jour (migration 15) pour les fichiers déjà en vidéothèque ; **relancer ensuite `check-completeness`** pour rafraîchir les verdicts obsolètes.
+
 **Usage CLI :**
 
 ```bash
@@ -1769,6 +1771,14 @@ uv run python -m src.main check-completeness
 ```
 
 Vérifier aussi que la clé `CINEORG_TVDB_API_KEY` est bien définie dans `.env` (`uv run cineorg info` indique si l'API TVDB est activée).
+
+### Une série est dite incomplète alors que le fichier manquant existe
+
+L'épisode signalé manquant est souvent regroupé avec le précédent dans **un seul fichier** (`SxxE01-E02`, `SxxE01-02`, `SxxE19-20-21`). CineOrg mémorise la plage couverte dans la colonne `episode_end` et la compte comme détenue en entier (voir [Surveillance de complétude](#surveillance-de-complétude-des-séries)) — mais le verdict persisté peut dater d'avant ce remplissage.
+
+→ Relancer la vérification pour la série (bouton **« Revérifier »** sur sa fiche, ou `check-completeness --series-id <ID>`).
+
+Si le verdict reste « incomplet », il s'agit d'un manque réel : comparer la durée totale détenue au nombre d'épisodes attendus lève le doute (un fichier double dure environ deux fois la durée d'un épisode).
 
 ### Un contenu n'apparaît pas dans Jellyfin
 

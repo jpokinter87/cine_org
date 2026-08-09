@@ -224,6 +224,9 @@ class EpisodeModel(SQLModel, table=True):
     series_id: int = Field(foreign_key="series.id", index=True)
     season_number: int
     episode_number: int
+    # Dernier episode couvert quand le fichier en regroupe plusieurs
+    # (ex. S01E01-E02 -> 2). None pour un episode simple.
+    episode_end: int | None = None
     title: str
     air_date: date | None = None
     duration_seconds: int | None = None

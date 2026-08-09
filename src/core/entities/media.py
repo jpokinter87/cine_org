@@ -117,6 +117,8 @@ class Episode:
         series_id : Référence vers la série parente
         season_number : Numéro de saison (commence à 1)
         episode_number : Numéro d'épisode dans la saison (commence à 1)
+        episode_end : Dernier épisode couvert quand un seul fichier en
+            regroupe plusieurs (ex. S01E01-E02 → 2) ; None sinon
         title : Titre de l'épisode
         air_date : Date de première diffusion
         duration_seconds : Durée de l'épisode en secondes
@@ -127,6 +129,7 @@ class Episode:
     series_id: Optional[str] = None
     season_number: int = 0
     episode_number: int = 0
+    episode_end: Optional[int] = None
     title: str = ""
     air_date: Optional[date] = None
     duration_seconds: Optional[int] = None

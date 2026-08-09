@@ -42,6 +42,7 @@ from src.infrastructure.persistence.repositories.series_repository import (
 from src.services.migration.dataclasses import MigrationCandidate, RatingDecision
 from src.services.organizer import OrganizerService
 from src.services.renamer import RenamerService
+from src.utils.helpers import resolve_episode_end
 
 
 class MigrationDestinationPlanner:
@@ -157,6 +158,7 @@ class MigrationDestinationPlanner:
         return Episode(
             season_number=parsed.season or 0,
             episode_number=parsed.episode or 0,
+            episode_end=resolve_episode_end(parsed.episode, parsed.episode_end),
             title=parsed.episode_title or "",
         )
 

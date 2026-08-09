@@ -185,7 +185,8 @@ def fix_series_symlinks(
 
         # Scanner tous les episodes avec file_path
         query = (
-            "SELECT e.id, e.series_id, e.season_number, e.episode_number, e.title, "
+            "SELECT e.id, e.series_id, e.season_number, e.episode_number, "
+            "e.episode_end, e.title, "
             "e.codec_video, e.codec_audio, e.resolution, e.languages_json, e.file_path, "
             "s.title as series_title, s.year as series_year, s.genres_json "
             "FROM episodes e "
@@ -226,6 +227,7 @@ def fix_series_symlinks(
                     series_id=str(row.series_id),
                     season_number=row.season_number,
                     episode_number=row.episode_number,
+                    episode_end=row.episode_end,
                     title=row.title,
                     codec_video=row.codec_video,
                     codec_audio=row.codec_audio,
@@ -507,6 +509,7 @@ async def _fix_all_issues(
                             series_id=episode_obj.series_id,
                             season_number=episode_obj.season_number,
                             episode_number=episode_obj.episode_number,
+                            episode_end=episode_obj.episode_end,
                             title=ep_title,
                             codec_video=episode_obj.codec_video,
                             codec_audio=episode_obj.codec_audio,

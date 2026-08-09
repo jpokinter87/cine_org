@@ -66,6 +66,7 @@ def _to_episode_entity(model: EpisodeModel) -> Episode:
         id=str(model.id) if model.id is not None else None,
         season_number=model.season_number,
         episode_number=model.episode_number,
+        episode_end=model.episode_end,
         title=model.title,
         is_extra=model.is_extra,
     )

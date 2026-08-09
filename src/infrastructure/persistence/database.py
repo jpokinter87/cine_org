@@ -157,6 +157,35 @@ def _backfill_completeness_flags(conn) -> None:
         )
 
 
+def _backfill_episode_end(conn) -> None:
+    """Rétro-remplit episode_end depuis les noms de fichiers existants.
+
+    Utilisé par la Migration 15. Le pré-filtre SQL restreint l'analyse aux
+    quelques chemins ressemblant à une plage d'épisodes ; le parsing réel (et
+    le garde-fou sur l'écart) est délégué à _extract_episode_end.
+    """
+    from sqlalchemy import text
+
+    from src.adapters.cli.helpers import _extract_episode_end
+
+    rows = conn.execute(
+        text(
+            "SELECT id, file_path FROM episodes "
+            "WHERE episode_end IS NULL AND file_path IS NOT NULL "
+            "AND (file_path GLOB '*[Ee][0-9][0-9]-[Ee][0-9][0-9]*' "
+            "  OR file_path GLOB '*[Ee][0-9][0-9]-[0-9][0-9]*')"
+        )
+    ).fetchall()
+    for episode_id, file_path in rows:
+        episode_end = _extract_episode_end(Path(file_path).name)
+        if episode_end is None:
+            continue
+        conn.execute(
+            text("UPDATE episodes SET episode_end = :end WHERE id = :id"),
+            {"end": episode_end, "id": episode_id},
+        )
+
+
 def _run_migrations() -> None:
     """
     Execute les migrations de schema necessaires.
@@ -459,4 +488,16 @@ def _run_migrations() -> None:
             )
             conn.commit()
             _backfill_completeness_flags(conn)
+            conn.commit()
+
+        # Migration 15: episode_end sur episodes (fichiers multi-episodes)
+        result = conn.execute(text("PRAGMA table_info(episodes)"))
+        episode_columns = [row[1] for row in result.fetchall()]
+
+        if "episode_end" not in episode_columns:
+            conn.execute(
+                text("ALTER TABLE episodes ADD COLUMN episode_end INTEGER")
+            )
+            conn.commit()
+            _backfill_episode_end(conn)
             conn.commit()

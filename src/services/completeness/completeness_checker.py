@@ -115,6 +115,32 @@ class CompletenessChecker:
         )
 
 
+def _owned_keys(models: list[EpisodeModel]) -> set[tuple[int, int]]:
+    """
+    Construit l'ensemble des (saison, épisode) réellement détenus.
+
+    Un fichier multi-épisodes (``episode_end`` renseigné, ex. S01E01-E02)
+    couvre toute la plage ``episode_number..episode_end`` : sans cela les
+    épisodes suivants seraient signalés comme manquants à tort.
+
+    Args:
+        models: épisodes de la série (extras déjà exclus).
+
+    Returns:
+        Ensemble des clés (saison, épisode) couvertes par un fichier.
+    """
+    owned: set[tuple[int, int]] = set()
+    for episode in models:
+        if not episode.file_path:
+            continue
+        last = episode.episode_end or episode.episode_number
+        for number in range(
+            episode.episode_number, max(last, episode.episode_number) + 1
+        ):
+            owned.add((episode.season_number, number))
+    return owned
+
+
 def _result_to_json(result: CompletenessResult) -> str:
     """Sérialise le détail des manques pour la colonne DB."""
     return json.dumps(
@@ -173,11 +199,7 @@ async def check_series_model(
             EpisodeModel.is_extra == False,  # noqa: E712
         )
     ).all()
-    owned = {
-        (e.season_number, e.episode_number)
-        for e in owned_models
-        if e.file_path
-    }
+    owned = _owned_keys(owned_models)
 
     result = await checker.compute(str(series.tvdb_id), owned, today)
 
