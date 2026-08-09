@@ -1,3 +1,9 @@
+## v2.13.0 (2026-08-09)
+
+### Feat
+
+- **completude**: exporter la liste des épisodes manquants
+
 ## v2.12.0 (2026-08-09)
 
 ### Feat

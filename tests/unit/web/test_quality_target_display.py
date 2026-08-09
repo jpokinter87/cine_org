@@ -153,6 +153,33 @@ def test_heterogeneous_series_is_flagged(engine, client):
     assert "qualité hétérogène" in resp.text
 
 
+def test_copy_button_carries_the_missing_list(engine, client):
+    """Le bouton de copie porte la liste des manques, qualité comprise."""
+    sid = _incomplete_series(engine, [{"episode": 1}, {"episode": 2}])
+
+    resp = client.get(f"/library/series/{sid}")
+
+    assert "Copier la liste" in resp.text
+    assert "Le Prisonnier (1967) S01E03" in resp.text
+
+
+def test_copy_button_absent_when_series_is_complete(engine, client):
+    """Rien à copier sur une série complète."""
+    sid = _incomplete_series(engine, [{"episode": 1}, {"episode": 2}])
+    with Session(engine) as s:
+        series = s.get(SeriesModel, sid)
+        series.completeness_status = "complete"
+        series.completeness_missing_json = json.dumps(
+            {"missing_seasons": [], "missing_episodes": [], "owned": 2}
+        )
+        s.add(series)
+        s.commit()
+
+    resp = client.get(f"/library/series/{sid}")
+
+    assert "Copier la liste" not in resp.text
+
+
 def test_no_target_without_technical_metadata(engine, client):
     """Sans métadonnées techniques, aucun encart n'est affiché."""
     sid = _incomplete_series(

@@ -113,6 +113,39 @@
             evt.detail.path = path + sep + 'profile=' + encodeURIComponent(getViewerProfile());
         }
     });
+    /* Copie de la liste des manques (cartouche de complétude) : le texte est
+       porté par le bouton, aucun aller-retour serveur n'est nécessaire. */
+    function copyMissingList(btn) {
+        var label = btn.querySelector('.completeness-copy-label');
+        var original = label ? label.textContent : '';
+        function feedback(message) {
+            if (!label) return;
+            label.textContent = message;
+            setTimeout(function() { label.textContent = original; }, 2000);
+        }
+        var text = btn.dataset.copy || '';
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(
+                function() { feedback('Copié'); },
+                function() { feedback('Échec de la copie'); }
+            );
+            return;
+        }
+        /* Repli pour les accès en HTTP simple, où l'API presse-papiers est absente */
+        var area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', '');
+        area.style.position = 'absolute';
+        area.style.left = '-9999px';
+        document.body.appendChild(area);
+        area.select();
+        try {
+            feedback(document.execCommand('copy') ? 'Copié' : 'Échec de la copie');
+        } catch (e) {
+            feedback('Échec de la copie');
+        }
+        document.body.removeChild(area);
+    }
     /* Tooltip résultats workflow : click-to-toggle (évite le problème de scroll hover) */
     function toggleResultTooltip(el) {
         var wasOpen = el.classList.contains('tooltip-open');
