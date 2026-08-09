@@ -309,8 +309,10 @@ def generate_series_filename(
     # Séparateur
     parts.append("-")
 
-    # Numéro d'épisode (SxxExx)
+    # Numéro d'épisode (SxxExx, ou SxxExx-Exx si le fichier en regroupe plusieurs)
     episode_code = f"S{episode.season_number:02d}E{episode.episode_number:02d}"
+    if episode.episode_end and episode.episode_end > episode.episode_number:
+        episode_code += f"-E{episode.episode_end:02d}"
     parts.append(episode_code)
 
     # Titre de l'épisode

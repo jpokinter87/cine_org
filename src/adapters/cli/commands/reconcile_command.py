@@ -651,6 +651,7 @@ def _update_episode_titles(
             episode_entity = EpisodeEntity(
                 season_number=episode.season_number,
                 episode_number=episode.episode_number,
+                episode_end=episode.episode_end,
                 title=episode.title,
             )
 

@@ -50,6 +50,7 @@ class SQLModelEpisodeRepository(IEpisodeRepository):
             series_id=str(model.series_id) if model.series_id else None,
             season_number=model.season_number,
             episode_number=model.episode_number,
+            episode_end=model.episode_end,
             title=model.title,
             air_date=model.air_date,
             duration_seconds=model.duration_seconds,
@@ -77,6 +78,7 @@ class SQLModelEpisodeRepository(IEpisodeRepository):
             series_id=int(entity.series_id) if entity.series_id else 0,
             season_number=entity.season_number,
             episode_number=entity.episode_number,
+            episode_end=entity.episode_end,
             title=entity.title,
             air_date=entity.air_date,
             duration_seconds=entity.duration_seconds,
@@ -146,6 +148,7 @@ class SQLModelEpisodeRepository(IEpisodeRepository):
             existing.series_id = int(episode.series_id) if episode.series_id else 0
             existing.season_number = episode.season_number
             existing.episode_number = episode.episode_number
+            existing.episode_end = episode.episode_end
             existing.title = episode.title
             existing.air_date = episode.air_date
             existing.duration_seconds = episode.duration_seconds

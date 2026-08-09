@@ -5,12 +5,38 @@ Ce module centralise les fonctions reutilisees a travers le codebase :
 - normalize_accents : suppression des diacritiques pour comparaison
 - strip_article : retrait de l'article initial d'un titre
 - parse_candidate / parse_candidates : conversion dict -> SearchResult
+- resolve_episode_end : validation d'une plage d'episodes (fichiers multi-episodes)
 """
 
 import unicodedata
+from typing import Optional
 
 from src.core.ports.api_clients import SearchResult
 from src.utils.constants import IGNORED_ARTICLES
+
+# Ecart maximal tolere entre le premier et le dernier episode d'un meme
+# fichier. Au-dela, la « plage » vient presque toujours d'un faux positif de
+# parsing (ex. « S05E28-40 detectives plus tard » ou 40 est un mot du titre).
+MAX_EPISODE_SPAN = 3
+
+
+def resolve_episode_end(start: Optional[int], end: Optional[int]) -> Optional[int]:
+    """
+    Valide la plage d'episodes couverte par un fichier multi-episodes.
+
+    Args:
+        start : Premier episode couvert (numero du fichier)
+        end : Dernier episode couvert, tel que parse
+
+    Returns:
+        Le dernier episode couvert, ou None si la plage est absente,
+        degeneree (end <= start) ou invraisemblable (ecart trop grand).
+    """
+    if start is None or end is None:
+        return None
+    if end <= start or end - start > MAX_EPISODE_SPAN:
+        return None
+    return end
 
 
 def strip_invisible_chars(text: str) -> str:

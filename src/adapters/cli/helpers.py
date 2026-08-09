@@ -118,6 +118,29 @@ def _extract_series_info(filename: str) -> tuple[int, int]:
     return season, episode
 
 
+def _extract_episode_end(filename: str) -> Optional[int]:
+    """
+    Extrait le dernier episode couvert par un fichier multi-episodes.
+
+    Reconnait les formes SxxExx-Exx, SxxExx-xx et SxxExx-xx-xx via guessit.
+    Les plages invraisemblables sont ecartees (cf. resolve_episode_end).
+
+    Args:
+        filename: Nom du fichier video
+
+    Returns:
+        Numero du dernier episode couvert, ou None pour un episode simple.
+    """
+    from src.adapters.parsing.guessit_parser import GuessitFilenameParser
+    from src.core.value_objects.parsed_info import MediaType
+    from src.utils.helpers import resolve_episode_end
+
+    parser = GuessitFilenameParser()
+    parsed = parser.parse(filename, MediaType.SERIES)
+
+    return resolve_episode_end(parsed.episode, parsed.episode_end)
+
+
 def _extract_language_from_filename(filename: str) -> Optional[str]:
     """
     Extrait la langue du nom de fichier via guessit.
