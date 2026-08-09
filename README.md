@@ -1074,6 +1074,27 @@ Le calcul se fait **par saison** (les saisons récentes sont souvent mieux encod
 
 Quand la valeur dominante représente moins des deux tiers du lot, la mention **« qualité hétérogène »** est ajoutée : la cible reste indicative, mais la saison mélange plusieurs encodages. Si aucune métadonnée technique n'est connue, l'encart n'apparaît pas du tout plutôt que d'afficher une cible vide.
 
+**Exporter la liste des manques** : le cartouche porte un bouton **« Copier la liste »** qui place dans le presse-papiers les manques de la série, qualité comprise — une ligne par manque, prête à coller dans une recherche :
+
+```
+Terra Nova (2011) S01E11 — 1080p · x264 · FR + EN
+```
+
+Pour l'inventaire complet du parc, la commande `missing-episodes` produit la même chose pour toutes les séries incomplètes :
+
+```bash
+# Inventaire de tous les manques (une ligne chacun)
+uv run python -m src.main missing-episodes
+
+# Une seule série
+uv run python -m src.main missing-episodes --series-id <ID>
+
+# Détail complet (titre d'épisode, date de diffusion) dans un tableur
+uv run python -m src.main missing-episodes --format csv -o manques.csv
+```
+
+Le format `text` sert à chercher, le format `csv` à inventorier : il porte en plus le titre de l'épisode et sa date de diffusion. Une saison entièrement absente donne une ligne `Saison 02 (complète)`. L'inventaire s'appuie sur les **verdicts persistés** : lancer `check-completeness` d'abord si les dernières vérifications datent.
+
 **Revérifier une série depuis sa fiche** : le cartouche « Pourquoi cette série est incomplète » porte un bouton **« Revérifier »** qui relance la vérification TVDB pour cette seule série et met le cartouche (et le badge « Incomplet ») à jour sur place, sans recharger la page. Utile quand le verdict est **périmé** : il est persisté en base et n'est recalculé automatiquement qu'en fin de transfert, donc une série complétée par un autre chemin (ré-association, import manuel, correction de fiche) continue d'afficher d'anciens épisodes comme manquants alors qu'ils figurent bien dans la liste des saisons. Si TVDB ne répond pas, un message d'échec s'affiche et le verdict précédent est conservé.
 
 **Limite connue (V1)** : seules les séries disposant d'un `tvdb_id` sont évaluées. Un repli sur TMDB est prévu ultérieurement pour couvrir les séries sans identifiant TVDB.

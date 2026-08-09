@@ -16,7 +16,14 @@ from ....infrastructure.persistence.models import (
     SeriesModel,
     VideoFileModel,
 )
-from ....services.completeness.quality_profile import build_quality_targets
+from ....services.completeness.missing_export import (
+    build_missing_entries,
+    format_entries,
+)
+from ....services.completeness.quality_profile import (
+    build_quality_targets,
+    format_profile,
+)
 from ....services.completeness.recompute import recompute_completeness_for_series
 from ...deps import templates
 from .helpers import (
@@ -167,31 +174,21 @@ async def rate_movie(request: Request, movie_id: int, rating: int = Form(...)):
 
 
 def _quality_targets(episodes, detail: dict | None) -> list[dict]:
-    """Formate pour l'affichage les qualités à rechercher (résolution lisible)."""
-    targets = []
-    for profile in build_quality_targets(episodes, detail):
-        parts = []
-        if profile.resolution:
-            parts.append(_resolution_label(profile.resolution))
-        if profile.video_codec:
-            parts.append(profile.video_codec)
-        if profile.audio_codec:
-            parts.append(profile.audio_codec)
-        if profile.languages:
-            # Français en tête : c'est la langue de référence de la vidéothèque.
-            ordered = sorted(
-                profile.languages, key=lambda code: (code.lower() != "fr", code)
-            )
-            parts.append(" + ".join(code.upper() for code in ordered))
-        targets.append(
-            {
-                "scope": profile.scope_label,
-                "label": " · ".join(parts),
-                "sample_size": profile.sample_size,
-                "mixed": profile.mixed,
-            }
-        )
-    return targets
+    """Formate pour l'affichage les qualités à rechercher."""
+    return [
+        {
+            "scope": profile.scope_label,
+            "label": format_profile(profile),
+            "sample_size": profile.sample_size,
+            "mixed": profile.mixed,
+        }
+        for profile in build_quality_targets(episodes, detail)
+    ]
+
+
+def _missing_export_text(session, series_id: int) -> str:
+    """Liste des manques d'une série, prête à copier depuis le cartouche."""
+    return format_entries(build_missing_entries(session, series_ids=[series_id]), "text")
 
 
 def _parse_completeness_detail(series: SeriesModel) -> dict | None:
@@ -260,6 +257,7 @@ async def series_detail(request: Request, series_id: int):
         # et qualités à rechercher qui en découlent (session encore ouverte).
         completeness_detail = _parse_completeness_detail(series)
         quality_targets = _quality_targets(episodes, completeness_detail)
+        missing_export_text = _missing_export_text(session, series_id)
 
     finally:
         session.close()
@@ -283,6 +281,7 @@ async def series_detail(request: Request, series_id: int):
             "completeness_status": series.completeness_status,
             "completeness_detail": completeness_detail,
             "quality_targets": quality_targets,
+            "missing_export_text": missing_export_text,
             "watched": series.watched,
             "personal_rating": series.personal_rating,
             "genres": genres,
@@ -347,6 +346,7 @@ async def recheck_series_completeness(request: Request, series_id: int):
             select(EpisodeModel).where(EpisodeModel.series_id == series_id)
         ).all()
         quality_targets = _quality_targets(episodes, completeness_detail)
+        missing_export_text = _missing_export_text(session, series_id)
     finally:
         session.close()
 
@@ -358,6 +358,7 @@ async def recheck_series_completeness(request: Request, series_id: int):
             "completeness_status": completeness_status,
             "completeness_detail": completeness_detail,
             "quality_targets": quality_targets,
+            "missing_export_text": missing_export_text,
             "recheck_error": recomputed == 0,
             "badge_oob": True,
         },

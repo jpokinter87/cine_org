@@ -106,6 +106,66 @@ def _season_label(season: int) -> str:
     return f"Saison {season:02d}"
 
 
+def profile_for_season(
+    episodes: Sequence, season: int, series_profile: Optional[QualityProfile] = None
+) -> QualityProfile:
+    """
+    Profil d'une saison, avec repli sur la série si elle n'apprend rien.
+
+    Args:
+        episodes: tous les épisodes de la série (EpisodeModel).
+        season: numéro de la saison concernée.
+        series_profile: profil série déjà calculé (évite de le refaire).
+
+    Returns:
+        Le profil de la saison, ou celui de la série s'il est vide.
+    """
+    profile = compute_quality_profile(
+        [e for e in episodes if e.season_number == season], _season_label(season)
+    )
+    if not profile.is_empty:
+        return profile
+    return series_profile or compute_quality_profile(episodes, "Série")
+
+
+def format_profile(profile: QualityProfile) -> str:
+    """
+    Rend un profil lisible : « 1080p · x264 · AC3 · FR + EN ».
+
+    La résolution brute de la base (« 1920x1080 ») est convertie en libellé
+    usuel, et le français est placé en tête — c'est la langue de référence
+    de la vidéothèque.
+
+    Args:
+        profile: le profil à formater.
+
+    Returns:
+        Le libellé, ou une chaîne vide si le profil ne dit rien.
+    """
+    from src.core.value_objects.media_info import Resolution
+
+    parts: list[str] = []
+    if profile.resolution:
+        label = profile.resolution
+        if "x" in label:
+            try:
+                width, height = label.split("x")
+                label = Resolution(width=int(width), height=int(height)).label
+            except (ValueError, TypeError):
+                pass
+        parts.append(label)
+    if profile.video_codec:
+        parts.append(profile.video_codec)
+    if profile.audio_codec:
+        parts.append(profile.audio_codec)
+    if profile.languages:
+        ordered = sorted(
+            profile.languages, key=lambda code: (code.lower() != "fr", code)
+        )
+        parts.append(" + ".join(code.upper() for code in ordered))
+    return " · ".join(parts)
+
+
 def build_quality_targets(
     episodes: Sequence, detail: Optional[dict]
 ) -> list[QualityProfile]:
@@ -137,12 +197,7 @@ def build_quality_targets(
 
     targets: list[QualityProfile] = []
     for season in sorted({ep["season"] for ep in missing_episodes}):
-        in_season = [e for e in episodes if e.season_number == season]
-        profile = compute_quality_profile(in_season, _season_label(season))
-        # Une saison sans métadonnée n'apprend rien : emprunter celle de la série.
-        if profile.is_empty:
-            profile = series_profile
-        targets.append(profile)
+        targets.append(profile_for_season(episodes, season, series_profile))
 
     if missing_seasons:
         targets.append(series_profile)

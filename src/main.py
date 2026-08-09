@@ -35,6 +35,7 @@ from .adapters.cli.commands import (
     import_library,
     link_movie_parts,
     link_movies,
+    missing_episodes,
     pending,
     populate_movies,
     populate_series,
@@ -132,6 +133,7 @@ app.command(name="purge-hardlinks")(purge_hardlinks)
 app.command(name="rename-canonical")(rename_canonical)
 app.command(name="relink-movies")(relink_movies)
 app.command(name="check-completeness")(check_completeness)
+app.command(name="missing-episodes")(missing_episodes)
 app.command(name="jellyfin-sync")(jellyfin_sync)
 
 # Monter validate_app comme sous-commande

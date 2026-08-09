@@ -10462,6 +10462,30 @@ details[open] > .maint-issue-toggle::before {
     color: var(--accent-amber);
 }
 
+/* Copie de la liste des manques : action secondaire, plus sobre que
+   « Revérifier » qui, lui, déclenche un appel réseau. */
+.completeness-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0.75rem 0 0;
+    padding: 0.28rem 0.6rem;
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: 100px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.completeness-copy-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.04);
+}
+
 /* Carte de résultat (page Maintenance) : surface de carte de la charte. */
 .maint-result-card {
     margin-top: 1rem;
