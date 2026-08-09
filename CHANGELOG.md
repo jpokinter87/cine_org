@@ -1,3 +1,9 @@
+## v2.11.0 (2026-08-09)
+
+### Feat
+
+- **web**: afficher le numéro de version dans le bandeau
+
 ## v2.10.0 (2026-08-09)
 
 ### Feat
