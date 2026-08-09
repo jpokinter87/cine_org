@@ -1,3 +1,9 @@
+## v2.14.0 (2026-08-09)
+
+### Feat
+
+- **validation**: garde-fous contre l'éclatement des séries homonymes
+
 ## v2.13.1 (2026-08-09)
 
 ### Fix

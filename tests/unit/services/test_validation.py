@@ -66,7 +66,9 @@ def mock_tvdb_client():
 
 
 @pytest.fixture
-def validation_service(mock_pending_repo, mock_matcher, mock_tmdb_client, mock_tvdb_client):
+def validation_service(
+    mock_pending_repo, mock_matcher, mock_tmdb_client, mock_tvdb_client
+):
     """Create a ValidationService with all mocks."""
     return ValidationService(
         pending_repo=mock_pending_repo,
@@ -148,22 +150,169 @@ class TestShouldAutoValidate:
         """Multiple candidates with best score >= 95% SHOULD auto-validate (high confidence)."""
         candidates = [
             SearchResult(id="1", title="Avatar", year=2009, score=95.0, source="tmdb"),
-            SearchResult(id="2", title="Avatar 2", year=2022, score=90.0, source="tmdb"),
+            SearchResult(
+                id="2", title="Avatar 2", year=2022, score=90.0, source="tmdb"
+            ),
         ]
         # HIGH_CONFIDENCE_THRESHOLD (95%) allows auto-validation even with multiple candidates
         assert validation_service.should_auto_validate(candidates) is True
 
-    def test_should_auto_validate_multiple_below_high_confidence(self, validation_service):
+    def test_should_auto_validate_multiple_below_high_confidence(
+        self, validation_service
+    ):
         """Multiple candidates with best score < 95% should NOT auto-validate."""
         candidates = [
             SearchResult(id="1", title="Avatar", year=2009, score=90.0, source="tmdb"),
-            SearchResult(id="2", title="Avatar 2", year=2022, score=85.0, source="tmdb"),
+            SearchResult(
+                id="2", title="Avatar 2", year=2022, score=85.0, source="tmdb"
+            ),
         ]
         assert validation_service.should_auto_validate(candidates) is False
 
     def test_should_auto_validate_empty_candidates(self, validation_service):
         """Empty candidates list should NOT auto-validate."""
         assert validation_service.should_auto_validate([]) is False
+
+
+class TestAutoValidateAmbiguity:
+    """Refus d'auto-validation quand deux candidats sont ex æquo (homonymes)."""
+
+    def test_ex_aequo_bloque_lauto_validation(self, validation_service):
+        """Deux homonymes à 100% : l'ordre API ne doit pas trancher seul."""
+        candidates = [
+            SearchResult(
+                id="1", title="The Killing", year=2011, score=100.0, source="tvdb"
+            ),
+            SearchResult(
+                id="2", title="The Killing", year=2007, score=100.0, source="tvdb"
+            ),
+        ]
+        assert validation_service.should_auto_validate(candidates) is False
+
+    def test_ecart_inferieur_a_la_marge_bloque(self, validation_service):
+        """Un écart sous la marge d'ambiguïté vaut ex æquo."""
+        candidates = [
+            SearchResult(
+                id="1", title="Le Bureau", year=2015, score=100.0, source="tvdb"
+            ),
+            SearchResult(
+                id="2", title="Le Bureau", year=2006, score=99.0, source="tvdb"
+            ),
+        ]
+        assert validation_service.should_auto_validate(candidates) is False
+
+    def test_ecart_franc_autorise_lauto_validation(self, validation_service):
+        """Au-delà de la marge, le meilleur candidat reste retenu."""
+        candidates = [
+            SearchResult(id="1", title="Avatar", year=2009, score=100.0, source="tmdb"),
+            SearchResult(
+                id="2", title="Avatar 2", year=2022, score=96.0, source="tmdb"
+            ),
+        ]
+        assert validation_service.should_auto_validate(candidates) is True
+
+    def test_candidat_unique_non_concerne(self, validation_service):
+        """Un candidat seul n'est jamais ambigu."""
+        candidates = [
+            SearchResult(id="1", title="Avatar", year=2009, score=100.0, source="tmdb")
+        ]
+        assert validation_service.should_auto_validate(candidates) is True
+
+
+# ============================================================================
+# Tests: collect_ambiguous_ids (cohérence de fiche à l'échelle du lot)
+# ============================================================================
+
+
+def _pending(pid: str, filename: str, candidates: list[dict]) -> PendingValidation:
+    """Construit un PendingValidation de test."""
+    return PendingValidation(
+        id=pid,
+        video_file=VideoFile(path=Path("/downloads") / filename, filename=filename),
+        candidates=candidates,
+        validation_status=ValidationStatus.PENDING,
+    )
+
+
+def _cand(cid: str, title: str, score: float = 100.0) -> dict:
+    return {"id": cid, "title": title, "score": score, "source": "tvdb"}
+
+
+class TestCollectAmbiguousIds:
+    """Un même titre de lot ne doit pas se répartir sur deux fiches."""
+
+    def test_lot_coherent_aucun_blocage(self, validation_service):
+        """Tous les épisodes désignent la même fiche : rien à bloquer."""
+        pendings = [
+            _pending("1", "The.Killing.S01E01.mkv", [_cand("95451", "The Killing")]),
+            _pending("2", "The.Killing.S01E02.mkv", [_cand("95451", "The Killing")]),
+        ]
+        assert validation_service.collect_ambiguous_ids(pendings) == set()
+
+    def test_lot_eclate_sur_deux_fiches_bloque_tout_le_groupe(self, validation_service):
+        """Cas The Killing : E14+ bascule sur l'autre fiche → groupe entier bloqué."""
+        pendings = [
+            _pending("1", "The.Killing.S01E01.mkv", [_cand("81831", "The Killing")]),
+            _pending("2", "The.Killing.S01E13.mkv", [_cand("81831", "The Killing")]),
+            _pending("3", "The.Killing.S01E14.mkv", [_cand("95451", "The Killing")]),
+            _pending("4", "The.Killing.S01E20.mkv", [_cand("95451", "The Killing")]),
+        ]
+        assert validation_service.collect_ambiguous_ids(pendings) == {
+            "1",
+            "2",
+            "3",
+            "4",
+        }
+
+    def test_titres_distincts_pas_de_conflit_croise(self, validation_service):
+        """Deux séries différentes dans le même batch ne se contaminent pas."""
+        pendings = [
+            _pending("1", "The.Killing.S01E01.mkv", [_cand("81831", "The Killing")]),
+            _pending("2", "Fargo.S01E01.mkv", [_cand("269613", "Fargo")]),
+        ]
+        assert validation_service.collect_ambiguous_ids(pendings) == set()
+
+    def test_scenario_the_killing_lot_entier_bloque(self, validation_service):
+        """Lot réel : E01-E13 voient les deux fiches, E14+ n'en voient qu'une."""
+        us = _cand("81831", "The Killing")
+        dk = _cand("95451", "The Killing")
+        pendings = [
+            _pending(
+                str(e), f"The.Killing.S01E{e:02d}.mkv", [us, dk] if e <= 13 else [dk]
+            )
+            for e in range(1, 21)
+        ]
+        # Aucun épisode ne doit être auto-validé : une seule décision humaine
+        assert validation_service.collect_ambiguous_ids(pendings) == {
+            str(e) for e in range(1, 21)
+        }
+
+    def test_matching_douteux_isole_ne_bloque_pas_le_lot(self, validation_service):
+        """Un candidat sous le seuil de haute confiance n'entraîne pas le groupe."""
+        pendings = [
+            _pending("1", "Fargo.S01E01.mkv", [_cand("269613", "Fargo")]),
+            _pending("2", "Fargo.S01E02.mkv", [_cand("269613", "Fargo")]),
+            _pending("3", "Fargo.S01E03.mkv", [_cand("999", "Fargo Bis", 70.0)]),
+        ]
+        assert validation_service.collect_ambiguous_ids(pendings) == set()
+
+    def test_fichiers_non_auto_validables_ignores(self, validation_service):
+        """Un fichier qui partait déjà en validation manuelle n'est pas compté."""
+        pendings = [
+            _pending("1", "The.Killing.S01E01.mkv", [_cand("81831", "The Killing")]),
+            _pending(
+                "2", "The.Killing.S01E14.mkv", [_cand("95451", "The Killing", 60.0)]
+            ),
+        ]
+        assert validation_service.collect_ambiguous_ids(pendings) == set()
+
+    def test_sans_candidat_ignore(self, validation_service):
+        """Un fichier sans candidat ne déclenche aucun blocage."""
+        pendings = [
+            _pending("1", "The.Killing.S01E01.mkv", []),
+            _pending("2", "The.Killing.S01E02.mkv", []),
+        ]
+        assert validation_service.collect_ambiguous_ids(pendings) == set()
 
 
 # ============================================================================
@@ -183,7 +332,13 @@ class TestProcessAutoValidation:
             id="1",
             video_file=sample_video_file,
             candidates=[
-                {"id": "19995", "title": "Avatar", "year": 2009, "score": 90.0, "source": "tmdb"}
+                {
+                    "id": "19995",
+                    "title": "Avatar",
+                    "year": 2009,
+                    "score": 90.0,
+                    "source": "tmdb",
+                }
             ],
             auto_validated=False,
             validation_status=ValidationStatus.PENDING,
@@ -205,7 +360,13 @@ class TestProcessAutoValidation:
             id="1",
             video_file=sample_video_file,
             candidates=[
-                {"id": "19995", "title": "Avatar", "year": 2009, "score": 70.0, "source": "tmdb"}
+                {
+                    "id": "19995",
+                    "title": "Avatar",
+                    "year": 2009,
+                    "score": 70.0,
+                    "source": "tmdb",
+                }
             ],
             auto_validated=False,
             validation_status=ValidationStatus.PENDING,
@@ -227,8 +388,20 @@ class TestProcessAutoValidation:
             id="1",
             video_file=sample_video_file,
             candidates=[
-                {"id": "19995", "title": "Avatar", "year": 2009, "score": 95.0, "source": "tmdb"},
-                {"id": "76600", "title": "Avatar 2", "year": 2022, "score": 90.0, "source": "tmdb"},
+                {
+                    "id": "19995",
+                    "title": "Avatar",
+                    "year": 2009,
+                    "score": 95.0,
+                    "source": "tmdb",
+                },
+                {
+                    "id": "76600",
+                    "title": "Avatar 2",
+                    "year": 2022,
+                    "score": 90.0,
+                    "source": "tmdb",
+                },
             ],
             auto_validated=False,
             validation_status=ValidationStatus.PENDING,
@@ -251,8 +424,20 @@ class TestProcessAutoValidation:
             id="1",
             video_file=sample_video_file,
             candidates=[
-                {"id": "19995", "title": "Avatar", "year": 2009, "score": 90.0, "source": "tmdb"},
-                {"id": "76600", "title": "Avatar 2", "year": 2022, "score": 85.0, "source": "tmdb"},
+                {
+                    "id": "19995",
+                    "title": "Avatar",
+                    "year": 2009,
+                    "score": 90.0,
+                    "source": "tmdb",
+                },
+                {
+                    "id": "76600",
+                    "title": "Avatar 2",
+                    "year": 2022,
+                    "score": 85.0,
+                    "source": "tmdb",
+                },
             ],
             auto_validated=False,
             validation_status=ValidationStatus.PENDING,
@@ -275,8 +460,13 @@ class TestValidateCandidate:
 
     @pytest.mark.asyncio
     async def test_validate_candidate_tmdb(
-        self, validation_service, mock_pending_repo, mock_tmdb_client,
-        sample_video_file, sample_search_result, sample_media_details
+        self,
+        validation_service,
+        mock_pending_repo,
+        mock_tmdb_client,
+        sample_video_file,
+        sample_search_result,
+        sample_media_details,
     ):
         """Source=tmdb -> appelle tmdb_client.get_details."""
         mock_tmdb_client.get_details = AsyncMock(return_value=sample_media_details)
@@ -288,15 +478,21 @@ class TestValidateCandidate:
             validation_status=ValidationStatus.PENDING,
         )
 
-        result = await validation_service.validate_candidate(pending, sample_search_result)
+        result = await validation_service.validate_candidate(
+            pending, sample_search_result
+        )
 
         mock_tmdb_client.get_details.assert_called_once_with("19995")
         assert result == sample_media_details
 
     @pytest.mark.asyncio
     async def test_validate_candidate_tvdb(
-        self, validation_service, mock_pending_repo, mock_tvdb_client,
-        sample_video_file, sample_media_details
+        self,
+        validation_service,
+        mock_pending_repo,
+        mock_tvdb_client,
+        sample_video_file,
+        sample_media_details,
     ):
         """Source=tvdb -> appelle tvdb_client.get_details."""
         mock_tvdb_client.get_details = AsyncMock(return_value=sample_media_details)
@@ -322,8 +518,13 @@ class TestValidateCandidate:
 
     @pytest.mark.asyncio
     async def test_validate_candidate_updates_status(
-        self, validation_service, mock_pending_repo, mock_tmdb_client,
-        sample_video_file, sample_search_result, sample_media_details
+        self,
+        validation_service,
+        mock_pending_repo,
+        mock_tmdb_client,
+        sample_video_file,
+        sample_search_result,
+        sample_media_details,
     ):
         """Verifie status=VALIDATED et selected_candidate_id mis a jour."""
         mock_tmdb_client.get_details = AsyncMock(return_value=sample_media_details)
@@ -431,7 +632,9 @@ class TestSearchManual:
         ]
         mock_tmdb_client.search = AsyncMock(return_value=expected_results)
 
-        results = await validation_service.search_manual("Avatar", is_series=False, year=2009)
+        results = await validation_service.search_manual(
+            "Avatar", is_series=False, year=2009
+        )
 
         mock_tmdb_client.search.assert_called_once_with("Avatar", year=2009)
         assert results == expected_results
@@ -466,7 +669,9 @@ class TestSearchManual:
         assert results == []
 
     @pytest.mark.asyncio
-    async def test_search_manual_client_no_api_key(self, mock_pending_repo, mock_matcher):
+    async def test_search_manual_client_no_api_key(
+        self, mock_pending_repo, mock_matcher
+    ):
         """Client avec api_key vide -> retourne liste vide."""
         tmdb_client = MagicMock()
         tmdb_client._api_key = None  # No API key
@@ -533,7 +738,9 @@ class TestSearchByExternalId:
         assert result == sample_media_details
 
     @pytest.mark.asyncio
-    async def test_search_by_external_id_no_client(self, mock_pending_repo, mock_matcher):
+    async def test_search_by_external_id_no_client(
+        self, mock_pending_repo, mock_matcher
+    ):
         """Client None -> retourne None."""
         service = ValidationService(
             pending_repo=mock_pending_repo,

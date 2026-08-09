@@ -385,8 +385,29 @@ uv run cineorg validate manual
 | Condition | Action |
 |-----------|--------|
 | Score ≥ 85 % **ET** candidat unique | Auto-validation |
+| Plusieurs candidats, meilleur score ≥ 95 % **ET** écart ≥ 2 points avec le suivant | Auto-validation (haute confiance) |
+| Plusieurs candidats ex æquo (écart < 2 points) | Validation manuelle (**homonymes**) |
 | Plusieurs candidats au-dessus du seuil | Validation manuelle (ambiguïté) |
 | Aucun candidat / score < 85 % | Validation manuelle |
+
+#### Garde-fous contre les séries homonymes
+
+Le score des séries repose uniquement sur la similarité du titre : deux fiches homonymes
+(par exemple *The Killing* danoise de 2007 et sa reprise américaine de 2011) obtiennent le
+même score, et seul l'ordre de retour de l'API — c'est-à-dire la popularité — les
+départagerait. Deux protections évitent qu'une série soit rattachée à la mauvaise fiche,
+ou pire, éclatée sur les deux :
+
+1. **Refus de l'ex æquo** : si le deuxième candidat est à moins de 2 points du premier,
+   aucune auto-validation n'a lieu — le choix revient à l'utilisateur.
+2. **Cohérence du lot** : les fichiers sont regroupés par titre extrait du nom de fichier.
+   Si, au sein d'un groupe, les candidats retenus ne désignent pas tous la même fiche,
+   *tout le groupe* part en validation manuelle. Ce cas survient quand une saison est plus
+   longue que le canon de la fiche retenue : le filtrage par nombre d'épisodes élimine cette
+   fiche pour les derniers épisodes, qui basculeraient alors sur la fiche homonyme.
+
+Une fois le bon candidat validé une seule fois, la cascade série propage le choix à tous les
+autres épisodes du lot.
 
 #### Formule de scoring
 

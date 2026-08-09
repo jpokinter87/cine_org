@@ -124,6 +124,10 @@ class MatchingStepMixin:
 
         pending_list = self._validation_service.list_pending()
 
+        # Fichiers d'un même titre dont l'auto-validation éclaterait la série
+        # sur deux fiches homonymes : laissés en validation manuelle.
+        ambiguous_ids = self._validation_service.collect_ambiguous_ids(pending_list)
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -136,10 +140,19 @@ class MatchingStepMixin:
             )
 
             for pend in pending_list:
+                if pend.id in ambiguous_ids:
+                    progress.advance(auto_task)
+                    continue
                 result = await self._validation_service.process_auto_validation(pend)
                 if result.auto_validated:
                     state.auto_validated_count += 1
                 progress.advance(auto_task)
+
+        if ambiguous_ids:
+            self._console.print(
+                f"[yellow]{len(ambiguous_ids)}[/yellow] fichier(s) laissé(s) en "
+                "validation manuelle : séries homonymes détectées dans le lot"
+            )
 
         self._console.print(
             f"[bold]{state.auto_validated_count}[/bold] fichier(s) auto-validé(s)"
