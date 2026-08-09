@@ -1,3 +1,9 @@
+## v2.12.0 (2026-08-09)
+
+### Feat
+
+- **completude**: afficher la qualité à rechercher pour les manques
+
 ## v2.11.0 (2026-08-09)
 
 ### Feat
