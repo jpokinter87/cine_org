@@ -1590,7 +1590,8 @@ La page **Validation** (`/validation`) liste les fichiers en attente de validati
 
 - Affichage du nom original et des candidats TMDB/TVDB proposés
 - Possibilité de **valider** un candidat, de le **rejeter** ou de **rechercher** manuellement un titre alternatif
-- Recherche par titre ou par ID TMDB/TVDB direct
+- Recherche par titre ou par ID TMDB/TVDB/IMDb direct
+- **Cascade série** : valider un épisode applique le même choix à tous les autres épisodes en attente de la même série, quel que soit le mode de validation (candidat proposé, recherche par titre ou recherche par ID externe). Le rapprochement se fait d'abord sur l'identifiant du candidat, puis, à défaut, sur le titre extrait du nom de fichier (uniquement pour les fichiers reconnus comme épisodes).
 
 ### Transfert
 

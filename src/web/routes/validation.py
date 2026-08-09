@@ -24,6 +24,9 @@ router = APIRouter(prefix="/validation")
 # Nombre max de candidats enrichis par page détail
 _MAX_ENRICHED_CANDIDATES = 10
 
+# Sources dont un candidat validé désigne une série (déclenchent la cascade)
+_SERIES_SOURCES = ("tvdb", "tmdb_tv")
+
 
 def _is_series(candidates: list[SearchResult], filename: str) -> bool:
     """Détecte si le fichier est une série (source tvdb ou pattern SxxExx)."""
@@ -288,9 +291,10 @@ async def validate_candidate(
             f'<div class="action-msg action-error">Erreur : {exc}</div>',
         )
 
-    # Auto-valider les autres épisodes de la même série (source tvdb)
+    # Auto-valider les autres épisodes de la même série (sources série :
+    # tvdb, ou tmdb_tv quand la validation vient d'une recherche par ID externe)
     auto_count = 0
-    if selected.source == "tvdb":
+    if selected.source in _SERIES_SOURCES:
         auto_count = await _auto_validate_series_episodes(service, pending, selected)
 
     title = selected.title or candidate_id
@@ -363,25 +367,32 @@ async def _auto_validate_series_episodes(service, pending, candidate) -> int:
 
     for other in remaining:
         other_candidates = parse_candidates(other.candidates)
-        matching = [c for c in other_candidates if c.id == candidate_id]
+        matching = [
+            c
+            for c in other_candidates
+            if c.id == candidate_id and c.source == candidate.source
+        ]
         if matching:
             # Cas normal : même candidat dans la liste
             await service.validate_candidate(other, matching[0])
             auto_count += 1
             fname = _get_filename(other) or "?"
             logger.info("Auto-validé (cascade série): %s", fname)
-        elif not other_candidates and ref_title:
-            # Fallback : aucun candidat, comparer le titre guessit
-            other_filename = _get_filename(other)
-            other_title = (
-                guessit(other_filename).get("title", "").lower().strip()
-                if other_filename
-                else ""
-            )
-            if other_title and other_title == ref_title:
-                await service.validate_candidate(other, candidate)
-                auto_count += 1
-                logger.info("Auto-validé (cascade titre): %s", other_filename)
+            continue
+
+        # Fallback : le candidat validé manuellement (recherche par titre ou par
+        # ID externe) n'est présent dans aucun candidat de l'épisode. On se rabat
+        # sur le titre guessit — même titre + fichier détecté série ⇒ même série.
+        if not ref_title:
+            continue
+        other_filename = _get_filename(other)
+        if not other_filename or not _is_series(other_candidates, other_filename):
+            continue
+        other_title = guessit(other_filename).get("title", "").lower().strip()
+        if other_title and other_title == ref_title:
+            await service.validate_candidate(other, candidate)
+            auto_count += 1
+            logger.info("Auto-validé (cascade titre): %s", other_filename)
 
     return auto_count
 
@@ -666,7 +677,9 @@ async def search_by_id(
                 title=details.title or id_value,
                 year=details.year,
                 score=100.0,
-                source="tmdb_tv" if details.is_tv else (id_type if id_type != "imdb" else "tmdb"),
+                source="tmdb_tv"
+                if details.is_tv
+                else (id_type if id_type != "imdb" else "tmdb"),
             ),
             "details": details,
             "score_class": "score-high",
