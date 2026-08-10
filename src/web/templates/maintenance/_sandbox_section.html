@@ -1,3 +1,4 @@
+{% from "_macros.html" import hint_icon %}
 {% if flash_message is defined and flash_message %}
 <div class="sandbox-flash">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
@@ -91,16 +92,27 @@
     </div>
 
     {% if is_local %}
+    <div class="sandbox-move-progress" id="sandbox-delete-progress" style="display: none;">
+        <div class="maint-progress-bar-track">
+            <div class="maint-progress-bar-fill" id="sandbox-delete-bar"></div>
+        </div>
+        <div class="maint-progress-phase" id="sandbox-delete-phase"></div>
+    </div>
+
     <div class="sandbox-actions" id="sandbox-actions">
         <div class="sandbox-actions-left">
             <span class="sandbox-selection-count" id="sandbox-sel-count">0 sélectionné(s)</span>
             <span class="sandbox-selection-warn" id="sandbox-sel-warn" hidden></span>
         </div>
         <div class="sandbox-actions-right">
-            <label class="sandbox-allow-unknown" title="Autorise la suppression des fichiers au statut indéterminé. Les fichiers sans remplaçant restent protégés.">
-                <input type="checkbox" name="allow_unknown" id="sandbox-allow-unknown" value="1">
-                Inclure les « à vérifier »
+            {% if sandbox_unknown_count %}
+            <label class="sandbox-allow-unknown">
+                <input type="checkbox" name="allow_unknown" id="sandbox-allow-unknown" value="1"
+                       onchange="sandboxUpdateActions()">
+                <span>Autoriser aussi les « à vérifier » ({{ sandbox_unknown_count }})</span>
+                {{ hint_icon("Un fichier « à vérifier » est un fichier que CineOrg n'a pas su rattacher à une fiche de la vidéothèque : nommage inhabituel, fichier non vidéo, ou média absent de la base. Il n'est donc pas prouvé qu'une autre copie existe. Sans cette case, ces fichiers sont épargnés même s'ils sont cochés. En la cochant, vous prenez la responsabilité de les supprimer après les avoir examinés — le filtre « À vérifier » permet de les lister. Les fichiers « Seule copie » restent protégés dans tous les cas.") }}
             </label>
+            {% endif %}
             <button type="button" class="sandbox-btn sandbox-btn-reinject" id="sandbox-btn-reinject" disabled
                     onclick="sandboxSubmit('reinject')">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>

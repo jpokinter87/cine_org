@@ -187,7 +187,10 @@ class SandboxService:
             return None
 
     def delete_files(
-        self, paths: list[Path], allow_unknown: bool = False
+        self,
+        paths: list[Path],
+        allow_unknown: bool = False,
+        on_progress: Optional[Callable[[int, int, str], None]] = None,
     ) -> DeletionReport:
         """Supprime définitivement des fichiers du sandbox.
 
@@ -201,6 +204,8 @@ class SandboxService:
         Args:
             paths: Fichiers à supprimer
             allow_unknown: Autorise la suppression des statuts indéterminés
+            on_progress: Callback (traités, total, nom du fichier) — une purge
+                de plusieurs centaines de fichiers sur un NAS prend du temps
 
         Returns:
             DeletionReport (supprimés, refusés avec motif, espace libéré).
@@ -208,7 +213,10 @@ class SandboxService:
         from src.services.sandbox_audit import MISSING, REPLACED, UNKNOWN
 
         report = DeletionReport()
-        for path in paths:
+        total = len(paths)
+        for index, path in enumerate(paths, start=1):
+            if on_progress:
+                on_progress(index, total, path.name)
             if not path.exists():
                 logger.warning("Fichier déjà absent : {}", path)
                 continue
@@ -307,17 +315,29 @@ class SandboxService:
     def _cleanup_empty_parents(
         self, paths: list[Path], root: Path | None = None
     ) -> None:
-        """Nettoie les répertoires vides en remontant vers root."""
-        stop = (root or self._storage_dir).resolve()
-        seen: set[Path] = set()
+        """Nettoie les répertoires vides en remontant vers root.
 
+        Les répertoires candidats sont collectés d'abord, puis traités du plus
+        profond au moins profond : un parent ne devient vide qu'une fois tous
+        ses enfants retirés, et doit donc être examiné après eux.
+        """
+        stop = (root or self._storage_dir).resolve()
+
+        candidates: set[Path] = set()
         for path in paths:
             parent = path.parent.resolve()
-            while parent != stop and parent not in seen and parent != parent.parent:
-                seen.add(parent)
-                if parent.exists() and parent.is_dir() and not any(parent.iterdir()):
-                    parent.rmdir()
-                    logger.debug("Répertoire vide supprimé : {}", parent)
-                    parent = parent.parent.resolve()
-                else:
-                    break
+            while parent != stop and parent != parent.parent:
+                try:
+                    parent.relative_to(stop)
+                except ValueError:
+                    break  # ne jamais remonter au-dessus de la racine
+                candidates.add(parent)
+                parent = parent.parent
+
+        for directory in sorted(candidates, key=lambda p: len(p.parts), reverse=True):
+            try:
+                if directory.is_dir() and not any(directory.iterdir()):
+                    directory.rmdir()
+                    logger.debug("Répertoire vide supprimé : {}", directory)
+            except OSError as exc:
+                logger.debug("Répertoire non supprimé ({}) : {}", exc, directory)

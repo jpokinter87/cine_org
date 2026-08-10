@@ -298,3 +298,46 @@ class TestSuppressionVerifiee:
 
         assert svc.delete_files([f], allow_unknown=True).deleted == 0
         assert f.exists()
+
+
+class TestNettoyageRepertoiresVides:
+    """Après une purge, aucune arborescence vide ne doit subsister."""
+
+    def test_parent_commun_vide_par_plusieurs_sous_dossiers(self, service, dirs):
+        """Deux dossiers frères vidés : leur parent doit disparaître aussi.
+
+        Régression : le parent était marqué « déjà examiné » lors du premier
+        fichier, alors qu'il n'était pas encore vide — il n'était donc jamais
+        réexaminé une fois le second dossier vidé.
+        """
+        base = dirs["sandbox"] / "Series" / "Animation" / "S" / "Star Wars"
+        f1 = _create_file(base / "Saison 1" / "ep01.mkv")
+        f2 = _create_file(base / "Saison 2" / "ep01.mkv")
+
+        service.delete_files([f1, f2])
+
+        assert not (base / "Saison 1").exists()
+        assert not (base / "Saison 2").exists()
+        assert not base.exists()
+        assert not (dirs["sandbox"] / "Series" / "Animation" / "S").exists()
+        assert not (dirs["sandbox"] / "Series" / "Animation").exists()
+
+    def test_parent_conserve_si_encore_occupe(self, service, dirs):
+        """Un dossier qui contient encore un fichier doit être conservé."""
+        base = dirs["sandbox"] / "Series" / "Show"
+        f1 = _create_file(base / "Saison 1" / "ep01.mkv")
+        _create_file(base / "Saison 2" / "ep02.mkv")
+
+        service.delete_files([f1])
+
+        assert not (base / "Saison 1").exists()
+        assert (base / "Saison 2").exists()
+        assert base.exists()
+
+    def test_ne_remonte_pas_au_dela_du_sandbox(self, service, dirs):
+        """La racine du sandbox ne doit jamais être supprimée."""
+        f = _create_file(dirs["sandbox"] / "isole.mkv")
+
+        service.delete_files([f])
+
+        assert dirs["sandbox"].exists()

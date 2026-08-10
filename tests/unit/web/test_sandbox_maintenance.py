@@ -148,3 +148,128 @@ class TestRouteSuppression:
         await sandbox_delete(request)
 
         assert service.delete_files.call_args[0][1] is False
+
+
+class TestRenduSection:
+    """Ergonomie du cartouche : actions visibles, case de forçage explicite."""
+
+    def _rendu(self, fichiers):
+        from src.web.deps import templates
+
+        return templates.env.get_template("maintenance/_sandbox_section.html").render(
+            is_local=True, **_sandbox_context(fichiers)
+        )
+
+    def test_case_de_forcage_avec_bulle_daide(self):
+        """La case « à vérifier » doit être expliquée, pas seulement nommée."""
+        html = self._rendu([_fichier("a.mkv", REPLACED), _fichier("b.json", UNKNOWN)])
+
+        assert "sandbox-allow-unknown" in html
+        assert "field-hint" in html  # bulle d'aide du projet
+        assert "Seule copie" in html  # la bulle rappelle ce qui reste protégé
+
+    def test_case_masquee_sans_fichier_a_verifier(self):
+        """Inutile d'exposer un réglage qui ne s'applique à rien."""
+        html = self._rendu([_fichier("a.mkv", REPLACED)])
+        assert "sandbox-allow-unknown" not in html
+
+    def test_barre_dactions_toujours_rendue(self):
+        """Les boutons ne doivent pas dépendre du filtre affiché."""
+        html = self._rendu([_fichier("a.mkv", MISSING)])
+
+        assert 'id="sandbox-btn-delete"' in html
+        assert 'id="sandbox-btn-reinject"' in html
+
+    def test_donnees_de_selection_exposees(self):
+        """Le JS a besoin du statut et de l'espace récupérable par ligne."""
+        html = self._rendu([_fichier("a.mkv", REPLACED, 1234)])
+
+        assert 'data-status="replaced"' in html
+        assert 'data-reclaimable="1234"' in html
+
+
+class TestPurgeAvecProgression:
+    """Une purge de centaines de fichiers doit rendre compte de son avancement."""
+
+    @pytest.mark.asyncio
+    async def test_depot_de_la_selection(self, monkeypatch):
+        """delete-start mémorise la sélection pour le flux SSE."""
+        import src.web.routes.maintenance as mod
+        from src.web.routes.maintenance import sandbox_delete_start
+
+        request = MagicMock()
+        request.client.host = "127.0.0.1"
+        donnees = MagicMock()
+        donnees.getlist.return_value = ["/a.mkv", "/b.mkv"]
+        donnees.get.side_effect = lambda k, d=None: {"allow_unknown": "1"}.get(k, d)
+
+        async def _form():
+            return donnees
+
+        request.form = _form
+
+        reponse = await sandbox_delete_start(request)
+
+        assert reponse.status_code == 204
+        depot = mod._analysis_cache["sandbox_delete"]
+        assert depot["paths"] == [Path("/a.mkv"), Path("/b.mkv")]
+        assert depot["allow_unknown"] is True
+        mod._analysis_cache.pop("sandbox_delete", None)
+
+    @pytest.mark.asyncio
+    async def test_depot_refuse_hors_machine_maitre(self):
+        from src.web.routes.maintenance import sandbox_delete_start
+
+        request = MagicMock()
+        request.client.host = "192.168.1.50"
+        reponse = await sandbox_delete_start(request)
+        assert reponse.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_flux_emet_progression_puis_resultat(self, monkeypatch):
+        """Le flux SSE relaie l'avancement fichier par fichier, puis le HTML final."""
+        import src.web.routes.maintenance as mod
+        from src.web.routes.maintenance import sandbox_delete_progress
+
+        def _supprime(paths, allow_unknown, on_progress=None):
+            for i, p in enumerate(paths, start=1):
+                if on_progress:
+                    on_progress(i, len(paths), p.name)
+            return DeletionReport(deleted=len(paths), reclaimed_bytes=1024)
+
+        service = MagicMock()
+        service.delete_files.side_effect = _supprime
+        service.list_sandboxed.return_value = []
+        monkeypatch.setattr(mod, "_get_sandbox_service", lambda *a, **k: service)
+
+        mod._analysis_cache["sandbox_delete"] = {
+            "paths": [Path("/a.mkv"), Path("/b.mkv")],
+            "allow_unknown": False,
+        }
+
+        request = MagicMock()
+        request.client.host = "127.0.0.1"
+        reponse = await sandbox_delete_progress(request)
+
+        recu = ""
+        async for morceau in reponse.body_iterator:
+            recu += morceau
+
+        assert "event: progress" in recu
+        assert "event: complete" in recu
+        assert "2 fichier(s) supprimé(s)" in recu
+
+    @pytest.mark.asyncio
+    async def test_flux_sans_selection(self, monkeypatch):
+        import src.web.routes.maintenance as mod
+        from src.web.routes.maintenance import sandbox_delete_progress
+
+        mod._analysis_cache.pop("sandbox_delete", None)
+        request = MagicMock()
+        request.client.host = "127.0.0.1"
+        reponse = await sandbox_delete_progress(request)
+
+        recu = ""
+        async for morceau in reponse.body_iterator:
+            recu += morceau
+        assert "Aucun fichier sélectionné" in recu

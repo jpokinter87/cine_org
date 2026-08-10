@@ -171,6 +171,7 @@ def _sandbox_context(files, flash_message: str | None = None) -> dict:
         ),
         "sandbox_purgeable_count": sum(1 for f in files if f.status == "replaced"),
         "sandbox_blocked_count": sum(1 for f in files if f.status != "replaced"),
+        "sandbox_unknown_count": sum(1 for f in files if f.status == "unknown"),
         "flash_message": flash_message,
     }
 
@@ -1625,6 +1626,11 @@ async def sandbox_delete(request: Request):
     sandbox_svc = _get_sandbox_service(container)
     report = await asyncio.to_thread(sandbox_svc.delete_files, paths, allow_unknown)
 
+    return HTMLResponse(_sandbox_section_html(sandbox_svc, _delete_message(report)))
+
+
+def _delete_message(report) -> str:
+    """Résume une suppression : volume libéré et fichiers épargnés."""
     message = (
         f"{report.deleted} fichier(s) supprimé(s) — "
         f"{_format_size(report.reclaimed_bytes)} libéré(s)."
@@ -1632,14 +1638,104 @@ async def sandbox_delete(request: Request):
     if report.refused:
         motifs = sorted({motif for _, motif in report.refused})
         message += f" {len(report.refused)} épargné(s) : {', '.join(motifs)}."
+    return message
 
-    # Retourner la section mise à jour
-    sandboxed = sandbox_svc.list_sandboxed()
-    html = templates.env.get_template("maintenance/_sandbox_section.html").render(
+
+def _sandbox_section_html(sandbox_svc, message: str) -> str:
+    """Rend la section sandbox à jour après une action."""
+    return templates.env.get_template("maintenance/_sandbox_section.html").render(
         is_local=True,
-        **_sandbox_context(sandboxed, message),
+        **_sandbox_context(sandbox_svc.list_sandboxed(), message),
     )
-    return HTMLResponse(html)
+
+
+@router.post("/maintenance/sandbox/delete-start", response_class=HTMLResponse)
+async def sandbox_delete_start(request: Request):
+    """Mémorise la sélection à purger, exécutée ensuite par le flux SSE.
+
+    EventSource ne sait émettre que des GET : la liste des fichiers (plusieurs
+    centaines) ne peut pas transiter par l'URL, d'où ce dépôt préalable.
+    """
+    client_host = request.client.host if request.client else ""
+    if client_host not in _LOCAL_HOSTS:
+        return HTMLResponse(
+            '<div class="action-msg action-error">Action autorisee uniquement depuis la machine maitre.</div>',
+            status_code=403,
+        )
+
+    form = await request.form()
+    _analysis_cache["sandbox_delete"] = {
+        "paths": [Path(p) for p in form.getlist("selected")],
+        "allow_unknown": form.get("allow_unknown") in ("1", "on", "true"),
+    }
+    return HTMLResponse("", status_code=204)
+
+
+@router.get("/maintenance/sandbox/delete-progress")
+async def sandbox_delete_progress(request: Request):
+    """Exécute la purge en diffusant la progression (SSE)."""
+    client_host = request.client.host if request.client else ""
+    if client_host not in _LOCAL_HOSTS:
+        return HTMLResponse(
+            "<p>Action autorisee uniquement depuis la machine maitre.</p>",
+            status_code=403,
+        )
+
+    container = request.app.state.container
+    pending = _analysis_cache.pop("sandbox_delete", None)
+
+    if not pending or not pending["paths"]:
+
+        async def empty_stream():
+            yield _sse_complete(
+                '<div class="sandbox-msg sandbox-msg-warn">Aucun fichier sélectionné.</div>'
+            )
+
+        return StreamingResponse(
+            empty_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    paths = pending["paths"]
+    allow_unknown = pending["allow_unknown"]
+    sandbox_svc = _get_sandbox_service(container)
+    total = len(paths)
+
+    async def event_stream():
+        queue: asyncio.Queue = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
+        def on_progress(done: int, count: int, filename: str) -> None:
+            # Appelé depuis le thread de suppression
+            loop.call_soon_threadsafe(queue.put_nowait, (done, count, filename))
+
+        task = asyncio.create_task(
+            asyncio.to_thread(
+                sandbox_svc.delete_files, paths, allow_unknown, on_progress
+            )
+        )
+
+        yield _sse_progress(0, total, "Démarrage…")
+        while not task.done() or not queue.empty():
+            try:
+                done, count, filename = await asyncio.wait_for(queue.get(), timeout=0.5)
+            except asyncio.TimeoutError:
+                continue
+            yield _sse_progress(done, count, filename)
+
+        report = await task
+        yield _sse_complete(_sandbox_section_html(sandbox_svc, _delete_message(report)))
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/maintenance/sandbox/reinject", response_class=HTMLResponse)

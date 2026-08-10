@@ -428,10 +428,16 @@ function sandboxUpdateActions() {
     var btnReinject = document.getElementById('sandbox-btn-reinject');
     var countMsg = document.getElementById('sandbox-delete-count-msg');
 
+    var allowUnknown = document.getElementById('sandbox-allow-unknown');
+    var forcer = allowUnknown && allowUnknown.checked;
+
     var octets = 0, bloques = 0;
     checked.forEach(function(cb) {
+        // Un « à vérifier » n'est plus protégé si la case de forçage est cochée
+        var protege = cb.getAttribute('data-blocked')
+            && !(forcer && cb.getAttribute('data-status') === 'unknown');
+        if (protege) { bloques++; return; }
         octets += parseInt(cb.getAttribute('data-reclaimable') || '0', 10);
-        if (cb.getAttribute('data-blocked')) bloques++;
     });
 
     if (countEl) countEl.textContent = count + ' sélectionné(s)';
@@ -460,6 +466,13 @@ function sandboxSubmit(action) {
     if (!form) return;
     var formData = new FormData(form);
 
+    // La purge peut porter sur des centaines de fichiers sur un NAS :
+    // on la suit en direct plutôt que de laisser l'utilisateur sans réponse.
+    if (action === 'delete') {
+        sandboxDeleteWithProgress(formData);
+        return;
+    }
+
     fetch('/maintenance/sandbox/' + action, {
         method: 'POST',
         body: formData
@@ -467,6 +480,55 @@ function sandboxSubmit(action) {
     .then(function(resp) { return resp.text(); })
     .then(function(html) {
         document.getElementById('sandbox-section').innerHTML = html;
+    });
+}
+
+function sandboxDeleteWithProgress(formData) {
+    var actions = document.getElementById('sandbox-actions');
+    var progress = document.getElementById('sandbox-delete-progress');
+    var bar = document.getElementById('sandbox-delete-bar');
+    var phase = document.getElementById('sandbox-delete-phase');
+
+    if (actions) actions.style.display = 'none';
+    if (progress) {
+        progress.style.display = 'block';
+        bar.style.width = '2%';
+        phase.textContent = 'Démarrage…';
+    }
+
+    fetch('/maintenance/sandbox/delete-start', { method: 'POST', body: formData })
+    .then(function() {
+        var es = new EventSource('/maintenance/sandbox/delete-progress');
+
+        es.addEventListener('progress', function(e) {
+            var d = JSON.parse(e.data);
+            var pct = d.total ? (d.phase / d.total) * 100 : 0;
+            bar.style.width = Math.max(pct, 2) + '%';
+            phase.innerHTML = '<span class="maint-phase-counter">' + d.phase + '/' + d.total
+                + '</span> ' + d.label;
+        });
+
+        es.addEventListener('complete', function(e) {
+            es.close();
+            bar.style.width = '100%';
+            bar.classList.add('complete');
+            phase.textContent = 'Purge terminée';
+            setTimeout(function() {
+                var d = JSON.parse(e.data);
+                document.getElementById('sandbox-section').innerHTML = d.html;
+            }, 400);
+        });
+
+        es.addEventListener('error', function() {
+            es.close();
+            bar.classList.add('error');
+            phase.textContent = 'Erreur pendant la purge';
+            setTimeout(function() {
+                if (progress) progress.style.display = 'none';
+                bar.classList.remove('error');
+                if (actions) actions.style.display = '';
+            }, 2000);
+        });
     });
 }
 
@@ -743,10 +805,16 @@ function startFix(type) {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-top: 0.75rem;
-    padding-top: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 0;
+    padding: 0.75rem 0 0.25rem;
     border-top: 1px solid var(--border-subtle);
     gap: 0.75rem;
+    /* Toujours atteignable, quel que soit le nombre de lignes affichées */
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: var(--bg-card, #16181d);
 }
 .sandbox-actions-left { flex-shrink: 0; }
 .sandbox-actions-right {
@@ -807,6 +875,19 @@ function startFix(type) {
     padding: 0.5rem;
     color: var(--text-muted);
     font-size: 0.8125rem;
+}
+/* Le tableau sandbox affiche des chemins complets : il lui faut les deux colonnes */
+.maint-card-sandbox {
+    grid-column: 1 / -1;
+}
+/* Hauteur bornée : sans quoi 700 lignes repoussent la barre d'actions hors écran */
+.sandbox-table-wrap {
+    max-height: 26rem;
+    overflow-y: auto;
+}
+.sandbox-td-origin code {
+    white-space: normal;
+    word-break: break-word;
 }
 /* Récapitulatif, filtres et statuts d'audit */
 .sandbox-summary {
@@ -875,12 +956,17 @@ function startFix(type) {
 .sandbox-allow-unknown {
     display: inline-flex;
     align-items: center;
-    gap: 0.3rem;
+    gap: 0.35rem;
     font-size: 0.75rem;
-    color: var(--text-muted);
-    cursor: help;
+    color: var(--accent-amber);
+    cursor: pointer;
     margin-right: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid rgba(232, 168, 73, 0.25);
+    border-radius: 6px;
+    background: rgba(232, 168, 73, 0.06);
 }
+.sandbox-allow-unknown input { cursor: pointer; }
 .sandbox-selection-warn {
     margin-left: 0.5rem;
     font-size: 0.75rem;
