@@ -1,3 +1,13 @@
+## v2.15.0 (2026-08-10)
+
+### Feat
+
+- **sandbox**: purge vérifiée — statut d'audit et refus serveur
+
+### Fix
+
+- **sandbox**: nettoyage des répertoires vides, progression et ergonomie
+
 ## v2.14.0 (2026-08-09)
 
 ### Feat
