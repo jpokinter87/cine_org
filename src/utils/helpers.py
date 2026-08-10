@@ -9,6 +9,8 @@ Ce module centralise les fonctions reutilisees a travers le codebase :
 """
 
 import unicodedata
+from collections.abc import Sequence
+from pathlib import Path
 from typing import Optional
 
 from src.core.ports.api_clients import SearchResult
@@ -155,7 +157,7 @@ def strip_article(title: str) -> str:
     for article in IGNORED_ARTICLES:
         if article.endswith("'"):
             if title_lower.startswith(article):
-                rest = title[len(article):]
+                rest = title[len(article) :]
                 if rest:
                     return rest
 
@@ -205,3 +207,33 @@ def parse_candidates(candidates: list) -> list[SearchResult]:
     if not candidates:
         return []
     return [parse_candidate(c) for c in candidates]
+
+
+def managed_roots(base: Path, subdirs: Optional[Sequence[str]] = None) -> list[Path]:
+    """
+    Retourne les racines a balayer sous ``base``, limitees aux dossiers geres.
+
+    storage/ et video/ hebergent aussi des contenus etrangers a la videotheque.
+    Restreindre les parcours aux sous-repertoires geres evite d'indexer des
+    dizaines de milliers de fichiers inutiles et de rapporter des anomalies sur
+    des contenus hors perimetre.
+
+    Si aucun des sous-repertoires geres n'existe, ``base`` est renvoye tel quel :
+    une installation organisee autrement continue de fonctionner.
+
+    Args:
+        base: Racine (storage_dir ou video_dir)
+        subdirs: Noms des sous-repertoires geres (defaut: MANAGED_SUBDIRS)
+
+    Returns:
+        Liste des repertoires a parcourir, dans l'ordre de ``subdirs``
+    """
+    from src.utils.constants import MANAGED_SUBDIRS
+
+    base = Path(base)
+    roots = [
+        base / name
+        for name in (subdirs if subdirs is not None else MANAGED_SUBDIRS)
+        if (base / name).is_dir()
+    ]
+    return roots or [base]

@@ -214,9 +214,9 @@ class IntegrityChecker:
     """
 
     # Extensions video a scanner
-    VIDEO_EXTENSIONS = frozenset({
-        ".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v"
-    })
+    VIDEO_EXTENSIONS = frozenset(
+        {".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v"}
+    )
 
     def __init__(
         self,
@@ -300,24 +300,29 @@ class IntegrityChecker:
         if not self._storage_dir or not self._storage_dir.exists():
             return
 
-        # Lister tous les fichiers video dans storage
-        for video_file in self._storage_dir.rglob("*"):
-            if video_file.is_dir():
-                continue
-            if video_file.is_symlink():
-                continue
-            if video_file.suffix.lower() not in self.VIDEO_EXTENSIONS:
-                continue
+        # Lister les fichiers video des repertoires geres. Hors de ceux-ci
+        # (musique, educatif...), aucun fichier n'est cense figurer en base :
+        # tous seraient signales comme orphelins a tort.
+        from src.utils.helpers import managed_roots
 
-            # Verifier si le fichier existe en BDD
-            existing = self._video_file_repo.get_by_path(video_file)
-            if existing is None:
-                report.issues.append(
-                    IntegrityIssue(
-                        type=IssueType.ORPHAN_FILE,
-                        path=video_file,
+        for racine in managed_roots(self._storage_dir):
+            for video_file in racine.rglob("*"):
+                if video_file.is_dir():
+                    continue
+                if video_file.is_symlink():
+                    continue
+                if video_file.suffix.lower() not in self.VIDEO_EXTENSIONS:
+                    continue
+
+                # Verifier si le fichier existe en BDD
+                existing = self._video_file_repo.get_by_path(video_file)
+                if existing is None:
+                    report.issues.append(
+                        IntegrityIssue(
+                            type=IssueType.ORPHAN_FILE,
+                            path=video_file,
+                        )
                     )
-                )
 
     def _check_broken_symlinks(self, report: IntegrityReport) -> None:
         """Detecte les symlinks casses dans video/."""

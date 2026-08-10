@@ -9,34 +9,46 @@ Ce module contient toutes les constantes utilisees dans l'application:
 - Mapping des IDs de genre TMDB vers noms francais
 """
 
+# Sous-repertoires de storage/ et video/ geres par CineOrg.
+#
+# Les deux racines hebergent aussi des contenus etrangers a la videotheque
+# (musique, educatif, documents...). Les balayages s'y limitent : cela evite
+# d'indexer des dizaines de milliers de fichiers inutiles et de signaler des
+# anomalies sur des contenus que l'application ne gere pas.
+MANAGED_SUBDIRS = ("Films", "Series")
+
 # Extensions video reconnues
-VIDEO_EXTENSIONS = frozenset({
-    ".mkv",
-    ".mp4",
-    ".avi",
-    ".mov",
-    ".wmv",
-    ".flv",
-    ".webm",
-    ".m4v",
-    ".mpg",
-    ".mpeg",
-    ".ts",
-    ".vob",
-})
+VIDEO_EXTENSIONS = frozenset(
+    {
+        ".mkv",
+        ".mp4",
+        ".avi",
+        ".mov",
+        ".wmv",
+        ".flv",
+        ".webm",
+        ".m4v",
+        ".mpg",
+        ".mpeg",
+        ".ts",
+        ".vob",
+    }
+)
 
 # Patterns a ignorer (sample, trailers, extras)
-IGNORED_PATTERNS = frozenset({
-    "sample",
-    "trailer",
-    "preview",
-    "extras",
-    "behind the scenes",
-    "deleted scenes",
-    "featurette",
-    "interview",
-    "bonus",
-})
+IGNORED_PATTERNS = frozenset(
+    {
+        "sample",
+        "trailer",
+        "preview",
+        "extras",
+        "behind the scenes",
+        "deleted scenes",
+        "featurette",
+        "interview",
+        "bonus",
+    }
+)
 
 # Hierarchie des genres (ordre de priorite pour le classement)
 # Animation > Science-Fiction > Fantastique > Horreur > Action > ...
@@ -63,34 +75,36 @@ GENRE_HIERARCHY = (
 )
 
 # Articles a ignorer pour le tri alphabetique (fr/en/de/es)
-IGNORED_ARTICLES = frozenset({
-    # Francais
-    "le",
-    "la",
-    "les",
-    "l'",
-    "un",
-    "une",
-    "des",
-    "de",
-    "du",
-    "au",
-    "aux",
-    # Anglais
-    "the",
-    "a",
-    "an",
-    # Allemand
-    "der",
-    "die",
-    "das",
-    "ein",
-    "eine",
-    # Espagnol
-    "el",
-    "los",
-    "las",
-})
+IGNORED_ARTICLES = frozenset(
+    {
+        # Francais
+        "le",
+        "la",
+        "les",
+        "l'",
+        "un",
+        "une",
+        "des",
+        "de",
+        "du",
+        "au",
+        "aux",
+        # Anglais
+        "the",
+        "a",
+        "an",
+        # Allemand
+        "der",
+        "die",
+        "das",
+        "ein",
+        "eine",
+        # Espagnol
+        "el",
+        "los",
+        "las",
+    }
+)
 
 # Mapping des IDs de genre TMDB vers noms francais
 # Source: https://api.themoviedb.org/3/genre/movie/list?language=fr-FR

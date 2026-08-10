@@ -1,3 +1,9 @@
+## v2.16.0 (2026-08-11)
+
+### Feat
+
+- **scope**: limiter les balayages aux répertoires gérés
+
 ## v2.15.0 (2026-08-10)
 
 ### Feat

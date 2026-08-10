@@ -41,6 +41,12 @@ class ImportResult:
     error_message: Optional[str] = None
 
 
+def _iter_roots(roots):
+    """Parcourt recursivement plusieurs racines."""
+    for root in roots:
+        yield from root.rglob("*")
+
+
 class ImporterService:
     """
     Service d'import de videotheque existante.
@@ -88,9 +94,7 @@ class ImporterService:
         self._compute_hash_fn = compute_hash_fn
         self._dry_run = dry_run
 
-    def scan_library(
-        self, storage_dir: Path
-    ) -> Generator[ImportResult, None, None]:
+    def scan_library(self, storage_dir: Path) -> Generator[ImportResult, None, None]:
         """
         Scanne un repertoire de stockage et importe les fichiers video.
 
@@ -104,9 +108,11 @@ class ImporterService:
             ImportResult pour chaque fichier traite
         """
         from src.adapters.file_system import IGNORED_PATTERNS, VIDEO_EXTENSIONS
+        from src.utils.helpers import managed_roots
 
-        # Parcourir recursivement le repertoire
-        for file_path in storage_dir.rglob("*"):
+        # Parcourir les repertoires geres uniquement : le volume heberge aussi
+        # des contenus etrangers a la videotheque (musique, educatif...)
+        for file_path in _iter_roots(managed_roots(storage_dir)):
             # Ignorer les repertoires et symlinks
             if file_path.is_dir() or file_path.is_symlink():
                 continue
@@ -282,9 +288,10 @@ class ImporterService:
             ImportResult pour chaque symlink traite
         """
         from src.adapters.file_system import IGNORED_PATTERNS, VIDEO_EXTENSIONS
+        from src.utils.helpers import managed_roots
 
-        # Parcourir recursivement le repertoire
-        for symlink_path in video_dir.rglob("*"):
+        # Parcourir les repertoires geres uniquement
+        for symlink_path in _iter_roots(managed_roots(video_dir)):
             # Ignorer les repertoires
             if symlink_path.is_dir():
                 continue

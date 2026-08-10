@@ -16,7 +16,11 @@ from loguru import logger
 from src.services.integrity import RepairAction, RepairActionType
 
 from .file_indexer import FileIndexer
-from .filename_analyzer import extract_clean_title, extract_series_info, normalize_filename
+from .filename_analyzer import (
+    extract_clean_title,
+    extract_series_info,
+    normalize_filename,
+)
 from .similarity_matcher import calculate_similarity_fast, calculate_title_similarity
 
 
@@ -105,9 +109,12 @@ class RepairService:
         return extract_clean_title(name)
 
     @staticmethod
-    def _extract_series_info(name: str) -> tuple[str, str | None, int | None, int | None]:
+    def _extract_series_info(
+        name: str,
+    ) -> tuple[str, str | None, int | None, int | None]:
         """Extrait les informations structurees d'un nom de fichier de serie."""
         from .filename_analyzer import extract_series_info
+
         return extract_series_info(name)
 
     # --- Delegation des methodes de similarite ---
@@ -128,7 +135,9 @@ class RepairService:
         """Retourne le chemin du fichier cache de l'index."""
         return self._indexer._get_index_cache_path()
 
-    def _load_cached_index(self, max_age_hours: int = 24, scan_all: bool = False) -> bool:
+    def _load_cached_index(
+        self, max_age_hours: int = 24, scan_all: bool = False
+    ) -> bool:
         """Charge l'index depuis le cache."""
         return self._indexer._load_cached_index(max_age_hours, scan_all)
 
@@ -166,15 +175,24 @@ class RepairService:
 
     def find_broken_symlinks(self) -> list[Path]:
         """
-        Trouve tous les symlinks casses dans video/.
+        Trouve tous les symlinks casses dans les repertoires geres de video/.
+
+        Le repertoire video/ heberge aussi des contenus etrangers a la
+        videotheque (musique, educatif...) : les liens casses qui s'y trouvent
+        ne relevent pas de CineOrg et ne doivent pas etre rapportes.
 
         Returns:
             Liste des chemins vers les symlinks casses
         """
+        from src.utils.helpers import managed_roots
+
         if not self._video_dir or not self._video_dir.exists():
             return []
 
-        return self._file_system.find_broken_links(self._video_dir)
+        broken: list[Path] = []
+        for racine in managed_roots(self._video_dir):
+            broken.extend(self._file_system.find_broken_links(racine))
+        return broken
 
     # --- Recherche par métadonnées DB ---
 
@@ -221,13 +239,24 @@ class RepairService:
             if is_episode and media_type != "Films":
                 # Recherche épisode via série + saison + épisode
                 candidates = self._find_episode_by_metadata(
-                    session, select, title, season, episode_num, year,
-                    SeriesModel, EpisodeModel,
+                    session,
+                    select,
+                    title,
+                    season,
+                    episode_num,
+                    year,
+                    SeriesModel,
+                    EpisodeModel,
                 )
             else:
                 # Recherche film par titre normalisé
                 candidates = self._find_movie_by_metadata(
-                    session, select, title, year, link_name, MovieModel,
+                    session,
+                    select,
+                    title,
+                    year,
+                    link_name,
+                    MovieModel,
                 )
         except Exception as e:
             logger.debug(f"Erreur recherche métadonnées DB: {e}")
@@ -236,8 +265,13 @@ class RepairService:
         return candidates
 
     def _find_movie_by_metadata(
-        self, session, select, title: str, year: int | None,
-        link_name: str, MovieModel,
+        self,
+        session,
+        select,
+        title: str,
+        year: int | None,
+        link_name: str,
+        MovieModel,
     ) -> list[tuple[Path, float]]:
         """Recherche un film via les métadonnées DB."""
         from difflib import SequenceMatcher
@@ -292,8 +326,15 @@ class RepairService:
         return candidates
 
     def _find_episode_by_metadata(
-        self, session, select, title: str, season: int, episode_num: int,
-        year: int | None, SeriesModel, EpisodeModel,
+        self,
+        session,
+        select,
+        title: str,
+        season: int,
+        episode_num: int,
+        year: int | None,
+        SeriesModel,
+        EpisodeModel,
     ) -> list[tuple[Path, float]]:
         """Recherche un épisode via les métadonnées DB."""
         from difflib import SequenceMatcher
@@ -357,7 +398,9 @@ class RepairService:
         return candidates
 
     def _search_file_in_storage(
-        self, old_file_path: str | None, media_subdir: str,
+        self,
+        old_file_path: str | None,
+        media_subdir: str,
     ) -> Path | None:
         """
         Cherche un fichier dans storage/ quand le file_path DB est périmé.
@@ -394,7 +437,9 @@ class RepairService:
     # --- Recherche de cibles ---
 
     def _find_regroup_candidates(
-        self, link: Path, min_score: float = 0.0,
+        self,
+        link: Path,
+        min_score: float = 0.0,
         alternative_names: list[str] | None = None,
     ) -> list[tuple[Path, float]]:
         """
@@ -436,7 +481,9 @@ class RepairService:
         link_name = link.name
         target_name = original_target.name
         clean_link = extract_clean_title(link_name)
-        clean_target = extract_clean_title(target_name) if target_name != link_name else ""
+        clean_target = (
+            extract_clean_title(target_name) if target_name != link_name else ""
+        )
 
         # Detecter si le symlink est un episode de serie (SxxExx)
         _, link_season, link_episode, _ = extract_series_info(link_name)
@@ -527,7 +574,9 @@ class RepairService:
         return candidates
 
     def find_possible_targets(
-        self, link: Path, min_score: float = 50.0,
+        self,
+        link: Path,
+        min_score: float = 50.0,
         alternative_names: list[str] | None = None,
     ) -> list[tuple[Path, float]]:
         """
@@ -600,7 +649,9 @@ class RepairService:
             part_lower = part.lower()
             if part_lower == "films":
                 media_type = "Films"
-                if i + 1 < len(parts) and not parts[i + 1].startswith(("A-", "H-", "R-")):
+                if i + 1 < len(parts) and not parts[i + 1].startswith(
+                    ("A-", "H-", "R-")
+                ):
                     genre = parts[i + 1]
                 elif i + 1 < len(parts):
                     genre = parts[i + 1]
@@ -614,8 +665,11 @@ class RepairService:
         return media_type, genre
 
     def _search_in_directory(
-        self, link: Path, search_dir: Path, min_score: float,
-        media_type_filter: str | None = None
+        self,
+        link: Path,
+        search_dir: Path,
+        min_score: float,
+        media_type_filter: str | None = None,
     ) -> list[tuple[Path, float]]:
         """
         Recherche des candidats dans un repertoire specifique.
@@ -656,11 +710,47 @@ class RepairService:
                 stem = stem.replace(sep, " ")
 
             # Supprimer les termes techniques et les groupes de release connus
-            tech_terms = ["hevc", "x264", "x265", "h264", "h265", "remux", "1080p", "720p", "2160p",
-                         "multi", "french", "vostfr", "bluray", "webrip", "web", "dts", "ac3",
-                         "aac", "internal", "proper", "repack", "hdr", "10bit", "fraternity",
-                         "extreme", "notag", "lost", "azaze", "cielos", "jiheff", "mhdgz",
-                         "fhd", "hd", "sd", "uhd", "dvdrip", "bdrip", "tvrip", "eac3"]
+            tech_terms = [
+                "hevc",
+                "x264",
+                "x265",
+                "h264",
+                "h265",
+                "remux",
+                "1080p",
+                "720p",
+                "2160p",
+                "multi",
+                "french",
+                "vostfr",
+                "bluray",
+                "webrip",
+                "web",
+                "dts",
+                "ac3",
+                "aac",
+                "internal",
+                "proper",
+                "repack",
+                "hdr",
+                "10bit",
+                "fraternity",
+                "extreme",
+                "notag",
+                "lost",
+                "azaze",
+                "cielos",
+                "jiheff",
+                "mhdgz",
+                "fhd",
+                "hd",
+                "sd",
+                "uhd",
+                "dvdrip",
+                "bdrip",
+                "tvrip",
+                "eac3",
+            ]
             clean = stem
             for term in tech_terms:
                 clean = re.sub(rf"\b{term}\b", "", clean, flags=re.IGNORECASE)
@@ -693,7 +783,11 @@ class RepairService:
                 return True
 
             # Filtrer les mots qui ressemblent a des vrais mots
-            words = [w for w in clean.split() if len(w) >= 3 and w.isalpha() and is_word_like(w)]
+            words = [
+                w
+                for w in clean.split()
+                if len(w) >= 3 and w.isalpha() and is_word_like(w)
+            ]
 
             # Un titre normal a au moins 2 mots lisibles OU un mot long (> 6 lettres)
             has_long_word = any(len(w) >= 7 for w in words)
@@ -714,7 +808,11 @@ class RepairService:
 
         # Utiliser l'index pre-construit si disponible
         if self._indexer.index_built:
-            for candidate_path, candidate_norm, candidate_clean in self._indexer.file_index:
+            for (
+                candidate_path,
+                candidate_norm,
+                candidate_clean,
+            ) in self._indexer.file_index:
                 # Filtrer par repertoire
                 if not str(candidate_path).startswith(search_str):
                     continue
@@ -730,18 +828,32 @@ class RepairService:
                             continue
 
                 # Calculer la similarite avec les titres nettoyes (priorite)
-                score_clean_link = calculate_similarity_fast(clean_link, candidate_clean)
+                score_clean_link = calculate_similarity_fast(
+                    clean_link, candidate_clean
+                )
                 score_norm_link = calculate_similarity_fast(norm_link, candidate_norm)
 
                 if clean_target:
-                    score_clean_target = calculate_similarity_fast(clean_target, candidate_clean)
-                    score_norm_target = calculate_similarity_fast(norm_target, candidate_norm)
-                    score = max(score_clean_link, score_norm_link, score_clean_target, score_norm_target)
+                    score_clean_target = calculate_similarity_fast(
+                        clean_target, candidate_clean
+                    )
+                    score_norm_target = calculate_similarity_fast(
+                        norm_target, candidate_norm
+                    )
+                    score = max(
+                        score_clean_link,
+                        score_norm_link,
+                        score_clean_target,
+                        score_norm_target,
+                    )
                 else:
                     score = max(score_clean_link, score_norm_link)
 
                 # Match exact = score maximum
-                if candidate_path.name == filename or candidate_path.name == original_name:
+                if (
+                    candidate_path.name == filename
+                    or candidate_path.name == original_name
+                ):
                     score = 100.0
 
                 if score >= min_score:
@@ -763,7 +875,9 @@ class RepairService:
                     score_link = calculate_title_similarity(filename, candidate.name)
                     # N'utiliser le nom de la cible que s'il n'est pas cryptique
                     if use_target_name:
-                        score_target = calculate_title_similarity(original_name, candidate.name)
+                        score_target = calculate_title_similarity(
+                            original_name, candidate.name
+                        )
                         score = max(score_link, score_target)
                     else:
                         score = score_link
@@ -904,9 +1018,15 @@ class RepairService:
                 "date": date_str,
                 "actions_count": len(actions),
                 "summary": {
-                    "repaired": sum(1 for a in actions if a.action == RepairActionType.REPAIRED),
-                    "orphaned": sum(1 for a in actions if a.action == RepairActionType.ORPHANED),
-                    "skipped": sum(1 for a in actions if a.action == RepairActionType.SKIPPED),
+                    "repaired": sum(
+                        1 for a in actions if a.action == RepairActionType.REPAIRED
+                    ),
+                    "orphaned": sum(
+                        1 for a in actions if a.action == RepairActionType.ORPHANED
+                    ),
+                    "skipped": sum(
+                        1 for a in actions if a.action == RepairActionType.SKIPPED
+                    ),
                 },
                 "actions": [a.to_dict() for a in actions],
             }
