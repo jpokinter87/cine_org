@@ -80,7 +80,7 @@ class TestListSandboxed:
     def test_list_files_with_metadata(self, service, dirs):
         """La liste retourne les bons fichiers avec métadonnées."""
         orphans_dir = dirs["sandbox"] / "orphans"
-        f1 = _create_file(orphans_dir / "Films" / "Action" / "film.mkv", "content123")
+        _create_file(orphans_dir / "Films" / "Action" / "film.mkv", "content123")
 
         result = service.list_sandboxed()
 
@@ -115,9 +115,9 @@ class TestDeleteFiles:
         orphans_dir = dirs["sandbox"] / "orphans"
         f = _create_file(orphans_dir / "Films" / "Action" / "film.mkv")
 
-        count = service.delete_files([f])
+        report = service.delete_files([f])
 
-        assert count == 1
+        assert report.deleted == 1
         assert not f.exists()
         assert not (orphans_dir / "Films" / "Action").exists()
 
@@ -125,18 +125,18 @@ class TestDeleteFiles:
         """Refuse de supprimer un fichier hors du sandbox."""
         outside = _create_file(dirs["storage"] / "important.mkv")
 
-        count = service.delete_files([outside])
+        report = service.delete_files([outside])
 
-        assert count == 0
+        assert report.deleted == 0
         assert outside.exists()
 
     def test_skip_already_deleted(self, service, dirs):
         """Les fichiers déjà absents sont ignorés."""
         missing = dirs["sandbox"] / "orphans" / "gone.mkv"
 
-        count = service.delete_files([missing])
+        report = service.delete_files([missing])
 
-        assert count == 0
+        assert report.deleted == 0
 
 
 class TestReinjectFiles:
@@ -196,3 +196,148 @@ class TestReinjectFiles:
         service.reinject_files([f])
 
         assert not (orphans_dir / "Films" / "Genre").exists()
+
+
+class TestListeCompleteEtStatuts:
+    """Le sandbox doit être visible en entier, avec le statut de chaque fichier."""
+
+    def test_liste_au_dela_du_dossier_orphans(self, service, dirs):
+        """Les anciennes versions déposées par le transfert doivent être visibles."""
+        _create_file(dirs["sandbox"] / "orphans" / "Films" / "orphelin.mkv")
+        _create_file(dirs["sandbox"] / "Series" / "TV" / "I-K" / "remplace.mkv")
+
+        result = {f.name: f for f in service.list_sandboxed()}
+
+        assert set(result) == {"orphelin.mkv", "remplace.mkv"}
+        assert result["orphelin.mkv"].origin == "orphan"
+        assert result["remplace.mkv"].origin == "replaced_version"
+
+    def test_original_path_selon_origine(self, service, dirs):
+        """L'emplacement d'origine se déduit de l'arborescence conservée."""
+        _create_file(dirs["sandbox"] / "Series" / "TV" / "X" / "ep.mkv")
+
+        item = service.list_sandboxed()[0]
+
+        assert item.original_path == dirs["storage"] / "Series" / "TV" / "X" / "ep.mkv"
+
+
+class _AuditeurFactice:
+    """Auditeur de test : statut fixé par nom de fichier."""
+
+    def __init__(self, statuts: dict[str, str]):
+        self._statuts = statuts
+
+    def audit(self, path: Path):
+        from src.services.sandbox_audit import UNKNOWN, SandboxAudit
+
+        statut = self._statuts.get(path.name, UNKNOWN)
+        taille = path.stat().st_size if path.exists() else 0
+        return SandboxAudit(statut, None, False, taille)
+
+
+class TestSuppressionVerifiee:
+    """La suppression ne doit jamais emporter la seule copie d'un média."""
+
+    def _service(self, dirs, statuts):
+        return SandboxService(
+            sandbox_dir=dirs["sandbox"],
+            storage_dir=dirs["storage"],
+            downloads_dir=dirs["downloads"],
+            auditor=_AuditeurFactice(statuts),
+        )
+
+    def test_refuse_un_fichier_sans_remplacant(self, dirs):
+        from src.services.sandbox_audit import MISSING
+
+        f = _create_file(dirs["sandbox"] / "Series" / "seule-copie.mkv")
+        svc = self._service(dirs, {"seule-copie.mkv": MISSING})
+
+        report = svc.delete_files([f])
+
+        assert report.deleted == 0
+        assert f.exists()
+        assert report.refused and report.refused[0][0] == f
+
+    def test_supprime_un_fichier_remplace(self, dirs):
+        from src.services.sandbox_audit import REPLACED
+
+        f = _create_file(dirs["sandbox"] / "Series" / "double.mkv", "abcd")
+        svc = self._service(dirs, {"double.mkv": REPLACED})
+
+        report = svc.delete_files([f])
+
+        assert report.deleted == 1
+        assert not f.exists()
+        assert report.reclaimed_bytes == 4
+        assert report.refused == []
+
+    def test_indetermine_refuse_par_defaut(self, dirs):
+        from src.services.sandbox_audit import UNKNOWN
+
+        f = _create_file(dirs["sandbox"] / "Series" / "bizarre.mkv")
+        svc = self._service(dirs, {"bizarre.mkv": UNKNOWN})
+
+        assert svc.delete_files([f]).deleted == 0
+        assert f.exists()
+
+    def test_indetermine_supprime_si_force(self, dirs):
+        from src.services.sandbox_audit import UNKNOWN
+
+        f = _create_file(dirs["sandbox"] / "Series" / "bizarre.mkv")
+        svc = self._service(dirs, {"bizarre.mkv": UNKNOWN})
+
+        assert svc.delete_files([f], allow_unknown=True).deleted == 1
+        assert not f.exists()
+
+    def test_forcer_ne_deverrouille_pas_les_sans_remplacant(self, dirs):
+        """allow_unknown ne doit jamais couvrir un fichier en statut MISSING."""
+        from src.services.sandbox_audit import MISSING
+
+        f = _create_file(dirs["sandbox"] / "Series" / "seule-copie.mkv")
+        svc = self._service(dirs, {"seule-copie.mkv": MISSING})
+
+        assert svc.delete_files([f], allow_unknown=True).deleted == 0
+        assert f.exists()
+
+
+class TestNettoyageRepertoiresVides:
+    """Après une purge, aucune arborescence vide ne doit subsister."""
+
+    def test_parent_commun_vide_par_plusieurs_sous_dossiers(self, service, dirs):
+        """Deux dossiers frères vidés : leur parent doit disparaître aussi.
+
+        Régression : le parent était marqué « déjà examiné » lors du premier
+        fichier, alors qu'il n'était pas encore vide — il n'était donc jamais
+        réexaminé une fois le second dossier vidé.
+        """
+        base = dirs["sandbox"] / "Series" / "Animation" / "S" / "Star Wars"
+        f1 = _create_file(base / "Saison 1" / "ep01.mkv")
+        f2 = _create_file(base / "Saison 2" / "ep01.mkv")
+
+        service.delete_files([f1, f2])
+
+        assert not (base / "Saison 1").exists()
+        assert not (base / "Saison 2").exists()
+        assert not base.exists()
+        assert not (dirs["sandbox"] / "Series" / "Animation" / "S").exists()
+        assert not (dirs["sandbox"] / "Series" / "Animation").exists()
+
+    def test_parent_conserve_si_encore_occupe(self, service, dirs):
+        """Un dossier qui contient encore un fichier doit être conservé."""
+        base = dirs["sandbox"] / "Series" / "Show"
+        f1 = _create_file(base / "Saison 1" / "ep01.mkv")
+        _create_file(base / "Saison 2" / "ep02.mkv")
+
+        service.delete_files([f1])
+
+        assert not (base / "Saison 1").exists()
+        assert (base / "Saison 2").exists()
+        assert base.exists()
+
+    def test_ne_remonte_pas_au_dela_du_sandbox(self, service, dirs):
+        """La racine du sandbox ne doit jamais être supprimée."""
+        f = _create_file(dirs["sandbox"] / "isole.mkv")
+
+        service.delete_files([f])
+
+        assert dirs["sandbox"].exists()

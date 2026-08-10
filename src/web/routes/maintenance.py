@@ -18,7 +18,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from loguru import logger
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from ..deps import templates
 from ...services.sandbox_service import SandboxService
@@ -81,14 +81,99 @@ def _sse_complete(html: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _get_sandbox_service(container) -> SandboxService:
-    """Construit le SandboxService depuis le container."""
+def _get_sandbox_service(container, session=None) -> SandboxService:
+    """Construit le SandboxService depuis le container.
+
+    ``session`` alimente l'auditeur qui confronte chaque fichier du sandbox à
+    la vidéothèque ; sans elle, aucune suppression n'est autorisée.
+    """
+    from ...infrastructure.persistence.database import get_engine
+    from ...services.sandbox_audit import SandboxAuditor
+
     settings = container.config()
+    sandbox_dir = settings.resolved_sandbox_dir
+
+    if session is not None:
+        auditor = SandboxAuditor(session, sandbox_dir).prime()
+    else:
+        # Index construit immédiatement pour pouvoir refermer la session
+        own = Session(get_engine())
+        try:
+            auditor = SandboxAuditor(own, sandbox_dir).prime()
+        finally:
+            own.close()
+
     return container.sandbox_service(
-        sandbox_dir=settings.resolved_sandbox_dir,
+        sandbox_dir=sandbox_dir,
         storage_dir=settings.storage_dir,
         downloads_dir=settings.downloads_dir,
+        auditor=auditor,
     )
+
+
+# Libellés et classes CSS des statuts d'audit du sandbox
+_SANDBOX_STATUS_LABELS = {
+    "replaced": ("Remplacé", "sandbox-badge-ok", "Une version vit dans la vidéothèque"),
+    "missing": (
+        "Seule copie",
+        "sandbox-badge-danger",
+        "Aucun remplaçant en bibliothèque — suppression bloquée",
+    ),
+    "unknown": (
+        "À vérifier",
+        "sandbox-badge-warn",
+        "Impossible de trancher automatiquement",
+    ),
+}
+
+
+def _sandbox_items(files) -> list[dict]:
+    """Prépare les lignes du tableau sandbox pour le template."""
+    items = []
+    for f in files:
+        label, css, hint = _SANDBOX_STATUS_LABELS.get(
+            f.status, _SANDBOX_STATUS_LABELS["unknown"]
+        )
+        items.append(
+            {
+                "path": str(f.path),
+                "name": f.name,
+                "size": _format_size(f.size),
+                "size_bytes": f.size,
+                "modified": f.modified.strftime("%d/%m/%Y"),
+                "original_path": _relative_from_root(f.original_path),
+                "origin": f.origin,
+                "status": f.status,
+                "status_label": label,
+                "status_class": css,
+                "status_hint": hint,
+                "purgeable": f.status == "replaced",
+                "shares_inode": f.shares_inode,
+                "reclaimable": _format_size(f.reclaimable_bytes),
+                "reclaimable_bytes": f.reclaimable_bytes,
+                "replacement_path": _relative_from_root(f.replacement_path)
+                if f.replacement_path
+                else None,
+            }
+        )
+    return items
+
+
+def _sandbox_context(files, flash_message: str | None = None) -> dict:
+    """Construit le contexte complet de la section sandbox."""
+    items = _sandbox_items(files)
+    return {
+        "sandbox_items": items,
+        "sandbox_count": len(items),
+        "sandbox_total_size": _format_size(sum(f.size for f in files)),
+        "sandbox_reclaimable": _format_size(
+            sum(f.reclaimable_bytes for f in files if f.status == "replaced")
+        ),
+        "sandbox_purgeable_count": sum(1 for f in files if f.status == "replaced"),
+        "sandbox_blocked_count": sum(1 for f in files if f.status != "replaced"),
+        "sandbox_unknown_count": sum(1 for f in files if f.status == "unknown"),
+        "flash_message": flash_message,
+    }
 
 
 def _format_size(size_bytes: int) -> str:
@@ -151,18 +236,7 @@ async def maintenance_page(request: Request):
     # Charger les fichiers sandbox
     sandbox_svc = _get_sandbox_service(container)
     sandboxed_files = sandbox_svc.list_sandboxed()
-    sandbox_total_size = sum(f.size for f in sandboxed_files)
-    sandbox_items = [
-        {
-            "path": str(f.path),
-            "name": f.name,
-            "size": _format_size(f.size),
-            "size_bytes": f.size,
-            "modified": f.modified.strftime("%d/%m/%Y"),
-            "original_path": _relative_from_root(f.original_path),
-        }
-        for f in sandboxed_files
-    ]
+    sandbox_ctx = _sandbox_context(sandboxed_files)
 
     return templates.TemplateResponse(
         request,
@@ -171,9 +245,7 @@ async def maintenance_page(request: Request):
             "is_local": is_local,
             "trash_items": trash_items,
             "trash_count": len(trash_items),
-            "sandbox_items": sandbox_items,
-            "sandbox_count": len(sandbox_items),
-            "sandbox_total_size": _format_size(sandbox_total_size),
+            **sandbox_ctx,
         },
     )
 
@@ -500,13 +572,9 @@ async def run_completeness_sse(request: Request):
             for i, series in enumerate(series_list):
                 yield _sse_progress(i + 1, total, series.title)
                 try:
-                    verdict = await check_series_model(
-                        session, checker, series, today
-                    )
+                    verdict = await check_series_model(session, checker, series, today)
                 except Exception as e:
-                    logger.warning(
-                        "Complétude : échec sur '{}' : {}", series.title, e
-                    )
+                    logger.warning("Complétude : échec sur '{}' : {}", series.title, e)
                     verdict = "unverifiable"
                 tally[verdict] = tally.get(verdict, 0) + 1
 
@@ -1516,25 +1584,11 @@ async def sandbox_move_orphans_sse(request: Request):
 
         # Construire le HTML final
         sandboxed = sandbox_svc.list_sandboxed()
-        total_size = sum(f.size for f in sandboxed)
-        sandbox_items = [
-            {
-                "path": str(f.path),
-                "name": f.name,
-                "size": _format_size(f.size),
-                "size_bytes": f.size,
-                "modified": f.modified.strftime("%d/%m/%Y"),
-                "original_path": _relative_from_root(f.original_path),
-            }
-            for f in sandboxed
-        ]
-
         html = templates.env.get_template("maintenance/_sandbox_section.html").render(
-            sandbox_items=sandbox_items,
-            sandbox_count=len(sandbox_items),
-            sandbox_total_size=_format_size(total_size),
             is_local=True,
-            flash_message=f"{moved_count} fichier(s) déplacé(s) vers le sandbox.",
+            **_sandbox_context(
+                sandboxed, f"{moved_count} fichier(s) déplacé(s) vers le sandbox."
+            ),
         )
         yield _sse_complete(html)
 
@@ -1568,32 +1622,120 @@ async def sandbox_delete(request: Request):
         )
 
     paths = [Path(p) for p in selected]
+    allow_unknown = form.get("allow_unknown") in ("1", "on", "true")
     sandbox_svc = _get_sandbox_service(container)
-    deleted = await asyncio.to_thread(sandbox_svc.delete_files, paths)
+    report = await asyncio.to_thread(sandbox_svc.delete_files, paths, allow_unknown)
 
-    # Retourner la section mise à jour
-    sandboxed = sandbox_svc.list_sandboxed()
-    total_size = sum(f.size for f in sandboxed)
-    sandbox_items = [
-        {
-            "path": str(f.path),
-            "name": f.name,
-            "size": _format_size(f.size),
-            "size_bytes": f.size,
-            "modified": f.modified.strftime("%d/%m/%Y"),
-            "original_path": _relative_from_root(f.original_path),
-        }
-        for f in sandboxed
-    ]
+    return HTMLResponse(_sandbox_section_html(sandbox_svc, _delete_message(report)))
 
-    html = templates.env.get_template("maintenance/_sandbox_section.html").render(
-        sandbox_items=sandbox_items,
-        sandbox_count=len(sandbox_items),
-        sandbox_total_size=_format_size(total_size),
-        is_local=True,
-        flash_message=f"{deleted} fichier(s) supprimé(s) définitivement.",
+
+def _delete_message(report) -> str:
+    """Résume une suppression : volume libéré et fichiers épargnés."""
+    message = (
+        f"{report.deleted} fichier(s) supprimé(s) — "
+        f"{_format_size(report.reclaimed_bytes)} libéré(s)."
     )
-    return HTMLResponse(html)
+    if report.refused:
+        motifs = sorted({motif for _, motif in report.refused})
+        message += f" {len(report.refused)} épargné(s) : {', '.join(motifs)}."
+    return message
+
+
+def _sandbox_section_html(sandbox_svc, message: str) -> str:
+    """Rend la section sandbox à jour après une action."""
+    return templates.env.get_template("maintenance/_sandbox_section.html").render(
+        is_local=True,
+        **_sandbox_context(sandbox_svc.list_sandboxed(), message),
+    )
+
+
+@router.post("/maintenance/sandbox/delete-start", response_class=HTMLResponse)
+async def sandbox_delete_start(request: Request):
+    """Mémorise la sélection à purger, exécutée ensuite par le flux SSE.
+
+    EventSource ne sait émettre que des GET : la liste des fichiers (plusieurs
+    centaines) ne peut pas transiter par l'URL, d'où ce dépôt préalable.
+    """
+    client_host = request.client.host if request.client else ""
+    if client_host not in _LOCAL_HOSTS:
+        return HTMLResponse(
+            '<div class="action-msg action-error">Action autorisee uniquement depuis la machine maitre.</div>',
+            status_code=403,
+        )
+
+    form = await request.form()
+    _analysis_cache["sandbox_delete"] = {
+        "paths": [Path(p) for p in form.getlist("selected")],
+        "allow_unknown": form.get("allow_unknown") in ("1", "on", "true"),
+    }
+    return HTMLResponse("", status_code=204)
+
+
+@router.get("/maintenance/sandbox/delete-progress")
+async def sandbox_delete_progress(request: Request):
+    """Exécute la purge en diffusant la progression (SSE)."""
+    client_host = request.client.host if request.client else ""
+    if client_host not in _LOCAL_HOSTS:
+        return HTMLResponse(
+            "<p>Action autorisee uniquement depuis la machine maitre.</p>",
+            status_code=403,
+        )
+
+    container = request.app.state.container
+    pending = _analysis_cache.pop("sandbox_delete", None)
+
+    if not pending or not pending["paths"]:
+
+        async def empty_stream():
+            yield _sse_complete(
+                '<div class="sandbox-msg sandbox-msg-warn">Aucun fichier sélectionné.</div>'
+            )
+
+        return StreamingResponse(
+            empty_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    paths = pending["paths"]
+    allow_unknown = pending["allow_unknown"]
+    sandbox_svc = _get_sandbox_service(container)
+    total = len(paths)
+
+    async def event_stream():
+        queue: asyncio.Queue = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
+        def on_progress(done: int, count: int, filename: str) -> None:
+            # Appelé depuis le thread de suppression
+            loop.call_soon_threadsafe(queue.put_nowait, (done, count, filename))
+
+        task = asyncio.create_task(
+            asyncio.to_thread(
+                sandbox_svc.delete_files, paths, allow_unknown, on_progress
+            )
+        )
+
+        yield _sse_progress(0, total, "Démarrage…")
+        while not task.done() or not queue.empty():
+            try:
+                done, count, filename = await asyncio.wait_for(queue.get(), timeout=0.5)
+            except asyncio.TimeoutError:
+                continue
+            yield _sse_progress(done, count, filename)
+
+        report = await task
+        yield _sse_complete(_sandbox_section_html(sandbox_svc, _delete_message(report)))
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/maintenance/sandbox/reinject", response_class=HTMLResponse)
@@ -1620,24 +1762,11 @@ async def sandbox_reinject(request: Request):
 
     # Retourner la section mise à jour
     sandboxed = sandbox_svc.list_sandboxed()
-    total_size = sum(f.size for f in sandboxed)
-    sandbox_items = [
-        {
-            "path": str(f.path),
-            "name": f.name,
-            "size": _format_size(f.size),
-            "size_bytes": f.size,
-            "modified": f.modified.strftime("%d/%m/%Y"),
-            "original_path": _relative_from_root(f.original_path),
-        }
-        for f in sandboxed
-    ]
-
     html = templates.env.get_template("maintenance/_sandbox_section.html").render(
-        sandbox_items=sandbox_items,
-        sandbox_count=len(sandbox_items),
-        sandbox_total_size=_format_size(total_size),
         is_local=True,
-        flash_message=f"{reinjected} fichier(s) réinjecté(s) dans les téléchargements.",
+        **_sandbox_context(
+            sandboxed,
+            f"{reinjected} fichier(s) réinjecté(s) dans les téléchargements.",
+        ),
     )
     return HTMLResponse(html)

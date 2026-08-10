@@ -1,3 +1,4 @@
+{% from "_macros.html" import hint_icon %}
 {% if flash_message is defined and flash_message %}
 <div class="sandbox-flash">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
@@ -6,7 +7,38 @@
 {% endif %}
 
 {% if sandbox_items %}
+<div class="sandbox-summary">
+    <span class="sandbox-summary-item">
+        <strong>{{ sandbox_count }}</strong> fichier{{ 's' if sandbox_count > 1 else '' }}
+        &middot; {{ sandbox_total_size }}
+    </span>
+    <span class="sandbox-summary-item sandbox-summary-ok">
+        <strong>{{ sandbox_purgeable_count }}</strong> purgeable{{ 's' if sandbox_purgeable_count > 1 else '' }}
+        &middot; {{ sandbox_reclaimable }} récupérable{{ 's' if sandbox_purgeable_count > 1 else '' }}
+    </span>
+    {% if sandbox_blocked_count %}
+    <span class="sandbox-summary-item sandbox-summary-blocked">
+        <strong>{{ sandbox_blocked_count }}</strong> à examiner
+    </span>
+    {% endif %}
+</div>
+
 <form id="sandbox-form">
+    <div class="sandbox-toolbar">
+        <div class="sandbox-filters">
+            <button type="button" class="sandbox-filter is-active" data-filter="all" onclick="sandboxFilter(this)">Tous</button>
+            <button type="button" class="sandbox-filter" data-filter="replaced" onclick="sandboxFilter(this)">Remplacés</button>
+            <button type="button" class="sandbox-filter" data-filter="missing" onclick="sandboxFilter(this)">Seule copie</button>
+            <button type="button" class="sandbox-filter" data-filter="unknown" onclick="sandboxFilter(this)">À vérifier</button>
+        </div>
+        {% if is_local and sandbox_purgeable_count %}
+        <button type="button" class="sandbox-btn sandbox-btn-safe" onclick="sandboxSelectSafe()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            Sélectionner les {{ sandbox_purgeable_count }} purgeables
+        </button>
+        {% endif %}
+    </div>
+
     <div class="sandbox-table-wrap">
         <table class="sandbox-table">
             <thead>
@@ -17,21 +49,40 @@
                     </th>
                     {% endif %}
                     <th>Fichier</th>
+                    <th>Statut</th>
                     <th>Taille</th>
+                    <th>Récupérable</th>
                     <th>Modifié</th>
                     <th>Emplacement original</th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in sandbox_items %}
-                <tr class="sandbox-row">
+                <tr class="sandbox-row" data-status="{{ item.status }}">
                     {% if is_local %}
                     <td class="sandbox-td-check">
-                        <input type="checkbox" name="selected" value="{{ item.path }}" class="sandbox-cb" onchange="sandboxUpdateActions()">
+                        <input type="checkbox" name="selected" value="{{ item.path }}"
+                               class="sandbox-cb" data-status="{{ item.status }}"
+                               data-reclaimable="{{ item.reclaimable_bytes }}"
+                               {% if not item.purgeable %}data-blocked="1"{% endif %}
+                               onchange="sandboxUpdateActions()">
                     </td>
                     {% endif %}
                     <td class="sandbox-td-name" title="{{ item.path }}">{{ item.name }}</td>
+                    <td class="sandbox-td-status">
+                        <span class="sandbox-badge {{ item.status_class }}"
+                              title="{{ item.status_hint }}{% if item.replacement_path %} — remplacé par {{ item.replacement_path }}{% endif %}">
+                            {{ item.status_label }}
+                        </span>
+                    </td>
                     <td class="sandbox-td-size">{{ item.size }}</td>
+                    <td class="sandbox-td-size">
+                        {% if item.shares_inode %}
+                        <span class="sandbox-hardlink" title="Fichier lié (hardlink) : la suppression ne libère aucun espace">—</span>
+                        {% else %}
+                        {{ item.reclaimable }}
+                        {% endif %}
+                    </td>
                     <td class="sandbox-td-date">{{ item.modified }}</td>
                     <td class="sandbox-td-origin"><code>{{ item.original_path }}</code></td>
                 </tr>
@@ -41,11 +92,27 @@
     </div>
 
     {% if is_local %}
+    <div class="sandbox-move-progress" id="sandbox-delete-progress" style="display: none;">
+        <div class="maint-progress-bar-track">
+            <div class="maint-progress-bar-fill" id="sandbox-delete-bar"></div>
+        </div>
+        <div class="maint-progress-phase" id="sandbox-delete-phase"></div>
+    </div>
+
     <div class="sandbox-actions" id="sandbox-actions">
         <div class="sandbox-actions-left">
             <span class="sandbox-selection-count" id="sandbox-sel-count">0 sélectionné(s)</span>
+            <span class="sandbox-selection-warn" id="sandbox-sel-warn" hidden></span>
         </div>
         <div class="sandbox-actions-right">
+            {% if sandbox_unknown_count %}
+            <label class="sandbox-allow-unknown">
+                <input type="checkbox" name="allow_unknown" id="sandbox-allow-unknown" value="1"
+                       onchange="sandboxUpdateActions()">
+                <span>Autoriser aussi les « à vérifier » ({{ sandbox_unknown_count }})</span>
+                {{ hint_icon("Un fichier « à vérifier » est un fichier que CineOrg n'a pas su rattacher à une fiche de la vidéothèque : nommage inhabituel, fichier non vidéo, ou média absent de la base. Il n'est donc pas prouvé qu'une autre copie existe. Sans cette case, ces fichiers sont épargnés même s'ils sont cochés. En la cochant, vous prenez la responsabilité de les supprimer après les avoir examinés — le filtre « À vérifier » permet de les lister. Les fichiers « Seule copie » restent protégés dans tous les cas.") }}
+            </label>
+            {% endif %}
             <button type="button" class="sandbox-btn sandbox-btn-reinject" id="sandbox-btn-reinject" disabled
                     onclick="sandboxSubmit('reinject')">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
