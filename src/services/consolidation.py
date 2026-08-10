@@ -125,14 +125,25 @@ class ConsolidationService:
             return "/".join(parts[:4])
         return str(path.parent)
 
+    @staticmethod
+    def _iter_managed(roots: list[Path]) -> Generator[Path, None, None]:
+        """Parcourt recursivement plusieurs racines."""
+        for root in roots:
+            yield from root.rglob("*")
+
     def scan_external_symlinks(self) -> Generator[ExternalSymlink, None, None]:
         """
         Scanne storage_dir pour trouver les symlinks vers des volumes externes.
 
+        Le parcours se limite aux repertoires geres : les autres branches du
+        volume (musique, educatif...) ne relevent pas de la videotheque.
+
         Yields:
             ExternalSymlink pour chaque symlink externe trouve
         """
-        for path in self._storage_dir.rglob("*"):
+        from src.utils.helpers import managed_roots
+
+        for path in self._iter_managed(managed_roots(self._storage_dir)):
             # Ne traiter que les symlinks
             if not path.is_symlink():
                 continue

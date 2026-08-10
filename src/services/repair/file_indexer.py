@@ -47,7 +47,9 @@ class FileIndexer:
         dir_hash = hashlib.md5(str(self._storage_dir).encode()).hexdigest()[:8]
         return cache_dir / f"file_index_{dir_hash}.json"
 
-    def _load_cached_index(self, max_age_hours: int = 24, scan_all: bool = False) -> bool:
+    def _load_cached_index(
+        self, max_age_hours: int = 24, scan_all: bool = False
+    ) -> bool:
         """
         Charge l'index depuis le cache s'il existe et n'est pas trop vieux.
 
@@ -66,7 +68,7 @@ class FileIndexer:
             # Verifier l'age du cache
             cache_age = time.time() - cache_path.stat().st_mtime
             if cache_age > max_age_hours * 3600:
-                logger.debug(f"Cache d'index trop vieux ({cache_age/3600:.1f}h)")
+                logger.debug(f"Cache d'index trop vieux ({cache_age / 3600:.1f}h)")
                 return False
 
             with open(cache_path, "r", encoding="utf-8") as f:
@@ -80,7 +82,9 @@ class FileIndexer:
             # Verifier la version du cache (version 3 requis pour scan_all)
             cache_version = data.get("version", 1)
             if cache_version < 3:
-                logger.debug("Cache d'index version obsolete, reconstruction necessaire")
+                logger.debug(
+                    "Cache d'index version obsolete, reconstruction necessaire"
+                )
                 return False
 
             # Verifier que le scope correspond
@@ -99,7 +103,9 @@ class FileIndexer:
             ]
             self._index_built = True
             scope = "complet" if cached_scan_all else "Films/Séries"
-            logger.debug(f"Index charge depuis le cache ({scope}): {len(self._file_index)} fichiers")
+            logger.debug(
+                f"Index charge depuis le cache ({scope}): {len(self._file_index)} fichiers"
+            )
             return True
 
         except (json.JSONDecodeError, KeyError, OSError) as e:
@@ -154,9 +160,14 @@ class FileIndexer:
             return 0
 
         # Essayer de charger depuis le cache
-        if not force_rebuild and self._load_cached_index(max_cache_age_hours, scan_all=scan_all):
+        if not force_rebuild and self._load_cached_index(
+            max_cache_age_hours, scan_all=scan_all
+        ):
             if progress_callback:
-                progress_callback(len(self._file_index), f"Index charge (cache): {len(self._file_index)} fichiers")
+                progress_callback(
+                    len(self._file_index),
+                    f"Index charge (cache): {len(self._file_index)} fichiers",
+                )
             return len(self._file_index)
 
         self._file_index = []
@@ -168,18 +179,14 @@ class FileIndexer:
             if progress_callback:
                 progress_callback(count, f"Scan complet: {self._storage_dir}")
         else:
-            # Limiter aux repertoires de videos (Films et Series)
-            media_dirs = []
-            for subdir in ["Films", "Séries", "Series"]:
-                media_path = self._storage_dir / subdir
-                if media_path.exists():
-                    media_dirs.append(media_path)
-                    if progress_callback:
-                        progress_callback(count, f"Scan: {media_path}")
+            # Limiter aux repertoires geres (voir MANAGED_SUBDIRS) ; repli sur
+            # storage_dir si aucun d'eux n'existe
+            from src.utils.helpers import managed_roots
 
-            # Fallback: si aucun sous-repertoire Films/Series, scanner storage_dir
-            if not media_dirs:
-                media_dirs = [self._storage_dir]
+            media_dirs = managed_roots(self._storage_dir)
+            if progress_callback:
+                for media_path in media_dirs:
+                    progress_callback(count, f"Scan: {media_path}")
 
         for media_dir in media_dirs:
             for candidate in media_dir.rglob("*"):

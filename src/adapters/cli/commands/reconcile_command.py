@@ -6,6 +6,7 @@ Résout les symlinks cassés via les métadonnées DB et met à jour les symlink
 """
 
 import asyncio
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Annotated
 
@@ -61,6 +62,14 @@ async def _reconcile_async(container, dry_run: bool, update_titles: bool) -> Non
     storage_dir = Path(config.storage_dir)
     video_dir = Path(config.video_dir)
 
+    # downloads/ et .sandbox/ sont situés sous storage_dir : les indexer
+    # reviendrait à réparer des symlinks vers des fichiers en seeding ou des
+    # versions déjà écartées.
+    excluded_roots = [
+        Path(config.downloads_dir),
+        Path(getattr(config, "resolved_sandbox_dir", storage_dir / ".sandbox")),
+    ]
+
     # Obtenir une session DB pour la recherche métadonnées
     session = next(get_session())
 
@@ -78,6 +87,7 @@ async def _reconcile_async(container, dry_run: bool, update_titles: bool) -> Non
             MovieModel,
             EpisodeModel,
             SeriesModel,
+            excluded_roots,
         )
 
         # --- Phase 1 : Réconciliation des symlinks cassés ---
@@ -143,6 +153,7 @@ async def _reconcile_async(container, dry_run: bool, update_titles: bool) -> Non
                     remaining,
                     storage_dir,
                     actions,
+                    excluded_roots,
                 )
                 unresolved = len(still_remaining)
                 console.print(
@@ -216,6 +227,41 @@ async def _reconcile_async(container, dry_run: bool, update_titles: bool) -> Non
         console.print("\n[green]Réconciliation terminée.[/green]")
 
 
+def _index_candidates(storage_dir: Path, excluded_roots) -> Iterator[Path]:
+    """Itère les fichiers vidéo indexables de storage.
+
+    La zone de téléchargement et le sandbox sont physiquement situés sous
+    ``storage_dir`` : sans exclusion, un fichier en cours de seeding ou une
+    ancienne version écartée devient une cible de réparation valide, ce qui
+    produit des symlinks pointant hors de la vidéothèque rangée (et voués à
+    recasser à la rotation des hardlinks).
+
+    Args:
+        storage_dir: Racine de la vidéothèque
+        excluded_roots: Répertoires à ne jamais indexer (downloads, sandbox…)
+
+    Yields:
+        Chemins des fichiers vidéo réels (ni dossiers, ni symlinks)
+    """
+    from src.adapters.file_system import VIDEO_EXTENSIONS
+    from src.utils.helpers import managed_roots
+
+    exclus = [Path(r).resolve() for r in excluded_roots]
+
+    for racine in managed_roots(storage_dir):
+        for f in racine.rglob("*"):
+            try:
+                if f.is_symlink() or f.is_dir():
+                    continue
+                if f.suffix.lower() not in VIDEO_EXTENSIONS:
+                    continue
+                if any(f.is_relative_to(exclu) for exclu in exclus):
+                    continue
+                yield f
+            except (PermissionError, OSError):
+                continue
+
+
 def _reconcile_db_file_paths(
     session,
     select,
@@ -224,6 +270,7 @@ def _reconcile_db_file_paths(
     MovieModel,
     EpisodeModel,
     SeriesModel,
+    excluded_roots=(),
 ) -> None:
     """
     Réconcilie les file_path en DB avec les fichiers physiques dans storage.
@@ -235,7 +282,6 @@ def _reconcile_db_file_paths(
     """
     from difflib import SequenceMatcher
 
-    from src.adapters.file_system import VIDEO_EXTENSIONS
     from src.services.repair.filename_analyzer import extract_clean_title
 
     # --- Index rapide des fichiers storage ---
@@ -244,24 +290,17 @@ def _reconcile_db_file_paths(
     films_by_name: dict[str, list[Path]] = {}
     series_by_name: dict[str, list[Path]] = {}
 
-    for f in storage_dir.rglob("*"):
-        try:
-            if f.is_symlink() or f.is_dir():
-                continue
-            if f.suffix.lower() not in VIDEO_EXTENSIONS:
-                continue
-            clean = extract_clean_title(f.name)
-            path_str = str(f).lower()
-            if "/films/" in path_str:
-                if clean not in films_by_name:
-                    films_by_name[clean] = []
-                films_by_name[clean].append(f)
-            elif "/séries/" in path_str or "/series/" in path_str:
-                if clean not in series_by_name:
-                    series_by_name[clean] = []
-                series_by_name[clean].append(f)
-        except (PermissionError, OSError):
-            continue
+    for f in _index_candidates(storage_dir, excluded_roots):
+        clean = extract_clean_title(f.name)
+        path_str = str(f).lower()
+        if "/films/" in path_str:
+            if clean not in films_by_name:
+                films_by_name[clean] = []
+            films_by_name[clean].append(f)
+        elif "/séries/" in path_str or "/series/" in path_str:
+            if clean not in series_by_name:
+                series_by_name[clean] = []
+            series_by_name[clean].append(f)
 
     console.print(
         f"  Index : {sum(len(v) for v in films_by_name.values())} films, "
@@ -403,6 +442,7 @@ def _fast_index_search(
     remaining: list[Path],
     storage_dir: Path,
     actions: list[dict],
+    excluded_roots=(),
 ) -> tuple[int, list[Path]]:
     """
     Recherche rapide par dictionnaire de noms de fichiers.
@@ -415,7 +455,6 @@ def _fast_index_search(
     """
     from difflib import SequenceMatcher
 
-    from src.adapters.file_system import VIDEO_EXTENSIONS
     from src.services.repair.filename_analyzer import extract_clean_title
 
     # Construire l'index en une seule passe
@@ -429,21 +468,14 @@ def _fast_index_search(
     ) as progress:
         progress.add_task("Construction de l'index rapide...", total=None)
 
-        for f in storage_dir.rglob("*"):
-            try:
-                if f.is_symlink() or f.is_dir():
-                    continue
-                if f.suffix.lower() not in VIDEO_EXTENSIONS:
-                    continue
-                # Index par nom exact
-                index_by_name[f.name] = f
-                # Index par titre normalisé
-                clean = extract_clean_title(f.name)
-                if clean not in index_by_clean:
-                    index_by_clean[clean] = []
-                index_by_clean[clean].append(f)
-            except (PermissionError, OSError):
-                continue
+        for f in _index_candidates(storage_dir, excluded_roots):
+            # Index par nom exact
+            index_by_name[f.name] = f
+            # Index par titre normalisé
+            clean = extract_clean_title(f.name)
+            if clean not in index_by_clean:
+                index_by_clean[clean] = []
+            index_by_clean[clean].append(f)
 
     console.print(
         f"    Index rapide : {len(index_by_name)} fichiers, "
