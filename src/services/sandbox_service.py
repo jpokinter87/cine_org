@@ -7,7 +7,7 @@ dans un répertoire dédié pour revue avant décision (supprimer ou réintégre
 
 import shutil
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -15,15 +15,48 @@ from typing import Optional
 from loguru import logger
 
 
+#: Origine d'un fichier du sandbox
+ORPHAN = "orphan"  # isolé par la détection d'orphelins (sous orphans/)
+REPLACED_VERSION = "replaced_version"  # ancienne version écartée par un transfert
+
+
 @dataclass
 class SandboxedFile:
-    """Fichier présent dans le sandbox."""
+    """Fichier présent dans le sandbox.
+
+    Attributs:
+        origin: ORPHAN ou REPLACED_VERSION
+        status: Statut d'audit (voir sandbox_audit) — REPLACED, MISSING, UNKNOWN
+        replacement_path: Fichier vivant qui remplace celui-ci, si connu
+        shares_inode: True si le fichier partage son inode (suppression sans gain)
+        reclaimable_bytes: Espace réellement libéré par la suppression
+    """
 
     path: Path
     name: str
     size: int
     modified: datetime
     original_path: Path
+    origin: str = REPLACED_VERSION
+    status: str = "unknown"
+    replacement_path: Optional[Path] = None
+    shares_inode: bool = False
+    reclaimable_bytes: int = 0
+
+
+@dataclass
+class DeletionReport:
+    """Compte rendu d'une suppression.
+
+    Attributs:
+        deleted: Nombre de fichiers effectivement supprimés
+        refused: Couples (chemin, motif) des fichiers épargnés
+        reclaimed_bytes: Espace disque réellement libéré
+    """
+
+    deleted: int = 0
+    refused: list[tuple[Path, str]] = field(default_factory=list)
+    reclaimed_bytes: int = 0
 
 
 class SandboxService:
@@ -33,6 +66,8 @@ class SandboxService:
         sandbox_dir: Répertoire racine du sandbox.
         storage_dir: Répertoire storage de la vidéothèque.
         downloads_dir: Répertoire des téléchargements (cible de réinjection).
+        auditor: Auditeur confrontant chaque fichier à la vidéothèque. Sans
+            lui, la suppression ne peut pas vérifier qu'un remplaçant existe.
     """
 
     def __init__(
@@ -40,11 +75,13 @@ class SandboxService:
         sandbox_dir: Path,
         storage_dir: Path,
         downloads_dir: Path,
+        auditor: Optional[object] = None,
     ) -> None:
         self._sandbox_dir = sandbox_dir
         self._storage_dir = storage_dir
         self._downloads_dir = downloads_dir
         self._orphans_dir = sandbox_dir / "orphans"
+        self._auditor = auditor
 
     def sandbox_orphans(
         self,
@@ -89,58 +126,124 @@ class SandboxService:
         return moved
 
     def list_sandboxed(self) -> list[SandboxedFile]:
-        """Liste les fichiers présents dans le sandbox.
+        """Liste tous les fichiers présents dans le sandbox.
+
+        Couvre aussi bien les orphelins isolés (sous ``orphans/``) que les
+        anciennes versions déposées par les transferts, qui reproduisent
+        l'arborescence du storage à la racine du sandbox.
+
+        Chaque entrée est confrontée à la vidéothèque quand un auditeur est
+        configuré, afin de savoir si un remplaçant existe.
 
         Returns:
-            Liste de SandboxedFile avec métadonnées.
+            Liste de SandboxedFile avec métadonnées et statut d'audit.
         """
-        if not self._orphans_dir.exists():
+        if not self._sandbox_dir.exists():
             return []
 
         files: list[SandboxedFile] = []
-        for entry in sorted(self._orphans_dir.rglob("*")):
+        for entry in sorted(self._sandbox_dir.rglob("*")):
             if entry.is_dir() or entry.is_symlink():
                 continue
+
             try:
-                relative = entry.relative_to(self._orphans_dir)
+                relative_to_sandbox = entry.relative_to(self._sandbox_dir)
             except ValueError:
                 continue
 
+            if relative_to_sandbox.parts and relative_to_sandbox.parts[0] == "orphans":
+                origin = ORPHAN
+                relative = entry.relative_to(self._orphans_dir)
+            else:
+                origin = REPLACED_VERSION
+                relative = relative_to_sandbox
+
             stat = entry.stat()
-            original = self._storage_dir / relative
+            audit = self._audit(entry)
             files.append(
                 SandboxedFile(
                     path=entry,
                     name=entry.name,
                     size=stat.st_size,
                     modified=datetime.fromtimestamp(stat.st_mtime),
-                    original_path=original,
+                    original_path=self._storage_dir / relative,
+                    origin=origin,
+                    status=audit.status if audit else "unknown",
+                    replacement_path=audit.replacement_path if audit else None,
+                    shares_inode=audit.shares_inode if audit else False,
+                    reclaimable_bytes=audit.reclaimable_bytes if audit else 0,
                 )
             )
         return files
 
-    def delete_files(self, paths: list[Path]) -> int:
+    def _audit(self, path: Path):
+        """Audite un fichier si un auditeur est configuré, sinon None."""
+        if self._auditor is None:
+            return None
+        try:
+            return self._auditor.audit(path)
+        except Exception as exc:  # l'audit ne doit jamais bloquer l'affichage
+            logger.warning("Audit impossible pour {} : {}", path, exc)
+            return None
+
+    def delete_files(
+        self, paths: list[Path], allow_unknown: bool = False
+    ) -> DeletionReport:
         """Supprime définitivement des fichiers du sandbox.
+
+        Un fichier n'est supprimé que si l'audit confirme qu'un remplaçant
+        vit dans la vidéothèque. Les fichiers dont le statut est indéterminé
+        exigent ``allow_unknown``. Les fichiers sans remplaçant sont toujours
+        refusés : le sandbox en détient la seule copie.
 
         Nettoie les répertoires vides remontant après suppression.
 
+        Args:
+            paths: Fichiers à supprimer
+            allow_unknown: Autorise la suppression des statuts indéterminés
+
         Returns:
-            Nombre de fichiers supprimés.
+            DeletionReport (supprimés, refusés avec motif, espace libéré).
         """
-        deleted = 0
+        from src.services.sandbox_audit import MISSING, REPLACED, UNKNOWN
+
+        report = DeletionReport()
         for path in paths:
             if not path.exists():
                 logger.warning("Fichier déjà absent : {}", path)
                 continue
             if not self._is_inside_sandbox(path):
                 logger.error("Tentative de suppression hors sandbox : {}", path)
+                report.refused.append((path, "hors du sandbox"))
                 continue
+
+            audit = self._audit(path)
+            if audit is not None:
+                if audit.status == MISSING:
+                    logger.warning(
+                        "Suppression refusée (aucun remplaçant en bibliothèque) : {}",
+                        path,
+                    )
+                    report.refused.append((path, "aucun remplaçant en bibliothèque"))
+                    continue
+                if audit.status == UNKNOWN and not allow_unknown:
+                    logger.info("Suppression refusée (statut indéterminé) : {}", path)
+                    report.refused.append((path, "statut indéterminé"))
+                    continue
+                if audit.status not in (REPLACED, UNKNOWN):
+                    report.refused.append((path, f"statut {audit.status}"))
+                    continue
+                gain = audit.reclaimable_bytes
+            else:
+                gain = path.stat().st_size
+
             path.unlink()
-            deleted += 1
+            report.deleted += 1
+            report.reclaimed_bytes += gain
             logger.info("Supprimé définitivement : {}", path)
 
-        self._cleanup_empty_parents(paths, root=self._orphans_dir)
-        return deleted
+        self._cleanup_empty_parents(paths, root=self._sandbox_dir)
+        return report
 
     def reinject_files(self, paths: list[Path]) -> int:
         """Réinjecte des fichiers du sandbox vers le répertoire downloads.

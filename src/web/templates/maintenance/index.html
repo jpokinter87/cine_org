@@ -390,18 +390,66 @@ function sandboxToggleAll(master) {
     sandboxUpdateActions();
 }
 
+function sandboxFormatSize(bytes) {
+    if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(2) + ' Go';
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' Mo';
+    if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' Ko';
+    return bytes + ' o';
+}
+
+// Filtre d'affichage par statut d'audit
+function sandboxFilter(btn) {
+    var filtre = btn.getAttribute('data-filter');
+    document.querySelectorAll('.sandbox-filter').forEach(function(b) {
+        b.classList.toggle('is-active', b === btn);
+    });
+    document.querySelectorAll('.sandbox-row').forEach(function(row) {
+        var visible = (filtre === 'all') || (row.getAttribute('data-status') === filtre);
+        row.style.display = visible ? '' : 'none';
+    });
+}
+
+// Coche uniquement les fichiers dont un remplaçant est confirmé
+function sandboxSelectSafe() {
+    document.querySelectorAll('.sandbox-cb').forEach(function(cb) {
+        cb.checked = cb.getAttribute('data-status') === 'replaced';
+    });
+    var master = document.getElementById('sandbox-select-all');
+    if (master) master.checked = false;
+    sandboxUpdateActions();
+}
+
 function sandboxUpdateActions() {
     var checked = document.querySelectorAll('.sandbox-cb:checked');
     var count = checked.length;
     var countEl = document.getElementById('sandbox-sel-count');
+    var warnEl = document.getElementById('sandbox-sel-warn');
     var btnDel = document.getElementById('sandbox-btn-delete');
     var btnReinject = document.getElementById('sandbox-btn-reinject');
     var countMsg = document.getElementById('sandbox-delete-count-msg');
 
+    var octets = 0, bloques = 0;
+    checked.forEach(function(cb) {
+        octets += parseInt(cb.getAttribute('data-reclaimable') || '0', 10);
+        if (cb.getAttribute('data-blocked')) bloques++;
+    });
+
     if (countEl) countEl.textContent = count + ' sélectionné(s)';
+    if (warnEl) {
+        if (bloques > 0) {
+            warnEl.textContent = bloques + ' protégé(s) — ne seront pas supprimés';
+            warnEl.hidden = false;
+        } else {
+            warnEl.hidden = true;
+        }
+    }
     if (btnDel) btnDel.disabled = count === 0;
     if (btnReinject) btnReinject.disabled = count === 0;
-    if (countMsg) countMsg.textContent = count + ' fichier(s) sélectionné(s)';
+    if (countMsg) {
+        countMsg.textContent = (count - bloques) + ' fichier(s) supprimable(s) — '
+            + sandboxFormatSize(octets) + ' à libérer'
+            + (bloques > 0 ? ' (' + bloques + ' protégé(s) par la vérification)' : '');
+    }
 }
 
 function sandboxSubmit(action) {
@@ -759,6 +807,84 @@ function startFix(type) {
     padding: 0.5rem;
     color: var(--text-muted);
     font-size: 0.8125rem;
+}
+/* Récapitulatif, filtres et statuts d'audit */
+.sandbox-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 0.5rem 0 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+.sandbox-summary-ok { color: var(--accent-emerald); }
+.sandbox-summary-blocked { color: var(--accent-amber); }
+.sandbox-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+.sandbox-filters { display: flex; gap: 0.25rem; }
+.sandbox-filter {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--border-subtle, rgba(255,255,255,0.12));
+    border-radius: 999px;
+    padding: 0.2rem 0.65rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.sandbox-filter:hover { color: var(--text-primary, #fff); }
+.sandbox-filter.is-active {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary, #fff);
+}
+.sandbox-badge {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.sandbox-badge-ok {
+    background: rgba(78, 203, 141, 0.12);
+    color: var(--accent-emerald);
+    border: 1px solid rgba(78, 203, 141, 0.25);
+}
+.sandbox-badge-danger {
+    background: rgba(232, 93, 117, 0.12);
+    color: #e85d75;
+    border: 1px solid rgba(232, 93, 117, 0.25);
+}
+.sandbox-badge-warn {
+    background: rgba(232, 168, 73, 0.12);
+    color: var(--accent-amber);
+    border: 1px solid rgba(232, 168, 73, 0.25);
+}
+.sandbox-hardlink { color: var(--text-muted); cursor: help; }
+.sandbox-btn-safe {
+    background: rgba(78, 203, 141, 0.1);
+    color: var(--accent-emerald);
+    border: 1px solid rgba(78, 203, 141, 0.25);
+}
+.sandbox-allow-unknown {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    cursor: help;
+    margin-right: 0.5rem;
+}
+.sandbox-selection-warn {
+    margin-left: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--accent-amber);
 }
 .sandbox-move-progress {
     padding: 0.75rem 0 0.25rem;

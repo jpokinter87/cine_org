@@ -21,7 +21,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Validation automatique et manuelle](#validation-automatique-et-manuelle)
   - [Détection des doublons](#détection-des-doublons)
   - [Hardlinks et seeding](#hardlinks-et-seeding)
-  - [Sandbox des orphelins](#sandbox-des-orphelins)
+  - [Sandbox](#sandbox)
 - [Peupler la base de données séries](#peupler-la-base-de-données-séries)
 - [Notes et évaluations](#notes-et-évaluations)
   - [Notes TMDB](#notes-tmdb)
@@ -479,13 +479,30 @@ Pour préserver le seeding BitTorrent après transfert, CineOrg crée un **hardl
 
 > 📖 Installation du timer et détails : [docs/hardlinks.md](docs/hardlinks.md).
 
-### Sandbox des orphelins
+### Sandbox
 
-Les **orphelins** (fichiers physiques sans symlink les référençant) peuvent être déplacés vers un répertoire `.sandbox/` (sur le même volume que `storage/` pour éviter les copies réseau) avant suppression ou réinjection :
+Le répertoire `.sandbox/` (sur le même volume que `storage/`, pour éviter les copies réseau) recueille deux familles de fichiers :
 
-- Détection via comparaison storage ↔ symlinks.
-- Déplacement non destructif (l'arborescence d'origine est préservée dans la sandbox).
-- Réinjection possible via le workflow (scan → match → transfer) pour les fichiers valables.
+- les **orphelins** (fichiers physiques sans symlink les référençant), isolés sous `.sandbox/orphans/` ;
+- les **anciennes versions** écartées par un transfert lorsqu'un fichier de meilleure qualité les remplace ; elles reproduisent l'arborescence de `storage/` à la racine de la sandbox.
+
+Le déplacement est non destructif dans les deux cas, et la réinjection dans le workflow (scan → match → transfer) reste possible.
+
+#### Purge vérifiée
+
+La sandbox grossit à chaque remplacement et doit être purgée périodiquement. Comme elle contient parfois la **seule copie** d'un média, chaque fichier est confronté à la vidéothèque avant toute suppression : on cherche en base la fiche correspondante (série + saison + épisode, ou film + année) et l'on vérifie que son fichier est **physiquement présent hors sandbox**. Trois statuts en découlent :
+
+| Statut | Signification | Suppression |
+|---|---|---|
+| **Remplacé** | Une version vit dans la vidéothèque | Autorisée |
+| **Seule copie** | Aucun remplaçant — la sandbox détient l'unique exemplaire | **Toujours refusée** |
+| **À vérifier** | Impossible de trancher (nommage hors schéma, fichier non vidéo) | Refusée sauf case « Inclure les à vérifier » |
+
+Le refus est appliqué **côté serveur**, pas seulement dans l'interface : une requête forgée à la main ne peut pas effacer un fichier protégé, et la case de forçage ne débloque jamais le statut « Seule copie ».
+
+La page Maintenance affiche un badge par ligne, un filtre par statut et un bouton **« Sélectionner les N purgeables »** qui ne coche que les fichiers vérifiés — la purge périodique tient ainsi en deux clics. La colonne *Récupérable* distingue l'espace réellement libéré : un fichier partageant son inode avec la vidéothèque (hardlink) affiche `—`, car le supprimer ne rend aucun octet.
+
+Les fichiers multi-épisodes (`S05E01-E06`) sont résolus via le champ `episode_end` ; à défaut de fiche couvrant la plage, ils basculent en « Seule copie » et restent protégés.
 
 ## Notes et évaluations
 
