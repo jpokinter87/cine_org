@@ -337,22 +337,34 @@ class ValidationService:
         Permet a l'utilisateur de rechercher un media par titre
         si les resultats automatiques ne correspondent pas.
 
+        La recherche par nom TVDB v3 (``/search/series?name=``) a ete retiree
+        par le fournisseur (404) : les series passent donc par ``search_tv``
+        TMDB, puis le tvdb_id de chaque candidat est resolu pour garder tout
+        l'aval (episodes, completude) sur TVDB par ID — meme chemin que le
+        workflow ``process``. Les candidats absents de TVDB sont ecartes.
+
         Args:
             query: Titre a rechercher
-            is_series: True pour chercher une serie (TVDB), False pour un film (TMDB)
+            is_series: True pour chercher une serie, False pour un film
             year: Annee optionnelle pour filtrer les resultats
 
         Returns:
             Liste des resultats de recherche (vide si client non disponible)
         """
         if is_series:
-            if self._tvdb_client is None:
+            if self._tmdb_client is None:
                 return []
             # Verifier si le client a une api_key valide
-            api_key = getattr(self._tvdb_client, "_api_key", None)
+            api_key = getattr(self._tmdb_client, "_api_key", None)
             if not api_key:
                 return []
-            return await self._tvdb_client.search(query, year=year)
+
+            from src.services.workflow.pending_factory import (
+                _resolve_tvdb_candidates,
+            )
+
+            results = await self._tmdb_client.search_tv(query, year=year)
+            return await _resolve_tvdb_candidates(results, self._tmdb_client, limit=10)
         else:
             if self._tmdb_client is None:
                 return []

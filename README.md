@@ -405,9 +405,27 @@ ou pire, éclatée sur les deux :
    *tout le groupe* part en validation manuelle. Ce cas survient quand une saison est plus
    longue que le canon de la fiche retenue : le filtrage par nombre d'épisodes élimine cette
    fiche pour les derniers épisodes, qui basculeraient alors sur la fiche homonyme.
+3. **Alignement de l'année** : quand le nom de fichier porte une année, les candidats dont
+   l'année de première diffusion s'en écarte de plus d'un an sont écartés. Deux précautions
+   encadrent ce filtre : un candidat sans année connue n'est jamais écarté (année inconnue
+   n'est pas année divergente), et si *aucun* candidat n'est aligné — année du nom de fichier
+   erronée, fréquent sur les releases — la liste d'origine est conservée intégralement et
+   l'arbitrage revient à l'utilisateur.
 
 Une fois le bon candidat validé une seule fois, la cascade série propage le choix à tous les
 autres épisodes du lot.
+
+#### Garde-fou de type : un épisode ne peut pas devenir un film
+
+Le type d'un média se décide sur **le fichier**, jamais sur la seule source de l'API. La
+source `tmdb_tv` est ambiguë : elle désigne une série TMDB, mais sert aussi aux *films*
+classés en série sur TMDB, pour lesquels la fiche film est le bon rangement.
+
+Quand le nom de fichier porte formellement une saison **et** un épisode, un candidat
+`tmdb_tv` est donc traité comme une série : son `tvdb_id` est résolu pour que tout l'aval
+(épisodes, complétude, symlinks) reste sur TVDB par identifiant. Si la série n'existe pas
+sur TVDB, le fichier est **ignoré avec un message explicite** plutôt que rangé en film —
+une fiche film créée à partir d'un épisode est difficile à rattraper.
 
 #### Formule de scoring
 
@@ -427,7 +445,8 @@ Où :
 
 **Séries :**
 ```
-Score = 100% × titre (avec filtrage par nombre d'épisodes compatible)
+Score = 100% × titre
+        (puis filtrage par année alignée et par nombre d'épisodes compatible)
 ```
 
 #### Matching bilingue
@@ -1806,6 +1825,19 @@ uv sync  # Réinstaller les dépendances
 ### Aucun candidat pour les séries
 
 L'API TheTVDB v3 a retiré son endpoint de recherche par nom (`/search/series?name=` → 404). La recherche de séries passe désormais par TMDB (`search_tv`), puis résout le `tvdb_id` via les identifiants externes TMDB pour conserver l'accès TVDB par ID (titres d'épisodes, complétude). Une série présente sur TMDB mais absente de TVDB n'est pas proposée automatiquement (validation manuelle par ID possible).
+
+La **recherche manuelle par titre** de la page de validation emprunte le même chemin : elle utilisait auparavant l'endpoint TVDB retiré et ne renvoyait donc jamais aucun résultat pour une série.
+
+### Une partie des épisodes d'une saison apparaît en films
+
+Symptôme : au sein d'une même saison, quelques épisodes sont reconnus comme série et les autres se retrouvent en fiches films indépendantes.
+
+Deux causes se combinaient, toutes deux corrigées :
+
+1. Une **série homonyme plus ancienne** restait candidate tant que le numéro d'épisode tenait dans le nombre d'épisodes de *sa* saison (ex. « Miracle Workers » 2006, 5 épisodes, face à celle de 2019 qui en compte 7 : seuls les épisodes 6 et 7 étaient départagés). L'ambiguïté renvoyait les autres en validation manuelle. Le [filtrage par année alignée](#garde-fous-contre-les-séries-homonymes) tranche désormais ce cas.
+2. La validation manuelle par **ID IMDB** produit un candidat de source `tmdb_tv`, que le transfert rangeait en film. Voir [Garde-fou de type](#garde-fou-de-type--un-épisode-ne-peut-pas-devenir-un-film).
+
+Si des fiches films fantômes subsistent d'une exécution antérieure, elles se suppriment depuis leur page de détail (bouton de suppression de fiche fantôme, qui envoie la fiche à la corbeille).
 
 ### Symlinks cassés après déplacement
 

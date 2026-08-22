@@ -1,3 +1,9 @@
+## v2.16.1 (2026-08-22)
+
+### Fix
+
+- **matching**: empêcher qu'un épisode soit rangé en film
+
 ## v2.16.0 (2026-08-11)
 
 ### Feat
