@@ -1836,11 +1836,14 @@ uv sync  # Réinstaller les dépendances
 
 ### Aucun candidat pour les séries
 
-L'API TheTVDB v3 a retiré son endpoint de recherche par nom (`/search/series?name=` → 404). La recherche de séries passe désormais par TMDB (`search_tv`), puis résout le `tvdb_id` via les identifiants externes TMDB pour conserver l'accès TVDB par ID (titres d'épisodes, complétude). Une série présente sur TMDB mais absente de TVDB n'est pas proposée automatiquement (validation manuelle par ID possible).
+Les séries sont cherchées **directement sur TVDB** (`/search?query=&type=series`), aussi bien dans le workflow `process` que dans la **recherche manuelle par titre** de la page de validation. Les candidats portent leur identifiant TVDB natif, donc tout l'aval (titres d'épisodes, complétude) reste sur TVDB par ID.
 
-La **recherche manuelle par titre** de la page de validation emprunte le même chemin : elle utilisait auparavant l'endpoint TVDB retiré et ne renvoyait donc jamais aucun résultat pour une série.
+Si aucun candidat n'apparaît :
+- vérifier que `CINEORG_TVDB_API_KEY` contient bien une clé **v4** (les clés v3 sont refusées, voir [TVDB](#tvdb-séries)) ;
+- essayer le titre original plutôt que le titre français, ou sans l'année ;
+- à défaut, saisir directement l'ID TVDB via l'onglet de recherche par ID.
 
-> **Depuis le passage à l'API v4**, TVDB expose de nouveau une recherche par nom (`/search?query=&type=series`). Le contournement TMDB décrit ci-dessus reste en place pour l'instant ; le rebranchement de la recherche sur TVDB fait l'objet d'un chantier distinct.
+> **Historique** : l'API v3 avait retiré son endpoint de recherche par nom (`/search/series?name=` → 404), ce qui rendait l'onglet « recherche par titre » inopérant pour les séries. Un contournement passait alors par TMDB (`search_tv`) puis résolvait le `tvdb_id` via les identifiants externes. L'API v4 ayant restauré la recherche par nom, ce détour a été supprimé.
 
 ### Une partie des épisodes d'une saison apparaît en films
 

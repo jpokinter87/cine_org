@@ -387,30 +387,21 @@ class TestSeriesCache:
 
     @pytest.fixture
     def tmdb_client(self) -> MagicMock:
-        """Client TMDB mocké : recherche série + résolution du tvdb_id.
-
-        get_tv_external_ids mappe l'id TMDB (numérique) sur le même tvdb_id
-        pour préserver l'identité des candidats à travers la résolution.
-        """
+        """Client TMDB mocké : ne porte plus la recherche série (passée sur TVDB)."""
         client = MagicMock()
         client._api_key = "fake-key"
-        client.search_tv = AsyncMock(
-            return_value=[
-                SearchResult(id="374506", title="From", year=2022, source="tmdb"),
-            ]
-        )
-
-        async def _ext(cid):
-            return {"tvdb_id": int(cid)}
-
-        client.get_tv_external_ids = AsyncMock(side_effect=_ext)
         return client
 
     @pytest.fixture
     def tvdb_client(self) -> MagicMock:
-        """Client TVDB mocké : détails (filtre doc) + comptage d'épisodes."""
+        """Client TVDB mocké : recherche + détails (filtre doc) + comptage."""
         client = MagicMock()
         client._api_key = "fake-key"
+        client.search = AsyncMock(
+            return_value=[
+                SearchResult(id="374506", title="From", year=2022, source="tvdb"),
+            ]
+        )
         client.get_details = AsyncMock(
             return_value=MediaDetails(id="374506", title="From", genres=("Drama",))
         )
@@ -445,8 +436,8 @@ class TestSeriesCache:
                 series_cache=series_cache,
             )
 
-        # search_tv() et score_results() appelés une seule fois
-        tmdb_client.search_tv.assert_called_once_with("From", year=2022)
+        # search() et score_results() appelés une seule fois
+        tvdb_client.search.assert_called_once_with("From", year=2022)
         matcher.score_results.assert_called_once()
 
     @pytest.mark.asyncio
@@ -474,7 +465,7 @@ class TestSeriesCache:
             )
 
         # Recherche unique malgré 3 saisons différentes
-        tmdb_client.search_tv.assert_called_once()
+        tvdb_client.search.assert_called_once()
         matcher.score_results.assert_called_once()
 
     @pytest.mark.asyncio
@@ -507,11 +498,11 @@ class TestSeriesCache:
         async def mock_search(title, year=None):
             if "From" in title:
                 return [
-                    SearchResult(id="374506", title="From", year=2022, source="tmdb")
+                    SearchResult(id="374506", title="From", year=2022, source="tvdb")
                 ]
-            return [SearchResult(id="999", title="Lost", year=2004, source="tmdb")]
+            return [SearchResult(id="999", title="Lost", year=2004, source="tvdb")]
 
-        tmdb_client.search_tv = AsyncMock(side_effect=mock_search)
+        tvdb_client.search = AsyncMock(side_effect=mock_search)
 
         def mock_score(results, title, year, duration, is_series=False):
             return [
@@ -555,7 +546,7 @@ class TestSeriesCache:
         )
 
         # 2 recherches : From + Lost (pas 3)
-        assert tmdb_client.search_tv.call_count == 2
+        assert tvdb_client.search.call_count == 2
         # From et Lost ont des candidats différents
         assert p1.candidates[0]["id"] == "374506"
         assert p2.candidates[0]["id"] == "999"
@@ -576,7 +567,7 @@ class TestSeriesCache:
             )
 
         # 3 appels search sans cache
-        assert tmdb_client.search_tv.call_count == 3
+        assert tvdb_client.search.call_count == 3
         assert matcher.score_results.call_count == 3
 
 

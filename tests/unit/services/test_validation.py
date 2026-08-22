@@ -640,44 +640,32 @@ class TestSearchManual:
         assert results == expected_results
 
     @pytest.mark.asyncio
-    async def test_search_manual_series(self, validation_service, mock_tmdb_client):
-        """is_series=True -> search_tv TMDB puis résolution du tvdb_id.
+    async def test_search_manual_series(self, validation_service, mock_tvdb_client):
+        """is_series=True -> recherche directe sur TVDB.
 
-        La recherche par nom TVDB v3 (/search/series) a été retirée par le
-        fournisseur : elle renvoyait systématiquement une liste vide, ce qui
-        rendait l'onglet « recherche par titre » inutilisable pour les séries.
+        L'API TVDB v4 a restauré la recherche par nom que la v3 avait retirée :
+        les candidats portent leur identifiant TVDB natif, sans détour par TMDB.
         """
-        mock_tmdb_client.search_tv = AsyncMock(
-            return_value=[
-                SearchResult(id="1396", title="Breaking Bad", year=2008, source="tmdb")
-            ]
-        )
-        mock_tmdb_client.get_tv_external_ids = AsyncMock(
-            return_value={"tvdb_id": 81189}
-        )
+        expected = [
+            SearchResult(id="81189", title="Breaking Bad", year=2008, source="tvdb")
+        ]
+        mock_tvdb_client.search = AsyncMock(return_value=expected)
 
         results = await validation_service.search_manual("Breaking Bad", is_series=True)
 
-        mock_tmdb_client.search_tv.assert_called_once_with("Breaking Bad", year=None)
+        mock_tvdb_client.search.assert_called_once_with("Breaking Bad", year=None)
         assert [(r.id, r.source) for r in results] == [("81189", "tvdb")]
 
     @pytest.mark.asyncio
-    async def test_search_manual_series_ecarte_candidat_sans_tvdb_id(
-        self, validation_service, mock_tmdb_client
+    async def test_search_manual_series_n_utilise_pas_tmdb(
+        self, validation_service, mock_tmdb_client, mock_tvdb_client
     ):
-        """Un candidat série absent de TVDB est écarté : tout l'aval est TVDB par ID."""
-        mock_tmdb_client.search_tv = AsyncMock(
-            return_value=[
-                SearchResult(id="78950", title="Miracle Workers", year=2019, source="tmdb")
-            ]
-        )
-        mock_tmdb_client.get_tv_external_ids = AsyncMock(return_value={})
+        """Aucun détour par TMDB pour les séries."""
+        mock_tvdb_client.search = AsyncMock(return_value=[])
 
-        results = await validation_service.search_manual(
-            "Miracle Workers", is_series=True
-        )
+        await validation_service.search_manual("Breaking Bad", is_series=True)
 
-        assert results == []
+        mock_tmdb_client.search_tv.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_search_manual_no_client(self, mock_pending_repo, mock_matcher):
@@ -711,6 +699,24 @@ class TestSearchManual:
         )
 
         results = await service.search_manual("Avatar", is_series=False)
+        assert results == []
+
+    @pytest.mark.asyncio
+    async def test_search_manual_series_tvdb_no_api_key(
+        self, mock_pending_repo, mock_matcher
+    ):
+        """Client TVDB sans api_key -> retourne liste vide."""
+        tvdb_client = MagicMock()
+        tvdb_client._api_key = None
+
+        service = ValidationService(
+            pending_repo=mock_pending_repo,
+            matcher=mock_matcher,
+            tmdb_client=None,
+            tvdb_client=tvdb_client,
+        )
+
+        results = await service.search_manual("Breaking Bad", is_series=True)
         assert results == []
 
 
