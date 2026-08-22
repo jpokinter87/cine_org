@@ -5,7 +5,6 @@ Module partagé entre le CLI (matching_step.py) et le web (workflow.py)
 pour éviter la duplication du code de matching API + scoring.
 """
 
-from dataclasses import replace
 from typing import Optional
 
 from loguru import logger
@@ -59,7 +58,7 @@ async def create_pending_validation(
         )
     else:
         candidates = await _search_and_score_series(
-            title, year, matcher, tmdb_client, tvdb_client, series_cache
+            title, year, matcher, tvdb_client, series_cache
         )
 
         # Filtrer les candidats incompatibles par nombre d'épisodes
@@ -191,49 +190,23 @@ async def _search_and_score_movie(
     return candidates
 
 
-async def _resolve_tvdb_candidates(scored: list, tmdb_client, limit: int = 8) -> list:
-    """Résout le tvdb_id des meilleurs candidats TMDB et les réécrit en forme TVDB.
-
-    Pour chaque candidat série trouvé via TMDB (parmi les ``limit`` meilleurs par
-    score), interroge ``get_tv_external_ids`` pour obtenir le tvdb_id. Les candidats
-    résolus sont réécrits avec ``source="tvdb"`` et ``id=<tvdb_id>`` afin que tout
-    l'aval (épisodes, complétude) reste sur TVDB par ID. Les candidats sans tvdb_id
-    (série absente de TVDB) ou en erreur sont écartés.
-    """
-    resolved = []
-    for cand in scored[:limit]:
-        try:
-            ext = await tmdb_client.get_tv_external_ids(cand.id)
-        except Exception as e:
-            logger.warning(
-                f"Erreur external_ids TMDB pour '{cand.title}' ({cand.id}): {e}"
-            )
-            continue
-        tvdb_id = ext.get("tvdb_id") if ext else None
-        if not tvdb_id:
-            logger.debug(
-                f"Série TMDB sans tvdb_id, écartée : '{cand.title}' ({cand.id})"
-            )
-            continue
-        resolved.append(replace(cand, id=str(tvdb_id), source="tvdb"))
-    return resolved
+# Nombre maximum de candidats séries proposés à la validation.
+MAX_SERIES_CANDIDATES = 8
 
 
 async def _search_and_score_series(
     title: str,
     year: Optional[int],
     matcher,
-    tmdb_client,
     tvdb_client,
     series_cache: Optional[dict[tuple[str, Optional[int]], list]] = None,
 ) -> list:
-    """Recherche et score les séries via TMDB, puis résout le tvdb_id.
+    """Recherche et score les séries directement sur TVDB.
 
-    La recherche par nom TVDB v3 (/search/series?name=) a été retirée par le
-    fournisseur (404). On cherche donc via TMDB (search_tv), puis on résout le
-    tvdb_id de chaque candidat (get_tv_external_ids) pour garder tout l'aval
-    (épisodes, complétude) sur TVDB par ID. Les candidats sans tvdb_id sont
-    écartés (choix : pas de chemin TMDB-natif dégradé).
+    L'API TVDB v4 a restauré la recherche par nom que la v3 avait retirée : les
+    candidats sortent donc de TVDB avec leur identifiant natif, sans le détour
+    par TMDB (search_tv puis get_tv_external_ids) qui servait à retrouver le
+    tvdb_id. Tout l'aval (épisodes, complétude) reste sur TVDB par ID.
 
     Utilise un cache mémoire par (titre, année) pour éviter les recherches et le
     scoring redondants quand plusieurs épisodes de la même série sont dans le batch.
@@ -245,21 +218,21 @@ async def _search_and_score_series(
 
     candidates = []
 
-    if not tmdb_client or not getattr(tmdb_client, "_api_key", None):
+    if not tvdb_client or not getattr(tvdb_client, "_api_key", None):
         return candidates
 
     try:
-        api_results = await tmdb_client.search_tv(title, year=year)
+        api_results = await tvdb_client.search(title, year=year)
         scored = matcher.score_results(api_results, title, year, None, is_series=True)
         # Garde-fou anti-homonymes : le scoring séries est à 100 % titre, deux
         # séries homonymes d'époques différentes sortent toutes deux à 100 %.
         scored = filter_by_year(scored, year)
-        candidates = await _resolve_tvdb_candidates(scored, tmdb_client)
+        candidates = scored[:MAX_SERIES_CANDIDATES]
         # Exclusion stricte des séries documentaires (le dossier temp/Séries n'en
         # contient jamais). Opère sur des candidats à id=tvdb_id → get_details TVDB OK.
         candidates = await filter_documentary_series(tvdb_client, candidates)
     except Exception as e:
-        logger.warning(f"Erreur recherche série TMDB pour {title}: {e}")
+        logger.warning(f"Erreur recherche série TVDB pour {title}: {e}")
 
     # Stocker dans le cache mémoire pour les prochains épisodes
     if series_cache is not None and cache_key:
