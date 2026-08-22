@@ -1,3 +1,9 @@
+## v2.18.0 (2026-08-22)
+
+### Feat
+
+- **tvdb**: rebrancher la recherche de series sur TVDB
+
 ## v2.17.0 (2026-08-22)
 
 ### Feat
