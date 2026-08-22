@@ -99,8 +99,8 @@ CINEORG_DATABASE_URL=sqlite:///cineorg.db
 # TMDB : https://www.themoviedb.org/settings/api
 CINEORG_TMDB_API_KEY=votre_cle_tmdb
 
-# TVDB : https://thetvdb.com/api-information
-CINEORG_TVDB_API_KEY=votre_cle_tvdb
+# TVDB (API v4 — les clés v3 sont refusées) : https://thetvdb.com/api-information
+CINEORG_TVDB_API_KEY=votre_cle_tvdb_v4
 
 # === TRAITEMENT ===
 # Taille minimum des fichiers en MB (ignore les petits fichiers)
@@ -127,7 +127,7 @@ EOF
 | `CINEORG_VIDEO_DIR` | `~/Videos/video` | Symlinks pour le mediacenter |
 | `CINEORG_DATABASE_URL` | `sqlite:///cineorg.db` | URL de la base de données |
 | `CINEORG_TMDB_API_KEY` | (vide) | Clé API TMDB pour les films |
-| `CINEORG_TVDB_API_KEY` | (vide) | Clé API TVDB pour les séries |
+| `CINEORG_TVDB_API_KEY` | (vide) | Clé API TVDB v4 pour les séries (format UUID, voir [TVDB](#tvdb-séries)) |
 | `CINEORG_MIN_FILE_SIZE_MB` | `100` | Taille minimum en MB |
 | `CINEORG_MATCH_SCORE_THRESHOLD` | `85` | Seuil de validation auto (%) |
 | `CINEORG_MAX_FILES_PER_SUBDIR` | `50` | Max fichiers par sous-dossier |
@@ -1364,6 +1364,18 @@ Les fichiers contenant ces termes sont automatiquement ignorés :
 2. Aller dans [API Information](https://thetvdb.com/api-information)
 3. Créer un projet et récupérer l'API Key
 
+**CineOrg utilise l'API TVDB v4.** Les clés v3 (32 caractères hexadécimaux) sont
+refusées par la v4 avec `InvalidAPIKey` : il faut générer une nouvelle clé
+(format UUID) depuis le dashboard TVDB. Deux régimes de clé existent :
+
+| Régime | Login | Configuration |
+|--------|-------|---------------|
+| **Project key** (souscription projet) | `apikey` seul | `CINEORG_TVDB_API_KEY` suffit |
+| **User-supported key** (gratuite) | `apikey` + `pin` | non pris en charge actuellement |
+
+L'API v3 a été retirée endpoint par endpoint (la recherche par nom renvoie 404
+depuis 2025) ; la v4 est désormais le seul chemin viable.
+
 ## Options globales
 
 ```bash
@@ -1827,6 +1839,8 @@ uv sync  # Réinstaller les dépendances
 L'API TheTVDB v3 a retiré son endpoint de recherche par nom (`/search/series?name=` → 404). La recherche de séries passe désormais par TMDB (`search_tv`), puis résout le `tvdb_id` via les identifiants externes TMDB pour conserver l'accès TVDB par ID (titres d'épisodes, complétude). Une série présente sur TMDB mais absente de TVDB n'est pas proposée automatiquement (validation manuelle par ID possible).
 
 La **recherche manuelle par titre** de la page de validation emprunte le même chemin : elle utilisait auparavant l'endpoint TVDB retiré et ne renvoyait donc jamais aucun résultat pour une série.
+
+> **Depuis le passage à l'API v4**, TVDB expose de nouveau une recherche par nom (`/search?query=&type=series`). Le contournement TMDB décrit ci-dessus reste en place pour l'instant ; le rebranchement de la recherche sur TVDB fait l'objet d'un chantier distinct.
 
 ### Une partie des épisodes d'une saison apparaît en films
 

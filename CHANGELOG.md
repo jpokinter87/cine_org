@@ -1,3 +1,9 @@
+## v2.17.0 (2026-08-22)
+
+### Feat
+
+- **tvdb**: migrer le client vers l'API TVDB v4
+
 ## v2.16.1 (2026-08-22)
 
 ### Fix

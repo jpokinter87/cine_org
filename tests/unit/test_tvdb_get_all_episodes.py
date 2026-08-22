@@ -1,102 +1,116 @@
-"""Test de TVDBClient.get_all_episodes (agrégation multi-saisons)."""
+"""Test de TVDBClient.get_all_episodes (agregation de toutes les saisons)."""
 
+from unittest.mock import AsyncMock, MagicMock
+
+import httpx
 import pytest
+import respx
 
+from src.adapters.api.cache import APICache
 from src.adapters.api.tvdb_client import TVDBClient
+from tests.fixtures.tvdb_responses import (
+    TVDB_LOGIN_RESPONSE,
+    TVDB_NOT_FOUND_RESPONSE,
+    TVDB_SERIES_EPISODES_ENG_RESPONSE,
+    TVDB_SERIES_EPISODES_FRA_RESPONSE,
+)
+
+BASE = "https://api4.thetvdb.com/v4"
+
+
+@pytest.fixture
+def mock_cache() -> MagicMock:
+    """APICache simule."""
+    cache = MagicMock(spec=APICache)
+    cache.get = AsyncMock(return_value=None)
+    cache.set = AsyncMock()
+    cache.set_search = AsyncMock()
+    cache.set_details = AsyncMock()
+    return cache
+
+
+def _mock_series(series_id: int = 81189) -> None:
+    """Simule le login et les deux endpoints d'episodes traduits."""
+    respx.post(f"{BASE}/login").mock(
+        return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
+    )
+    respx.get(f"{BASE}/series/{series_id}/episodes/default/fra").mock(
+        return_value=httpx.Response(200, json=TVDB_SERIES_EPISODES_FRA_RESPONSE)
+    )
+    respx.get(f"{BASE}/series/{series_id}/episodes/default/eng").mock(
+        return_value=httpx.Response(200, json=TVDB_SERIES_EPISODES_ENG_RESPONSE)
+    )
 
 
 @pytest.mark.asyncio
-async def test_get_all_episodes_aggregates_seasons(monkeypatch):
-    """Agrège les épisodes de toutes les saisons jusqu'à la première vide."""
-    client = TVDBClient(api_key="x", cache=None)
+@respx.mock
+async def test_get_all_episodes_aggregates_seasons(mock_cache) -> None:
+    """Agrege les episodes de toutes les saisons en une seule liste."""
+    _mock_series()
 
-    async def fake_ensure_token():
-        return None
+    client = TVDBClient(api_key="x", cache=mock_cache)
+    try:
+        episodes = await client.get_all_episodes("81189")
 
-    async def fake_get_client():
-        return object()
+        assert len(episodes) == 20  # 7 (S1) + 13 (S2), specials exclus
+        keys = {(e.season_number, e.episode_number) for e in episodes}
+        assert (1, 1) in keys
+        assert (2, 13) in keys
 
-    seasons = {
-        1: [
-            {
-                "id": 11,
-                "episodeName": "Pilote",
-                "airedSeason": 1,
-                "airedEpisodeNumber": 1,
-                "firstAired": "2019-01-01",
-                "overview": "o1",
-            },
-            {
-                "id": 12,
-                "episodeName": "Deux",
-                "airedSeason": 1,
-                "airedEpisodeNumber": 2,
-                "firstAired": "2019-01-08",
-                "overview": "o2",
-            },
-        ],
-        2: [
-            {
-                "id": 21,
-                "episodeName": "S2E1",
-                "airedSeason": 2,
-                "airedEpisodeNumber": 1,
-                "firstAired": "2020-01-01",
-                "overview": "o3",
-            },
-        ],
-    }
-
-    async def fake_raw(self, http_client, series_id, season, language):
-        return seasons.get(season, [])
-
-    monkeypatch.setattr(client, "_ensure_token", fake_ensure_token)
-    monkeypatch.setattr(client, "_get_client", fake_get_client)
-    monkeypatch.setattr(
-        TVDBClient, "_fetch_all_season_episodes_raw", fake_raw, raising=True
-    )
-
-    episodes = await client.get_all_episodes("999")
-
-    assert len(episodes) == 3
-    keys = {(e.season_number, e.episode_number) for e in episodes}
-    assert keys == {(1, 1), (1, 2), (2, 1)}
-    by_key = {(e.season_number, e.episode_number): e for e in episodes}
-    assert by_key[(1, 1)].air_date == "2019-01-01"
-    assert by_key[(1, 1)].title == "Pilote"
+        by_key = {(e.season_number, e.episode_number): e for e in episodes}
+        assert by_key[(1, 1)].title == "Chute libre"
+        assert by_key[(1, 1)].air_date == "2008-01-20"
+    finally:
+        await client.close()
 
 
 @pytest.mark.asyncio
-async def test_get_all_episodes_skips_none_episode_number(monkeypatch):
-    """Un épisode sans numéro est ignoré."""
-    client = TVDBClient(api_key="x", cache=None)
+@respx.mock
+async def test_get_all_episodes_excludes_specials(mock_cache) -> None:
+    """La saison 0 (specials) est exclue, comme le faisait la v3."""
+    _mock_series()
 
-    async def fake_ensure_token():
-        return None
+    client = TVDBClient(api_key="x", cache=mock_cache)
+    try:
+        episodes = await client.get_all_episodes("81189")
 
-    async def fake_get_client():
-        return object()
+        assert all(e.season_number != 0 for e in episodes)
+    finally:
+        await client.close()
 
-    async def fake_raw(self, http_client, series_id, season, language):
-        if season == 1:
-            return [
-                {"id": 1, "airedSeason": 1, "airedEpisodeNumber": None},
-                {
-                    "id": 2,
-                    "airedSeason": 1,
-                    "airedEpisodeNumber": 1,
-                    "firstAired": "2019-01-01",
-                    "episodeName": "ok",
-                },
-            ]
-        return []
 
-    monkeypatch.setattr(client, "_ensure_token", fake_ensure_token)
-    monkeypatch.setattr(client, "_get_client", fake_get_client)
-    monkeypatch.setattr(
-        TVDBClient, "_fetch_all_season_episodes_raw", fake_raw, raising=True
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_all_episodes_falls_back_to_english_title(mock_cache) -> None:
+    """Un episode sans titre francais reprend le titre anglais."""
+    _mock_series()
+
+    client = TVDBClient(api_key="x", cache=mock_cache)
+    try:
+        episodes = await client.get_all_episodes("81189")
+
+        by_key = {(e.season_number, e.episode_number): e for e in episodes}
+        assert by_key[(1, 7)].title == "English title 7"
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_all_episodes_returns_empty_on_404(mock_cache) -> None:
+    """Une serie inconnue retourne une liste vide."""
+    respx.post(f"{BASE}/login").mock(
+        return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
+    )
+    respx.get(f"{BASE}/series/999999/episodes/default/fra").mock(
+        return_value=httpx.Response(404, json=TVDB_NOT_FOUND_RESPONSE)
+    )
+    respx.get(f"{BASE}/series/999999/episodes/default/eng").mock(
+        return_value=httpx.Response(404, json=TVDB_NOT_FOUND_RESPONSE)
     )
 
-    episodes = await client.get_all_episodes("1")
-    assert len(episodes) == 1
-    assert episodes[0].episode_number == 1
+    client = TVDBClient(api_key="x", cache=mock_cache)
+    try:
+        assert await client.get_all_episodes("999999") == []
+    finally:
+        await client.close()
