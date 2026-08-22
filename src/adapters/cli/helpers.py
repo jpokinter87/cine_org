@@ -118,6 +118,29 @@ def _extract_series_info(filename: str) -> tuple[int, int]:
     return season, episode
 
 
+def _looks_like_episode(filename: str) -> bool:
+    """
+    Determine si un nom de fichier designe formellement un episode.
+
+    S'appuie sur le meme parser que ``_extract_series_info`` : un fichier est
+    un episode lorsque guessit y trouve **a la fois** une saison et un episode.
+    Contrairement a ce dernier, aucune valeur par defaut n'est appliquee — la
+    reponse doit rester fiable pour servir de garde-fou de rangement.
+
+    Args:
+        filename: Nom du fichier video
+
+    Returns:
+        True si le fichier porte une saison ET un episode
+    """
+    from src.adapters.parsing.guessit_parser import GuessitFilenameParser
+    from src.core.value_objects.parsed_info import MediaType
+
+    parsed = GuessitFilenameParser().parse(filename, MediaType.SERIES)
+
+    return parsed.season is not None and parsed.episode is not None
+
+
 def _extract_episode_end(filename: str) -> Optional[int]:
     """
     Extrait le dernier episode couvert par un fichier multi-episodes.

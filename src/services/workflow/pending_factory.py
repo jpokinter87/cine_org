@@ -251,6 +251,9 @@ async def _search_and_score_series(
     try:
         api_results = await tmdb_client.search_tv(title, year=year)
         scored = matcher.score_results(api_results, title, year, None, is_series=True)
+        # Garde-fou anti-homonymes : le scoring séries est à 100 % titre, deux
+        # séries homonymes d'époques différentes sortent toutes deux à 100 %.
+        scored = filter_by_year(scored, year)
         candidates = await _resolve_tvdb_candidates(scored, tmdb_client)
         # Exclusion stricte des séries documentaires (le dossier temp/Séries n'en
         # contient jamais). Opère sur des candidats à id=tvdb_id → get_details TVDB OK.
@@ -267,6 +270,48 @@ async def _search_and_score_series(
 
 # Genres identifiant une série documentaire (TVDB renvoie l'anglais,
 # TMDB le français selon la langue de la requête).
+def filter_by_year(candidates: list, year: Optional[int]) -> list:
+    """Écarte les candidats séries dont l'année de diffusion diverge du fichier.
+
+    Le scoring séries repose à 100 % sur le titre : deux séries homonymes
+    d'époques différentes obtiennent le même score et l'ambiguïté qui en résulte
+    bloque l'auto-validation (cas « Miracle Workers » 2006 vs 2019).
+
+    Deux précautions, dans l'esprit du reste du matching :
+    - un candidat sans année n'est pas « formellement divergent » → conservé ;
+    - si aucun candidat n'est aligné (année du nom de fichier fausse, fréquent
+      sur les releases), la liste d'origine est rendue intacte et l'arbitrage
+      revient à l'utilisateur.
+
+    Args:
+        candidates: Liste de SearchResult scorés.
+        year: Année extraite du nom de fichier (None si absente).
+
+    Returns:
+        Liste filtrée, ou ``candidates`` inchangée si le filtrage n'est pas
+        applicable.
+    """
+    if year is None or not candidates:
+        return candidates
+
+    kept = [c for c in candidates if c.year is None or abs(c.year - year) <= 1]
+
+    if not kept:
+        return candidates
+
+    for candidate in candidates:
+        if candidate not in kept:
+            logger.info(
+                "Candidat série écarté (année {} ≠ {}) : « {} » (id {})",
+                candidate.year,
+                year,
+                candidate.title,
+                candidate.id,
+            )
+
+    return kept
+
+
 _DOCUMENTARY_GENRES = {"documentaire", "documentary"}
 
 

@@ -15,6 +15,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
+from loguru import logger
 from rich.console import Console
 
 from src.adapters.cli.helpers import (
@@ -23,6 +24,7 @@ from src.adapters.cli.helpers import (
     _extract_episode_end,
     _extract_series_info,
     _extract_subtitle_language_from_filename,
+    _looks_like_episode,
 )
 
 if TYPE_CHECKING:
@@ -115,6 +117,72 @@ class TransferData:
         if self.symlink_destination:
             data["symlink_destination"] = self.symlink_destination
         return data
+
+
+async def resolve_media_type(
+    candidate_source: str,
+    candidate_id: str,
+    filename: str,
+    tmdb_client,
+) -> Optional[tuple[bool, str, str]]:
+    """
+    Determine le type du media a partir du FICHIER, pas de la seule source API.
+
+    La source ``tmdb_tv`` est ambigue : elle designe une serie TMDB, mais elle
+    sert aussi aux **films** classes en serie sur TMDB (cas « Tout le bleu du
+    ciel »), ou l'entree film est le bon rangement. Se fier a la source seule
+    faisait basculer en film tout episode valide via l'onglet ID IMDB.
+
+    Quand le fichier est formellement un episode, le tvdb_id du candidat est
+    resolu pour que tout l'aval (episodes, completude) reste sur TVDB par ID.
+    Une resolution impossible est bloquante : ranger un episode en film cree
+    une entree fantome difficile a rattraper.
+
+    Args:
+        candidate_source: Source du candidat valide ("tvdb", "tmdb_tv", "tmdb")
+        candidate_id: Identifiant du candidat dans sa source
+        filename: Nom du fichier a transferer
+        tmdb_client: Client TMDB (pour la resolution du tvdb_id)
+
+    Returns:
+        Tuple (is_series, source, id) a utiliser en aval, ou None si le type
+        ne peut pas etre determine sans risque d'erreur de rangement.
+    """
+    if candidate_source == "tvdb":
+        return True, candidate_source, candidate_id
+
+    if candidate_source != "tmdb_tv" or not _looks_like_episode(filename):
+        if candidate_source == "tmdb" and _looks_like_episode(filename):
+            logger.warning(
+                "Fichier reconnu episode mais candidat film TMDB retenu : {}",
+                filename,
+            )
+        return False, candidate_source, candidate_id
+
+    if not tmdb_client or not getattr(tmdb_client, "_api_key", None):
+        logger.warning(
+            "Client TMDB indisponible : tvdb_id irrecuperable pour {}", filename
+        )
+        return None
+
+    try:
+        external_ids = await tmdb_client.get_tv_external_ids(candidate_id)
+    except Exception as e:
+        logger.warning(
+            f"Erreur external_ids TMDB pour {filename} ({candidate_id}): {e}"
+        )
+        return None
+
+    tvdb_id = external_ids.get("tvdb_id") if external_ids else None
+    if not tvdb_id:
+        logger.warning(
+            "Serie TMDB {} sans tvdb_id : {} ne peut pas etre range",
+            candidate_id,
+            filename,
+        )
+        return None
+
+    return True, "tvdb", str(tvdb_id)
 
 
 async def _enrich_movie_metadata(
@@ -476,8 +544,20 @@ async def build_transfers_batch(
                         f"fallback sur titre parsé : {candidate_title}"
                     )
 
-        # Determiner si c'est une serie
-        is_series = candidate_source == "tvdb"
+        # Determiner si c'est une serie : le type se decide sur le fichier,
+        # pas sur la seule source API (cf. resolve_media_type)
+        filename = pending.video_file.filename if pending.video_file else ""
+        resolved = await resolve_media_type(
+            candidate_source, candidate_id, filename, tmdb_client
+        )
+        if resolved is None:
+            console.print(
+                f"[red]Erreur:[/red] {filename} est un épisode mais la série TMDB "
+                f"{candidate_id} n'a pas d'équivalent TVDB — fichier ignoré "
+                "(le ranger en film créerait une entrée erronée)."
+            )
+            continue
+        is_series, candidate_source, candidate_id = resolved
 
         # Notifier la progression
         if on_progress:

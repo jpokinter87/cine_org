@@ -640,17 +640,44 @@ class TestSearchManual:
         assert results == expected_results
 
     @pytest.mark.asyncio
-    async def test_search_manual_series(self, validation_service, mock_tvdb_client):
-        """is_series=True -> utilise tvdb_client."""
-        expected_results = [
-            SearchResult(id="81189", title="Breaking Bad", year=2008, source="tvdb")
-        ]
-        mock_tvdb_client.search = AsyncMock(return_value=expected_results)
+    async def test_search_manual_series(self, validation_service, mock_tmdb_client):
+        """is_series=True -> search_tv TMDB puis résolution du tvdb_id.
+
+        La recherche par nom TVDB v3 (/search/series) a été retirée par le
+        fournisseur : elle renvoyait systématiquement une liste vide, ce qui
+        rendait l'onglet « recherche par titre » inutilisable pour les séries.
+        """
+        mock_tmdb_client.search_tv = AsyncMock(
+            return_value=[
+                SearchResult(id="1396", title="Breaking Bad", year=2008, source="tmdb")
+            ]
+        )
+        mock_tmdb_client.get_tv_external_ids = AsyncMock(
+            return_value={"tvdb_id": 81189}
+        )
 
         results = await validation_service.search_manual("Breaking Bad", is_series=True)
 
-        mock_tvdb_client.search.assert_called_once_with("Breaking Bad", year=None)
-        assert results == expected_results
+        mock_tmdb_client.search_tv.assert_called_once_with("Breaking Bad", year=None)
+        assert [(r.id, r.source) for r in results] == [("81189", "tvdb")]
+
+    @pytest.mark.asyncio
+    async def test_search_manual_series_ecarte_candidat_sans_tvdb_id(
+        self, validation_service, mock_tmdb_client
+    ):
+        """Un candidat série absent de TVDB est écarté : tout l'aval est TVDB par ID."""
+        mock_tmdb_client.search_tv = AsyncMock(
+            return_value=[
+                SearchResult(id="78950", title="Miracle Workers", year=2019, source="tmdb")
+            ]
+        )
+        mock_tmdb_client.get_tv_external_ids = AsyncMock(return_value={})
+
+        results = await validation_service.search_manual(
+            "Miracle Workers", is_series=True
+        )
+
+        assert results == []
 
     @pytest.mark.asyncio
     async def test_search_manual_no_client(self, mock_pending_repo, mock_matcher):
