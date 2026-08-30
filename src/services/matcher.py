@@ -11,12 +11,26 @@ Formules de scoring:
 Le scoring est deterministe pour des resultats reproductibles.
 """
 
+import re
 from dataclasses import replace
 
 from rapidfuzz import fuzz, utils
 
 from src.core.ports.api_clients import SearchResult
 from src.utils.helpers import normalize_accents as _normalize_accents
+
+# Nombre a 4 chiffres dans un titre = annee discriminante (ex: "Paris Police 1900").
+_YEAR_LIKE_RE = re.compile(r"\b\d{4}\b")
+
+# Plafond de score quand deux titres de series portent des annees distinctes.
+# Volontairement bien sous le seuil d'auto-validation (85 %) pour forcer une
+# validation manuelle au lieu de confondre deux series homonymes.
+_DISTINCT_YEAR_CEILING: float = 50.0
+
+
+def _year_like_tokens(title: str) -> set[str]:
+    """Extrait les nombres a 4 chiffres (annees) presents dans un titre."""
+    return set(_YEAR_LIKE_RE.findall(title))
 
 
 def _calculate_title_score(query_title: str, candidate_title: str) -> float:
@@ -165,13 +179,38 @@ def calculate_series_score(
     Returns:
         Match score from 0.0 to 100.0, rounded to 2 decimals
     """
-    score = _calculate_title_score(query_title, candidate_title)
+    score = _series_title_score(query_title, candidate_title)
 
     if candidate_original_title:
-        original_score = _calculate_title_score(query_title, candidate_original_title)
+        original_score = _series_title_score(query_title, candidate_original_title)
         score = max(score, original_score)
 
     return round(score, 2)
+
+
+def _series_title_score(query_title: str, candidate_title: str) -> float:
+    """Score de titre serie avec garde-fou anti-homonymes par annee.
+
+    token_sort_ratio donne ~94 % a deux titres qui ne different que par une
+    annee a 4 chiffres ("Paris Police 1905" vs "Paris Police 1900"), au-dessus
+    du seuil d'auto-validation. Or ce sont des series distinctes (suites/spin-offs
+    "1900/1905/1910", ou "1883" vs "1923"). Quand les deux titres portent des
+    annees et qu'elles n'ont aucune valeur en commun, on plafonne le score pour
+    basculer en validation manuelle.
+
+    La penalite ne s'applique PAS si une annee n'est presente que d'un seul cote
+    (ex: "Doctor Who 2005" vs "Doctor Who") ni aux nombres non-annee (numeros
+    d'episode a 2 chiffres, "9-1-1", etc.).
+    """
+    base = _calculate_title_score(query_title, candidate_title)
+
+    query_years = _year_like_tokens(query_title)
+    candidate_years = _year_like_tokens(candidate_title)
+
+    if query_years and candidate_years and query_years.isdisjoint(candidate_years):
+        return min(base, _DISTINCT_YEAR_CEILING)
+
+    return base
 
 
 class MatcherService:
