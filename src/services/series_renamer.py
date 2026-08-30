@@ -164,13 +164,30 @@ class SeriesRenamer:
 
         return moves
 
-    def _relocate(self, path: Path, moves: dict[Path, Path]) -> Path:
-        """Applique les renommages de dossiers à un chemin de fichier."""
+    def _relocate(
+        self,
+        path: Path,
+        moves: dict[Path, Path],
+        season_folder: Optional[str] = None,
+    ) -> Path:
+        """
+        Applique les renommages de dossiers à un chemin de fichier.
+
+        ``season_folder`` force le dossier de saison canonique : un épisode
+        dont le numéro de saison a été corrigé en base change de dossier.
+        """
         series_dir = path.parent.parent
-        new_dir = moves.get(series_dir)
-        if new_dir is None:
-            return path
-        return new_dir / path.parent.name / path.name
+        new_dir = moves.get(series_dir, series_dir)
+        return new_dir / (season_folder or path.parent.name) / path.name
+
+    @staticmethod
+    def _prune_empty_dir(directory: Path) -> None:
+        """Retire un dossier de saison vidé par le déplacement d'un épisode."""
+        try:
+            if directory.is_dir() and not any(directory.iterdir()):
+                directory.rmdir()
+        except OSError as e:
+            logger.debug("Dossier {} non supprimé : {}", directory, e)
 
     def _rename_episode(
         self,
@@ -181,6 +198,7 @@ class SeriesRenamer:
     ) -> EpisodeRenameOutcome:
         """Renomme le fichier storage et recrée le symlink d'un épisode."""
         original = Path(episode.file_path)
+        season_folder = f"Saison {episode.season_number:02d}"
         # En dry-run les dossiers n'ont pas bougé : le fichier est encore à
         # son emplacement d'origine, seule la destination finale est calculée.
         current = original if dry_run else self._relocate(original, moves)
@@ -204,7 +222,7 @@ class SeriesRenamer:
             media_info,
             current.suffix,
         )
-        final = self._relocate(original, moves).with_name(new_name)
+        final = self._relocate(original, moves, season_folder).with_name(new_name)
 
         if final == original:
             return EpisodeRenameOutcome(
@@ -236,19 +254,30 @@ class SeriesRenamer:
             if episode.symlink_path
             else None
         )
-        final_symlink = current_symlink.with_name(new_name) if current_symlink else None
+        final_symlink = (
+            self._relocate(Path(episode.symlink_path), moves, season_folder).with_name(
+                new_name
+            )
+            if episode.symlink_path
+            else None
+        )
 
         try:
             if final != current:
+                final.parent.mkdir(parents=True, exist_ok=True)
                 current.rename(final)
             if final_symlink is not None:
                 if current_symlink.is_symlink() or current_symlink.exists():
                     current_symlink.unlink()
+                final_symlink.parent.mkdir(parents=True, exist_ok=True)
                 final_symlink.symlink_to(final)
                 episode.symlink_path = str(final_symlink)
             episode.file_path = str(final)
             self._session.add(episode)
             self._session.commit()
+            self._prune_empty_dir(current.parent)
+            if current_symlink is not None:
+                self._prune_empty_dir(current_symlink.parent)
         except OSError as e:
             logger.error("Renommage échoué pour l'épisode {} : {}", episode.id, e)
             return EpisodeRenameOutcome(

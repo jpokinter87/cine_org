@@ -205,3 +205,70 @@ def test_serie_sans_fichier_ne_produit_aucun_resultat(session, extractor):
     session.commit()
 
     assert SeriesRenamer(session, extractor).rename_series(series.id) == []
+
+
+def test_saison_corrigee_deplace_le_fichier_dans_le_bon_dossier(
+    session, extractor, tree
+):
+    """Un numéro de saison corrigé en base déplace fichier et symlink.
+
+    Cas réel : les cours d'anime livrés en S01/S02/S03 par les teams sont
+    réalignés sur la saison canonique du fournisseur (Bleach TYBW → saison 17).
+    """
+    series, episode = _seed(session, tree)
+    episode.season_number = 17
+    episode.episode_number = 3
+    session.add(episode)
+    session.commit()
+
+    outcomes = SeriesRenamer(session, extractor).rename_series(series.id, dry_run=False)
+
+    assert [o.status for o in outcomes] == ["renamed"]
+
+    new_storage = Path(episode.file_path)
+    new_symlink = Path(episode.symlink_path)
+
+    assert new_storage.parent.name == "Saison 17"
+    assert new_symlink.parent.name == "Saison 17"
+    assert "S17E03" in new_storage.name
+    assert new_storage.exists()
+    assert new_symlink.is_symlink()
+    assert new_symlink.resolve() == new_storage.resolve()
+    assert not tree["storage"].exists()
+
+
+def test_dossier_de_saison_vide_est_supprime(session, extractor, tmp_path):
+    """Le dossier de saison quitté est retiré une fois vidé.
+
+    Le dossier de série ne bouge pas ici : seul le numéro de saison change.
+    """
+    storage_season = tmp_path / "storage" / "Series" / NEW_FOLDER / "Saison 01"
+    video_season = tmp_path / "video" / "Series" / NEW_FOLDER / "Saison 01"
+    storage_season.mkdir(parents=True)
+    video_season.mkdir(parents=True)
+    storage_file = storage_season / "ancien.mkv"
+    storage_file.write_bytes(b"video")
+    symlink = video_season / "ancien.mkv"
+    symlink.symlink_to(storage_file)
+
+    series = SeriesModel(title="Found : Les Oubliés", year=2023)
+    session.add(series)
+    session.commit()
+    session.refresh(series)
+    episode = EpisodeModel(
+        series_id=series.id,
+        season_number=17,
+        episode_number=1,
+        title="Disparition : une fugueuse",
+        file_path=str(storage_file),
+        symlink_path=str(symlink),
+    )
+    session.add(episode)
+    session.commit()
+    session.refresh(episode)
+
+    SeriesRenamer(session, extractor).rename_series(series.id, dry_run=False)
+
+    assert Path(episode.file_path).parent.name == "Saison 17"
+    assert not storage_season.exists()
+    assert not video_season.exists()

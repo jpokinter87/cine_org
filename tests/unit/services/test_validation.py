@@ -771,6 +771,62 @@ class TestSearchByExternalId:
         assert result == sample_media_details
 
     @pytest.mark.asyncio
+    async def test_search_by_imdb_id_relays_via_tvdb_when_tmdb_find_empty(
+        self,
+        validation_service,
+        mock_tmdb_client,
+        mock_tvdb_client,
+        sample_media_details,
+    ):
+        """TMDB /find muet -> relais TVDB (IMDb -> ID serie TVDB -> TMDB)."""
+        mock_tmdb_client.find_by_imdb_id = AsyncMock(return_value=None)
+        mock_tmdb_client.find_by_external_id = AsyncMock(
+            return_value=sample_media_details
+        )
+        mock_tvdb_client.find_series_id_by_imdb_id = AsyncMock(return_value="74796")
+
+        result = await validation_service.search_by_external_id("imdb", "tt14986406")
+
+        mock_tvdb_client.find_series_id_by_imdb_id.assert_awaited_once_with(
+            "tt14986406"
+        )
+        mock_tmdb_client.find_by_external_id.assert_awaited_once_with(
+            "74796", "tvdb_id"
+        )
+        assert result == sample_media_details
+
+    @pytest.mark.asyncio
+    async def test_search_by_imdb_id_skips_tvdb_relay_when_tmdb_answers(
+        self,
+        validation_service,
+        mock_tmdb_client,
+        mock_tvdb_client,
+        sample_media_details,
+    ):
+        """TMDB /find repond -> pas d'appel TVDB."""
+        mock_tmdb_client.find_by_imdb_id = AsyncMock(return_value=sample_media_details)
+        mock_tvdb_client.find_series_id_by_imdb_id = AsyncMock(return_value="74796")
+
+        result = await validation_service.search_by_external_id("imdb", "tt0499549")
+
+        mock_tvdb_client.find_series_id_by_imdb_id.assert_not_awaited()
+        assert result == sample_media_details
+
+    @pytest.mark.asyncio
+    async def test_search_by_imdb_id_returns_none_when_tvdb_relay_fails(
+        self, validation_service, mock_tmdb_client, mock_tvdb_client
+    ):
+        """Ni TMDB ni TVDB ne resolvent l'ID -> None."""
+        mock_tmdb_client.find_by_imdb_id = AsyncMock(return_value=None)
+        mock_tmdb_client.find_by_external_id = AsyncMock(return_value=None)
+        mock_tvdb_client.find_series_id_by_imdb_id = AsyncMock(return_value=None)
+
+        result = await validation_service.search_by_external_id("imdb", "tt0000000")
+
+        mock_tmdb_client.find_by_external_id.assert_not_awaited()
+        assert result is None
+
+    @pytest.mark.asyncio
     async def test_search_by_external_id_no_client(
         self, mock_pending_repo, mock_matcher
     ):

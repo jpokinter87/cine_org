@@ -219,6 +219,12 @@ class TVDBClient(IMediaAPIClient):
         """
         Retrouve l'ID TVDB d'une serie a partir de son ID IMDb.
 
+        Certains arcs ou saisons sont publies sur IMDb comme titres distincts
+        (ex. tt14986406, *Bleach: Thousand-Year Blood War*, rattache par TVDB a
+        la saison 17 de BLEACH). L'endpoint les renvoie alors enveloppes dans
+        ``season`` ou ``episode`` : on remonte a la serie parente via
+        ``seriesId``.
+
         Args:
             imdb_id: ID IMDb de la serie (format "tt1234567")
 
@@ -229,12 +235,18 @@ class TVDBClient(IMediaAPIClient):
         if not data:
             return None
 
-        # L'endpoint resout aussi les films, personnes et saisons : on ne
-        # retient que les correspondances de type serie.
-        for item in data:
-            series = item.get("series")
-            if series and series.get("id"):
-                return str(series["id"])
+        # L'endpoint resout aussi les films et les personnes : seules les
+        # correspondances rattachables a une serie sont retenues, la
+        # correspondance serie directe primant sur saison puis episode.
+        for key, id_field in (
+            ("series", "id"),
+            ("season", "seriesId"),
+            ("episode", "seriesId"),
+        ):
+            for item in data:
+                match = item.get(key)
+                if match and match.get(id_field):
+                    return str(match[id_field])
 
         return None
 

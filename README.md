@@ -1515,6 +1515,28 @@ Pour une **série**, la correction entraîne en plus trois mises à jour automat
   déjà enregistrée. Si le dossier canonique existe déjà, les fichiers sont renommés sur place sans
   déplacement de dossier.
 
+#### Recherche par ID externe (TMDB / TVDB / IMDB)
+
+L'overlay accepte aussi un **identifiant direct**, utile quand la recherche par titre ne
+remonte pas la bonne fiche. Les onglets TMDB et TVDB interrogent leur fournisseur ; l'onglet
+IMDB passe par l'index inverse `/find` de TMDB.
+
+Cet index **ne couvre pas tous les IDs IMDb** : les arcs d'anime publiés sur IMDb comme
+titres distincts n'y figurent pas (`tt14986406`, *Bleach: Thousand-Year Blood War*,
+renvoyait « Aucun résultat »). Un relais par TVDB prend désormais la suite quand `/find`
+reste muet :
+
+```
+IMDb → /search/remoteid TVDB → ID de série TVDB → /find?external_source=tvdb_id → fiche TMDB
+```
+
+TVDB rattache par ailleurs ces IDs à une **saison** ou à un **épisode**, pas à une série :
+la résolution remonte donc à la série parente via `seriesId`. L'identifiant retourné reste
+un ID TMDB, comme attendu par le reste de la ré-association.
+
+> Un ID IMDb d'arc résout vers la **série mère** (`tt14986406` → *Bleach*), ces arcs n'ayant
+> pas de fiche propre chez TMDB ni TVDB.
+
 #### Suppression d'une fiche fantôme (doublon)
 
 Une **fiche fantôme** est une fiche sans aucun fichier rattaché (série dont aucun épisode n'a de fichier, ou film sans fichier). Elle résulte typiquement d'un mauvais matching laissé en place après une re-analyse (ex. une série associée à tort à un mauvais résultat, puis re-validée vers la bonne fiche, l'ancienne fiche restant orpheline).

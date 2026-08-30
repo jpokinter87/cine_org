@@ -400,14 +400,46 @@ class ValidationService:
             return await self._tvdb_client.get_details(id_value)
 
         elif id_type == "imdb":
-            if self._tmdb_client is None:
-                return None
-            api_key = getattr(self._tmdb_client, "_api_key", None)
-            if not api_key:
-                return None
-            return await self._tmdb_client.find_by_imdb_id(id_value)
+            return await self._find_by_imdb_id(id_value)
 
         return None
+
+    async def _find_by_imdb_id(self, imdb_id: str) -> Optional[MediaDetails]:
+        """
+        Resout un ID IMDb en MediaDetails TMDB, avec relais TVDB.
+
+        L'index inverse TMDB /find ne couvre pas tous les IDs IMDb : les arcs
+        d'anime publies sur IMDb comme titres distincts (ex. tt14986406,
+        *Bleach: Thousand-Year Blood War*) n'y figurent pas. TVDB les rattache
+        en revanche a leur serie parente : on relaie donc IMDb -> ID de serie
+        TVDB -> TMDB /find?external_source=tvdb_id, ce qui garde l'ID retourne
+        dans l'espace TMDB attendu par les appelants.
+
+        Args:
+            imdb_id: ID IMDb (format ttXXXXXXX)
+
+        Returns:
+            MediaDetails si trouve, None sinon
+        """
+        if self._tmdb_client is None:
+            return None
+        if not getattr(self._tmdb_client, "_api_key", None):
+            return None
+
+        details = await self._tmdb_client.find_by_imdb_id(imdb_id)
+        if details is not None:
+            return details
+
+        if self._tvdb_client is None:
+            return None
+        if not getattr(self._tvdb_client, "_api_key", None):
+            return None
+
+        tvdb_series_id = await self._tvdb_client.find_series_id_by_imdb_id(imdb_id)
+        if tvdb_series_id is None:
+            return None
+
+        return await self._tmdb_client.find_by_external_id(tvdb_series_id, "tvdb_id")
 
     def list_pending(self) -> list[PendingValidation]:
         """
