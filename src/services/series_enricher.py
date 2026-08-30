@@ -10,10 +10,61 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Optional
 
+from loguru import logger
+
 from src.adapters.api.tmdb_client import TMDBClient
 from src.adapters.imdb.dataset_importer import IMDbDatasetImporter
 from src.core.entities.media import Series
+from src.core.ports.api_clients import SearchResult
 from src.core.ports.repositories import IEpisodeRepository, ISeriesRepository
+
+# Ré-export pour compat : la fonction vit désormais dans utils.helpers (réutilisée
+# par l'organizer et le renamer, sans dépendance à ce service).
+from src.utils.helpers import strip_trailing_year  # noqa: E402,F401
+
+
+async def resolve_tmdb_tv_by_external_id(
+    tmdb_client,
+    *,
+    tvdb_id: Optional[int] = None,
+    imdb_id: Optional[str] = None,
+) -> Optional[SearchResult]:
+    """
+    Resout l'equivalent TMDB d'une serie via ses identifiants externes.
+
+    Privilegie les identifiants externes (tvdb_id puis imdb_id) a la recherche
+    par titre : le titre stocke est souvent traduit (ex: « Les Detectoristes »)
+    et ne matche pas la recherche TMDB, alors que /find par tvdb_id reussit.
+
+    Chaque strategie est isolee : un echec sur l'une n'empeche pas d'essayer
+    la suivante.
+
+    Args:
+        tmdb_client: Client TMDB (doit exposer find_by_external_id)
+        tvdb_id: ID TVDB de la serie (prioritaire)
+        imdb_id: ID IMDb de la serie (repli)
+
+    Returns:
+        Le meilleur SearchResult TMDB, ou None si aucun identifiant ne resout.
+    """
+    candidates: list[tuple[str, str]] = []
+    if tvdb_id is not None:
+        candidates.append((str(tvdb_id), "tvdb_id"))
+    if imdb_id:
+        candidates.append((imdb_id, "imdb_id"))
+
+    for external_id, source in candidates:
+        try:
+            results = await tmdb_client.find_by_external_id(external_id, source)
+        except Exception as exc:
+            logger.debug(
+                "Echec resolution TMDB par {} {} : {}", source, external_id, exc
+            )
+            continue
+        if results:
+            return results[0]
+
+    return None
 
 
 class EnrichmentResult(str, Enum):
@@ -150,14 +201,16 @@ class SeriesEnricherService:
             result = await self._enrich_one(series)
 
             if on_progress:
-                on_progress(ProgressInfo(
-                    current=i + 1,
-                    total=stats.total,
-                    series_title=series.title,
-                    series_year=series.year,
-                    result=result,
-                    tmdb_id=None,
-                ))
+                on_progress(
+                    ProgressInfo(
+                        current=i + 1,
+                        total=stats.total,
+                        series_title=series.title,
+                        series_year=series.year,
+                        result=result,
+                        tmdb_id=None,
+                    )
+                )
 
             if result == EnrichmentResult.SUCCESS:
                 stats.enriched += 1
@@ -173,28 +226,39 @@ class SeriesEnricherService:
     async def _enrich_one(self, series: Series) -> EnrichmentResult:
         """Enrichit une seule serie depuis TMDB."""
         try:
-            # Rechercher la serie par titre
-            results = await self._tmdb_client.search_tv(series.title, year=series.year)
+            # Priorite aux identifiants externes (tvdb_id, imdb_id) : evite
+            # l'echec de la recherche par titre quand le titre stocke est traduit
+            # (ex: « Les Detectoristes » vs « Detectorists »).
+            best = await resolve_tmdb_tv_by_external_id(
+                self._tmdb_client,
+                tvdb_id=series.tvdb_id,
+                imdb_id=series.imdb_id,
+            )
 
-            if not results:
-                return EnrichmentResult.NOT_FOUND
+            if best is None:
+                # Repli : recherche par titre normalise (sans « (AAAA) » final).
+                query = strip_trailing_year(series.title)
+                results = await self._tmdb_client.search_tv(query, year=series.year)
 
-            # Garde-fou anti-homonymes : si on a deja des episodes en base et
-            # qu'il reste plusieurs candidats, ecarter ceux dont les saisons
-            # cote TMDB n'ont pas assez d'episodes pour couvrir ce qu'on a en DB.
-            if (
-                len(results) > 1
-                and series.id is not None
-                and self._episode_repo is not None
-            ):
-                results = await self._filter_by_episode_counts(results, series.id)
                 if not results:
                     return EnrichmentResult.NOT_FOUND
 
-            # Prendre le meilleur resultat (filtrer par annee si disponible)
-            best = pick_best_tv_match(results, series.title, series.year)
-            if not best:
-                return EnrichmentResult.NOT_FOUND
+                # Garde-fou anti-homonymes : si on a deja des episodes en base et
+                # qu'il reste plusieurs candidats, ecarter ceux dont les saisons
+                # cote TMDB n'ont pas assez d'episodes pour couvrir ce qu'on a en DB.
+                if (
+                    len(results) > 1
+                    and series.id is not None
+                    and self._episode_repo is not None
+                ):
+                    results = await self._filter_by_episode_counts(results, series.id)
+                    if not results:
+                        return EnrichmentResult.NOT_FOUND
+
+                # Prendre le meilleur resultat (filtrer par annee si disponible)
+                best = pick_best_tv_match(results, query, series.year)
+                if not best:
+                    return EnrichmentResult.NOT_FOUND
 
             # Recuperer les details complets
             details = await self._tmdb_client.get_tv_details(best.id)
@@ -231,6 +295,14 @@ class SeriesEnricherService:
                 if ext_ids and ext_ids.get("imdb_id"):
                     series.imdb_id = ext_ids["imdb_id"]
 
+            # Repli : TMDB ne fournit pas toujours d'imdb_id (series non
+            # anglophones, ex. quebecoises). On retrouve alors le tconst via la
+            # table locale imdb_akas par titre (garde-fou anti-homonymes inclus).
+            if not series.imdb_id and self._imdb_importer:
+                tconst = self._imdb_importer.find_tconst_by_title(series.title)
+                if tconst:
+                    series.imdb_id = tconst
+
             # Notes IMDb depuis le cache local (si importer fourni et imdb_id connu).
             # Permet d'eviter une commande imdb sync supplementaire pour les series.
             if self._imdb_importer and series.imdb_id:
@@ -253,9 +325,7 @@ class SeriesEnricherService:
         """Conserve pour compat externe : delegue a la fonction module-level."""
         return pick_best_tv_match(results, title, year)
 
-    async def _filter_by_episode_counts(
-        self, results: list, series_id: str
-    ) -> list:
+    async def _filter_by_episode_counts(self, results: list, series_id: str) -> list:
         """
         Ecarte les candidats TMDB dont les saisons n'ont pas assez d'episodes
         pour couvrir ce qui est deja stocke en base pour la serie.

@@ -28,16 +28,29 @@ def mock_series_repo():
 
 @pytest.fixture
 def mock_tmdb_client():
-    """Mock TMDB avec methodes async usuelles."""
+    """Mock TMDB avec methodes async usuelles.
+
+    Par defaut, aucune resolution par identifiant externe : ces tests couvrent
+    le repli par recherche titre (et ses garde-fous annee/episodes). Les tests
+    dedies a la resolution par tvdb_id/imdb_id vivent dans
+    test_series_enricher_external_id.py.
+    """
     client = AsyncMock()
+    client.find_by_external_id = AsyncMock(return_value=[])
     return client
 
 
 @pytest.fixture
 def mock_imdb_importer():
-    """Mock du IMDbDatasetImporter (cache local)."""
+    """Mock du IMDbDatasetImporter (cache local).
+
+    Par defaut, le repli par titre ne trouve rien (find_tconst_by_title -> None) :
+    ces tests couvrent le chemin imdb_id-via-TMDB. Le repli par titre est teste
+    a part dans test_series_enricher_imdb_title_fallback.py.
+    """
     importer = MagicMock()
     importer.get_rating.return_value = None
+    importer.find_tconst_by_title.return_value = None
     return importer
 
 
