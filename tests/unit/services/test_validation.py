@@ -721,6 +721,95 @@ class TestSearchManual:
 
 
 # ============================================================================
+# Tests: collect_season_remap_ids (arcs livres en cours separes)
+# ============================================================================
+
+
+class TestCollectSeasonRemapIds:
+    """Un arc dont la numerotation est decalee ne doit jamais s'auto-valider."""
+
+    @pytest.mark.asyncio
+    async def test_arc_detecte_est_renvoye_avec_sa_proposition(
+        self, validation_service, mock_tvdb_client, monkeypatch
+    ):
+        """Le fichier est signale et porte le realignement propose."""
+        from src.services import season_remap as season_remap_module
+        from src.services.season_remap import SeasonRemap
+
+        proposal = SeasonRemap(
+            source_season=2,
+            source_episode=5,
+            target_season=17,
+            target_episode=18,
+            season_name="Bleach: Thousand-Year Blood War",
+            cour=2,
+        )
+        monkeypatch.setattr(
+            season_remap_module,
+            "detect_season_remap",
+            AsyncMock(return_value=proposal),
+        )
+
+        pendings = [
+            _pending(
+                "1",
+                "BLEACH.Thousand-Year.Blood.War.S02E05.mkv",
+                [_cand("74796", "BLEACH")],
+            )
+        ]
+
+        result = await validation_service.collect_season_remap_ids(pendings)
+
+        assert result == {"1": proposal}
+
+    @pytest.mark.asyncio
+    async def test_lot_sans_decalage_ne_bloque_rien(
+        self, validation_service, monkeypatch
+    ):
+        """Aucun decalage detecte : l'auto-validation reste ouverte."""
+        from src.services import season_remap as season_remap_module
+
+        monkeypatch.setattr(
+            season_remap_module, "detect_season_remap", AsyncMock(return_value=None)
+        )
+
+        pendings = [_pending("1", "Fargo.S01E01.mkv", [_cand("269613", "Fargo")])]
+
+        assert await validation_service.collect_season_remap_ids(pendings) == {}
+
+    @pytest.mark.asyncio
+    async def test_candidats_non_tvdb_sont_ignores(
+        self, validation_service, monkeypatch
+    ):
+        """La detection repose sur des IDs TVDB : les autres sources sont hors jeu."""
+        from src.services import season_remap as season_remap_module
+
+        detect = AsyncMock(return_value=None)
+        monkeypatch.setattr(season_remap_module, "detect_season_remap", detect)
+
+        cand = {"id": "30984", "title": "Bleach", "score": 100.0, "source": "tmdb_tv"}
+        pendings = [_pending("1", "Bleach.S02E05.mkv", [cand])]
+
+        assert await validation_service.collect_season_remap_ids(pendings) == {}
+        detect.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_sans_client_tvdb_aucune_detection(
+        self, mock_pending_repo, mock_matcher, mock_tmdb_client
+    ):
+        """Sans client TVDB, la detection est simplement inactive."""
+        service = ValidationService(
+            pending_repo=mock_pending_repo,
+            matcher=mock_matcher,
+            tmdb_client=mock_tmdb_client,
+            tvdb_client=None,
+        )
+        pendings = [_pending("1", "Bleach.S02E05.mkv", [_cand("74796", "BLEACH")])]
+
+        assert await service.collect_season_remap_ids(pendings) == {}
+
+
+# ============================================================================
 # Tests: search_by_external_id
 # ============================================================================
 

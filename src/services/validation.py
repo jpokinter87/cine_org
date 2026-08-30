@@ -11,7 +11,7 @@ Responsabilites:
 - Gestion des statuts (pending, validated, rejected)
 """
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from src.core.entities.video import PendingValidation, ValidationStatus
 from src.core.ports.api_clients import MediaDetails, SearchResult
@@ -20,6 +20,9 @@ from src.infrastructure.persistence.repositories.pending_validation_repository i
 )
 from src.services.matcher import MatcherService
 from src.utils.helpers import parse_candidates
+
+if TYPE_CHECKING:
+    from src.services.season_remap import SeasonRemap
 
 
 # Seuil d'auto-validation (score minimum en pourcentage)
@@ -367,6 +370,58 @@ class ValidationService:
             if not api_key:
                 return []
             return await self._tmdb_client.search(query, year=year)
+
+    async def collect_season_remap_ids(
+        self, pendings: list[PendingValidation]
+    ) -> dict[str, "SeasonRemap"]:
+        """
+        Repere les fichiers dont la numerotation est decalee par rapport au canon.
+
+        Les teams livrent les arcs d'anime en cours numerotes S01/S02/S03 alors
+        que le fournisseur les range dans une saison a numerotation continue
+        (Bleach TYBW = saison 17 de BLEACH). Auto-valider ces fichiers leur
+        collerait les titres d'une saison sans rapport : ils partent en
+        validation manuelle avec la proposition de realignement.
+
+        Args:
+            pendings: Validations en attente du lot courant
+
+        Returns:
+            ``{id_de_pending: realignement propose}``, vide si aucun decalage
+        """
+        # Imports locaux : meme parser saison/episode que le chemin de
+        # transfert (cf. anomaly_detector), et evite un cycle services <-> services.
+        from src.adapters.cli.helpers import _extract_series_info
+        from src.services import season_remap as season_remap_module
+        from src.services.season_remap import SeasonRemap
+
+        if self._tvdb_client is None:
+            return {}
+
+        detected: dict[str, SeasonRemap] = {}
+        for pending in pendings:
+            if not pending.id:
+                continue
+            candidates = self._parse_candidates(pending.candidates)
+            if not candidates or candidates[0].source != "tvdb":
+                continue
+            filename = pending.video_file.filename if pending.video_file else ""
+            if not filename:
+                continue
+
+            season, episode = _extract_series_info(filename)
+            remap = await season_remap_module.detect_season_remap(
+                self._tvdb_client,
+                series_id=candidates[0].id,
+                series_title=candidates[0].title,
+                filename=filename,
+                season=season,
+                episode=episode,
+            )
+            if remap is not None:
+                detected[pending.id] = remap
+
+        return detected
 
     async def search_by_external_id(
         self, id_type: str, id_value: str

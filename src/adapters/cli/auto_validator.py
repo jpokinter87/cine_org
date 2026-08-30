@@ -170,9 +170,7 @@ async def _filter_by_duration_compatibility(
         console=console,
     ) as progress:
         task = progress.add_task(
-            "Verification durees TMDB...",
-            total=len(remaining),
-            status=""
+            "Verification durees TMDB...", total=len(remaining), status=""
         )
 
         for pending in remaining:
@@ -192,9 +190,7 @@ async def _filter_by_duration_compatibility(
             compatible_candidates = []
             for candidate in pending.candidates[:3]:
                 candidate_id = (
-                    candidate.get("id")
-                    if isinstance(candidate, dict)
-                    else candidate.id
+                    candidate.get("id") if isinstance(candidate, dict) else candidate.id
                 )
                 candidate_source = (
                     candidate.get("source", "")
@@ -286,9 +282,7 @@ async def _filter_by_episode_count_compatibility(
                 continue
 
             candidate_id = (
-                candidate.get("id")
-                if isinstance(candidate, dict)
-                else candidate.id
+                candidate.get("id") if isinstance(candidate, dict) else candidate.id
             )
 
             try:
@@ -358,6 +352,23 @@ async def auto_validate_files(
 
     console.print(f"[bold]{len(pending_list)}[/bold] fichier(s) a valider.\n")
 
+    # Etape 0: Arcs livres en cours separes (S01/S02/S03) alors que le
+    # fournisseur les range dans une saison a numerotation continue. Le
+    # realignement est propose, jamais applique seul : ces fichiers sont
+    # ecartes de l'auto-validation.
+    season_remaps = await service.collect_season_remap_ids(pending_list)
+    if season_remaps:
+        console.print(
+            f"[yellow]{len(season_remaps)}[/yellow] fichier(s) a numerotation "
+            "decalee, laisse(s) en validation manuelle :"
+        )
+        for remap in season_remaps.values():
+            console.print(f"  [cyan]-> {remap.label}[/cyan]")
+        console.print()
+
+    remapped = [p for p in pending_list if p.id in season_remaps]
+    pending_list = [p for p in pending_list if p.id not in season_remaps]
+
     # Etape 1: Filtrage par score de confiance
     auto_validated, remaining = _filter_by_score_confidence(pending_list)
 
@@ -375,9 +386,7 @@ async def auto_validate_files(
             )
             for pending in duration_validated:
                 candidate = pending._duration_validated_candidate
-                filename = (
-                    pending.video_file.filename if pending.video_file else "?"
-                )
+                filename = pending.video_file.filename if pending.video_file else "?"
 
                 search_result = parse_candidate(candidate)
 
@@ -391,7 +400,10 @@ async def auto_validate_files(
 
     # Etape 3: Filtrage par compatibilite nombre d'episodes (TVDB)
     if remaining and tvdb_client:
-        episode_validated, still_remaining = await _filter_by_episode_count_compatibility(
+        (
+            episode_validated,
+            still_remaining,
+        ) = await _filter_by_episode_count_compatibility(
             remaining, tvdb_client, session=session
         )
 
@@ -403,9 +415,7 @@ async def auto_validate_files(
             )
             for pending in episode_validated:
                 candidate = pending._episode_validated_candidate
-                filename = (
-                    pending.video_file.filename if pending.video_file else "?"
-                )
+                filename = pending.video_file.filename if pending.video_file else "?"
 
                 search_result = parse_candidate(candidate)
 
@@ -437,4 +447,8 @@ async def auto_validate_files(
 
         console.print()
 
-    return ValidationResult(auto_validated=auto_validated, remaining=remaining)
+    # Les arcs a numerotation decalee n'ont traverse aucune etape
+    # d'auto-validation : ils rejoignent le lot manuel en fin de parcours.
+    return ValidationResult(
+        auto_validated=auto_validated, remaining=remapped + remaining
+    )

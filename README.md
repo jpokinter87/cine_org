@@ -19,6 +19,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
 - [Workflow de traitement](#workflow-de-traitement)
   - [Zone de staging](#zone-de-staging)
   - [Validation automatique et manuelle](#validation-automatique-et-manuelle)
+    - [Garde-fou de numérotation : arcs livrés en cours séparés](#garde-fou-de-numérotation--arcs-livrés-en-cours-séparés)
   - [Détection des doublons](#détection-des-doublons)
   - [Hardlinks et seeding](#hardlinks-et-seeding)
   - [Sandbox](#sandbox)
@@ -426,6 +427,41 @@ Quand le nom de fichier porte formellement une saison **et** un épisode, un can
 (épisodes, complétude, symlinks) reste sur TVDB par identifiant. Si la série n'existe pas
 sur TVDB, le fichier est **ignoré avec un message explicite** plutôt que rangé en film —
 une fiche film créée à partir d'un épisode est difficile à rattraper.
+
+#### Garde-fou de numérotation : arcs livrés en cours séparés
+
+Les teams de release découpent les longs arcs d'anime en cours numérotés `S01`, `S02`,
+`S03`, alors que TMDB et TVDB rangent l'arc entier dans **une seule saison de la série
+mère**, à numérotation continue. *Bleach: Thousand-Year Blood War* est ainsi la saison 17
+de *BLEACH* chez TVDB (épisodes 1 à 50), et la saison 2 chez TMDB — aucun des deux
+fournisseurs n'a de fiche distincte pour l'arc, alors qu'IMDb en publie une
+(`tt14986406`). Sans réalignement, `S02E05` hérite du titre de l'épisode 5 de la saison 2
+de la série de 2004.
+
+CineOrg détecte le décalage en croisant deux signaux vérifiables :
+
+1. **le nom de la saison chez le fournisseur** — traduit en anglais, langue de nommage des
+   releases — apparaît dans le nom de fichier en plus du titre de la série
+   (« Bleach: Thousand-Year Blood War ») ;
+2. **les cours d'une même saison sont séparés par plusieurs mois de diffusion** : regrouper
+   les épisodes sur un écart de plus de 90 jours redonne le découpage des releases
+   (13 + 13 + 14 épisodes pour les trois premiers cours de TYBW).
+
+Le cours *N* du nom de fichier est alors mappé sur le *N*-ième groupe, et le numéro
+d'épisode décalé en conséquence (`S02E05` → `S17E18`).
+
+**La détection ne s'applique jamais seule.** Un fichier reconnu est **exclu de
+l'auto-validation** et part en validation manuelle avec la proposition affichée :
+
+```
+1 fichier(s) laissé(s) en validation manuelle : numérotation décalée par rapport au canon
+  ↻ cour 2 de « Bleach: Thousand-Year Blood War » → S17E18 (au lieu de S02E05)
+```
+
+Le réalignement est appliqué au moment du transfert, une fois la fiche confirmée. Toute
+incertitude — aucun nom de saison reconnu, cours absent, dates de diffusion manquantes,
+API indisponible — annule la proposition : le fichier garde sa numérotation d'origine et
+reste en validation manuelle, plutôt que d'être renuméroté à tort.
 
 #### Formule de scoring
 
@@ -1535,7 +1571,8 @@ la résolution remonte donc à la série parente via `seriesId`. L'identifiant r
 un ID TMDB, comme attendu par le reste de la ré-association.
 
 > Un ID IMDb d'arc résout vers la **série mère** (`tt14986406` → *Bleach*), ces arcs n'ayant
-> pas de fiche propre chez TMDB ni TVDB.
+> pas de fiche propre chez TMDB ni TVDB. Le rattachement à la bonne saison relève du
+> [garde-fou de numérotation](#garde-fou-de-numérotation--arcs-livrés-en-cours-séparés).
 
 #### Suppression d'une fiche fantôme (doublon)
 

@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Optional
 from loguru import logger
 from rich.console import Console
 
+from src.services.season_remap import detect_season_remap
 from src.adapters.cli.helpers import (
     _extract_language_from_filename,
     _extract_part_from_filename,
@@ -587,6 +588,26 @@ async def build_transfers_batch(
             season_num, episode_num = _extract_series_info(original_filename)
             episode_end = _extract_episode_end(original_filename)
 
+            # Arc livre en cours separes (S01/S02/S03) alors que le fournisseur
+            # le range dans une saison a numerotation continue : realigner avant
+            # de nommer, sinon l'episode herite des titres d'une autre saison.
+            # La detection n'a pu passer l'auto-validation qu'apres arbitrage
+            # manuel (voir ValidationService.collect_season_remap_ids).
+            season_remap = await detect_season_remap(
+                tvdb_client,
+                series_id=str(candidate_id),
+                series_title=candidate_title,
+                filename=original_filename,
+                season=season_num,
+                episode=episode_num,
+            )
+            if season_remap is not None:
+                season_num = season_remap.target_season
+                episode_num = season_remap.target_episode
+                console.print(
+                    f"  [cyan]↻[/cyan] {original_filename} : {season_remap.label}"
+                )
+
             # Recuperer le titre d'episode et les genres depuis TVDB
             episode_title = ""
             series_genres: tuple[str, ...] = ()
@@ -740,6 +761,8 @@ async def build_transfers_batch(
                 "year": candidate_year,
                 "series_id": saved_series.id,
                 "episode_id": saved_episode.id,
+                "season_num": season_num,
+                "episode_num": episode_num,
             }
             transfers.append(transfer_data)
 
@@ -925,7 +948,11 @@ def _fix_duplicate_filenames(
                 # Reconstruire Series/Episode depuis les infos existantes
                 from src.core.entities.media import Series, Episode
 
-                season_num, episode_num = _extract_series_info(original_filename)
+                # La numerotation retenue en amont prime : un arc realigne
+                # (cours -> saison canonique) serait sinon re-parse a tort.
+                parsed_season, parsed_episode = _extract_series_info(original_filename)
+                season_num = t.get("season_num", parsed_season)
+                episode_num = t.get("episode_num", parsed_episode)
                 series = Series(title=t.get("title", ""), year=t.get("year"))
                 episode = Episode(
                     season_number=season_num,

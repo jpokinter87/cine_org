@@ -308,6 +308,62 @@ class TVDBClient(IMediaAPIClient):
         await self._cache.set_details(cache_key, details)
         return details
 
+    async def get_season_names(self, series_id: str) -> dict[int, tuple[str, ...]]:
+        """
+        Recupere les noms des saisons officielles d'une serie.
+
+        Les teams livrent souvent les arcs d'anime sous le nom de l'arc
+        (« BLEACH.Thousand-Year.Blood.War.S01 ») alors que TVDB les range dans
+        une saison de la serie mere. Le nom de saison — natif et traduit en
+        anglais, langue de nommage des releases — est le signal qui permet de
+        rattacher le fichier a la bonne saison.
+
+        Le resultat est cache 7 jours : les noms de saisons ne bougent pas.
+
+        Args:
+            series_id: ID TVDB de la serie
+
+        Returns:
+            ``{numero_de_saison: (nom, ...)}``, vide si la serie est inconnue
+        """
+        cache_key = f"tvdb4:seasonnames:{series_id}"
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        series = await self._get_json(f"/series/{series_id}/extended")
+        if series is None:
+            return {}
+
+        names: dict[int, tuple[str, ...]] = {}
+        for season in series.get("seasons") or []:
+            if (season.get("type") or {}).get("type") != "official":
+                continue
+            number = season.get("number")
+            if number is None:
+                continue
+
+            collected: list[str] = []
+            base_name = season.get("name")
+            if base_name:
+                collected.append(base_name)
+
+            # ``nameTranslations`` arrive parfois en une chaine « eng,jpn,… ».
+            langs = ",".join(season.get("nameTranslations") or [])
+            if self.LANG_EN in langs and season.get("id"):
+                translation = await self._get_json(
+                    f"/seasons/{season['id']}/translations/{self.LANG_EN}"
+                )
+                translated = (translation or {}).get("name")
+                if translated and translated not in collected:
+                    collected.append(translated)
+
+            if collected:
+                names[number] = tuple(collected)
+
+        await self._cache.set_details(cache_key, names)
+        return names
+
     async def _load_episodes(self, series_id: str) -> list[EpisodeDetails]:
         """
         Charge tous les episodes d'une serie, toutes saisons confondues.
