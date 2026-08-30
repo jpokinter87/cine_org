@@ -1,3 +1,13 @@
+## v2.19.0 (2026-08-30)
+
+### Feat
+
+- **workflow**: detecter les arcs livres en cours separes et proposer le realignement
+
+### Fix
+
+- **validation**: resoudre les ID IMDb absents de l'index /find de TMDB
+
 ## v2.18.0 (2026-08-22)
 
 ### Feat

@@ -55,10 +55,13 @@ class TestFilterByEpisodeCountCompatibility:
 
         tvdb_client.get_season_episode_count = AsyncMock(side_effect=mock_count)
 
-        pending = _make_pending("serie.s03e10.mkv", [
-            _make_candidate("111", "Serie A", score=70.0),
-            _make_candidate("222", "Serie B", score=65.0),
-        ])
+        pending = _make_pending(
+            "serie.s03e10.mkv",
+            [
+                _make_candidate("111", "Serie A", score=70.0),
+                _make_candidate("222", "Serie B", score=65.0),
+            ],
+        )
 
         validated, remaining = await _filter_by_episode_count_compatibility(
             [pending], tvdb_client
@@ -76,10 +79,13 @@ class TestFilterByEpisodeCountCompatibility:
         tvdb_client = MagicMock()
         tvdb_client.get_season_episode_count = AsyncMock(return_value=22)
 
-        pending = _make_pending("serie.s03e10.mkv", [
-            _make_candidate("111", "Serie A", score=70.0),
-            _make_candidate("222", "Serie B", score=65.0),
-        ])
+        pending = _make_pending(
+            "serie.s03e10.mkv",
+            [
+                _make_candidate("111", "Serie A", score=70.0),
+                _make_candidate("222", "Serie B", score=65.0),
+            ],
+        )
 
         validated, remaining = await _filter_by_episode_count_compatibility(
             [pending], tvdb_client
@@ -100,10 +106,13 @@ class TestFilterByEpisodeCountCompatibility:
 
         tvdb_client.get_season_episode_count = AsyncMock(side_effect=mock_count)
 
-        pending = _make_pending("serie.s03e10.mkv", [
-            _make_candidate("111", "Serie A", score=50.0),  # score trop bas
-            _make_candidate("222", "Serie B", score=45.0),
-        ])
+        pending = _make_pending(
+            "serie.s03e10.mkv",
+            [
+                _make_candidate("111", "Serie A", score=50.0),  # score trop bas
+                _make_candidate("222", "Serie B", score=45.0),
+            ],
+        )
 
         validated, remaining = await _filter_by_episode_count_compatibility(
             [pending], tvdb_client
@@ -115,9 +124,12 @@ class TestFilterByEpisodeCountCompatibility:
     @pytest.mark.asyncio
     async def test_no_tvdb_client_returns_all_remaining(self):
         """Sans tvdb_client, tous les fichiers restent en remaining."""
-        pending = _make_pending("serie.s03e10.mkv", [
-            _make_candidate("111", "Serie A", score=70.0),
-        ])
+        pending = _make_pending(
+            "serie.s03e10.mkv",
+            [
+                _make_candidate("111", "Serie A", score=70.0),
+            ],
+        )
 
         validated, remaining = await _filter_by_episode_count_compatibility(
             [pending], None
@@ -132,10 +144,13 @@ class TestFilterByEpisodeCountCompatibility:
         tvdb_client = MagicMock()
         tvdb_client.get_season_episode_count = AsyncMock(return_value=22)
 
-        pending = _make_pending("serie.s03e10.mkv", [
-            {"id": "111", "title": "Film A", "score": 70.0, "source": "tmdb"},
-            _make_candidate("222", "Serie B", score=65.0),
-        ])
+        pending = _make_pending(
+            "serie.s03e10.mkv",
+            [
+                {"id": "111", "title": "Film A", "score": 70.0, "source": "tmdb"},
+                _make_candidate("222", "Serie B", score=65.0),
+            ],
+        )
 
         validated, remaining = await _filter_by_episode_count_compatibility(
             [pending], tvdb_client
@@ -151,9 +166,12 @@ class TestFilterByEpisodeCountCompatibility:
         tvdb_client = MagicMock()
         tvdb_client.get_season_episode_count = AsyncMock(return_value=22)
 
-        pending = _make_pending("documentaire.mkv", [
-            _make_candidate("111", "Serie A", score=70.0),
-        ])
+        pending = _make_pending(
+            "documentaire.mkv",
+            [
+                _make_candidate("111", "Serie A", score=70.0),
+            ],
+        )
 
         validated, remaining = await _filter_by_episode_count_compatibility(
             [pending], tvdb_client
@@ -161,3 +179,59 @@ class TestFilterByEpisodeCountCompatibility:
 
         assert len(validated) == 0
         assert len(remaining) == 1
+
+
+class TestAutoValidateFilesSkipsRemappedArcs:
+    """Un arc à numérotation décalée traverse l'auto-validation sans être validé."""
+
+    @pytest.mark.asyncio
+    async def test_arc_decale_rejoint_le_lot_manuel_sans_validation(self):
+        """Le fichier signalé n'est jamais validé, même à score maximal."""
+        from src.adapters.cli.auto_validator import auto_validate_files
+        from src.services.season_remap import SeasonRemap
+
+        arc = _make_pending(
+            "BLEACH.Thousand-Year.Blood.War.S02E05.mkv",
+            [_make_candidate("74796", "BLEACH", score=100.0)],
+        )
+        arc.id = "arc"
+
+        service = MagicMock()
+        service.collect_season_remap_ids = AsyncMock(
+            return_value={
+                "arc": SeasonRemap(
+                    source_season=2,
+                    source_episode=5,
+                    target_season=17,
+                    target_episode=18,
+                    season_name="Bleach: Thousand-Year Blood War",
+                    cour=2,
+                )
+            }
+        )
+        service.validate_candidate = AsyncMock()
+
+        result = await auto_validate_files([arc], service)
+
+        assert result.auto_validated == []
+        assert result.remaining == [arc]
+        service.validate_candidate.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_sans_decalage_lauto_validation_reste_inchangee(self):
+        """Aucun décalage : le comportement d'origine est préservé."""
+        from src.adapters.cli.auto_validator import auto_validate_files
+
+        pending = _make_pending(
+            "Fargo.S01E01.mkv", [_make_candidate("269613", "Fargo", score=100.0)]
+        )
+        pending.id = "fargo"
+
+        service = MagicMock()
+        service.collect_season_remap_ids = AsyncMock(return_value={})
+        service.validate_candidate = AsyncMock(return_value=MagicMock(title="Fargo"))
+
+        result = await auto_validate_files([pending], service)
+
+        assert result.auto_validated == [pending]
+        service.validate_candidate.assert_awaited_once()

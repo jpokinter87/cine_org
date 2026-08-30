@@ -587,6 +587,9 @@ class TestAutoValidateSkipsAmbiguous:
         service._validation_service.process_auto_validation = AsyncMock(
             return_value=MagicMock(auto_validated=True)
         )
+        service._validation_service.collect_season_remap_ids = AsyncMock(
+            return_value={}
+        )
         return service
 
     @pytest.mark.asyncio
@@ -622,3 +625,35 @@ class TestAutoValidateSkipsAmbiguous:
 
         assert workflow._validation_service.process_auto_validation.await_count == 2
         assert state.auto_validated_count == 2
+
+    @pytest.mark.asyncio
+    async def test_numerotation_decalee_part_en_validation_manuelle(
+        self, workflow: WorkflowService
+    ):
+        """Un arc livré en cours n'est jamais auto-validé : l'humain arbitre."""
+        from src.services.season_remap import SeasonRemap
+
+        pendings = [
+            _make_pending("1", "BLEACH.Thousand-Year.Blood.War.S02E05.mkv", []),
+            _make_pending("2", "Fargo.S01E01.mkv", []),
+        ]
+        workflow._validation_service.list_pending.return_value = pendings
+        workflow._validation_service.collect_ambiguous_ids.return_value = set()
+        workflow._validation_service.collect_season_remap_ids = AsyncMock(
+            return_value={
+                "1": SeasonRemap(
+                    source_season=2,
+                    source_episode=5,
+                    target_season=17,
+                    target_episode=18,
+                    season_name="Bleach: Thousand-Year Blood War",
+                    cour=2,
+                )
+            }
+        )
+
+        state = WorkflowState()
+        await workflow._auto_validate(state)
+
+        assert workflow._validation_service.process_auto_validation.await_count == 1
+        assert state.auto_validated_count == 1

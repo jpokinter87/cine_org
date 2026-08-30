@@ -11,7 +11,7 @@ Responsabilites:
 - Gestion des statuts (pending, validated, rejected)
 """
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from src.core.entities.video import PendingValidation, ValidationStatus
 from src.core.ports.api_clients import MediaDetails, SearchResult
@@ -20,6 +20,9 @@ from src.infrastructure.persistence.repositories.pending_validation_repository i
 )
 from src.services.matcher import MatcherService
 from src.utils.helpers import parse_candidates
+
+if TYPE_CHECKING:
+    from src.services.season_remap import SeasonRemap
 
 
 # Seuil d'auto-validation (score minimum en pourcentage)
@@ -368,6 +371,58 @@ class ValidationService:
                 return []
             return await self._tmdb_client.search(query, year=year)
 
+    async def collect_season_remap_ids(
+        self, pendings: list[PendingValidation]
+    ) -> dict[str, "SeasonRemap"]:
+        """
+        Repere les fichiers dont la numerotation est decalee par rapport au canon.
+
+        Les teams livrent les arcs d'anime en cours numerotes S01/S02/S03 alors
+        que le fournisseur les range dans une saison a numerotation continue
+        (Bleach TYBW = saison 17 de BLEACH). Auto-valider ces fichiers leur
+        collerait les titres d'une saison sans rapport : ils partent en
+        validation manuelle avec la proposition de realignement.
+
+        Args:
+            pendings: Validations en attente du lot courant
+
+        Returns:
+            ``{id_de_pending: realignement propose}``, vide si aucun decalage
+        """
+        # Imports locaux : meme parser saison/episode que le chemin de
+        # transfert (cf. anomaly_detector), et evite un cycle services <-> services.
+        from src.adapters.cli.helpers import _extract_series_info
+        from src.services import season_remap as season_remap_module
+        from src.services.season_remap import SeasonRemap
+
+        if self._tvdb_client is None:
+            return {}
+
+        detected: dict[str, SeasonRemap] = {}
+        for pending in pendings:
+            if not pending.id:
+                continue
+            candidates = self._parse_candidates(pending.candidates)
+            if not candidates or candidates[0].source != "tvdb":
+                continue
+            filename = pending.video_file.filename if pending.video_file else ""
+            if not filename:
+                continue
+
+            season, episode = _extract_series_info(filename)
+            remap = await season_remap_module.detect_season_remap(
+                self._tvdb_client,
+                series_id=candidates[0].id,
+                series_title=candidates[0].title,
+                filename=filename,
+                season=season,
+                episode=episode,
+            )
+            if remap is not None:
+                detected[pending.id] = remap
+
+        return detected
+
     async def search_by_external_id(
         self, id_type: str, id_value: str
     ) -> Optional[MediaDetails]:
@@ -400,14 +455,46 @@ class ValidationService:
             return await self._tvdb_client.get_details(id_value)
 
         elif id_type == "imdb":
-            if self._tmdb_client is None:
-                return None
-            api_key = getattr(self._tmdb_client, "_api_key", None)
-            if not api_key:
-                return None
-            return await self._tmdb_client.find_by_imdb_id(id_value)
+            return await self._find_by_imdb_id(id_value)
 
         return None
+
+    async def _find_by_imdb_id(self, imdb_id: str) -> Optional[MediaDetails]:
+        """
+        Resout un ID IMDb en MediaDetails TMDB, avec relais TVDB.
+
+        L'index inverse TMDB /find ne couvre pas tous les IDs IMDb : les arcs
+        d'anime publies sur IMDb comme titres distincts (ex. tt14986406,
+        *Bleach: Thousand-Year Blood War*) n'y figurent pas. TVDB les rattache
+        en revanche a leur serie parente : on relaie donc IMDb -> ID de serie
+        TVDB -> TMDB /find?external_source=tvdb_id, ce qui garde l'ID retourne
+        dans l'espace TMDB attendu par les appelants.
+
+        Args:
+            imdb_id: ID IMDb (format ttXXXXXXX)
+
+        Returns:
+            MediaDetails si trouve, None sinon
+        """
+        if self._tmdb_client is None:
+            return None
+        if not getattr(self._tmdb_client, "_api_key", None):
+            return None
+
+        details = await self._tmdb_client.find_by_imdb_id(imdb_id)
+        if details is not None:
+            return details
+
+        if self._tvdb_client is None:
+            return None
+        if not getattr(self._tvdb_client, "_api_key", None):
+            return None
+
+        tvdb_series_id = await self._tvdb_client.find_series_id_by_imdb_id(imdb_id)
+        if tvdb_series_id is None:
+            return None
+
+        return await self._tmdb_client.find_by_external_id(tvdb_series_id, "tvdb_id")
 
     def list_pending(self) -> list[PendingValidation]:
         """

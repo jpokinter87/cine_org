@@ -423,11 +423,26 @@ class TMDBClient(IMediaAPIClient):
         """
         Recherche un film ou une série via son ID IMDb.
 
-        Utilise l'endpoint TMDB /find/{external_id} avec source=imdb_id.
+        Args:
+            imdb_id: ID IMDb (format ttXXXXXXX)
+
+        Returns:
+            MediaDetails si trouvé, None sinon
+        """
+        return await self.find_by_external_id(imdb_id, "imdb_id")
+
+    async def find_by_external_id(
+        self, external_id: str, external_source: str
+    ) -> Optional[MediaDetails]:
+        """
+        Recherche un film ou une série via un ID externe.
+
+        Utilise l'endpoint TMDB /find/{external_id}.
         Si un film est trouvé, retourne ses détails complets via get_details.
 
         Args:
-            imdb_id: ID IMDb (format ttXXXXXXX)
+            external_id: Valeur de l'ID externe
+            external_source: Source TMDB (ex. "imdb_id", "tvdb_id")
 
         Returns:
             MediaDetails si trouvé, None sinon
@@ -437,8 +452,8 @@ class TMDBClient(IMediaAPIClient):
             response = await request_with_retry(
                 client,
                 "GET",
-                f"/find/{imdb_id}",
-                params={"language": "fr-FR", "external_source": "imdb_id"},
+                f"/find/{external_id}",
+                params={"language": "fr-FR", "external_source": external_source},
             )
         except httpx.HTTPStatusError:
             return None

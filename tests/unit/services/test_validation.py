@@ -721,6 +721,95 @@ class TestSearchManual:
 
 
 # ============================================================================
+# Tests: collect_season_remap_ids (arcs livres en cours separes)
+# ============================================================================
+
+
+class TestCollectSeasonRemapIds:
+    """Un arc dont la numerotation est decalee ne doit jamais s'auto-valider."""
+
+    @pytest.mark.asyncio
+    async def test_arc_detecte_est_renvoye_avec_sa_proposition(
+        self, validation_service, mock_tvdb_client, monkeypatch
+    ):
+        """Le fichier est signale et porte le realignement propose."""
+        from src.services import season_remap as season_remap_module
+        from src.services.season_remap import SeasonRemap
+
+        proposal = SeasonRemap(
+            source_season=2,
+            source_episode=5,
+            target_season=17,
+            target_episode=18,
+            season_name="Bleach: Thousand-Year Blood War",
+            cour=2,
+        )
+        monkeypatch.setattr(
+            season_remap_module,
+            "detect_season_remap",
+            AsyncMock(return_value=proposal),
+        )
+
+        pendings = [
+            _pending(
+                "1",
+                "BLEACH.Thousand-Year.Blood.War.S02E05.mkv",
+                [_cand("74796", "BLEACH")],
+            )
+        ]
+
+        result = await validation_service.collect_season_remap_ids(pendings)
+
+        assert result == {"1": proposal}
+
+    @pytest.mark.asyncio
+    async def test_lot_sans_decalage_ne_bloque_rien(
+        self, validation_service, monkeypatch
+    ):
+        """Aucun decalage detecte : l'auto-validation reste ouverte."""
+        from src.services import season_remap as season_remap_module
+
+        monkeypatch.setattr(
+            season_remap_module, "detect_season_remap", AsyncMock(return_value=None)
+        )
+
+        pendings = [_pending("1", "Fargo.S01E01.mkv", [_cand("269613", "Fargo")])]
+
+        assert await validation_service.collect_season_remap_ids(pendings) == {}
+
+    @pytest.mark.asyncio
+    async def test_candidats_non_tvdb_sont_ignores(
+        self, validation_service, monkeypatch
+    ):
+        """La detection repose sur des IDs TVDB : les autres sources sont hors jeu."""
+        from src.services import season_remap as season_remap_module
+
+        detect = AsyncMock(return_value=None)
+        monkeypatch.setattr(season_remap_module, "detect_season_remap", detect)
+
+        cand = {"id": "30984", "title": "Bleach", "score": 100.0, "source": "tmdb_tv"}
+        pendings = [_pending("1", "Bleach.S02E05.mkv", [cand])]
+
+        assert await validation_service.collect_season_remap_ids(pendings) == {}
+        detect.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_sans_client_tvdb_aucune_detection(
+        self, mock_pending_repo, mock_matcher, mock_tmdb_client
+    ):
+        """Sans client TVDB, la detection est simplement inactive."""
+        service = ValidationService(
+            pending_repo=mock_pending_repo,
+            matcher=mock_matcher,
+            tmdb_client=mock_tmdb_client,
+            tvdb_client=None,
+        )
+        pendings = [_pending("1", "Bleach.S02E05.mkv", [_cand("74796", "BLEACH")])]
+
+        assert await service.collect_season_remap_ids(pendings) == {}
+
+
+# ============================================================================
 # Tests: search_by_external_id
 # ============================================================================
 
@@ -769,6 +858,62 @@ class TestSearchByExternalId:
 
         mock_tmdb_client.find_by_imdb_id.assert_called_once_with("tt0499549")
         assert result == sample_media_details
+
+    @pytest.mark.asyncio
+    async def test_search_by_imdb_id_relays_via_tvdb_when_tmdb_find_empty(
+        self,
+        validation_service,
+        mock_tmdb_client,
+        mock_tvdb_client,
+        sample_media_details,
+    ):
+        """TMDB /find muet -> relais TVDB (IMDb -> ID serie TVDB -> TMDB)."""
+        mock_tmdb_client.find_by_imdb_id = AsyncMock(return_value=None)
+        mock_tmdb_client.find_by_external_id = AsyncMock(
+            return_value=sample_media_details
+        )
+        mock_tvdb_client.find_series_id_by_imdb_id = AsyncMock(return_value="74796")
+
+        result = await validation_service.search_by_external_id("imdb", "tt14986406")
+
+        mock_tvdb_client.find_series_id_by_imdb_id.assert_awaited_once_with(
+            "tt14986406"
+        )
+        mock_tmdb_client.find_by_external_id.assert_awaited_once_with(
+            "74796", "tvdb_id"
+        )
+        assert result == sample_media_details
+
+    @pytest.mark.asyncio
+    async def test_search_by_imdb_id_skips_tvdb_relay_when_tmdb_answers(
+        self,
+        validation_service,
+        mock_tmdb_client,
+        mock_tvdb_client,
+        sample_media_details,
+    ):
+        """TMDB /find repond -> pas d'appel TVDB."""
+        mock_tmdb_client.find_by_imdb_id = AsyncMock(return_value=sample_media_details)
+        mock_tvdb_client.find_series_id_by_imdb_id = AsyncMock(return_value="74796")
+
+        result = await validation_service.search_by_external_id("imdb", "tt0499549")
+
+        mock_tvdb_client.find_series_id_by_imdb_id.assert_not_awaited()
+        assert result == sample_media_details
+
+    @pytest.mark.asyncio
+    async def test_search_by_imdb_id_returns_none_when_tvdb_relay_fails(
+        self, validation_service, mock_tmdb_client, mock_tvdb_client
+    ):
+        """Ni TMDB ni TVDB ne resolvent l'ID -> None."""
+        mock_tmdb_client.find_by_imdb_id = AsyncMock(return_value=None)
+        mock_tmdb_client.find_by_external_id = AsyncMock(return_value=None)
+        mock_tvdb_client.find_series_id_by_imdb_id = AsyncMock(return_value=None)
+
+        result = await validation_service.search_by_external_id("imdb", "tt0000000")
+
+        mock_tmdb_client.find_by_external_id.assert_not_awaited()
+        assert result is None
 
     @pytest.mark.asyncio
     async def test_search_by_external_id_no_client(

@@ -128,6 +128,14 @@ class MatchingStepMixin:
         # sur deux fiches homonymes : laissés en validation manuelle.
         ambiguous_ids = self._validation_service.collect_ambiguous_ids(pending_list)
 
+        # Arcs livres en cours separes alors que le fournisseur les range dans
+        # une saison a numerotation continue : realignement proposé, jamais
+        # appliqué seul.
+        season_remaps = await self._validation_service.collect_season_remap_ids(
+            pending_list
+        )
+        manual_only = ambiguous_ids | set(season_remaps)
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -140,7 +148,7 @@ class MatchingStepMixin:
             )
 
             for pend in pending_list:
-                if pend.id in ambiguous_ids:
+                if pend.id in manual_only:
                     progress.advance(auto_task)
                     continue
                 result = await self._validation_service.process_auto_validation(pend)
@@ -153,6 +161,14 @@ class MatchingStepMixin:
                 f"[yellow]{len(ambiguous_ids)}[/yellow] fichier(s) laissé(s) en "
                 "validation manuelle : séries homonymes détectées dans le lot"
             )
+
+        if season_remaps:
+            self._console.print(
+                f"[yellow]{len(season_remaps)}[/yellow] fichier(s) laissé(s) en "
+                "validation manuelle : numérotation décalée par rapport au canon"
+            )
+            for remap in season_remaps.values():
+                self._console.print(f"  [cyan]↻[/cyan] {remap.label}")
 
         self._console.print(
             f"[bold]{state.auto_validated_count}[/bold] fichier(s) auto-validé(s)"

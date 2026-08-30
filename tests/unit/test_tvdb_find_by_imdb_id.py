@@ -108,3 +108,91 @@ async def test_find_series_id_ignores_non_series_matches(mock_cache) -> None:
         assert await client.find_series_id_by_imdb_id("tt1234567") is None
     finally:
         await client.close()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_find_series_id_resolves_season_match(mock_cache) -> None:
+    """Un ID IMDb designant une saison (arc) resout vers la serie parente.
+
+    Cas reel : tt14986406 (Bleach: Thousand-Year Blood War) est publie sur IMDb
+    comme titre distinct, mais TVDB le rattache a la saison 17 de BLEACH.
+    """
+    respx.post(f"{BASE}/login").mock(
+        return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
+    )
+    respx.get(f"{BASE}/search/remoteid/tt14986406").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "status": "success",
+                "data": [
+                    {
+                        "season": {
+                            "id": 2008655,
+                            "seriesId": 74796,
+                            "number": 17,
+                            "name": "千年血戦篇",
+                        }
+                    }
+                ],
+            },
+        )
+    )
+
+    client = TVDBClient(api_key="x", cache=mock_cache)
+    try:
+        assert await client.find_series_id_by_imdb_id("tt14986406") == "74796"
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_find_series_id_resolves_episode_match(mock_cache) -> None:
+    """Un ID IMDb designant un episode resout vers la serie parente."""
+    respx.post(f"{BASE}/login").mock(
+        return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
+    )
+    respx.get(f"{BASE}/search/remoteid/tt2301451").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "status": "success",
+                "data": [{"episode": {"id": 4470379, "seriesId": 81189}}],
+            },
+        )
+    )
+
+    client = TVDBClient(api_key="x", cache=mock_cache)
+    try:
+        assert await client.find_series_id_by_imdb_id("tt2301451") == "81189"
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_find_series_id_prefers_series_over_season(mock_cache) -> None:
+    """Une correspondance serie prime sur une correspondance saison."""
+    respx.post(f"{BASE}/login").mock(
+        return_value=httpx.Response(200, json=TVDB_LOGIN_RESPONSE)
+    )
+    respx.get(f"{BASE}/search/remoteid/tt0903747").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "status": "success",
+                "data": [
+                    {"season": {"id": 1, "seriesId": 999}},
+                    {"series": {"id": 81189, "name": "Breaking Bad"}},
+                ],
+            },
+        )
+    )
+
+    client = TVDBClient(api_key="x", cache=mock_cache)
+    try:
+        assert await client.find_series_id_by_imdb_id("tt0903747") == "81189"
+    finally:
+        await client.close()

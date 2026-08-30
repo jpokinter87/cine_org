@@ -207,13 +207,27 @@ async def _run_web_workflow(
                 len(ambiguous_ids),
             )
 
+        # Arcs livres en cours separes (S01/S02/S03) alors que le fournisseur
+        # les range dans une saison a numerotation continue : realignement
+        # propose, jamais applique seul.
+        season_remaps = await validation_service.collect_season_remap_ids(pending_list)
+        if season_remaps:
+            logger.info(
+                "Decalage de saison detecte : %d fichier(s) laisse(s) en validation manuelle",
+                len(season_remaps),
+            )
+            for remap in season_remaps.values():
+                logger.info("  proposition : %s", remap.label)
+
+        manual_only = ambiguous_ids | set(season_remaps)
+
         auto_count = 0
         for i, pend in enumerate(pending_list):
             progress.current = i + 1
             progress.filename = pend.video_file.filename if pend.video_file else ""
 
             fname = pend.video_file.filename if pend.video_file else "?"
-            if pend.id not in ambiguous_ids:
+            if pend.id not in manual_only:
                 result = await validation_service.process_auto_validation(pend)
                 if result.auto_validated:
                     auto_count += 1
