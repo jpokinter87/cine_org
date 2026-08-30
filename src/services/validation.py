@@ -369,16 +369,25 @@ class ValidationService:
             return await self._tmdb_client.search(query, year=year)
 
     async def search_by_external_id(
-        self, id_type: str, id_value: str
+        self, id_type: str, id_value: str, is_series: bool = False
     ) -> Optional[MediaDetails]:
         """
         Recherche un media par son ID externe.
 
         Permet de rechercher directement par ID TMDB, TVDB ou IMDB.
 
+        Pour les séries (is_series=True), tous les chemins convergent vers un
+        ID TMDB-TV afin que la ré-association (POST get_tv_details) fonctionne :
+        - tmdb : interroge l'espace de noms TV (et non films), car un même
+          identifiant numérique désigne des œuvres différentes selon l'espace
+          (ex. 245078 = film « Potraga » mais série « Deep »).
+        - tvdb : résout l'ID TVDB en ID TMDB via /find, puis charge les détails
+          TV — le MediaDetails renvoyé porte ainsi un ID TMDB exploitable.
+
         Args:
             id_type: Type d'ID ("tmdb", "tvdb", "imdb")
             id_value: Valeur de l'ID
+            is_series: True pour ré-associer une série, False pour un film
 
         Returns:
             MediaDetails si trouve, None sinon
@@ -389,9 +398,24 @@ class ValidationService:
             api_key = getattr(self._tmdb_client, "_api_key", None)
             if not api_key:
                 return None
+            if is_series:
+                return await self._tmdb_client.get_tv_details(id_value)
             return await self._tmdb_client.get_details(id_value)
 
         elif id_type == "tvdb":
+            if is_series:
+                # Résoudre TVDB -> TMDB pour obtenir un ID TMDB-TV confirmable
+                if self._tmdb_client is None:
+                    return None
+                api_key = getattr(self._tmdb_client, "_api_key", None)
+                if not api_key:
+                    return None
+                results = await self._tmdb_client.find_by_external_id(
+                    id_value, "tvdb_id"
+                )
+                if not results:
+                    return None
+                return await self._tmdb_client.get_tv_details(results[0].id)
             if self._tvdb_client is None:
                 return None
             api_key = getattr(self._tvdb_client, "_api_key", None)
