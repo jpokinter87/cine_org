@@ -5,6 +5,7 @@ Fonctions utilitaires partagées pour les routes de la bibliothèque.
 import json
 from pathlib import Path
 
+from sqlalchemy import column as sa_column, table as sa_table
 from sqlmodel import select
 
 from ....infrastructure.persistence.database import get_session
@@ -16,22 +17,103 @@ from ....utils.helpers import normalize_accents, search_variants
 ITEMS_PER_PAGE = 24
 
 
-def _title_search_filter(model_class, q: str, extended: bool = False):
+# Table imdb_akas (titres alternatifs IMDb) — pas de modèle SQLModel, on la
+# référence en table légère pour les sous-requêtes corrélées de recherche.
+_AKAS_TABLE = sa_table(
+    "imdb_akas",
+    sa_column("tconst"),
+    sa_column("title_normalized"),
+)
+
+
+def _akas_table_exists(session) -> bool:
+    """Indique si la table ``imdb_akas`` existe (absente des bases anciennes).
+
+    Sans cette vérification, un filtre référençant ``imdb_akas`` ferait planter
+    toute la requête de recherche sur les bases qui n'ont pas importé les akas.
+    """
+    from sqlalchemy import text
+
+    try:
+        row = session.exec(
+            text("SELECT 1 FROM sqlite_master WHERE type='table' AND name='imdb_akas'")
+        ).first()
+        return row is not None
+    except Exception:
+        return False
+
+
+def _matched_french_aliases(session, tconsts, q: str) -> dict[str, str]:
+    """Pour une liste de tconst, retourne l'alias IMDb ayant matché la query `q`.
+
+    Sert à expliquer pourquoi une fiche stockée sous son titre original apparaît
+    dans les résultats : on affiche le titre alternatif qui a déclenché le match.
+    Priorité de sélection : région « FR », puis langue « fr » (ex. CA-fr), sinon
+    le premier alias matchant (toute langue) afin de toujours justifier le match.
+
+    Renvoie un dict ``{tconst: titre_alias}`` ne contenant que les tconst dont au
+    moins un alias matche. Dict vide si entrées vides ou table ``imdb_akas``
+    absente (bases anciennes).
+    """
+    tconsts = [t for t in tconsts if t]
+    if not tconsts or not q.strip():
+        return {}
+
+    from sqlalchemy import bindparam, text
+
+    q_norm = normalize_accents(q).lower().replace("-", " ")
+    stmt = text(
+        "SELECT tconst, title, region, language FROM imdb_akas "
+        "WHERE tconst IN :tconsts "
+        "AND REPLACE(LOWER(title_normalized), '-', ' ') LIKE :pat"
+    ).bindparams(
+        bindparam("tconsts", value=tconsts, expanding=True),
+        bindparam("pat", value=f"%{q_norm}%"),
+    )
+    try:
+        rows = session.exec(stmt).all()
+    except Exception:
+        # Table absente (bases sans import des akas).
+        return {}
+
+    def _rank(region: str | None, language: str | None) -> int:
+        if (region or "").upper() == "FR":
+            return 0
+        if (language or "").lower() == "fr":
+            return 1
+        return 2
+
+    best: dict[str, tuple[int, str]] = {}
+    for tconst, title, region, language in rows:
+        rank = _rank(region, language)
+        current = best.get(tconst)
+        if current is None or rank < current[0]:
+            best[tconst] = (rank, title)
+    return {tconst: title for tconst, (_, title) in best.items()}
+
+
+def _title_search_filter(
+    model_class, q: str, extended: bool = False, include_akas: bool = False
+):
     """
     Construit un filtre SQL de recherche par titre, insensible aux accents
     et aux ligatures.
 
-    Deux familles de conditions combinées en OR :
+    Familles de conditions combinées en OR :
     1. LIKE direct sur chaque variante (search_variants : casse, ligatures,
        version accent-stripped).
     2. LIKE sur ``unaccent(title)`` contre la query accent-stripped —
        indispensable pour matcher les titres DB accentués quand la query
        ne l'est pas (ex: "Millenium" → "Millénium").
+    3. Si ``include_akas`` : match via les titres alternatifs IMDb
+       (``imdb_akas``, toutes régions) rattachés au même ``imdb_id``. Permet de
+       retrouver une fiche stockée en langue originale via un titre localisé
+       (ex: « Le Maître du Haut-Château » → « The Man in the High Castle »).
 
     L'UDF ``unaccent`` est enregistrée par le listener SQLite dans
     ``database.py``.
     """
-    from sqlalchemy import func, or_
+    from sqlalchemy import func, or_, select as sa_select
 
     variants = search_variants(q)
     unaccent_q = normalize_accents(q)
@@ -40,16 +122,29 @@ def _title_search_filter(model_class, q: str, extended: bool = False):
     for v in variants:
         conditions.append(model_class.title.contains(v))
     # Pattern unaccent (UDF SQLite) : couvre les cas accent DB / sans-accent query
-    conditions.append(
-        func.unaccent(model_class.title).like(f"%{unaccent_q}%")
-    )
+    conditions.append(func.unaccent(model_class.title).like(f"%{unaccent_q}%"))
 
     if extended and hasattr(model_class, "overview"):
         for v in variants:
             conditions.append(model_class.overview.contains(v))
-        conditions.append(
-            func.unaccent(model_class.overview).like(f"%{unaccent_q}%")
+        conditions.append(func.unaccent(model_class.overview).like(f"%{unaccent_q}%"))
+
+    if include_akas:
+        # Sous-requête corrélée EXISTS : pour chaque fiche, ne scanne que ses
+        # propres akas via l'index sur tconst (et non les 40M+ lignes globales).
+        # title_normalized = accents retirés + minuscules ; LIKE SQLite est
+        # insensible à la casse ASCII.
+        # Tirets ↔ espaces : les titres divergent entre sources (TMDB « Haut-
+        # Château », aka IMDb « Haut Château »). On uniformise des deux côtés.
+        aka_pattern = f"%{unaccent_q.lower().replace('-', ' ')}%"
+        aka_subquery = (
+            sa_select(_AKAS_TABLE.c.tconst)
+            .where(_AKAS_TABLE.c.tconst == model_class.imdb_id)
+            .where(
+                func.replace(_AKAS_TABLE.c.title_normalized, "-", " ").like(aka_pattern)
+            )
         )
+        conditions.append(aka_subquery.exists())
 
     return or_(*conditions)
 
@@ -183,7 +278,9 @@ def _best_rating(vote_average: float | None, imdb_rating: float | None) -> float
     return vote_average
 
 
-def _find_movie_file(title: str, year: int | None, original_title: str | None = None) -> dict | None:
+def _find_movie_file(
+    title: str, year: int | None, original_title: str | None = None
+) -> dict | None:
     """
     Recherche le fichier d'un film dans video/Films/ par titre et annee,
     puis en fallback dans les VideoFiles en DB par titre approche.

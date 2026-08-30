@@ -48,6 +48,9 @@
         </div>
         <div class="lib-card-body">
             <h3 class="lib-card-title">{{ item.title }}</h3>
+            {% if item.matched_alias %}
+            <p class="lib-card-alias" title="Titre alternatif correspondant à votre recherche">aussi : « {{ item.matched_alias }} »</p>
+            {% endif %}
             <div class="lib-card-meta">
                 {% if item.year %}<span>{{ item.year }}</span>{% endif %}
                 {% if item.genres %}<span>{{ item.genres[0] }}</span>{% endif %}

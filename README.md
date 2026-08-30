@@ -1456,6 +1456,10 @@ La barre de filtres en haut de la bibliothèque permet de combiner librement plu
 
 **Recherche étendue** — Le mode « Titre + Synopsis » permet de chercher des mots-clés dans le synopsis des films (ex : chercher « espace » trouve les films de science-fiction même si le mot n'est pas dans le titre).
 
+**Recherche par titre alternatif** — La recherche par titre interroge aussi les titres alternatifs IMDb (table `imdb_akas`, toutes régions/langues). Une fiche stockée sous son titre original est ainsi retrouvée par n'importe quel titre localisé connu : chercher « Le Maître du Haut-Château » trouve la série stockée sous « The Man in the High Castle », tout comme son titre espagnol « El hombre en el castillo ». La recherche reste insensible aux accents et tolère l'écart tiret/espace. Ce repli ne s'active que pour les fiches ayant un `imdb_id` et nécessite l'import du dataset IMDb (voir `imdb import`).
+
+Quand un résultat n'apparaît que parce qu'un de ses titres alternatifs correspond (et non son titre affiché), la carte indique l'alias français qui a déclenché le match — par exemple `aussi : « Le maître »` sous « The Master » — afin que la présence du résultat soit immédiatement compréhensible.
+
 ### Fiches détaillées
 
 > ![Fiche détaillée film](docs/screenshots/movie-detail.png)
