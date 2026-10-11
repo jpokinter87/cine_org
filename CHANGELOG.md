@@ -1,3 +1,9 @@
+## v2.20.2 (2026-10-11)
+
+### Fix
+
+- **library**: réactiver le bouton Supprimer / Fusionner après une recherche
+
 ## v2.20.1 (2026-10-11)
 
 ### Fix
