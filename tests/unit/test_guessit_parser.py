@@ -390,3 +390,41 @@ class TestGuessitFilenameParserPart:
         assert result.year == 2003
         assert result.resolution == "1080p"
         assert result.media_type == MediaType.MOVIE
+
+
+class TestGuessitFilenameParserAV1:
+    """guessit 3.8 ignore le codec AV1 : sans correctif, « AV1-groupe » n'est pas
+    reconnu en fin de nom et guessit prend le début du titre pour un groupe de
+    release (cas « Spider-Noir » lu « Noir », groupe « Spider »)."""
+
+    @pytest.fixture
+    def parser(self) -> GuessitFilenameParser:
+        return GuessitFilenameParser()
+
+    def test_hyphenated_series_title_with_av1(
+        self, parser: GuessitFilenameParser
+    ) -> None:
+        result = parser.parse(
+            "Spider-Noir.S01E07.MULTi.VFF.1080p.WEBRip.OPUS.5.1.AV1-jaaj.mkv",
+            MediaType.SERIES,
+        )
+        assert result.title == "Spider-Noir"
+        assert result.release_group == "jaaj"
+        assert result.video_codec == "AV1"
+        assert result.season == 1
+        assert result.episode == 7
+
+    def test_hyphenated_movie_title_with_av1(
+        self, parser: GuessitFilenameParser
+    ) -> None:
+        result = parser.parse("Ant-Man.2015.1080p.WEB.AV1-FW.mkv", None)
+        assert result.title == "Ant-Man"
+        assert result.year == 2015
+        assert result.video_codec == "AV1"
+
+    def test_av1_inside_word_is_not_a_codec(
+        self, parser: GuessitFilenameParser
+    ) -> None:
+        result = parser.parse("Nav1gator.2020.1080p.x264-FW.mkv", None)
+        assert result.title == "Nav1gator"
+        assert result.video_codec == "H.264"
