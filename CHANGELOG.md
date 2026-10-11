@@ -1,3 +1,15 @@
+## v2.20.0 (2026-10-11)
+
+### Feat
+
+- **library**: fusionner plus de deux fiches séries et réinitialiser la sélection après fusion
+
+### Fix
+
+- **library**: ne plus créer de doublon en ré-associant vers une série déjà présente
+- **transfer**: retirer les fiches créées par la préparation lors d'un renvoi en validation
+- **parsing**: reconnaître le codec AV1 pour ne plus tronquer les titres composés
+
 ## v2.19.0 (2026-08-30)
 
 ### Feat
