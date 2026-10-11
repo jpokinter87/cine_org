@@ -761,6 +761,9 @@ async def build_transfers_batch(
                 "year": candidate_year,
                 "series_id": saved_series.id,
                 "episode_id": saved_episode.id,
+                # Episode cree par cette preparation (et non pre-existant) :
+                # a retirer si l'element est renvoye en validation.
+                "created_episode": not existing_eps,
                 "season_num": season_num,
                 "episode_num": episode_num,
             }
