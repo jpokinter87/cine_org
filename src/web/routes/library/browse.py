@@ -461,8 +461,12 @@ async def library_index(
     if request.headers.get("HX-Request"):
         response = templates.TemplateResponse(request, "library/_content.html", context)
         response.headers["Vary"] = "HX-Request"
+        response.headers["Cache-Control"] = "no-store"
         return response
 
     response = templates.TemplateResponse(request, "library/index.html", context)
     response.headers["Vary"] = "HX-Request"
+    # Jamais resservie depuis le cache : après une fusion ou une suppression,
+    # le retour arrière réaffichait des fiches qui n'existent plus.
+    response.headers["Cache-Control"] = "no-store"
     return response

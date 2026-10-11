@@ -253,18 +253,9 @@
     }
 
     // Retour arrière servi par le cache du navigateur (bfcache) : la page est
-    // restaurée telle quelle, sans réexécuter ce script. On resynchronise sur
-    // l'état mémorisé, effacé entre-temps par une fusion ou une suppression.
+    // restaurée telle quelle (fiches et sélection d'avant une fusion ou une
+    // suppression). On la recharge pour repartir de l'état réel.
     window.addEventListener('pageshow', function (e) {
-        if (!e.persisted) return;
-        selected.clear();
-        selectMode = false;
-        loadState();
-        removeCheckboxes();
-        if (selectMode) {
-            enterSelectMode();
-        } else {
-            exitSelectMode();
-        }
+        if (e.persisted) window.location.reload();
     });
 })();
