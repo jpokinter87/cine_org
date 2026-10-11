@@ -251,4 +251,20 @@
     if (selectMode) {
         enterSelectMode();
     }
+
+    // Retour arrière servi par le cache du navigateur (bfcache) : la page est
+    // restaurée telle quelle, sans réexécuter ce script. On resynchronise sur
+    // l'état mémorisé, effacé entre-temps par une fusion ou une suppression.
+    window.addEventListener('pageshow', function (e) {
+        if (!e.persisted) return;
+        selected.clear();
+        selectMode = false;
+        loadState();
+        removeCheckboxes();
+        if (selectMode) {
+            enterSelectMode();
+        } else {
+            exitSelectMode();
+        }
+    });
 })();

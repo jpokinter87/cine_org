@@ -19,6 +19,7 @@ from starlette.responses import StreamingResponse
 
 from loguru import logger
 
+from ...infrastructure.persistence.database import get_session
 from ..deps import templates
 
 router = APIRouter(prefix="/transfer")
@@ -1564,6 +1565,64 @@ async def transfer_progress_sse(request: Request):
     )
 
 
+def _discard_prepared_records(request: Request, pending_ids: set[str]) -> None:
+    """Retire les fiches que la préparation a créées pour des éléments renvoyés.
+
+    ``build_transfers_batch`` enregistre séries, épisodes et films dès la
+    préparation. Renvoyer un élément en validation (mauvais match) laissait
+    ces fiches sans fichier dans la bibliothèque. Ne sont retirés que :
+    les épisodes créés par la préparation et sans fichier, la série si elle
+    n'a plus aucun épisode porteur d'un fichier (corbeille), le film sans
+    fichier (corbeille). Les éléments renvoyés quittent aussi le batch.
+    """
+    from ...infrastructure.persistence.models import (
+        EpisodeModel,
+        MovieModel,
+        SeriesModel,
+    )
+    from .library.delete import (
+        _delete_movie_record,
+        _delete_series_record,
+        _series_is_phantom,
+    )
+
+    transfers = getattr(request.app.state, "transfer_batch", None)
+    if not transfers:
+        return
+    discarded = [t for t in transfers if t["pending"].id in pending_ids]
+    if not discarded:
+        return
+
+    file_system = request.app.state.container.file_system()
+    session = next(get_session())
+    try:
+        series_ids = set()
+        for t in discarded:
+            if t.get("is_series"):
+                if not t.get("series_id") or not t.get("episode_id"):
+                    continue
+                series_ids.add(t["series_id"])
+                episode = session.get(EpisodeModel, t["episode_id"])
+                if episode and t.get("created_episode") and not episode.file_path:
+                    session.delete(episode)
+            elif t.get("movie_id"):
+                movie = session.get(MovieModel, t["movie_id"])
+                if movie and not movie.file_path:
+                    _delete_movie_record(session, movie, file_system, "send_back")
+        session.flush()
+        for series_id in series_ids:
+            series = session.get(SeriesModel, series_id)
+            if series and _series_is_phantom(session, series_id):
+                _delete_series_record(session, series, file_system, "send_back")
+        session.commit()
+    finally:
+        session.close()
+
+    request.app.state.transfer_batch = [
+        t for t in transfers if t["pending"].id not in pending_ids
+    ]
+
+
 @router.post("/send-back/{pending_id}", response_class=HTMLResponse)
 async def send_back(request: Request, pending_id: str):
     """Renvoie un fichier validé en statut pending pour re-validation.
@@ -1583,6 +1642,7 @@ async def send_back(request: Request, pending_id: str):
 
     candidate_id = pending.selected_candidate_id
     validation_service.reset_to_pending(pending)
+    sent_back_ids = {pending_id}
 
     # Cascade inverse pour les séries : renvoyer tous les épisodes
     # ayant le même candidat TVDB (miroir de _auto_validate_series_episodes)
@@ -1592,7 +1652,10 @@ async def send_back(request: Request, pending_id: str):
         for other in validated_list:
             if other.id != pending_id and other.selected_candidate_id == candidate_id:
                 validation_service.reset_to_pending(other)
+                sent_back_ids.add(other.id)
                 cascade_count += 1
+
+    _discard_prepared_records(request, sent_back_ids)
 
     if cascade_count > 0:
         msg = f"Fichier + {cascade_count} épisode(s) renvoyé(s) en validation."

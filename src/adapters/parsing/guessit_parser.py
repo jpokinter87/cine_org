@@ -8,10 +8,34 @@ pour extraire les informations structurees des noms de fichiers video.
 import re
 from typing import Any, Optional
 
-from guessit import guessit
+from guessit.api import GuessItApi
+from guessit.rules import rebulk_builder
+from guessit.rules.common.validators import seps_surround
+from rebulk import Rebulk
 
 from src.core.ports.parser import IFilenameParser
 from src.core.value_objects.parsed_info import MediaType, ParsedFilename
+
+
+def _rebulk_builder_with_av1(config: dict[str, Any]) -> Rebulk:
+    """
+    Regles guessit standard + reconnaissance du codec AV1.
+
+    guessit 3.8 ignore AV1 : la fin de nom « AV1-groupe » n'est alors pas lue
+    comme « codec-groupe » et guessit prend le debut du titre pour un groupe
+    de release (« Spider-Noir…AV1-jaaj » donnait le titre « Noir »).
+    """
+    rebulk = rebulk_builder(config)
+    rebulk.rebulk(
+        Rebulk()
+        .regex_defaults(flags=re.IGNORECASE)
+        .regex(r"AV1", name="video_codec", value="AV1", validator=seps_surround)
+    )
+    return rebulk
+
+
+_guessit_api = GuessItApi()
+_guessit_api.configure({}, rules_builder=_rebulk_builder_with_av1)
 
 
 class GuessitFilenameParser(IFilenameParser):
@@ -40,7 +64,7 @@ class GuessitFilenameParser(IFilenameParser):
         options = self._build_options(type_hint)
 
         # Appeler guessit
-        result = guessit(filename, options)
+        result = _guessit_api.guessit(filename, options)
 
         # Mapper vers ParsedFilename
         return self._map_to_parsed_filename(result, type_hint)

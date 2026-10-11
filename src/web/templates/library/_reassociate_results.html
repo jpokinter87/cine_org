@@ -72,13 +72,14 @@
 <div class="reassociate-confirm-overlay" id="reassociate-confirm-overlay" onclick="if(event.target===this)hideReassociateConfirm()">
     <div class="reassociate-confirm-dialog">
         <h3 class="reassociate-confirm-title">Ré-associer ce titre ?</h3>
-        <p class="reassociate-confirm-text">
+        <p class="reassociate-confirm-text" id="reassociate-confirm-text">
             Associer avec <strong id="reassociate-confirm-name"></strong>
         </p>
         <div class="reassociate-confirm-actions">
             <button type="button" class="reassociate-confirm-cancel" onclick="hideReassociateConfirm()">Annuler</button>
             <button type="button" class="reassociate-confirm-ok"
                 id="reassociate-confirm-ok-btn"
+                hx-target="#reassociate-confirm-text"
                 hx-post="/library/{{ entity_type ~ 's' if entity_type == 'movie' else entity_type }}/{{ entity_id }}/reassociate"
             >
                 Confirmer

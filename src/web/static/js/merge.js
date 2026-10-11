@@ -19,12 +19,15 @@
     function refreshButton() {
         var btn = document.getElementById('merge-confirm-btn');
         if (!btn) return;
-        btn.style.display = selectedSeries().length === 2 ? '' : 'none';
+        btn.style.display = selectedSeries().length >= 2 ? '' : 'none';
     }
 
     // explicit=true → respecte l'ordre demandé (pas de re-tri par date côté serveur)
-    function openOverlay(a, b, explicit) {
-        var url = '/library/merge/overlay?a=' + a + '&b=' + b + (explicit ? '&explicit=1' : '');
+    function openOverlay(ids, keep) {
+        var params = new URLSearchParams();
+        ids.forEach(function (id) { params.append('ids', id); });
+        if (keep) { params.append('keep', keep); }
+        var url = '/library/merge/overlay?' + params.toString();
         fetch(url)
             .then(function (r) { return r.text(); })
             .then(function (html) {
@@ -39,13 +42,13 @@
         if (!form) return;
         form.querySelectorAll('input[name="keep"]').forEach(function (radio) {
             radio.addEventListener('change', function () {
-                var keep = parseInt(this.value, 10);
-                var a = parseInt(form.dataset.recipient, 10);
-                var b = parseInt(form.dataset.absorbed, 10);
-                var other = keep === a ? b : a;
-                openOverlay(keep, other, true);
+                openOverlay(formIds(form), parseInt(this.value, 10));
             });
         });
+    }
+
+    function formIds(form) {
+        return form.dataset.ids.split(',').map(function (id) { return parseInt(id, 10); });
     }
 
     window.CineMerge = {
@@ -55,11 +58,11 @@
         },
         apply: function () {
             var form = document.getElementById('merge-form');
-            var keep = form.querySelector('input[name="keep"]:checked').value;
-            var a = parseInt(form.dataset.recipient, 10);
-            var b = parseInt(form.dataset.absorbed, 10);
-            var absorbed = parseInt(keep, 10) === a ? b : a;
-            var body = new URLSearchParams({ absorbed_id: absorbed });
+            var keep = parseInt(form.querySelector('input[name="keep"]:checked').value, 10);
+            var body = new URLSearchParams();
+            formIds(form).forEach(function (id) {
+                if (id !== keep) { body.append('absorbed_id', id); }
+            });
 
             // État de chargement : la fusion peut être longue (régénération des
             // symlinks). On désactive les boutons et on affiche un indicateur.
@@ -91,6 +94,9 @@
                             throw new Error('merge-failed');
                         });
                     }
+                    // Les fiches absorbées n'existent plus : la sélection
+                    // mémorisée est périmée et ne doit pas être restaurée.
+                    sessionStorage.removeItem('cineorg_delete_selection');
                     var redirect = res.headers.get('HX-Redirect');
                     if (redirect) {
                         // Succès : on garde l'indicateur jusqu'à la redirection.
@@ -110,8 +116,8 @@
     document.addEventListener('click', function (e) {
         if (e.target.closest && e.target.closest('#merge-confirm-btn')) {
             var series = selectedSeries();
-            if (series.length === 2) {
-                openOverlay(series[0].id, series[1].id);
+            if (series.length >= 2) {
+                openOverlay(series.map(function (it) { return it.id; }));
             }
         }
     });
@@ -125,6 +131,7 @@
     }, true);
 
     document.addEventListener('DOMContentLoaded', refreshButton);
+    window.addEventListener('pageshow', refreshButton);
     document.body.addEventListener('htmx:afterSwap', function () {
         setTimeout(refreshButton, 0);
     });
