@@ -2,6 +2,7 @@
 Routes de ré-association TMDB — correction manuelle des associations films et séries.
 """
 
+import html
 import json
 import re
 from datetime import date, datetime
@@ -799,6 +800,46 @@ async def series_reassociate_search_by_id(
     )
 
 
+def _reassociate_to_existing_series(
+    session, series: SeriesModel, existing: SeriesModel, file_system
+) -> Response:
+    """
+    Ré-association vers une série déjà présente sous une autre fiche.
+
+    Fiche sans fichier (fantôme) : elle n'apporte rien, on la met à la
+    corbeille et on bascule sur la fiche existante. Fiche avec fichiers :
+    refus, l'utilisateur passe par la fusion de fiches (``series_merge``).
+    """
+    from .delete import _delete_series_record, _series_is_phantom
+
+    existing_url = f"/library/series/{existing.id}"
+    year = f" ({existing.year})" if existing.year else ""
+    if not _series_is_phantom(session, series.id):
+        return HTMLResponse(
+            f"La série « {html.escape(existing.title)}{year} » existe déjà sous une autre "
+            f'fiche : <a href="{existing_url}">ouvrir la fiche existante</a>. '
+            "Ré-association refusée pour ne pas créer de doublon : réunir les "
+            "deux fiches via « Fusionner » dans la bibliothèque."
+        )
+
+    logger.info(
+        "Ré-association de la fiche fantôme '{}' (id {}) vers la fiche "
+        "existante '{}' (id {}) : fiche fantôme mise à la corbeille",
+        series.title,
+        series.id,
+        existing.title,
+        existing.id,
+    )
+    phantom_id = series.id
+    _delete_series_record(session, series, file_system, "reassociate_duplicate")
+    session.commit()
+    _remove_from_quality_cache("series", phantom_id)
+
+    response = Response(status_code=200)
+    response.headers["HX-Redirect"] = existing_url
+    return response
+
+
 @router.post("/series/{series_id}/reassociate")
 async def series_reassociate_apply(
     request: Request,
@@ -824,6 +865,18 @@ async def series_reassociate_apply(
         series = session.get(SeriesModel, series_id)
         if not series:
             return HTMLResponse("<p>Série non trouvée</p>", status_code=404)
+
+        # La cible est déjà une autre fiche de la bibliothèque : ne pas créer
+        # de doublon (deux fiches pour une même série, l'une « incomplète »).
+        duplicate = session.exec(
+            select(SeriesModel).where(
+                SeriesModel.tmdb_id == int(tmdb_id), SeriesModel.id != series_id
+            )
+        ).first()
+        if duplicate:
+            return _reassociate_to_existing_series(
+                session, series, duplicate, container.file_system()
+            )
 
         series.tmdb_id = int(tmdb_id)
         series.imdb_id = imdb_id
