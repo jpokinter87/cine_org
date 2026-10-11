@@ -19,3 +19,10 @@ def test_library_response_is_not_stored(isolated_db, hx):  # noqa: F811
         resp = client.get("/library/", headers=headers)
     assert resp.status_code == 200
     assert "no-store" in resp.headers.get("cache-control", "")
+
+
+def test_library_title_links_back_to_library_home(isolated_db):  # noqa: F811
+    """Le titre « Bibliothèque » ramène à la bibliothèque sans filtre."""
+    with TestClient(app) as client:
+        resp = client.get("/library/?q=patriot")
+    assert 'href="/library/" class="hero-title-link"' in resp.text
