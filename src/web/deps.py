@@ -19,13 +19,23 @@ templates.env.globals["app_version"] = f"CineOrg v{get_version()}"
 # Numéro seul, pour le bandeau où le nom de l'app est déjà affiché
 templates.env.globals["app_version_number"] = get_version()
 
-# Cache-buster pour les assets statiques (invalidé à chaque modif de style.css)
+
+# Cache-buster pour les assets statiques (invalidé à chaque modif CSS ou JS)
 def _asset_version() -> str:
-    """Retourne le mtime du style.css pour busting du cache navigateur."""
+    """Retourne le mtime le plus récent des CSS/JS pour busting du cache navigateur.
+
+    Ne suivre que style.css laissait l'URL des scripts inchangée après une
+    modification JS seule : le navigateur gardait l'ancien script en cache.
+    """
+    static = _WEB_DIR / "static"
     try:
-        return str(int((_WEB_DIR / "static" / "css" / "style.css").stat().st_mtime))
+        mtimes = [
+            p.stat().st_mtime for p in static.rglob("*") if p.suffix in (".css", ".js")
+        ]
     except OSError:
         return "0"
+    return str(int(max(mtimes))) if mtimes else "0"
+
 
 templates.env.globals["asset_version"] = _asset_version
 
