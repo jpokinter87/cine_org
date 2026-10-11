@@ -1,3 +1,11 @@
+## v2.20.1 (2026-10-11)
+
+### Fix
+
+- **library**: recalculer la complétude de la fiche conservée après une fusion
+- **library**: ne plus réafficher une bibliothèque périmée au retour arrière
+- **web**: invalider le cache des scripts à chaque modification JS
+
 ## v2.20.0 (2026-10-11)
 
 ### Feat
