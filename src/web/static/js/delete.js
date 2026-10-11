@@ -48,8 +48,17 @@
     if (!container) return;
 
     // --- Bouton d'activation ---
-    var toggleBtn = document.getElementById('delete-mode-toggle');
-    if (!toggleBtn) return;
+    // Le bouton vit dans les filtres, remplacés à chaque recherche HTMX :
+    // ne jamais garder de référence, le retrouver à chaque usage.
+    var TOGGLE_LABEL_ON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Annuler la sélection';
+    var TOGGLE_LABEL_OFF = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Supprimer / Fusionner';
+
+    function renderToggle() {
+        var btn = document.getElementById('delete-mode-toggle');
+        if (!btn) return;
+        btn.classList.toggle('active', selectMode);
+        btn.innerHTML = selectMode ? TOGGLE_LABEL_ON : TOGGLE_LABEL_OFF;
+    }
 
     // --- Barre flottante ---
     var bar = document.getElementById('delete-bar');
@@ -74,8 +83,7 @@
     function enterSelectMode() {
         selectMode = true;
         document.body.classList.add('delete-mode');
-        toggleBtn.classList.add('active');
-        toggleBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Annuler la sélection';
+        renderToggle();
         attachCheckboxes();
         updateUI();
         saveState();
@@ -85,14 +93,14 @@
         selectMode = false;
         selected.clear();
         document.body.classList.remove('delete-mode');
-        toggleBtn.classList.remove('active');
-        toggleBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Supprimer / Fusionner';
+        renderToggle();
         removeCheckboxes();
         updateUI();
         clearState();
     }
 
-    toggleBtn.addEventListener('click', function () {
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest || !e.target.closest('#delete-mode-toggle')) return;
         if (selectMode) {
             exitSelectMode();
         } else {
@@ -230,8 +238,11 @@
 
     // Ré-attacher les checkboxes après un swap HTMX (changement de filtre/page)
     document.body.addEventListener('htmx:afterSwap', function (e) {
-        if (selectMode && e.detail.target && e.detail.target.id === 'library-content') {
-            setTimeout(function () { attachCheckboxes(); updateUI(); }, 50);
+        if (e.detail.target && e.detail.target.id === 'library-content') {
+            renderToggle();
+            if (selectMode) {
+                setTimeout(function () { attachCheckboxes(); updateUI(); }, 50);
+            }
         }
     });
 
