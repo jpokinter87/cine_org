@@ -1,3 +1,9 @@
+## v2.21.0 (2026-10-11)
+
+### Feat
+
+- **library**: rendre le titre Bibliothèque cliquable pour revenir à l'accueil
+
 ## v2.20.2 (2026-10-11)
 
 ### Fix
