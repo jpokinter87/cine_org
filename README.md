@@ -1582,6 +1582,11 @@ Dans ce cas seulement, un bouton **Supprimer la fiche** apparaît sur le détail
 
 > Pour prévenir ce type de doublon, les séries documentaires sont désormais exclues des candidats lors du matching (le dossier de téléchargement `Séries` n'en contient jamais), et la déduplication des séries se fait aussi par `tmdb_id` (et plus seulement `tvdb_id`).
 
+Deux garde-fous évitent en amont la création de ces fiches :
+
+- **Renvoi en validation depuis le résumé de transfert** : la préparation du transfert enregistre déjà séries, épisodes et films en base. Renvoyer un élément en validation (mauvais match) retire désormais ce que la préparation avait créé pour lui : les épisodes nouvellement créés et sans fichier, la série si elle n'a plus aucun épisode avec fichier, le film sans fichier (série et film vont à la corbeille). Une fiche porteuse de fichiers n'est jamais touchée.
+- **Ré-association vers une série déjà présente** : si la série choisie existe déjà sous une autre fiche (même `tmdb_id`), une fiche sans fichier est mise à la corbeille et l'interface bascule sur la fiche existante. Une fiche avec fichiers n'est pas modifiée : la ré-association est refusée, avec un lien vers la fiche existante : réunir alors les deux fiches via la [fusion de fiches séries](#fusion-de-fiches-séries-dupliquées).
+
 ### Lecteur vidéo intégré
 
 Le bouton **Visionner** (films) ou le bouton **play** (épisodes) lance la lecture du fichier via le lecteur configuré. Un indicateur de statut s'affiche pendant la lecture.
@@ -1756,16 +1761,16 @@ Après le téléchargement de nouveaux épisodes, il arrive que ceux-ci soient r
 
 1. Ouvrir la **Bibliothèque** (`/library/`), filtrer sur « Séries » et rechercher le titre concerné.
 2. Cliquer sur le bouton **Suppression** pour passer en mode sélection.
-3. Cocher **exactement deux** fiches de type Série (le bouton **Fusionner** n'apparaît que pour cette combinaison ; il reste masqué pour les films ou si le nombre de sélections est différent de 2).
+3. Cocher **au moins deux** fiches de type Série (le bouton **Fusionner** n'apparaît qu'à partir de deux séries cochées ; les films sélectionnés sont ignorés). Trois doublons ou plus se fusionnent en une seule opération.
 4. Cliquer sur **Fusionner** dans la barre flottante.
-5. Un overlay s'ouvre avec les deux fiches côte à côte. Un bouton radio **Conserver celle-ci** permet de choisir quelle fiche est conservée (la plus ancienne est pré-sélectionnée). Un aperçu calculé affiche :
+5. Un overlay s'ouvre avec les fiches côte à côte. Un bouton radio **Conserver celle-ci** permet de choisir quelle fiche est conservée (la plus ancienne est pré-sélectionnée). Un aperçu calculé affiche, pour chaque fiche absorbée :
    - le nombre d'épisodes qui seront rattachés à la fiche conservée ;
    - les champs de métadonnées récupérés depuis la fiche absorbée (ex. `tvdb_id` manquant) ;
    - les éventuels conflits d'épisodes (même saison + même numéro dans les deux fiches) ;
    - un avertissement si les deux fiches ont des `tmdb_id` ou des années différents (risque de fusionner deux séries distinctes).
    
-   Modifier la sélection radio recalcule l'aperçu dans l'autre sens.
-6. Cliquer sur **Fusionner ▶** pour exécuter. La page redirige vers la fiche unifiée.
+   Modifier la sélection radio recalcule l'aperçu pour la nouvelle fiche conservée.
+6. Cliquer sur **Fusionner ▶** pour exécuter. Les fiches absorbées sont fusionnées l'une après l'autre dans la fiche conservée ; en cas d'échec en cours de route, le message indique combien de fusions ont déjà été effectuées. La page redirige vers la fiche unifiée et **le mode sélection est réinitialisé** (au retour dans la bibliothèque, par le bouton Retour ou par le menu, aucune case ne reste cochée).
 
 #### Ce que fait la fusion
 
@@ -1903,6 +1908,14 @@ Si aucun candidat n'apparaît :
 - à défaut, saisir directement l'ID TVDB via l'onglet de recherche par ID.
 
 > **Historique** : l'API v3 avait retiré son endpoint de recherche par nom (`/search/series?name=` → 404), ce qui rendait l'onglet « recherche par titre » inopérant pour les séries. Un contournement passait alors par TMDB (`search_tv`) puis résolvait le `tvdb_id` via les identifiants externes. L'API v4 ayant restauré la recherche par nom, ce détour a été supprimé.
+
+### Une release AV1 au titre composé est mal reconnue
+
+Symptôme : `Spider-Noir.S01E07.MULTi.1080p.WEBRip.OPUS.5.1.AV1-jaaj.mkv` est cherché sous le titre « Noir » (et associé à une autre série), alors que la même release en x265 est bien reconnue.
+
+Cause : guessit 3.8 ne connaît pas le codec AV1. La fin de nom `AV1-jaaj` n'étant pas lue comme « codec-groupe », guessit prenait le début du titre pour un groupe de release (`Spider`). Le parser déclare désormais AV1 comme codec vidéo : le titre (« Spider-Noir », « Ant-Man »…) et le codec sont extraits correctement.
+
+Si une fiche erronée a été créée avant le correctif : la ré-associer vers la bonne série depuis sa page (voir [Suppression d'une fiche fantôme](#suppression-dune-fiche-fantôme-doublon)), ou la supprimer si elle n'a aucun fichier.
 
 ### Une partie des épisodes d'une saison apparaît en films
 

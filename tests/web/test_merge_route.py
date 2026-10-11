@@ -19,7 +19,7 @@ def client():
 
 def test_merge_routes_are_registered(client):
     # GET overlay : 200 si les fiches existent, 404 sinon — on valide le routage.
-    resp = client.get("/library/merge/overlay", params={"a": 1, "b": 2})
+    resp = client.get("/library/merge/overlay", params={"ids": [1, 2]})
     assert resp.status_code in (200, 404)
 
 
