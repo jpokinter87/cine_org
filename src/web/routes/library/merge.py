@@ -1,5 +1,6 @@
 """Routes de fusion de fiches séries dupliquées (deux ou plus)."""
 
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Form, Query, Request
@@ -17,6 +18,10 @@ from ....infrastructure.persistence.repositories.series_repository import (
 from ....services.duplicate_detector import DuplicateDetector
 from ....services.organizer import OrganizerService
 from ....services.renamer import RenamerService
+from ....services.completeness.completeness_checker import (
+    CompletenessChecker,
+    check_series_model,
+)
 from ....services.series_merge import SeriesMergeService
 from ...deps import templates
 
@@ -39,6 +44,24 @@ def _build_service(session, container) -> SeriesMergeService:
         series_repo=SQLModelSeriesRepository(session),
         episode_repo=SQLModelEpisodeRepository(session),
     )
+
+
+async def _refresh_completeness(session, container, series_id: int) -> None:
+    """Recalcule la complétude de la fiche conservée après fusion.
+
+    Les épisodes absorbés rendent l'ancien verdict périmé (badge « Incomplet »
+    persistant). Une panne TVDB n'annule pas la fusion, déjà validée.
+    """
+    series = session.get(SeriesModel, series_id)
+    if series is None:
+        return
+    try:
+        checker = CompletenessChecker(container.tvdb_client())
+        await check_series_model(session, checker, series, date.today())
+    except Exception as exc:
+        logger.warning(
+            "Complétude non recalculée après fusion de '{}' : {}", series.title, exc
+        )
 
 
 @router.get("/merge/overlay")
@@ -110,6 +133,7 @@ async def merge_apply(
         for absorbed in dict.fromkeys(absorbed_id):
             service.merge(recipient_id, absorbed)
             done += 1
+        await _refresh_completeness(session, container, recipient_id)
     except ValueError as exc:
         return JSONResponse(
             {"error": f"{exc} ({done} fusion(s) déjà effectuée(s))"},
