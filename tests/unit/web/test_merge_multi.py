@@ -156,3 +156,45 @@ def test_overlay_requires_at_least_two_series(engine, monkeypatch):
     resp = client.get("/library/merge/overlay", params={"ids": [a]})
 
     assert resp.status_code == 400
+
+
+def test_merge_apply_refreshes_recipient_completeness(engine, monkeypatch):
+    """Le verdict de complétude de la fiche conservée était périmé après la
+    fusion (badge « Incomplet » d'avant l'arrivée des épisodes absorbés)."""
+    from src.web.routes.library import merge as merge_mod
+
+    recipient = _series(engine, "Heimat 1", datetime(2026, 2, 23))
+    checked = []
+
+    async def _fake_check(session, checker, series, today):
+        checked.append(series.id)
+        return "complete"
+
+    monkeypatch.setattr(merge_mod, "check_series_model", _fake_check)
+    client = _client(engine, monkeypatch, _FakeMergeService())
+
+    resp = client.post(
+        f"/library/series/{recipient}/merge", data={"absorbed_id": "999"}
+    )
+
+    assert resp.status_code == 200
+    assert checked == [recipient]
+
+
+def test_merge_apply_survives_completeness_failure(engine, monkeypatch):
+    """Une panne TVDB n'annule pas une fusion déjà effectuée."""
+    from src.web.routes.library import merge as merge_mod
+
+    recipient = _series(engine, "Heimat 1", datetime(2026, 2, 23))
+
+    async def _boom(*a, **kw):
+        raise RuntimeError("TVDB indisponible")
+
+    monkeypatch.setattr(merge_mod, "check_series_model", _boom)
+    client = _client(engine, monkeypatch, _FakeMergeService())
+
+    resp = client.post(
+        f"/library/series/{recipient}/merge", data={"absorbed_id": "999"}
+    )
+
+    assert resp.status_code == 200
