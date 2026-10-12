@@ -1,3 +1,9 @@
+## v2.22.1 (2026-10-12)
+
+### Fix
+
+- **player**: envoyer le lien symbolique à la DuneHD au lieu du fichier physique
+
 ## v2.22.0 (2026-10-12)
 
 ### Feat

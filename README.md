@@ -1606,6 +1606,20 @@ Le sélecteur propose aussi **DuneHD** : un appareil qui ne sert qu'à choisir l
 soir (un téléphone, par exemple) peut ainsi l'adopter comme identité, et « Visionner »
 envoie alors directement au mediacenter. Voir [Utilisation sur téléphone](#utilisation-sur-téléphone).
 
+#### Lecture sur la DuneHD : chemin envoyé
+
+La Dune lit le partage Samba du **serveur de fichiers**, qui héberge les **liens
+symboliques** de l'arborescence vidéo ; les fichiers physiques sont sur le NAS de stockage.
+CineOrg envoie donc à la Dune le chemin du lien (`symlink_path`, non résolu), traduit en URL
+SMB par les préfixes du profil (`smb_movies_prefix`, `smb_series_prefix`) — par exemple
+`/media/Serveur/Collection/Series/TV/C/…` → `smb://192.168.1.2/Series TV/TV/C/…`. Si la
+fiche n'a pas de lien sur le disque, le chemin physique est utilisé en repli. Les lecteurs
+mpv (local ou SSH) reçoivent toujours le fichier physique.
+
+**Dépannage** : si la Dune affiche une horloge figée sans lancer la vidéo, l'URL SMB reçue
+n'existe pas dans le partage (elle accepte la commande sans vérifier le fichier). Comparer
+l'URL journalisée (`DuneHD play → …` dans `journalctl -u cineorg`) avec le partage Samba.
+
 **Trois modes de lecture** sont disponibles via les profils lecteur (`/config` > Lecteur) :
 
 | Mode | Target | Description |
