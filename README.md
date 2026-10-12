@@ -764,6 +764,9 @@ uv run cineorg enrich-tvdb-ids
 # Titres des épisodes via TVDB
 uv run cineorg enrich-episode-titles
 
+# … et résumés d'épisodes manquants (titres existants jamais écrasés)
+uv run cineorg enrich-episode-titles --overviews
+
 # Métadonnées techniques (résolution, codecs, langues) via mediainfo
 uv run cineorg enrich-tech
 ```
@@ -1517,7 +1520,8 @@ Pour les **séries**, le menu **« Modifier la fiche »** (Corriger / Éditer) f
 - Le nombre de **saisons** et d'**épisodes**
 - Les **badges techniques agrégés** à partir de l'ensemble des épisodes (valeurs distinctes)
 - La **liste des saisons** sous forme de panneaux dépliables, chaque épisode ayant :
-  - Son numéro (E01, E02…) et son titre
+  - Son numéro (E01, E02…) et son titre ; quand un **résumé** est connu, le titre porte un
+    chevron et le toucher déplie le résumé (le reste de la ligne lance toujours la lecture)
   - Un bouton **lecture** (triangle play) pour lancer l'épisode dans mpv
   - Un bouton **fichier** pour afficher le chemin du fichier
 

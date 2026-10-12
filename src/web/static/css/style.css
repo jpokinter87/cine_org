@@ -4646,6 +4646,50 @@ a.tech-badge-codec:hover {
     color: var(--text-secondary);
 }
 
+/* Titre d'épisode avec résumé : bouton qui déplie le résumé */
+.lib-episode-title-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0;
+    background: none;
+    border: none;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.lib-episode-title-toggle:hover,
+.lib-episode-title-toggle:focus-visible {
+    color: var(--accent-amber);
+}
+
+.lib-episode-overview-chevron {
+    flex-shrink: 0;
+    opacity: 0.6;
+    transition: transform 0.2s;
+}
+
+.overview-open .lib-episode-overview-chevron {
+    transform: rotate(180deg);
+}
+
+.lib-episode-overview {
+    display: none;
+    width: 100%;
+    margin: 0.15rem 0 0.25rem;
+    padding-left: 2.75rem;
+    font-size: 0.8125rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+    cursor: auto;
+}
+
+.overview-open .lib-episode-overview {
+    display: block;
+}
+
 /* (lib-filter-order supprimé — remplacé par lib-sort-arrow) */
 
 /* ── Pagination Top (compact, inline with filters) ── */
