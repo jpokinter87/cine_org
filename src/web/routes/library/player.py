@@ -115,14 +115,32 @@ def _launch_dunehd(profile: dict, file_path: Path) -> int:
     return pid
 
 
+def _dune_path(file_path: Path, symlink_path: str | None) -> Path:
+    """Chemin à envoyer à la DuneHD : le lien symbolique, non résolu.
+
+    La Dune lit le partage Samba du serveur de fichiers, qui héberge les liens
+    symboliques (arborescence vidéo) ; les fichiers physiques sont sur un autre
+    NAS et leur chemin n'existe pas dans ce partage. Repli sur le fichier
+    physique si la fiche n'a pas de lien présent sur le disque.
+    """
+    if symlink_path:
+        link = Path(symlink_path)
+        if link.is_symlink() or link.exists():
+            return link
+    return file_path
+
+
 def _launch_player(
-    file_path: Path, profile_name: str | None = None
+    file_path: Path,
+    profile_name: str | None = None,
+    symlink_path: str | None = None,
 ) -> tuple[int, bool, str]:
     """Lance le lecteur selon le profil spécifié ou actif.
 
     Retourne (pid, is_remote, profile_name).
     Pour les profils dunehd, le pid est synthétique et la lecture est
-    fire-and-forget (pas de process local à suivre).
+    fire-and-forget (pas de process local à suivre) ; la Dune reçoit le lien
+    symbolique (`symlink_path`) plutôt que le fichier physique.
     """
     if profile_name:
         profile = get_profile_by_name(profile_name)
@@ -132,7 +150,7 @@ def _launch_player(
         profile = get_active_profile()
 
     if profile.get("type") == "dunehd":
-        pid = _launch_dunehd(profile, file_path)
+        pid = _launch_dunehd(profile, _dune_path(file_path, symlink_path))
         _active_players[pid] = (None, True, profile["name"])
         return pid, True, profile["name"]
 
@@ -333,6 +351,7 @@ async def movie_play(
         if not movie:
             return Response(status_code=404)
         file_path = movie.file_path
+        symlink_path = movie.symlink_path
         title = movie.title
         year = movie.year
     finally:
@@ -345,11 +364,14 @@ async def movie_play(
             resolved = _resolve_video_path(
                 file_info.get("storage_path") or file_info.get("symlink_path")
             )
+            symlink_path = symlink_path or file_info.get("symlink_path")
 
     if not resolved:
         return HTMLResponse(_error_html("Fichier vidéo introuvable", "movies", movie_id))
 
-    pid, _, pname = _launch_player(resolved, profile_name=profile)
+    pid, _, pname = _launch_player(
+        resolved, profile_name=profile, symlink_path=symlink_path
+    )
     return HTMLResponse(_playing_html(pid, "movies", movie_id, pname))
 
 
@@ -364,6 +386,7 @@ async def movie_part_play(
         if not part:
             return Response(status_code=404)
         file_path = part.file_path or part.symlink_path
+        symlink_path = part.symlink_path
     finally:
         session.close()
 
@@ -373,7 +396,9 @@ async def movie_part_play(
             _error_html("Fichier vidéo introuvable", "movie-parts", part_id)
         )
 
-    pid, _, pname = _launch_player(resolved, profile_name=profile)
+    pid, _, pname = _launch_player(
+        resolved, profile_name=profile, symlink_path=symlink_path
+    )
     return HTMLResponse(_playing_html(pid, "movie-parts", part_id, pname))
 
 
@@ -388,6 +413,7 @@ async def episode_play(
         if not episode:
             return Response(status_code=404)
         file_path = episode.file_path
+        symlink_path = episode.symlink_path
     finally:
         session.close()
 
@@ -397,7 +423,9 @@ async def episode_play(
             _error_html("Fichier vidéo introuvable", "episodes", episode_id)
         )
 
-    pid, _, pname = _launch_player(resolved, profile_name=profile)
+    pid, _, pname = _launch_player(
+        resolved, profile_name=profile, symlink_path=symlink_path
+    )
     return HTMLResponse(_playing_html(pid, "episodes", episode_id, pname))
 
 
@@ -427,6 +455,7 @@ async def series_play(
                 )
             )
         file_path = episode.file_path
+        symlink_path = episode.symlink_path
     finally:
         session.close()
 
@@ -436,5 +465,7 @@ async def series_play(
             _error_html("Fichier vidéo introuvable", "series", series_id)
         )
 
-    pid, _, pname = _launch_player(resolved, profile_name=profile)
+    pid, _, pname = _launch_player(
+        resolved, profile_name=profile, symlink_path=symlink_path
+    )
     return HTMLResponse(_playing_html(pid, "series", series_id, pname))

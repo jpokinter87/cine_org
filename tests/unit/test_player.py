@@ -281,6 +281,7 @@ class TestSeriesPlay:
 
         mock_ep = MagicMock(spec=EpisodeModel)
         mock_ep.file_path = "/path/to/S01E01.mkv"
+        mock_ep.symlink_path = "/video/S01E01.mkv"
         mock_ep.id = 10
 
         mock_session = MagicMock()
@@ -301,7 +302,11 @@ class TestSeriesPlay:
         resp = client.post("/library/series/1/play")
         assert resp.status_code == 200
         assert "Lecture en cours" in resp.text
-        mock_launch.assert_called_once_with(Path("/path/to/S01E01.mkv"), profile_name=None)
+        mock_launch.assert_called_once_with(
+            Path("/path/to/S01E01.mkv"),
+            profile_name=None,
+            symlink_path="/video/S01E01.mkv",
+        )
 
     @patch("src.web.routes.library.player.get_session")
     def test_serie_introuvable_retourne_404(self, mock_get_session):

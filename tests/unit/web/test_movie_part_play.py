@@ -45,7 +45,7 @@ def test_play_partie_lance_le_lecteur(tmp_path, monkeypatch):
 
     launched = {}
 
-    def fake_launch(path, profile_name=None):
+    def fake_launch(path, profile_name=None, symlink_path=None):
         launched["path"] = str(path)
         return 4242, None, "mpv"
 
