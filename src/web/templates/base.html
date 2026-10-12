@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}CineOrg{% endblock %}</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <!-- Installation sur l'écran d'accueil du téléphone -->
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+    <meta name="theme-color" content="#12121a">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
@@ -20,12 +24,14 @@
             <a href="/" class="nav-brand">Ciné<span class="brand-accent">Org</span></a>
             <span class="nav-version" title="Version installée">v{{ app_version_number }}</span>
         </div>
-        {% set _personal = get_personal_profiles() %}
-        {% if _personal | length > 1 %}
+        {# Tous les profils, DuneHD comprise : l'identité est mémorisée par
+           navigateur, un téléphone peut ainsi viser la DuneHD en un geste. #}
+        {% set _viewers = get_player_profiles().get('profiles', []) %}
+        {% if _viewers | length > 1 %}
         <div class="viewer-select-wrap">
             <label for="viewer-select" class="viewer-select-label">Vous regardez sur</label>
             <select id="viewer-select" class="viewer-select" onchange="setViewerProfile(this.value)">
-                {% for p in _personal %}
+                {% for p in _viewers %}
                 <option value="{{ p.name }}">{{ p.name }}</option>
                 {% endfor %}
             </select>

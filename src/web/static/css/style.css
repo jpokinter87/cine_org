@@ -443,6 +443,9 @@ a {
     .main-nav {
         padding: 0 1rem;
         flex-wrap: wrap;
+        /* Hauteur libre : le menu ouvert s'empile sous l'en-tête, sur son fond */
+        height: auto;
+        min-height: 64px;
     }
 
     .nav-toggle {
@@ -8379,11 +8382,16 @@ details[open] > .maint-issue-toggle::before {
     border-radius: var(--radius-lg);
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(8px);
-    transition: bottom 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    /* Masquée hors mode sélection : sur deux lignes (mobile), elle dépasse
+       des 80 px de retrait et recouvrirait le bas de la page. */
+    visibility: hidden;
+    transition: bottom 0.3s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 0.3s;
 }
 
 .delete-bar.active {
     bottom: 2rem;
+    visibility: visible;
+    transition: bottom 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .delete-bar-count {
@@ -10577,3 +10585,73 @@ details[open] > .maint-issue-toggle::before {
 }
 .share-banner-empty { display: none; }
 
+
+/* ── Téléphone : consultation de la bibliothèque ── */
+
+/* Bouton « Filtres » : réservé au petit écran */
+.lib-filters-mobile-toggle {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    /* Recherche et bouton « Filtres » côte à côte, réglages repliés dessous */
+    .lib-filters-main {
+        flex-direction: row;
+    }
+
+    .lib-search-wrap {
+        flex: 1;
+        min-width: 0;
+    }
+
+    /* Réglages dépliés : chacun sur sa propre ligne, sous la recherche */
+    .lib-filters-main > select {
+        flex: 1 1 100%;
+        max-width: none;
+    }
+
+    .lib-filters-mobile-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0 0.9rem;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-family: var(--font-body);
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        cursor: pointer;
+    }
+
+    .lib-filters.filters-open .lib-filters-mobile-toggle {
+        color: var(--accent-amber);
+        border-color: var(--accent-amber);
+    }
+
+    .lib-filters:not(.filters-open) .lib-filters-main > select,
+    .lib-filters:not(.filters-open) .lib-filters-secondary,
+    .lib-filters:not(.filters-open) .lib-filters-tech {
+        display: none;
+    }
+}
+
+/* Écran tactile étroit (téléphone) : usage consultation. Les actions de
+   gestion de la fiche sont masquées et les petites cibles agrandies. */
+@media (max-width: 768px) and (pointer: coarse) {
+    .lib-detail-edit-menu,
+    .share-zone {
+        display: none;
+    }
+
+    .lib-episode-play-btn,
+    .lib-episode-file-btn {
+        min-width: 40px;
+        min-height: 40px;
+        justify-content: center;
+    }
+
+    .star {
+        padding: 0.35rem;
+    }
+}

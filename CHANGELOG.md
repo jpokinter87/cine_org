@@ -1,3 +1,9 @@
+## v2.22.0 (2026-10-12)
+
+### Feat
+
+- **web**: consulter la bibliothèque depuis un téléphone
+
 ## v2.21.0 (2026-10-11)
 
 ### Feat

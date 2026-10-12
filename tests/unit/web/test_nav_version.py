@@ -15,7 +15,7 @@ def test_nav_shows_version_number():
     """Le bandeau rend « vX.Y.Z » à côté du sigle."""
     html = templates.get_template("base.html").render(
         request=None,
-        get_personal_profiles=lambda: [],
+        get_player_profiles=lambda: {},
     )
     assert 'class="nav-version"' in html
     assert f"v{get_version()}" in html.split("</nav>")[0]
