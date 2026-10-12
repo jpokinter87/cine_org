@@ -1,3 +1,9 @@
+## v2.24.0 (2026-10-12)
+
+### Feat
+
+- **library**: résumés d'épisodes dépliables sur la fiche série
+
 ## v2.23.0 (2026-10-12)
 
 ### Feat

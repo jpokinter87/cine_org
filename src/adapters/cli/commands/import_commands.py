@@ -1125,14 +1125,21 @@ def enrich_episode_titles(
         int,
         typer.Option("--limit", help="Nombre max de séries à traiter (0 = toutes)"),
     ] = 0,
+    overviews: Annotated[
+        bool,
+        typer.Option(
+            "--overviews",
+            help="Complète aussi les résumés manquants (sans écraser les titres existants)",
+        ),
+    ] = False,
 ) -> None:
     """Enrichit les titres d'épisodes manquants via l'API TVDB."""
-    asyncio.run(_enrich_episode_titles_async(dry_run, limit))
+    asyncio.run(_enrich_episode_titles_async(dry_run, limit, overviews=overviews))
 
 
 @with_container()
 async def _enrich_episode_titles_async(
-    container, dry_run: bool, limit: int
+    container, dry_run: bool, limit: int, overviews: bool = False
 ) -> None:
     """Implémentation async de enrich-episode-titles."""
     from sqlalchemy import or_
@@ -1144,11 +1151,15 @@ async def _enrich_episode_titles_async(
     session = episode_repo._session
     tvdb_client = container.tvdb_client()
 
-    # Épisodes sans titre avec tvdb_id disponible, groupés par série
+    # Épisodes sans titre (ou, avec --overviews, sans résumé) avec tvdb_id
+    # disponible, groupés par série
+    missing = [EpisodeModel.title.is_(None), EpisodeModel.title == ""]
+    if overviews:
+        missing += [EpisodeModel.overview.is_(None), EpisodeModel.overview == ""]
     eps = session.exec(
         select(EpisodeModel, SeriesModel.tvdb_id)
         .join(SeriesModel, EpisodeModel.series_id == SeriesModel.id)
-        .where(or_(EpisodeModel.title.is_(None), EpisodeModel.title == ""))
+        .where(or_(*missing))
         .where(SeriesModel.tvdb_id.isnot(None))
         .order_by(EpisodeModel.series_id, EpisodeModel.season_number, EpisodeModel.episode_number)
     ).all()
@@ -1206,11 +1217,18 @@ async def _enrich_episode_titles_async(
                         progress.advance(task)
                         continue
 
-                    if details and details.title:
+                    # Ne compléter que ce qui manque : un titre ou un résumé
+                    # existant (éventuellement saisi à la main) est conservé.
+                    new_title = details.title if details and not ep.title else None
+                    new_overview = (
+                        details.overview if details and not ep.overview else None
+                    )
+                    if new_title or new_overview:
                         if not dry_run:
-                            ep.title = details.title
-                            if details.overview:
-                                ep.overview = details.overview
+                            if new_title:
+                                ep.title = new_title
+                            if new_overview:
+                                ep.overview = new_overview
                             session.add(ep)
                         enriched += 1
                     else:

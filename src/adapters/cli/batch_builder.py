@@ -468,6 +468,44 @@ async def _build_series_transfer_data(
     )
 
 
+async def _fetch_tvdb_episode_info(
+    tvdb_client, candidate_id, season_num: int, episode_num: int
+) -> tuple[str, Optional[str], "MediaDetails | None", Optional[int]]:
+    """Titre et résumé de l'épisode, détails de la série (genres, résumé,
+    affiche) et nombre canonique d'épisodes de la saison, depuis TVDB.
+
+    Best-effort : sans client/clé ou en cas d'erreur API, renvoie les valeurs
+    par défaut (le transfert continue sans ces informations).
+    """
+    episode_title = ""
+    episode_overview: Optional[str] = None
+    series_details: "MediaDetails | None" = None
+    canonical_count: Optional[int] = None
+
+    if tvdb_client and getattr(tvdb_client, "_api_key", None) and candidate_id:
+        try:
+            # Recuperer les details de la serie (genres, resume, affiche)
+            series_details = await tvdb_client.get_details(candidate_id)
+
+            # Recuperer le titre et le resume d'episode
+            ep_details = await tvdb_client.get_episode_details(
+                candidate_id, season_num, episode_num
+            )
+            if ep_details:
+                episode_title = ep_details.title or ""
+                episode_overview = ep_details.overview or None
+
+            # Canonical count : pour marquer les episodes hors canon
+            # comme is_extra=True (phase 42-01).
+            canonical_count = await tvdb_client.get_season_episode_count(
+                candidate_id, season_num
+            )
+        except Exception:
+            pass
+
+    return episode_title, episode_overview, series_details, canonical_count
+
+
 async def build_transfers_batch(
     validated_list: list["PendingValidation"],
     container: "Container",
@@ -608,32 +646,18 @@ async def build_transfers_batch(
                     f"  [cyan]↻[/cyan] {original_filename} : {season_remap.label}"
                 )
 
-            # Recuperer le titre d'episode et les genres depuis TVDB
-            episode_title = ""
-            series_genres: tuple[str, ...] = ()
-            canonical_count: Optional[int] = None
-
-            if tvdb_client and getattr(tvdb_client, "_api_key", None) and candidate_id:
-                try:
-                    # Recuperer les details de la serie (genres)
-                    series_details = await tvdb_client.get_details(candidate_id)
-                    if series_details and series_details.genres:
-                        series_genres = series_details.genres
-
-                    # Recuperer le titre d'episode
-                    ep_details = await tvdb_client.get_episode_details(
-                        candidate_id, season_num, episode_num
-                    )
-                    if ep_details and ep_details.title:
-                        episode_title = ep_details.title
-
-                    # Canonical count : pour marquer les episodes hors canon
-                    # comme is_extra=True (phase 42-01).
-                    canonical_count = await tvdb_client.get_season_episode_count(
-                        candidate_id, season_num
-                    )
-                except Exception:
-                    pass
+            # Recuperer titre, resume d'episode et genres depuis TVDB
+            (
+                episode_title,
+                episode_overview,
+                series_details,
+                canonical_count,
+            ) = await _fetch_tvdb_episode_info(
+                tvdb_client, candidate_id, season_num, episode_num
+            )
+            series_genres: tuple[str, ...] = (
+                series_details.genres if series_details and series_details.genres else ()
+            )
 
             # Extraire les metadonnees techniques du fichier
             codec_video, codec_audio, resolution_str, languages, file_size_bytes = (
@@ -703,6 +727,7 @@ async def build_transfers_batch(
                 episode_number=episode_num,
                 episode_end=episode_end,
                 title=episode_title,
+                overview=episode_overview,
                 codec_video=codec_video,
                 codec_audio=codec_audio,
                 resolution=resolution_str,

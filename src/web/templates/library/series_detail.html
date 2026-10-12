@@ -207,7 +207,17 @@
                     onclick="episodeRowClick(event, this)"
                     {% endif %}>
                     <span class="lib-episode-num">E{{ '%02d'|format(ep.episode_number) }}</span>
+                    {% if ep.overview %}
+                    {# Titre cliquable : déplie le résumé (le reste de la ligne lance la lecture) #}
+                    <button type="button" class="lib-episode-title lib-episode-title-toggle"
+                        aria-expanded="false" title="Afficher le résumé"
+                        onclick="toggleEpisodeOverview(event, this)">
+                        {{ ep.title or 'Épisode ' ~ ep.episode_number }}
+                        <svg class="lib-episode-overview-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    {% else %}
                     <span class="lib-episode-title">{{ ep.title or 'Épisode ' ~ ep.episode_number }}</span>
+                    {% endif %}
                     {% if ep.file_path %}
                     {% with play_entity_type="episodes", play_entity_id=ep.id, play_btn_class="lib-episode-play-btn", play_show_label=false %}
                     {% include "library/_play_btn.html" %}
@@ -218,6 +228,9 @@
                     <div class="lib-episode-file-path">
                         <code>{{ ep.file_path }}</code>
                     </div>
+                    {% endif %}
+                    {% if ep.overview %}
+                    <p class="lib-episode-overview">{{ ep.overview }}</p>
                     {% endif %}
                 </div>
                 {% endfor %}
@@ -280,9 +293,17 @@ function openPosterLightbox(src) {
 })();
 
 /* Navigation épisodes : clic ligne + clavier */
+function toggleEpisodeOverview(e, btn) {
+    e.stopPropagation();
+    var open = btn.closest('.lib-episode-row').classList.toggle('overview-open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
 function episodeRowClick(e, row) {
     /* Ignorer si clic sur le bouton fichier ou le chemin du fichier */
     if (e.target.closest('.lib-episode-file-btn, .lib-episode-file-path')) return;
+    /* Ignorer le titre dépliable et le résumé (lecture du texte) */
+    if (e.target.closest('.lib-episode-title-toggle, .lib-episode-overview')) return;
     /* Ignorer si clic directement sur le bouton play (il a son propre handler) */
     if (e.target.closest('.lib-episode-play-btn, .play-popover-trigger, .play-profile-popover')) return;
     /* Ouvrir le popover ou lancer directement */
