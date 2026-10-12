@@ -50,6 +50,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Fiches détaillées](#fiches-détaillées)
   - [Correction des associations TMDB](#correction-des-associations-tmdb)
   - [Lecteur vidéo intégré](#lecteur-vidéo-intégré)
+  - [Utilisation sur téléphone](#utilisation-sur-téléphone)
   - [Traitement et validation](#traitement-et-validation)
   - [Transfert](#transfert)
   - [Qualité et doublons](#qualité-et-doublons)
@@ -1601,8 +1602,9 @@ donc plusieurs personnes peuvent regarder en même temps sans interférence).
 - **Chevron ▾** : choix ponctuel d'un autre lecteur ou envoi vers le mediacenter **DuneHD**,
   sans changer votre identité.
 
-DuneHD n'apparaît pas dans le sélecteur d'identité (il *envoie* au mediacenter plutôt que
-de « regarder ») : il reste accessible uniquement via le menu ▾.
+Le sélecteur propose aussi **DuneHD** : un appareil qui ne sert qu'à choisir le film du
+soir (un téléphone, par exemple) peut ainsi l'adopter comme identité, et « Visionner »
+envoie alors directement au mediacenter. Voir [Utilisation sur téléphone](#utilisation-sur-téléphone).
 
 **Trois modes de lecture** sont disponibles via les profils lecteur (`/config` > Lecteur) :
 
@@ -1704,6 +1706,32 @@ Dans la page Configuration (`/config` > Lecteur), créer un profil avec :
 | Préfixe distant | Chemin UNC (ex: `\\192.168.1.XX\partage`) |
 
 > **Fonctionnement** : CineOrg envoie le chemin du fichier via SCP (pour préserver l'encodage UTF-8 des caractères accentués) dans `C:\Apps\mpv_queue.txt`. Le watcher détecte le fichier et lance mpv dans la session de bureau.
+
+### Utilisation sur téléphone
+
+L'interface est prévue pour **consulter la bibliothèque depuis un téléphone sur le Wi-Fi
+local** (aucun accès extérieur) et lancer la lecture sur la DuneHD.
+
+- **Accès** : ouvrir `http://<ip-du-serveur>:8000/library/` dans Chrome.
+- **Lecture** : choisir une fois **DuneHD** dans « Vous regardez sur » (mémorisé par ce
+  navigateur) ; « Visionner » envoie ensuite la vidéo au mediacenter.
+- **Filtres** : sur petit écran, seuls la recherche et un bouton **Filtres** sont affichés
+  (avec le nombre de filtres actifs) ; il déplie les autres réglages.
+- **Consultation seule** : sur écran tactile étroit, « Partager » et « Modifier la fiche »
+  sont masqués ; « Supprimer / Fusionner » est de toute façon réservé à l'accès depuis le
+  serveur lui-même.
+
+#### Icône sur l'écran d'accueil
+
+Un manifest (`/static/manifest.json`, démarrage sur la bibliothèque) permet d'ajouter
+CineOrg à l'écran d'accueil. En HTTP sur le réseau local, Chrome Android n'ouvre l'appli
+en plein écran que si l'adresse est considérée comme sûre :
+
+1. Sur le téléphone, ouvrir `chrome://flags/#unsafely-treat-insecure-origin-as-secure`.
+2. Saisir `http://<ip-du-serveur>:8000`, passer l'option à **Enabled**, relancer Chrome.
+3. Ouvrir la bibliothèque, menu ⋮ → **Ajouter à l'écran d'accueil** → **Installer**.
+
+Sans ce réglage, l'icône fonctionne aussi mais ouvre un onglet Chrome classique.
 
 ### Traitement et validation
 
