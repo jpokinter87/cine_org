@@ -88,6 +88,15 @@
             }
         }
     }
+    /* Lecture sur le téléphone : ouvre VLC (Android) sur le fichier diffusé
+       par CineOrg. Sans VLC installé, Android propose le Play Store. */
+    function openInVlc(btn) {
+        var url = location.host + btn.dataset.stream;
+        var scheme = location.protocol.replace(':', '');
+        location.href = 'intent://' + url + '#Intent;scheme=' + scheme
+            + ';type=video/*;package=org.videolan.vlc;end';
+        btn.closest('.play-wrapper').classList.remove('popover-open', 'popover-above', 'popover-right');
+    }
     /* Identité « qui regarde » mémorisée dans CE navigateur (jamais côté serveur) */
     var VIEWER_KEY = 'cineorg.viewer';
     function getViewerProfile() {

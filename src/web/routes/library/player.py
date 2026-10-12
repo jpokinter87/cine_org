@@ -5,13 +5,14 @@ Supporte les lectures simultanées sur différents profils.
 """
 
 import html
+import mimetypes
 import subprocess
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from sqlmodel import select
 
 from ....infrastructure.persistence.database import get_session
@@ -224,6 +225,13 @@ def _play_button_html(entity_type: str, entity_id: int) -> str:
         '<line x1="2" y1="20" x2="2.01" y2="20"/></svg>'
     )
 
+    icon_phone = (
+        '<svg class="play-profile-icon" width="14" height="14" viewBox="0 0 24 24"'
+        ' fill="none" stroke="currentColor" stroke-width="2">'
+        '<rect x="6" y="2" width="12" height="20" rx="2"/>'
+        '<line x1="11" y1="18" x2="13" y2="18"/></svg>'
+    )
+
     options_html = ""
     for p in profiles:
         name_url = quote(p["name"], safe="")  # valeur de query-string
@@ -244,6 +252,14 @@ def _play_button_html(entity_type: str, entity_id: int) -> str:
             f' onclick="event.stopPropagation()">'
             f"{icon} {name_esc}{suffix}</button>"
         )
+
+    # Lecture sur le téléphone lui-même (VLC) — affichée sur écran tactile seulement
+    options_html += (
+        f'<button class="play-profile-option play-option-vlc"'
+        f' data-stream="{base.removesuffix("/play")}/stream"'
+        f' onclick="event.stopPropagation(); openInVlc(this)">'
+        f"{icon_phone} Sur ce téléphone (VLC)</button>"
+    )
 
     wrapper_class = "play-wrapper play-wrapper-episode" if is_episode else "play-wrapper"
     return (
@@ -469,3 +485,55 @@ async def series_play(
         resolved, profile_name=profile, symlink_path=symlink_path
     )
     return HTMLResponse(_playing_html(pid, "series", series_id, pname))
+
+
+def _entity_video_file(entity_type: str, entity_id: int) -> Path | None:
+    """Fichier physique d'un film, d'une partie, d'un épisode ou du premier
+    épisode d'une série (mêmes règles que les routes de lecture)."""
+    session = next(get_session())
+    try:
+        if entity_type == "movies":
+            movie = session.get(MovieModel, entity_id)
+            if not movie:
+                return None
+            resolved = _resolve_video_path(movie.file_path)
+            if not resolved:
+                file_info = _find_movie_file(movie.title, movie.year)
+                if file_info:
+                    resolved = _resolve_video_path(
+                        file_info.get("storage_path") or file_info.get("symlink_path")
+                    )
+            return resolved
+        if entity_type == "movie-parts":
+            part = session.get(MoviePartModel, entity_id)
+            return _resolve_video_path(part.file_path or part.symlink_path) if part else None
+        if entity_type == "episodes":
+            episode = session.get(EpisodeModel, entity_id)
+            return _resolve_video_path(episode.file_path) if episode else None
+        if entity_type == "series":
+            episode = session.exec(
+                select(EpisodeModel)
+                .where(
+                    EpisodeModel.series_id == entity_id,
+                    EpisodeModel.file_path.is_not(None),  # type: ignore[union-attr]
+                )
+                .order_by(EpisodeModel.season_number, EpisodeModel.episode_number)
+            ).first()
+            return _resolve_video_path(episode.file_path) if episode else None
+        return None
+    finally:
+        session.close()
+
+
+@router.get("/{entity_type}/{entity_id}/stream")
+async def stream_video(entity_type: str, entity_id: int):
+    """Diffuse le fichier vidéo tel quel (sans conversion) pour une lecture
+    sur le téléphone dans VLC. Les requêtes partielles (Range) sont gérées
+    par FileResponse : avance et retour rapides sans tout télécharger.
+    Réservé au réseau local : seul Jellyfin est exposé par le partage Funnel.
+    """
+    path = _entity_video_file(entity_type, entity_id)
+    if not path:
+        return Response(status_code=404)
+    media_type = mimetypes.guess_type(path.name)[0] or "video/x-matroska"
+    return FileResponse(path, media_type=media_type)
