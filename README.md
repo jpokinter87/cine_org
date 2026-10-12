@@ -1724,11 +1724,17 @@ Dans la page Configuration (`/config` > Lecteur), créer un profil avec :
 ### Utilisation sur téléphone
 
 L'interface est prévue pour **consulter la bibliothèque depuis un téléphone sur le Wi-Fi
-local** (aucun accès extérieur) et lancer la lecture sur la DuneHD.
+local** (aucun accès extérieur) et lancer la lecture sur la DuneHD ou sur le téléphone.
 
 - **Accès** : ouvrir `http://<ip-du-serveur>:8000/library/` dans Chrome.
 - **Lecture** : choisir une fois **DuneHD** dans « Vous regardez sur » (mémorisé par ce
   navigateur) ; « Visionner » envoie ensuite la vidéo au mediacenter.
+- **Lecture sur le téléphone** : menu ▾ → **Sur ce téléphone (VLC)**. CineOrg diffuse le
+  fichier tel quel (`GET /library/<type>/<id>/stream`, sans conversion, avance rapide
+  possible) et Android l'ouvre dans **VLC** (à installer depuis le Play Store), qui lit tous
+  les formats (MKV, HEVC, AV1, AC3, DTS, sous-titres). Pas de reprise côté CineOrg (VLC
+  mémorise la position) ; le débit Wi-Fi peut limiter les gros fichiers 4K. Cette route
+  n'est accessible que sur le réseau local (le partage Funnel n'expose que Jellyfin).
 - **Filtres** : sur petit écran, seuls la recherche et un bouton **Filtres** sont affichés
   (avec le nombre de filtres actifs) ; il déplie les autres réglages.
 - **Consultation seule** : sur écran tactile étroit, « Partager » et « Modifier la fiche »

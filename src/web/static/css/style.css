@@ -10655,3 +10655,14 @@ details[open] > .maint-issue-toggle::before {
         padding: 0.35rem;
     }
 }
+
+/* Option « Sur ce téléphone (VLC) » : seulement sur écran tactile étroit */
+.play-option-vlc {
+    display: none;
+}
+
+@media (max-width: 768px) and (pointer: coarse) {
+    .play-option-vlc {
+        display: flex;
+    }
+}

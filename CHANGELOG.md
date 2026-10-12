@@ -1,3 +1,9 @@
+## v2.23.0 (2026-10-12)
+
+### Feat
+
+- **player**: lire une vidéo sur le téléphone dans VLC
+
 ## v2.22.1 (2026-10-12)
 
 ### Fix
