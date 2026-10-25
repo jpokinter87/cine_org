@@ -23,13 +23,16 @@ appliqué avant le premier affichage. Nuit ambrée reste strictement identique.
    Dans Nuit ambrée, `--accent` = `--accent-amber` : aucun changement visible.
 2. **Couleurs translucides tokenisées.** Les `rgba()` dérivés des accents (ambre, émeraude,
    rose, bleu) et du blanc deviennent `color-mix(in srgb, var(--token) N%, transparent)`.
-   Équivalent exact dans Nuit ambrée. Le blanc translucide passe par `--tint` (blanc sur les
-   thèmes sombres, encre sur Cinémathèque). Les ombres et voiles noirs restent en dur.
+   Équivalent exact dans Nuit ambrée pour les accents ; les teintes voisines d'une ancienne
+   palette parallèle (verts, rouges, oranges, bleus) sont rattachées au token de leur famille
+   (écart minime). Le blanc translucide passe par `--tint` (blanc sur les thèmes sombres, encre
+   sur Cinémathèque). Les ombres et voiles noirs restent en dur ; les couleurs des sources
+   externes (TMDB, TVDB, IMDb) et le violet « sandbox » deviennent des tokens.
 3. **Thèmes = blocs `[data-theme="…"]`** posés sur `<html>`, redéfinissant couleurs, polices,
    arrondis et ombres, plus quelques signatures légères issues des maquettes (cadre doré des
    jaquettes et titres en capitales pour Velours, filets sans ombre pour Cinémathèque, formes
    plus rondes pour Kodachrome). Aucune modification de mise en page.
-4. **Mémorisation par navigateur** (`localStorage`, clé `cineorg_theme`), comme « Vous
+4. **Mémorisation par navigateur** (`localStorage`, clé `cineorg.theme`), comme « Vous
    regardez sur ». Un script inline dans `<head>` pose `data-theme` avant le rendu (pas de
    flash) et ne charge que les polices du thème actif.
 5. **Sélecteur** : `<select>` étiqueté « Thème » à côté de « Vous regardez sur », quatre

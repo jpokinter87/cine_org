@@ -108,7 +108,7 @@
         <!-- Corbeille -->
         <div class="maint-card">
             <div class="maint-card-header">
-                <div class="maint-card-icon" style="background: rgba(232, 93, 117, 0.12); color: var(--accent-rose);">
+                <div class="maint-card-icon" style="background: color-mix(in srgb, var(--accent-rose) 12%, transparent); color: var(--accent-rose);">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                 </div>
                 <div>
@@ -177,7 +177,7 @@
 {% if is_local %}
 <div class="trash-empty-overlay" id="sandbox-delete-overlay">
     <div class="delete-dialog">
-        <div class="delete-dialog-icon" style="color: #e85d75;">
+        <div class="delete-dialog-icon" style="color: var(--accent-rose);">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         </div>
         <h3 class="delete-dialog-title">Supprimer définitivement ?</h3>
@@ -200,7 +200,7 @@ document.getElementById('sandbox-delete-overlay').addEventListener('click', func
 <!-- Dialogue de confirmation sandboxing orphelins -->
 <div class="trash-empty-overlay" id="sandbox-move-overlay">
     <div class="delete-dialog">
-        <div class="delete-dialog-icon" style="color: #a882ff;">
+        <div class="delete-dialog-icon" style="color: var(--accent-violet);">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         </div>
         <h3 class="delete-dialog-title">Sandboxer les orphelins ?</h3>
@@ -208,7 +208,7 @@ document.getElementById('sandbox-delete-overlay').addEventListener('click', func
         <div class="delete-dialog-warning" id="sandbox-move-count-msg">0 fichier(s)</div>
         <div class="delete-dialog-actions">
             <button class="reject-dialog-cancel" onclick="document.getElementById('sandbox-move-overlay').classList.remove('active')">Annuler</button>
-            <button class="reject-dialog-confirm" style="background: #a882ff; border-color: #a882ff;" onclick="document.getElementById('sandbox-move-overlay').classList.remove('active'); sandboxMoveOrphansConfirmed()">
+            <button class="reject-dialog-confirm" style="background: var(--accent-violet); border-color: var(--accent-violet);" onclick="document.getElementById('sandbox-move-overlay').classList.remove('active'); sandboxMoveOrphansConfirmed()">
                 Déplacer vers le sandbox
             </button>
         </div>
@@ -604,13 +604,13 @@ function startFix(type) {
     align-items: center;
     justify-content: space-between;
     padding: 0.5rem 0.75rem;
-    background: rgba(255, 255, 255, 0.02);
+    background: color-mix(in srgb, var(--tint) 2%, transparent);
     border-radius: 6px;
     font-size: 0.8125rem;
     gap: 0.5rem;
 }
 .maint-trash-item:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: color-mix(in srgb, var(--tint) 4%, transparent);
 }
 .maint-trash-item-info {
     display: flex;
@@ -629,11 +629,11 @@ function startFix(type) {
     flex-shrink: 0;
 }
 .maint-trash-item-type.type-movie {
-    background: rgba(99, 102, 241, 0.15);
-    color: #818cf8;
+    background: color-mix(in srgb, var(--accent-violet) 15%, transparent);
+    color: var(--accent-violet);
 }
 .maint-trash-item-type.type-series {
-    background: rgba(16, 185, 129, 0.15);
+    background: color-mix(in srgb, var(--accent-emerald) 15%, transparent);
     color: var(--accent-emerald);
 }
 .maint-trash-item-title {
@@ -652,7 +652,7 @@ function startFix(type) {
     align-items: center;
     gap: 0.25rem;
     padding: 0.25rem 0.5rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid color-mix(in srgb, var(--tint) 10%, transparent);
     border-radius: 4px;
     background: transparent;
     color: var(--text-muted);
@@ -662,26 +662,26 @@ function startFix(type) {
     transition: color 0.15s, background-color 0.15s, border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
 }
 .maint-trash-restore-btn:hover {
-    border-color: rgba(99, 102, 241, 0.4);
-    color: #818cf8;
-    background: rgba(99, 102, 241, 0.08);
+    border-color: color-mix(in srgb, var(--accent-violet) 40%, transparent);
+    color: var(--accent-violet);
+    background: color-mix(in srgb, var(--accent-violet) 8%, transparent);
 }
 .maint-trash-empty-btn {
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
     padding: 0.375rem 0.75rem;
-    border: 1px solid rgba(232, 93, 117, 0.25);
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 25%, transparent);
     border-radius: 6px;
-    background: rgba(232, 93, 117, 0.08);
+    background: color-mix(in srgb, var(--accent-rose) 8%, transparent);
     color: var(--accent-rose);
     font-size: 0.8125rem;
     cursor: pointer;
     transition: color 0.15s, background-color 0.15s, border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
 }
 .maint-trash-empty-btn:hover {
-    background: rgba(232, 93, 117, 0.15);
-    border-color: rgba(232, 93, 117, 0.4);
+    background: color-mix(in srgb, var(--accent-rose) 15%, transparent);
+    border-color: color-mix(in srgb, var(--accent-rose) 40%, transparent);
 }
 .maint-trash-empty-state {
     padding: 1.5rem;
@@ -701,7 +701,7 @@ function startFix(type) {
 .maint-trash-spinner {
     width: 18px;
     height: 18px;
-    border: 2px solid rgba(255, 255, 255, 0.1);
+    border: 2px solid color-mix(in srgb, var(--tint) 10%, transparent);
     border-top-color: var(--accent-rose);
     border-radius: 50%;
     animation: trash-spin 0.7s linear infinite;
@@ -712,8 +712,8 @@ function startFix(type) {
 
 /* ── Sandbox ── */
 .maint-icon-sandbox {
-    background: rgba(168, 130, 255, 0.12);
-    color: #a882ff;
+    background: color-mix(in srgb, var(--accent-violet) 12%, transparent);
+    color: var(--accent-violet);
 }
 .sandbox-flash {
     display: flex;
@@ -721,8 +721,8 @@ function startFix(type) {
     gap: 0.4rem;
     padding: 0.5rem 0.75rem;
     margin-bottom: 0.75rem;
-    background: rgba(78, 203, 141, 0.08);
-    border: 1px solid rgba(78, 203, 141, 0.2);
+    background: color-mix(in srgb, var(--accent-emerald) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 20%, transparent);
     border-radius: 6px;
     color: var(--accent-emerald);
     font-size: 0.8125rem;
@@ -734,9 +734,9 @@ function startFix(type) {
 }
 .sandbox-msg { padding: 0.75rem; font-size: 0.8125rem; border-radius: 6px; }
 .sandbox-msg-warn {
-    background: rgba(232, 168, 73, 0.08);
+    background: color-mix(in srgb, var(--accent-amber) 8%, transparent);
     color: var(--accent-amber);
-    border: 1px solid rgba(232, 168, 73, 0.2);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 20%, transparent);
 }
 .sandbox-table-wrap {
     overflow-x: auto;
@@ -767,11 +767,11 @@ function startFix(type) {
 .sandbox-th-check { width: 28px; }
 .sandbox-table td {
     padding: 0.4rem 0.5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid color-mix(in srgb, var(--tint) 3%, transparent);
     vertical-align: middle;
 }
 .sandbox-row:hover td {
-    background: rgba(255, 255, 255, 0.02);
+    background: color-mix(in srgb, var(--tint) 2%, transparent);
 }
 .sandbox-td-check { width: 28px; text-align: center; }
 .sandbox-td-name {
@@ -794,12 +794,12 @@ function startFix(type) {
 .sandbox-td-origin code {
     font-size: 0.75rem;
     color: var(--text-muted);
-    background: rgba(255, 255, 255, 0.03);
+    background: color-mix(in srgb, var(--tint) 3%, transparent);
     padding: 0.1rem 0.3rem;
     border-radius: 3px;
 }
 .sandbox-cb {
-    accent-color: #a882ff;
+    accent-color: var(--accent-violet);
 }
 .sandbox-actions {
     display: flex;
@@ -814,7 +814,7 @@ function startFix(type) {
     position: sticky;
     bottom: 0;
     z-index: 2;
-    background: var(--bg-card, #16181d);
+    background: var(--bg-card);
 }
 .sandbox-actions-left { flex-shrink: 0; }
 .sandbox-actions-right {
@@ -844,22 +844,22 @@ function startFix(type) {
     cursor: not-allowed;
 }
 .sandbox-btn-reinject {
-    background: rgba(78, 203, 141, 0.1);
+    background: color-mix(in srgb, var(--accent-emerald) 10%, transparent);
     color: var(--accent-emerald);
-    border-color: rgba(78, 203, 141, 0.2);
+    border-color: color-mix(in srgb, var(--accent-emerald) 20%, transparent);
 }
 .sandbox-btn-reinject:not(:disabled):hover {
-    background: rgba(78, 203, 141, 0.18);
-    border-color: rgba(78, 203, 141, 0.35);
+    background: color-mix(in srgb, var(--accent-emerald) 18%, transparent);
+    border-color: color-mix(in srgb, var(--accent-emerald) 35%, transparent);
 }
 .sandbox-btn-delete {
-    background: rgba(232, 93, 117, 0.08);
+    background: color-mix(in srgb, var(--accent-rose) 8%, transparent);
     color: var(--accent-rose);
-    border-color: rgba(232, 93, 117, 0.2);
+    border-color: color-mix(in srgb, var(--accent-rose) 20%, transparent);
 }
 .sandbox-btn-delete:not(:disabled):hover {
-    background: rgba(232, 93, 117, 0.15);
-    border-color: rgba(232, 93, 117, 0.35);
+    background: color-mix(in srgb, var(--accent-rose) 15%, transparent);
+    border-color: color-mix(in srgb, var(--accent-rose) 35%, transparent);
 }
 .sandbox-empty-state {
     display: flex;
@@ -912,17 +912,17 @@ function startFix(type) {
 .sandbox-filter {
     appearance: none;
     background: transparent;
-    border: 1px solid var(--border-subtle, rgba(255,255,255,0.12));
+    border: 1px solid var(--border-subtle, color-mix(in srgb, var(--tint) 12%, transparent));
     border-radius: 999px;
     padding: 0.2rem 0.65rem;
     font-size: 0.75rem;
     color: var(--text-muted);
     cursor: pointer;
 }
-.sandbox-filter:hover { color: var(--text-primary, #fff); }
+.sandbox-filter:hover { color: var(--text-primary); }
 .sandbox-filter.is-active {
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--text-primary, #fff);
+    background: color-mix(in srgb, var(--tint) 8%, transparent);
+    color: var(--text-primary);
 }
 .sandbox-badge {
     display: inline-block;
@@ -933,25 +933,25 @@ function startFix(type) {
     white-space: nowrap;
 }
 .sandbox-badge-ok {
-    background: rgba(78, 203, 141, 0.12);
+    background: color-mix(in srgb, var(--accent-emerald) 12%, transparent);
     color: var(--accent-emerald);
-    border: 1px solid rgba(78, 203, 141, 0.25);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 25%, transparent);
 }
 .sandbox-badge-danger {
-    background: rgba(232, 93, 117, 0.12);
-    color: #e85d75;
-    border: 1px solid rgba(232, 93, 117, 0.25);
+    background: color-mix(in srgb, var(--accent-rose) 12%, transparent);
+    color: var(--accent-rose);
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 25%, transparent);
 }
 .sandbox-badge-warn {
-    background: rgba(232, 168, 73, 0.12);
+    background: color-mix(in srgb, var(--accent-amber) 12%, transparent);
     color: var(--accent-amber);
-    border: 1px solid rgba(232, 168, 73, 0.25);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 25%, transparent);
 }
 .sandbox-hardlink { color: var(--text-muted); cursor: help; }
 .sandbox-btn-safe {
-    background: rgba(78, 203, 141, 0.1);
+    background: color-mix(in srgb, var(--accent-emerald) 10%, transparent);
     color: var(--accent-emerald);
-    border: 1px solid rgba(78, 203, 141, 0.25);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 25%, transparent);
 }
 .sandbox-allow-unknown {
     display: inline-flex;
@@ -962,9 +962,9 @@ function startFix(type) {
     cursor: pointer;
     margin-right: 0.5rem;
     padding: 0.25rem 0.5rem;
-    border: 1px solid rgba(232, 168, 73, 0.25);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 25%, transparent);
     border-radius: 6px;
-    background: rgba(232, 168, 73, 0.06);
+    background: color-mix(in srgb, var(--accent-amber) 6%, transparent);
 }
 .sandbox-allow-unknown input { cursor: pointer; }
 .sandbox-selection-warn {
@@ -985,13 +985,13 @@ function startFix(type) {
     100% { margin-left: 70%; width: 30%; }
 }
 .sandbox-move-btn {
-    background: rgba(168, 130, 255, 0.1) !important;
-    color: #a882ff !important;
-    border-color: rgba(168, 130, 255, 0.25) !important;
+    background: color-mix(in srgb, var(--accent-violet) 10%, transparent) !important;
+    color: var(--accent-violet) !important;
+    border-color: color-mix(in srgb, var(--accent-violet) 25%, transparent) !important;
 }
 .sandbox-move-btn:hover {
-    background: rgba(168, 130, 255, 0.18) !important;
-    border-color: rgba(168, 130, 255, 0.4) !important;
+    background: color-mix(in srgb, var(--accent-violet) 18%, transparent) !important;
+    border-color: color-mix(in srgb, var(--accent-violet) 40%, transparent) !important;
 }
 </style>
 {% endblock %}

@@ -52,6 +52,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Lecteur vidéo intégré](#lecteur-vidéo-intégré)
   - [Utilisation sur téléphone](#utilisation-sur-téléphone)
   - [Accessibilité](#accessibilité)
+  - [Thèmes](#thèmes)
   - [Traitement et validation](#traitement-et-validation)
   - [Transfert](#transfert)
   - [Qualité et doublons](#qualité-et-doublons)
@@ -1774,6 +1775,28 @@ L'interface vise le niveau WCAG AA :
 - **Mouvement réduit** : si le système demande de réduire les animations, les apparitions
   deviennent de simples fondus courts, sans déplacement, zoom ni reflet en boucle ; les
   indicateurs de travail en cours sont conservés.
+
+### Thèmes
+
+Le menu **Thème** de la barre de navigation (à côté de « Vous regardez sur ») change
+l'apparence de toute l'interface :
+
+| Thème | Ambiance |
+|---|---|
+| **Nuit ambrée** (par défaut) | Nuit bleutée, accent ambre, titres en Instrument Serif |
+| **Cinémathèque** | Thème clair : papier crème, encre noire, filets fins, accent vermillon |
+| **Velours** | Salle de cinéma Art déco : noir bordeaux, or, titres en capitales |
+| **Kodachrome** | Pellicule des années 70 : tabac, orange, moutarde, sarcelle |
+
+- Le choix est **mémorisé par navigateur** (comme « Vous regardez sur ») : chaque poste et le
+  téléphone gardent le leur. Il est appliqué avant l'affichage de la page, sans flash.
+- Seules les polices du thème actif sont chargées ; la barre d'état du téléphone prend la
+  couleur du thème.
+- Les thèmes ne changent que l'apparence (couleurs, polices, arrondis), jamais la mise en
+  page. Chaque palette garde un contraste d'au moins 4,5:1 pour tout texte.
+- Pour les développeurs : les thèmes sont des blocs `:root[data-theme="…"]` en tête de
+  `src/web/static/css/style.css`. La couleur de marque (`--accent` : liens actifs, boutons
+  principaux, « Visionner ») est distincte de l'ambre d'avertissement (`--accent-amber`).
 
 ### Traitement et validation
 

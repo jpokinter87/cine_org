@@ -11,7 +11,42 @@
     <meta name="theme-color" content="#12121a">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+    <script>
+    /* Thème mémorisé dans CE navigateur, appliqué avant le premier rendu (pas
+       de flash) ; seules les polices du thème actif sont chargées. */
+    var THEME_KEY = 'cineorg.theme';
+    var THEMES = {
+        nuit: { color: '#12121a', fonts: 'DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1' },
+        cinematheque: { color: '#faf7f0', fonts: 'Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Public+Sans:wght@300;400;500;600;700' },
+        velours: { color: '#1d0d12', fonts: 'Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,600;1,6..96,400&family=Jost:wght@300;400;500;600;700' },
+        kodachrome: { color: '#2a2018', fonts: 'Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Figtree:wght@300;400;500;600;700' }
+    };
+    function getTheme() {
+        try { var t = localStorage.getItem(THEME_KEY); return THEMES[t] ? t : 'nuit'; }
+        catch (e) { return 'nuit'; }
+    }
+    function applyTheme(name) {
+        var t = THEMES[name] ? name : 'nuit';
+        var root = document.documentElement;
+        if (t === 'nuit') root.removeAttribute('data-theme');
+        else root.setAttribute('data-theme', t);
+        document.querySelector('meta[name="theme-color"]').content = THEMES[t].color;
+        var link = document.getElementById('theme-fonts');
+        if (!link) {
+            link = document.createElement('link');
+            link.id = 'theme-fonts';
+            link.rel = 'stylesheet';
+            document.head.appendChild(link);
+        }
+        link.href = 'https://fonts.googleapis.com/css2?family=' + THEMES[t].fonts + '&display=swap';
+    }
+    function setTheme(name) {
+        try { localStorage.setItem(THEME_KEY, name); } catch (e) {}
+        applyTheme(name);
+    }
+    applyTheme(getTheme());
+    </script>
+    <noscript><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"></noscript>
     <link rel="stylesheet" href="/static/css/style.css?v={{ asset_version() }}">
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
     <script>document.addEventListener('DOMContentLoaded', function() { htmx.config.refreshOnHistoryMiss = true; });</script>
@@ -38,6 +73,15 @@
             </select>
         </div>
         {% endif %}
+        <div class="viewer-select-wrap theme-select-wrap">
+            <label for="theme-select" class="viewer-select-label">Thème</label>
+            <select id="theme-select" class="viewer-select" onchange="setTheme(this.value)">
+                <option value="nuit">Nuit ambrée</option>
+                <option value="cinematheque">Cinémathèque</option>
+                <option value="velours">Velours</option>
+                <option value="kodachrome">Kodachrome</option>
+            </select>
+        </div>
         <ul class="nav-links">
             <li><a href="/" class="nav-link {% block nav_home %}{% endblock %}">Accueil</a></li>
             <li><a href="/workflow" class="nav-link {% block nav_workflow %}{% endblock %}">Traitement</a></li>
@@ -118,6 +162,10 @@
         }
         if (!found) { stored = 'Local'; setViewerProfile('Local'); }
         sel.value = stored;
+    });
+    document.addEventListener('DOMContentLoaded', function() {
+        var sel = document.getElementById('theme-select');
+        if (sel) sel.value = getTheme();
     });
     /* « Visionner » en un clic : injecter l'identité dans les requêtes /play
        qui n'ont pas déjà un profil explicite (les options du ▾ en portent un). */
