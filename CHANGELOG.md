@@ -1,3 +1,11 @@
+## v2.24.1 (2026-10-25)
+
+### Fix
+
+- **ui**: mouvement réduit, transitions ciblées et finitions de l'audit
+- **ui**: navigation clavier et dialogues accessibles
+- **ui**: contraste et lisibilité des textes secondaires et des badges
+
 ## v2.24.0 (2026-10-12)
 
 ### Feat
