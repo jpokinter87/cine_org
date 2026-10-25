@@ -23,7 +23,7 @@
 
     <div class="lib-detail-header">
         <div class="lib-detail-aside">
-            <div class="lib-detail-poster poster-zoomable" {% if effective_poster %}onclick="openPosterLightbox('{{ effective_poster_large or effective_poster }}')"{% endif %}>
+            <div class="lib-detail-poster poster-zoomable" {% if effective_poster %}role="button" tabindex="0" aria-label="Agrandir l'affiche" onclick="openPosterLightbox('{{ effective_poster_large or effective_poster }}')"{% endif %}>
                 {% if effective_poster %}
                 <img src="{{ effective_poster_large or effective_poster }}" alt="{{ series.title }}">
                 <div class="poster-zoom-hint">
@@ -148,12 +148,12 @@
 
             {% if effective_overview %}
             <div class="lib-detail-synopsis">
-                <h3 class="lib-detail-section-title">
+                <h2 class="lib-detail-section-title">
                     Synopsis
                     {% if series.overview_override %}
                     <span class="override-badge override-badge-mini" title="Synopsis modifié manuellement">✎</span>
                     {% endif %}
-                </h3>
+                </h2>
                 <p>{{ effective_overview }}</p>
             </div>
             {% endif %}

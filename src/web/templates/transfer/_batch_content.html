@@ -148,7 +148,7 @@
 <!-- Dialogue custom de renvoi en validation -->
 <div class="reject-overlay" id="sendback-overlay" onclick="if(event.target===this)hideSendbackDialog()">
     <div class="reject-dialog">
-        <h3 class="reject-dialog-title">Renvoyer en validation ?</h3>
+        <h2 class="reject-dialog-title">Renvoyer en validation ?</h2>
         <p class="reject-dialog-text">
             Le fichier <strong id="sendback-filename"></strong> sera remis en attente de validation.
         </p>
@@ -170,7 +170,7 @@
 <!-- Dialogue custom de confirmation transfert -->
 <div class="reject-overlay" id="transfer-overlay" onclick="if(event.target===this)hideTransferDialog()">
     <div class="reject-dialog">
-        <h3 class="reject-dialog-title">Lancer le transfert ?</h3>
+        <h2 class="reject-dialog-title">Lancer le transfert ?</h2>
         <p class="reject-dialog-text">
             <strong>{{ tree_data.total if tree_data else 0 }} fichier(s)</strong> seront déplacés vers la vidéothèque
             et les symlinks créés dans le répertoire de lecture.

@@ -49,7 +49,7 @@
 {% if all_done and has_validated %}
 <div class="reject-overlay active" id="transfer-overlay" onclick="if(event.target===this)hideTransferDialog()">
     <div class="reject-dialog">
-        <h3 class="reject-dialog-title">Validations terminées</h3>
+        <h2 class="reject-dialog-title">Validations terminées</h2>
         <p class="reject-dialog-text">
             Tous les fichiers ont été validés. Passer au transfert ?
         </p>
@@ -131,7 +131,7 @@ function hideTransferDialog() {
 <!-- Dialogue custom de revalidation -->
 <div class="reject-overlay" id="reset-overlay" onclick="if(event.target===this)hideResetDialog()">
     <div class="reject-dialog">
-        <h3 class="reject-dialog-title">Revalider ce fichier ?</h3>
+        <h2 class="reject-dialog-title">Revalider ce fichier ?</h2>
         <p class="reject-dialog-text">
             Le fichier <strong id="reset-filename"></strong> sera remis en attente de validation manuelle.
         </p>

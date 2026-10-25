@@ -114,6 +114,11 @@ p {
     outline-offset: 2px;
 }
 
+/* Fond d'un dialogue focalisé par a11y.js : pas d'anneau sur tout l'écran */
+[role="dialog"][tabindex="-1"]:focus {
+    outline: none;
+}
+
 /* ── Navigation ── */
 
 .main-nav {
