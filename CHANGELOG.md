@@ -1,3 +1,9 @@
+## v2.25.0 (2026-10-25)
+
+### Feat
+
+- **ui**: sélecteur de thème (Nuit ambrée, Cinémathèque, Velours, Kodachrome)
+
 ## v2.24.1 (2026-10-25)
 
 ### Fix

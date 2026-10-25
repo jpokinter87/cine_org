@@ -16,14 +16,29 @@
     --text-muted: #8b899e;
     --text-faint: #5c5a6e; /* décor uniquement (séparateurs, icônes inertes), jamais du texte */
 
+    /* Couleur de marque (lien actif, bouton principal, focus) : distincte de
+       l'ambre d'avertissement pour que chaque thème puisse la redéfinir. */
+    --accent: var(--accent-amber);
+    --accent-dim: color-mix(in srgb, var(--accent) 12%, transparent);
+
     --accent-amber: #e8a849;
-    --accent-amber-dim: rgba(232, 168, 73, 0.12);
+    --accent-amber-dim: color-mix(in srgb, var(--accent-amber) 12%, transparent);
     --accent-blue: #5b8def;
-    --accent-blue-dim: rgba(91, 141, 239, 0.12);
+    --accent-blue-dim: color-mix(in srgb, var(--accent-blue) 12%, transparent);
     --accent-emerald: #4ecb8d;
-    --accent-emerald-dim: rgba(78, 203, 141, 0.12);
+    --accent-emerald-dim: color-mix(in srgb, var(--accent-emerald) 12%, transparent);
     --accent-rose: #e85d75;
-    --accent-rose-dim: rgba(232, 93, 117, 0.12);
+    --accent-rose-dim: color-mix(in srgb, var(--accent-rose) 12%, transparent);
+    /* Sandbox (page maintenance) */
+    --accent-violet: #a882ff;
+
+    /* Voile translucide de survol/relief : blanc sur fond sombre, encre sur fond clair */
+    --tint: #ffffff;
+
+    /* Couleurs des sources externes (pastilles TMDB, TVDB, IMDb) */
+    --brand-tmdb: #01b4e4;
+    --brand-tvdb: #6cc24a;
+    --brand-imdb: #f5c518;
 
     /* Texte posé sur un aplat d'accent : foncé, lisible sur ambre/émeraude/bleu/rose */
     --on-accent: #0a0a0f;
@@ -39,6 +54,160 @@
 
     --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border-subtle);
     --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border);
+}
+
+/* ═══════════════════════════════════════════
+   Thèmes optionnels — posés sur <html data-theme="…"> par le script de
+   base.html (choix mémorisé par navigateur). Nuit ambrée = :root ci-dessus.
+   Chaque palette est vérifiée à 4,5:1 minimum pour tout texte.
+   ═══════════════════════════════════════════ */
+
+/* Cinémathèque : clair éditorial, papier crème, encre, vermillon */
+:root[data-theme="cinematheque"] {
+    --bg-deep: #f3eee4;
+    --bg-surface: #faf7f0;
+    --bg-card: #ffffff;
+    --bg-card-hover: #f6f1e7;
+    --border: #d8cebd;
+    --border-subtle: #e6ddcf;
+
+    --text-primary: #1c1a17;
+    --text-secondary: #4f4a42;
+    --text-muted: #5b554c;
+    --text-faint: #b3a998;
+
+    --accent: #a8321e;
+    --accent-amber: #8a5a00;
+    --accent-blue: #1f4e8c;
+    --accent-emerald: #1f6b3f;
+    --accent-rose: #a1253f;
+    --accent-violet: #6b3fa0;
+
+    --tint: #1c1a17;
+    --brand-tmdb: #01698c;
+    --brand-tvdb: #346a1c;
+    --brand-imdb: #7d6200;
+
+    --on-accent: #ffffff;
+    --chip-overlay: rgba(250, 247, 240, 0.92);
+
+    --radius-sm: 2px;
+    --radius-md: 3px;
+    --radius-lg: 4px;
+
+    --font-display: 'Newsreader', Georgia, serif;
+    --font-body: 'Public Sans', system-ui, sans-serif;
+
+    --shadow-card: 0 0 0 1px var(--border);
+    --shadow-card-hover: 0 0 0 1px var(--text-secondary);
+}
+
+/* Velours : salle de cinéma Art déco, noir bordeaux, or */
+:root[data-theme="velours"] {
+    --bg-deep: #14080b;
+    --bg-surface: #1d0d12;
+    --bg-card: #271219;
+    --bg-card-hover: #311820;
+    --border: #43222c;
+    --border-subtle: #2c141b;
+
+    --text-primary: #f4e9e3;
+    --text-secondary: #c4aca7;
+    --text-muted: #b39994;
+    --text-faint: #6d4e55;
+
+    --accent: #d8b25a;
+    --accent-amber: #eea05a;
+    --accent-blue: #8fb0f2;
+    --accent-emerald: #86c9a0;
+    --accent-rose: #e47a85;
+    --accent-violet: #c3a3f0;
+    --velvet: #8f2333;
+
+    --on-accent: #1a0b0f;
+    --chip-overlay: rgba(20, 8, 11, 0.82);
+
+    --radius-sm: 3px;
+    --radius-md: 4px;
+    --radius-lg: 6px;
+
+    --font-display: 'Bodoni Moda', Didot, serif;
+    --font-body: 'Jost', system-ui, sans-serif;
+
+    --shadow-card: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+    --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--accent);
+}
+
+/* Kodachrome : pellicule des années 70, tabac, orange, moutarde, sarcelle */
+:root[data-theme="kodachrome"] {
+    --bg-deep: #1f1812;
+    --bg-surface: #2a2018;
+    --bg-card: #33271d;
+    --bg-card-hover: #3d2f23;
+    --border: #4a3a2b;
+    --border-subtle: #33271d;
+
+    --text-primary: #f6ebdb;
+    --text-secondary: #cdb99c;
+    --text-muted: #bfa98a;
+    --text-faint: #6e5a45;
+
+    --accent: #ec8a45;
+    --accent-amber: #e6b84a;
+    --accent-blue: #7ab8de;
+    --accent-emerald: #4fb3a5;
+    --accent-rose: #ef7d6a;
+    --accent-violet: #c99be2;
+
+    --on-accent: #1f1812;
+    --chip-overlay: rgba(31, 24, 18, 0.82);
+
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 22px;
+
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-body: 'Figtree', system-ui, sans-serif;
+}
+
+/* ── Signatures des thèmes (sans changement de mise en page) ── */
+
+:root[data-theme="cinematheque"] .main-nav {
+    border-bottom: 1px solid var(--text-primary);
+}
+:root[data-theme="cinematheque"] .hero-title {
+    font-style: italic;
+}
+:root[data-theme="cinematheque"] .lib-detail-poster {
+    box-shadow: 0 0 0 1px var(--border);
+}
+
+:root[data-theme="velours"] .main-nav {
+    box-shadow: inset 0 3px 0 var(--velvet);
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+:root[data-theme="velours"] .nav-brand,
+:root[data-theme="velours"] .hero-title,
+:root[data-theme="velours"] .section-title,
+:root[data-theme="velours"] .lib-detail-title {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+:root[data-theme="velours"] .lib-detail-poster {
+    outline: 1px solid var(--accent);
+    outline-offset: 5px;
+}
+
+:root[data-theme="kodachrome"] .main-nav {
+    border-bottom: 4px solid;
+    border-image: linear-gradient(90deg,
+        var(--accent) 0 33.33%, var(--accent-amber) 33.33% 66.66%, var(--accent-emerald) 66.66%) 1;
+}
+:root[data-theme="kodachrome"] .hero-title,
+:root[data-theme="kodachrome"] .section-title,
+:root[data-theme="kodachrome"] .lib-detail-title {
+    font-weight: 600;
+    letter-spacing: -0.02em;
 }
 
 /* ── Scrollbar ── */
@@ -104,13 +273,13 @@ p {
 }
 
 ::selection {
-    background: rgba(232, 168, 73, 0.35);
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
     color: var(--text-primary);
 }
 
 /* Anneau de focus clavier commun ; les champs gardent leur propre état focus */
 :focus-visible {
-    outline: 2px solid var(--accent-amber);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
 
@@ -155,7 +324,7 @@ p {
 }
 
 .brand-accent {
-    color: var(--accent-amber);
+    color: var(--accent);
 }
 
 .nav-links {
@@ -176,12 +345,12 @@ p {
 
 .nav-link:hover {
     color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.04);
+    background: color-mix(in srgb, var(--tint) 4%, transparent);
 }
 
 .nav-link.active {
-    color: var(--accent-amber);
-    background: var(--accent-amber-dim);
+    color: var(--accent);
+    background: var(--accent-dim);
     font-weight: 500;
 }
 
@@ -238,7 +407,7 @@ p {
 
 .hero-title-link:hover,
 .hero-title-link:focus-visible {
-    color: var(--accent-amber);
+    color: var(--accent);
 }
 
 .hero-subtitle {
@@ -376,12 +545,12 @@ p {
 }
 
 .action-primary {
-    background: var(--accent-amber);
+    background: var(--accent);
     color: var(--bg-deep);
 }
 
 .action-primary:hover {
-    background: var(--accent-amber);
+    background: var(--accent);
 }
 
 .action-secondary {
@@ -398,14 +567,14 @@ p {
 /* ── Bouton Surprends-moi ── */
 
 .action-surprise {
-    background: linear-gradient(135deg, var(--accent-amber), #d4913a);
+    background: linear-gradient(135deg, var(--accent), #d4913a);
     color: var(--bg-deep);
     position: relative;
     overflow: hidden;
 }
 
 .action-surprise:hover {
-    background: linear-gradient(135deg, var(--accent-amber), var(--accent-amber));
+    background: linear-gradient(135deg, var(--accent), var(--accent));
 }
 
 .action-surprise::before {
@@ -416,7 +585,7 @@ p {
     background: conic-gradient(
         from 0deg,
         transparent 0%,
-        var(--accent-amber) 10%,
+        var(--accent) 10%,
         transparent 20%
     );
     opacity: 0;
@@ -431,24 +600,24 @@ p {
 
 @keyframes surpriseReveal {
     0% {
-        box-shadow: 0 0 0 0 rgba(232, 168, 73, 0);
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
     }
     10% {
-        box-shadow: 0 0 18px 4px rgba(232, 168, 73, 0.35),
-                    0 0 36px 8px rgba(232, 168, 73, 0.12);
+        box-shadow: 0 0 18px 4px color-mix(in srgb, var(--accent) 35%, transparent),
+                    0 0 36px 8px color-mix(in srgb, var(--accent) 12%, transparent);
         transform: translateY(-2px) scale(1.03);
     }
     30% {
-        box-shadow: 0 0 24px 6px rgba(232, 168, 73, 0.45),
-                    0 0 48px 12px rgba(232, 168, 73, 0.15);
+        box-shadow: 0 0 24px 6px color-mix(in srgb, var(--accent) 45%, transparent),
+                    0 0 48px 12px color-mix(in srgb, var(--accent) 15%, transparent);
         transform: translateY(-2px) scale(1.03);
     }
     60% {
-        box-shadow: 0 0 12px 3px rgba(232, 168, 73, 0.2);
+        box-shadow: 0 0 12px 3px color-mix(in srgb, var(--accent) 20%, transparent);
         transform: translateY(-1px) scale(1.01);
     }
     100% {
-        box-shadow: 0 0 0 0 rgba(232, 168, 73, 0);
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
         transform: translateY(0) scale(1);
     }
 }
@@ -600,7 +769,7 @@ p {
 }
 
 .score-medium {
-    background: rgba(234, 179, 56, 0.15);
+    background: color-mix(in srgb, var(--accent-amber) 15%, transparent);
     color: var(--accent-amber);
 }
 
@@ -620,13 +789,13 @@ p {
 }
 
 .source-tmdb {
-    background: rgba(1, 180, 228, 0.12);
-    color: #01b4e4;
+    background: color-mix(in srgb, var(--brand-tmdb) 12%, transparent);
+    color: var(--brand-tmdb);
 }
 
 .source-tvdb {
-    background: rgba(108, 194, 74, 0.12);
-    color: #6cc24a;
+    background: color-mix(in srgb, var(--brand-tvdb) 12%, transparent);
+    color: var(--brand-tvdb);
 }
 
 /* ── Empty State ── */
@@ -736,7 +905,7 @@ p {
 }
 
 .back-link:hover {
-    color: var(--accent-amber);
+    color: var(--accent);
 }
 
 .back-links {
@@ -906,7 +1075,7 @@ p {
     padding: 0.1rem 0.45rem;
     border-radius: 100px;
     font-size: 0.6875rem;
-    background: rgba(255, 255, 255, 0.05);
+    background: color-mix(in srgb, var(--tint) 5%, transparent);
     color: var(--text-secondary);
     border: 1px solid var(--border-subtle);
     text-decoration: none;
@@ -914,21 +1083,21 @@ p {
 }
 
 a.genre-tag:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
+    background: color-mix(in srgb, var(--tint) 10%, transparent);
+    border-color: color-mix(in srgb, var(--tint) 20%, transparent);
     color: var(--text-primary);
 }
 
 .genre-tag-storage {
-    border-color: rgba(245, 158, 11, 0.4);
-    background: rgba(245, 158, 11, 0.1);
-    color: var(--accent-amber);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--accent);
 }
 
 a.genre-tag-storage:hover {
-    background: rgba(245, 158, 11, 0.2);
-    border-color: rgba(245, 158, 11, 0.5);
-    color: var(--accent-amber);
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+    color: var(--accent);
 }
 
 .genre-storage-indicator {
@@ -992,7 +1161,7 @@ a.genre-tag-storage:hover {
 }
 
 .duration-close {
-    background: rgba(234, 179, 56, 0.12);
+    background: color-mix(in srgb, var(--accent-amber) 12%, transparent);
     color: var(--accent-amber);
 }
 
@@ -1104,19 +1273,19 @@ a.genre-tag-storage:hover {
 .action-success {
     background: var(--accent-emerald-dim);
     color: var(--accent-emerald);
-    border: 1px solid rgba(78, 203, 141, 0.2);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 20%, transparent);
 }
 
 .action-warning {
-    background: rgba(234, 179, 56, 0.1);
+    background: color-mix(in srgb, var(--accent-amber) 10%, transparent);
     color: var(--accent-amber);
-    border: 1px solid rgba(234, 179, 56, 0.2);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 20%, transparent);
 }
 
 .action-error {
     background: var(--accent-rose-dim);
     color: var(--accent-rose);
-    border: 1px solid rgba(232, 93, 117, 0.2);
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 20%, transparent);
 }
 
 @keyframes feedbackSlide {
@@ -1143,7 +1312,7 @@ a.genre-tag-storage:hover {
     align-items: center;
     gap: 0.4rem;
     padding: 0.5rem 1rem;
-    border: 1px solid rgba(78, 203, 141, 0.25);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 25%, transparent);
     border-radius: var(--radius-sm);
     background: var(--accent-emerald-dim);
     color: var(--accent-emerald);
@@ -1155,10 +1324,10 @@ a.genre-tag-storage:hover {
 }
 
 .action-btn-validate:hover {
-    background: rgba(78, 203, 141, 0.2);
-    border-color: rgba(78, 203, 141, 0.4);
+    background: color-mix(in srgb, var(--accent-emerald) 20%, transparent);
+    border-color: color-mix(in srgb, var(--accent-emerald) 40%, transparent);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(78, 203, 141, 0.15);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--accent-emerald) 15%, transparent);
 }
 
 .action-btn-validate:active {
@@ -1188,10 +1357,10 @@ a.genre-tag-storage:hover {
     align-items: center;
     gap: 0.35rem;
     padding: 0.45rem 0.9rem;
-    border: 1px solid rgba(78, 203, 141, 0.25);
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
     border-radius: var(--radius-sm);
     background: transparent;
-    color: var(--accent-emerald);
+    color: var(--accent);
     font-family: var(--font-body);
     font-size: 0.75rem;
     font-weight: 500;
@@ -1201,8 +1370,8 @@ a.genre-tag-storage:hover {
 }
 
 .action-btn-play:hover {
-    background: var(--accent-emerald-dim);
-    border-color: rgba(78, 203, 141, 0.4);
+    background: var(--accent-dim);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
     opacity: 1;
 }
 
@@ -1217,7 +1386,7 @@ a.genre-tag-storage:hover {
     align-items: center;
     gap: 0.35rem;
     padding: 0.45rem 0.9rem;
-    border: 1px solid rgba(232, 93, 117, 0.2);
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 20%, transparent);
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--accent-rose);
@@ -1231,7 +1400,7 @@ a.genre-tag-storage:hover {
 
 .action-btn-reject:hover {
     background: var(--accent-rose-dim);
-    border-color: rgba(232, 93, 117, 0.35);
+    border-color: color-mix(in srgb, var(--accent-rose) 35%, transparent);
     opacity: 1;
 }
 
@@ -1288,8 +1457,8 @@ a.genre-tag-storage:hover {
 
 .search-input:focus {
     outline: none;
-    border-color: var(--accent-amber);
-    box-shadow: 0 0 0 3px var(--accent-amber-dim);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .search-input::placeholder {
@@ -1313,8 +1482,8 @@ a.genre-tag-storage:hover {
 
 .search-year:focus {
     outline: none;
-    border-color: var(--accent-amber);
-    box-shadow: 0 0 0 3px var(--accent-amber-dim);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .search-year::placeholder {
@@ -1354,8 +1523,8 @@ a.genre-tag-storage:hover {
 
 .search-select:focus {
     outline: none;
-    border-color: var(--accent-amber);
-    box-shadow: 0 0 0 3px var(--accent-amber-dim);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .search-btn {
@@ -1363,7 +1532,7 @@ a.genre-tag-storage:hover {
     align-items: center;
     gap: 0.4rem;
     padding: 0.6rem 1.1rem;
-    background: var(--accent-amber);
+    background: var(--accent);
     color: var(--bg-deep);
     border: none;
     border-radius: var(--radius-sm);
@@ -1376,7 +1545,7 @@ a.genre-tag-storage:hover {
 }
 
 .search-btn:hover {
-    background: var(--accent-amber);
+    background: var(--accent);
     transform: translateY(-1px);
 }
 
@@ -1416,7 +1585,7 @@ a.genre-tag-storage:hover {
     width: 18px;
     height: 18px;
     border: 2px solid var(--border);
-    border-top-color: var(--accent-amber);
+    border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
 }
@@ -1587,7 +1756,7 @@ a.pagination-btn:hover {
     color: var(--text-muted);
     line-height: 1.5;
     padding: 0.6rem 0.8rem;
-    background: rgba(255, 255, 255, 0.03);
+    background: color-mix(in srgb, var(--tint) 3%, transparent);
     border-radius: var(--radius-sm);
     border-left: 2px solid var(--border);
     margin-bottom: 1.5rem;
@@ -1619,9 +1788,9 @@ a.pagination-btn:hover {
 
 .reject-dialog-confirm {
     padding: 0.55rem 1.1rem;
-    border: 1px solid rgba(232, 93, 117, 0.3);
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 30%, transparent);
     border-radius: var(--radius-sm);
-    background: rgba(232, 93, 117, 0.07);
+    background: color-mix(in srgb, var(--accent-rose) 7%, transparent);
     color: var(--accent-rose);
     font-family: var(--font-body);
     font-size: 0.8125rem;
@@ -1631,8 +1800,8 @@ a.pagination-btn:hover {
 }
 
 .reject-dialog-confirm:hover {
-    background: rgba(232, 93, 117, 0.2);
-    border-color: rgba(232, 93, 117, 0.5);
+    background: color-mix(in srgb, var(--accent-rose) 20%, transparent);
+    border-color: color-mix(in srgb, var(--accent-rose) 50%, transparent);
 }
 
 /* ── Poster Zoom ── */
@@ -1774,8 +1943,8 @@ a.pagination-btn:hover {
     width: 52px;
     height: 52px;
     border-radius: var(--radius-md);
-    background: var(--accent-amber-dim);
-    color: var(--accent-amber);
+    background: var(--accent-dim);
+    color: var(--accent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1840,7 +2009,7 @@ a.pagination-btn:hover {
 
 .workflow-select:focus {
     outline: none;
-    border-color: var(--accent-amber);
+    border-color: var(--accent);
 }
 
 .workflow-start-btn {
@@ -1848,7 +2017,7 @@ a.pagination-btn:hover {
     align-items: center;
     gap: 0.5rem;
     padding: 0.65rem 1.5rem;
-    background: var(--accent-amber);
+    background: var(--accent);
     color: var(--bg-deep);
     border: none;
     border-radius: var(--radius-sm);
@@ -1860,9 +2029,9 @@ a.pagination-btn:hover {
 }
 
 .workflow-start-btn:hover {
-    background: var(--accent-amber);
+    background: var(--accent);
     transform: translateY(-1px);
-    box-shadow: 0 4px 16px rgba(232, 168, 73, 0.25);
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 .workflow-start-btn:active {
@@ -1878,19 +2047,19 @@ a.pagination-btn:hover {
     align-items: center;
     gap: 0.4rem;
     padding: 0.4rem 0.8rem;
-    border: 1px solid rgba(220, 80, 80, 0.3);
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 30%, transparent);
     border-radius: var(--radius);
-    background: rgba(220, 80, 80, 0.08);
-    color: rgba(220, 120, 120, 0.8);
-    font-family: 'DM Sans', sans-serif;
+    background: color-mix(in srgb, var(--accent-rose) 8%, transparent);
+    color: color-mix(in srgb, var(--accent-rose) 80%, transparent);
+    font-family: var(--font-body);
     font-size: 0.78rem;
     cursor: pointer;
     transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
 .workflow-reset-btn:hover {
-    background: rgba(220, 80, 80, 0.15);
-    color: rgba(220, 120, 120, 1);
-    border-color: rgba(220, 80, 80, 0.5);
+    background: color-mix(in srgb, var(--accent-rose) 15%, transparent);
+    color: color-mix(in srgb, var(--accent-rose) 100%, transparent);
+    border-color: color-mix(in srgb, var(--accent-rose) 50%, transparent);
 }
 
 /* ── Status Section ── */
@@ -1936,7 +2105,7 @@ a.pagination-btn:hover {
     display: inline-block;
     margin-top: 0.5rem;
     font-size: 0.8125rem;
-    color: var(--accent-amber);
+    color: var(--accent);
     transition: opacity 0.15s;
 }
 
@@ -2021,7 +2190,7 @@ a.pagination-btn:hover {
 }
 
 .workflow-progress.done {
-    border-color: rgba(78, 203, 141, 0.2);
+    border-color: color-mix(in srgb, var(--accent-emerald) 20%, transparent);
 }
 
 .progress-header {
@@ -2068,7 +2237,7 @@ a.pagination-btn:hover {
 
 .progress-bar {
     height: 100%;
-    background: linear-gradient(90deg, var(--accent-amber), var(--accent-amber));
+    background: linear-gradient(90deg, var(--accent), var(--accent));
     border-radius: 3px;
     transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
     position: relative;
@@ -2081,7 +2250,7 @@ a.pagination-btn:hover {
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tint) 15%, transparent), transparent);
     animation: shimmer 1.5s infinite;
 }
 
@@ -2150,8 +2319,8 @@ a.pagination-btn:hover {
 }
 
 .progress-step.active .progress-step-dot {
-    background: var(--accent-amber);
-    box-shadow: 0 0 8px rgba(232, 168, 73, 0.4);
+    background: var(--accent);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .progress-step.completed .progress-step-dot {
@@ -2189,7 +2358,7 @@ a.pagination-btn:hover {
 .progress-counter-value {
     font-size: 1.125rem;
     font-weight: 700;
-    color: var(--accent-amber);
+    color: var(--accent);
     font-variant-numeric: tabular-nums;
 }
 
@@ -2210,7 +2379,7 @@ a.pagination-btn:hover {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-family: 'DM Sans', monospace;
+    font-family: var(--font-body);
 }
 
 /* ── Results Card ── */
@@ -2220,7 +2389,7 @@ a.pagination-btn:hover {
     background: var(--bg-card);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    border: 1px solid rgba(78, 203, 141, 0.15);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 15%, transparent);
     animation: fadeInUp 0.4s ease both;
 }
 
@@ -2363,7 +2532,7 @@ a.pagination-btn:hover {
     margin-top: 1.75rem;
     padding: 1.5rem;
     background: var(--accent-amber-dim);
-    border: 1px solid rgba(232, 168, 73, 0.28);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 28%, transparent);
     border-radius: var(--radius-lg);
     animation: fadeInUp 0.4s ease both;
 }
@@ -2447,7 +2616,7 @@ a.pagination-btn:hover {
     padding: 0.25rem 0.6rem;
     background: var(--accent-amber-dim);
     border-radius: 999px;
-    border: 1px solid rgba(232, 168, 73, 0.22);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 22%, transparent);
 }
 
 .anomaly-group-stats {
@@ -2567,7 +2736,7 @@ a.pagination-btn:hover {
 .anomaly-btn-trash {
     background: transparent;
     color: var(--accent-rose);
-    border-color: rgba(232, 93, 117, 0.35);
+    border-color: color-mix(in srgb, var(--accent-rose) 35%, transparent);
 }
 
 .anomaly-btn-trash:hover {
@@ -2592,13 +2761,13 @@ a.pagination-btn:hover {
 .anomaly-resolved-success {
     background: var(--accent-emerald-dim);
     color: var(--accent-emerald);
-    border: 1px solid rgba(78, 203, 141, 0.25);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 25%, transparent);
 }
 
 .anomaly-resolved-trash {
     background: var(--accent-rose-dim);
     color: var(--accent-rose);
-    border: 1px solid rgba(232, 93, 117, 0.25);
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 25%, transparent);
 }
 
 .anomaly-resolved-muted {
@@ -2659,7 +2828,7 @@ a.pagination-btn:hover {
 .transfer-counter-value {
     font-size: 2.25rem;
     font-weight: 700;
-    color: var(--accent-amber);
+    color: var(--accent);
     letter-spacing: -0.03em;
     line-height: 1;
 }
@@ -2783,8 +2952,8 @@ a.pagination-btn:hover {
     font-size: 0.6875rem;
     font-weight: 600;
     color: var(--accent-emerald);
-    background: rgba(76, 175, 80, 0.1);
-    border: 1px solid rgba(76, 175, 80, 0.3);
+    background: color-mix(in srgb, var(--accent-emerald) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 30%, transparent);
     border-radius: 4px;
     padding: 0.125rem 0.5rem;
 }
@@ -2807,7 +2976,7 @@ a.pagination-btn:hover {
 }
 
 .tree-leaf:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: color-mix(in srgb, var(--tint) 3%, transparent);
 }
 
 .tree-leaf-main {
@@ -2886,8 +3055,8 @@ a.pagination-btn:hover {
     align-items: flex-start;
     gap: 0.75rem;
     padding: 0.85rem 1rem;
-    background: rgba(255, 152, 0, 0.08);
-    border: 1px solid rgba(255, 152, 0, 0.3);
+    background: color-mix(in srgb, var(--accent-amber) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 30%, transparent);
     border-radius: 8px;
     margin-bottom: 1rem;
     color: var(--text-primary);
@@ -2921,7 +3090,7 @@ a.pagination-btn:hover {
     letter-spacing: 0.5px;
     padding: 0.1rem 0.4rem;
     border-radius: 4px;
-    background: rgba(255, 152, 0, 0.15);
+    background: color-mix(in srgb, var(--accent-amber) 15%, transparent);
     color: var(--accent-amber);
     cursor: help;
 }
@@ -2951,12 +3120,12 @@ a.pagination-btn:hover {
 }
 
 .tree-leaf-dup-reco-new {
-    background: rgba(76, 175, 80, 0.15);
+    background: color-mix(in srgb, var(--accent-emerald) 15%, transparent);
     color: var(--accent-emerald);
 }
 
 .tree-leaf-dup-reco-old {
-    background: rgba(244, 67, 54, 0.15);
+    background: color-mix(in srgb, var(--accent-rose) 15%, transparent);
     color: var(--accent-rose);
 }
 
@@ -2972,16 +3141,16 @@ a.pagination-btn:hover {
     letter-spacing: 0.5px;
     padding: 0.15rem 0.5rem;
     border-radius: 4px;
-    background: rgba(255, 152, 0, 0.15);
-    color: var(--accent-amber);
-    border: 1px solid rgba(255, 152, 0, 0.3);
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
 }
 
 .tree-leaf-resolve-btn:hover {
-    background: rgba(255, 152, 0, 0.25);
-    border-color: rgba(255, 152, 0, 0.5);
+    background: color-mix(in srgb, var(--accent) 25%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 /* Badge résolu après choix */
@@ -2997,22 +3166,22 @@ a.pagination-btn:hover {
 
 .tree-leaf-resolved-badge.tree-leaf-resolved-keep_old,
 .tree-leaf-resolved-badge.tree-leaf-resolved-keep_old_trash {
-    background: rgba(244, 67, 54, 0.12);
+    background: color-mix(in srgb, var(--accent-rose) 12%, transparent);
     color: var(--accent-rose);
 }
 
 .tree-leaf-resolved-badge.tree-leaf-resolved-keep_new {
-    background: rgba(76, 175, 80, 0.12);
+    background: color-mix(in srgb, var(--accent-emerald) 12%, transparent);
     color: var(--accent-emerald);
 }
 
 .tree-leaf-resolved-badge.tree-leaf-resolved-keep_both {
-    background: rgba(33, 150, 243, 0.12);
+    background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
     color: var(--accent-blue);
 }
 
 .tree-leaf-resolved-badge.tree-leaf-resolved-skip {
-    background: rgba(158, 158, 158, 0.12);
+    background: color-mix(in srgb, var(--text-muted) 12%, transparent);
     color: var(--text-secondary);
 }
 
@@ -3023,8 +3192,8 @@ a.pagination-btn:hover {
 /* Bandeau doublons résolu (vert) */
 
 .duplicate-alert-resolved {
-    background: rgba(76, 175, 80, 0.08);
-    border-color: rgba(76, 175, 80, 0.3);
+    background: color-mix(in srgb, var(--accent-emerald) 8%, transparent);
+    border-color: color-mix(in srgb, var(--accent-emerald) 30%, transparent);
 }
 
 .duplicate-alert-resolved .duplicate-alert-icon {
@@ -3060,7 +3229,7 @@ a.pagination-btn:hover {
 }
 
 .autovalidated-header-icon {
-    color: var(--accent-amber);
+    color: var(--accent);
     opacity: 0.7;
     display: flex;
 }
@@ -3083,8 +3252,8 @@ a.pagination-btn:hover {
     border-radius: 100px;
     font-size: 0.75rem;
     font-weight: 600;
-    background: var(--accent-amber-dim);
-    color: var(--accent-amber);
+    background: var(--accent-dim);
+    color: var(--accent);
 }
 
 .autovalidated-subtitle {
@@ -3182,9 +3351,9 @@ a.pagination-btn:hover {
 }
 
 .autovalidated-reset-btn:hover {
-    color: var(--accent-amber);
-    border-color: var(--accent-amber);
-    background: var(--accent-amber-dim);
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-dim);
 }
 
 .autovalidated-list .autovalidated-card {
@@ -3352,7 +3521,7 @@ a.pagination-btn:hover {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    background: rgba(234, 179, 56, 0.12);
+    background: color-mix(in srgb, var(--accent-amber) 12%, transparent);
     color: var(--accent-amber);
     margin-bottom: 1.25rem;
 }
@@ -3462,24 +3631,24 @@ a.pagination-btn:hover {
 
 .conflict-btn-old {
     background: transparent;
-    border: 1px solid rgba(232, 93, 117, 0.25);
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 25%, transparent);
     color: var(--accent-rose);
 }
 
 .conflict-btn-old:hover {
     background: var(--accent-rose-dim);
-    border-color: rgba(232, 93, 117, 0.4);
+    border-color: color-mix(in srgb, var(--accent-rose) 40%, transparent);
 }
 
 .conflict-btn-new {
     background: var(--accent-emerald-dim);
-    border: 1px solid rgba(78, 203, 141, 0.25);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 25%, transparent);
     color: var(--accent-emerald);
 }
 
 .conflict-btn-new:hover {
-    background: rgba(78, 203, 141, 0.2);
-    border-color: rgba(78, 203, 141, 0.4);
+    background: color-mix(in srgb, var(--accent-emerald) 20%, transparent);
+    border-color: color-mix(in srgb, var(--accent-emerald) 40%, transparent);
 }
 
 .conflict-btn-both {
@@ -3534,7 +3703,7 @@ a.pagination-btn:hover {
 
 .conflict-quality-col.conflict-recommended {
     background: var(--accent-emerald-dim);
-    border: 1px solid rgba(78, 203, 141, 0.3);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 30%, transparent);
 }
 
 .conflict-badge-recommended {
@@ -3689,8 +3858,8 @@ a.pagination-btn:hover {
 }
 
 .lib-sort-arrow.active {
-    color: var(--accent-amber);
-    background: var(--accent-amber-dim);
+    color: var(--accent);
+    background: var(--accent-dim);
 }
 
 /* ── Section technique dépliable ── */
@@ -3735,7 +3904,7 @@ a.pagination-btn:hover {
     height: 18px;
     padding: 0 5px;
     border-radius: 100px;
-    background: var(--accent-amber);
+    background: var(--accent);
     color: var(--bg-deep);
     font-size: 0.7rem;
     font-weight: 600;
@@ -3790,8 +3959,8 @@ a.pagination-btn:hover {
 
 .lib-search-input:focus {
     outline: none;
-    border-color: var(--accent-amber);
-    box-shadow: 0 0 0 3px var(--accent-amber-dim);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .lib-search-input::placeholder {
@@ -3823,8 +3992,8 @@ a.pagination-btn:hover {
 
 .lib-filter-select:focus {
     outline: none;
-    border-color: var(--accent-amber);
-    box-shadow: 0 0 0 3px var(--accent-amber-dim);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 /* ── Active Filter Tags ── */
@@ -3841,8 +4010,8 @@ a.pagination-btn:hover {
     align-items: center;
     gap: 0.35rem;
     padding: 0.2rem 0.6rem;
-    background: var(--accent-amber-dim);
-    color: var(--accent-amber);
+    background: var(--accent-dim);
+    color: var(--accent);
     border-radius: 100px;
     font-size: 0.75rem;
     font-weight: 500;
@@ -3858,11 +4027,11 @@ a.pagination-btn:hover {
     font-size: 0.875rem;
     line-height: 1;
     transition: background 0.15s;
-    color: var(--accent-amber);
+    color: var(--accent);
 }
 
 .lib-filter-tag-remove:hover {
-    background: rgba(232, 168, 73, 0.25);
+    background: color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 /* ── Library Grid ── */
@@ -4154,8 +4323,8 @@ a.pagination-btn:hover {
 }
 
 .lib-rating-imdb {
-    background: rgba(245, 197, 24, 0.12);
-    color: #f5c518;
+    background: color-mix(in srgb, var(--brand-imdb) 12%, transparent);
+    color: var(--brand-imdb);
 }
 
 .lib-detail-original-title {
@@ -4226,17 +4395,17 @@ a.pagination-btn:hover {
 }
 
 a.tech-badge-resolution:hover {
-    background: rgba(91, 141, 239, 0.22);
+    background: color-mix(in srgb, var(--accent-blue) 22%, transparent);
     color: var(--text-primary);
 }
 
 .tech-badge-codec {
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--tint) 6%, transparent);
     color: var(--text-secondary);
 }
 
 a.tech-badge-codec:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: color-mix(in srgb, var(--tint) 12%, transparent);
     color: var(--text-primary);
 }
 
@@ -4247,7 +4416,7 @@ a.tech-badge-codec:hover {
 
 .tech-badge-multi {
     font-weight: 600;
-    background: rgba(52, 211, 153, 0.2);
+    background: color-mix(in srgb, var(--accent-emerald) 20%, transparent);
 }
 
 .tech-badge-lang-mini {
@@ -4280,14 +4449,14 @@ a.tech-badge-codec:hover {
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--tint) 6%, transparent);
     color: var(--text-secondary);
     text-decoration: none;
     transition: background 0.2s, color 0.2s;
 }
 
 .lib-detail-nav-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: color-mix(in srgb, var(--tint) 12%, transparent);
     color: var(--text-primary);
 }
 
@@ -4302,7 +4471,7 @@ a.tech-badge-codec:hover {
 }
 
 .lib-filter-tag-tech .lib-filter-tag-remove:hover {
-    background: rgba(91, 141, 239, 0.25);
+    background: color-mix(in srgb, var(--accent-blue) 25%, transparent);
 }
 
 /* ── Search mode select ── */
@@ -4371,18 +4540,18 @@ a.tech-badge-codec:hover {
 }
 
 .lib-external-imdb {
-    background: rgba(245, 197, 24, 0.15);
-    color: #f5c518;
+    background: color-mix(in srgb, var(--brand-imdb) 15%, transparent);
+    color: var(--brand-imdb);
 }
 
 .lib-external-tmdb {
-    background: rgba(1, 180, 228, 0.12);
-    color: #01b4e4;
+    background: color-mix(in srgb, var(--brand-tmdb) 12%, transparent);
+    color: var(--brand-tmdb);
 }
 
 .lib-external-tvdb {
-    background: rgba(108, 194, 74, 0.12);
-    color: #6cc24a;
+    background: color-mix(in srgb, var(--brand-tvdb) 12%, transparent);
+    color: var(--brand-tvdb);
 }
 
 /* ── Rating Source Label (Grid) ── */
@@ -4407,16 +4576,16 @@ a.tech-badge-codec:hover {
 }
 
 .lib-filter-tag-director {
-    background: rgba(251, 146, 60, 0.15);
-    color: #fb923c;
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    color: var(--accent);
 }
 
 .lib-filter-tag-director .lib-filter-tag-remove {
-    color: #fb923c;
+    color: var(--accent);
 }
 
 .lib-filter-tag-director .lib-filter-tag-remove:hover {
-    background: rgba(251, 146, 60, 0.25);
+    background: color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 .lib-detail-synopsis {
@@ -4519,7 +4688,7 @@ a.tech-badge-codec:hover {
 .lib-file-ids {
     font-size: 0.8125rem;
     color: var(--text-secondary);
-    font-family: 'DM Sans', monospace;
+    font-family: var(--font-body);
 }
 
 .lib-file-row .lib-file-path {
@@ -4668,7 +4837,7 @@ a.tech-badge-codec:hover {
 }
 
 .lib-episode-row:hover {
-    background: rgba(255, 255, 255, 0.02);
+    background: color-mix(in srgb, var(--tint) 2%, transparent);
 }
 
 .lib-episode-playable {
@@ -4677,8 +4846,8 @@ a.tech-badge-codec:hover {
 
 .lib-episode-playable:focus {
     outline: none;
-    background: rgba(232, 168, 73, 0.08);
-    box-shadow: inset 0 0 0 1px rgba(232, 168, 73, 0.5);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 .lib-episode-num {
@@ -4710,7 +4879,7 @@ a.tech-badge-codec:hover {
 
 .lib-episode-title-toggle:hover,
 .lib-episode-title-toggle:focus-visible {
-    color: var(--accent-amber);
+    color: var(--accent);
 }
 
 .lib-episode-overview-chevron {
@@ -4856,13 +5025,17 @@ a.tech-badge-codec:hover {
     margin-left: auto;
     margin-right: 0.75rem;
 }
+/* Sélecteur de thème : collé au sélecteur d'identité quand il est présent */
+.viewer-select-wrap + .theme-select-wrap {
+    margin-left: 0;
+}
 .viewer-select-label {
     font-size: 0.72rem;
     color: var(--text-muted);
     white-space: nowrap;
 }
 .viewer-select {
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 0.78rem;
     color: var(--text-primary);
     background: var(--bg-card);
@@ -4872,14 +5045,14 @@ a.tech-badge-codec:hover {
     cursor: pointer;
 }
 .viewer-select:hover {
-    border-color: var(--accent-amber);
+    border-color: var(--accent);
 }
 /* État actif/focus : ambre raccord à la charte (remplace le contour blanc épais du navigateur) */
 .viewer-select:focus,
 .viewer-select:focus-visible {
     outline: none;
-    border-color: var(--accent-amber);
-    box-shadow: 0 0 0 2px var(--accent-amber-dim);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-dim);
 }
 
 /* Page layout */
@@ -4906,9 +5079,9 @@ a.tech-badge-codec:hover {
 }
 
 .config-toast-success {
-    background: rgba(78, 203, 141, 0.1);
+    background: color-mix(in srgb, var(--accent-emerald) 10%, transparent);
     color: var(--accent-emerald);
-    border: 1px solid rgba(78, 203, 141, 0.2);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 20%, transparent);
 }
 
 .config-toast-close {
@@ -4936,7 +5109,7 @@ a.tech-badge-codec:hover {
     font-size: 0.78rem;
     color: var(--accent-amber);
     background: var(--accent-amber-dim);
-    border: 1px solid rgba(232, 168, 73, 0.15);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 15%, transparent);
     margin-bottom: 2rem;
 }
 
@@ -4976,11 +5149,11 @@ a.tech-badge-codec:hover {
 }
 
 .config-section legend:hover {
-    color: var(--accent-amber);
+    color: var(--accent);
 }
 
 .config-section legend svg {
-    color: var(--accent-amber);
+    color: var(--accent);
     flex-shrink: 0;
 }
 
@@ -5065,14 +5238,14 @@ a.tech-badge-codec:hover {
 }
 
 .config-input:focus {
-    border-color: var(--accent-amber);
-    box-shadow: 0 0 0 3px var(--accent-amber-dim);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .config-input-readonly {
     opacity: 0.5;
     cursor: not-allowed;
-    font-family: 'DM Sans', monospace;
+    font-family: var(--font-body);
     font-size: 0.8rem;
 }
 
@@ -5099,7 +5272,7 @@ a.tech-badge-codec:hover {
 
 .config-path-wrap .config-input {
     flex: 1;
-    font-family: 'DM Sans', monospace;
+    font-family: var(--font-body);
     font-size: 0.8rem;
 }
 
@@ -5114,12 +5287,12 @@ a.tech-badge-codec:hover {
 }
 
 .config-path-status.status-ok {
-    background: rgba(78, 203, 141, 0.15);
+    background: color-mix(in srgb, var(--accent-emerald) 15%, transparent);
     color: var(--accent-emerald);
 }
 
 .config-path-status.status-missing {
-    background: rgba(232, 93, 117, 0.15);
+    background: color-mix(in srgb, var(--accent-rose) 15%, transparent);
     color: var(--accent-rose);
 }
 
@@ -5132,7 +5305,7 @@ a.tech-badge-codec:hover {
 
 .config-secret-wrap .config-input {
     flex: 1;
-    font-family: 'DM Sans', monospace;
+    font-family: var(--font-body);
     font-size: 0.8rem;
     letter-spacing: 0.05em;
 }
@@ -5169,12 +5342,12 @@ a.tech-badge-codec:hover {
 }
 
 .config-api-badge.api-set {
-    background: rgba(78, 203, 141, 0.12);
+    background: color-mix(in srgb, var(--accent-emerald) 12%, transparent);
     color: var(--accent-emerald);
 }
 
 .config-api-badge.api-unset {
-    background: rgba(232, 93, 117, 0.12);
+    background: color-mix(in srgb, var(--accent-rose) 12%, transparent);
     color: var(--accent-rose);
 }
 
@@ -5184,7 +5357,7 @@ a.tech-badge-codec:hover {
 }
 
 .config-field-error .config-input:focus {
-    box-shadow: 0 0 0 3px rgba(232, 93, 117, 0.15);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-rose) 15%, transparent);
 }
 
 .config-error-msg {
@@ -5205,8 +5378,8 @@ a.tech-badge-codec:hover {
     align-items: center;
     gap: 0.5rem;
     padding: 0.7rem 1.8rem;
-    background: var(--accent-amber);
-    color: #0a0a0f;
+    background: var(--accent);
+    color: var(--on-accent);
     border: none;
     border-radius: var(--radius-sm);
     font-family: var(--font-body);
@@ -5217,8 +5390,8 @@ a.tech-badge-codec:hover {
 }
 
 .config-save-btn:hover {
-    background: var(--accent-amber);
-    box-shadow: 0 4px 16px rgba(232, 168, 73, 0.25);
+    background: var(--accent);
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 .config-save-btn:active {
@@ -5265,7 +5438,7 @@ a.tech-badge-codec:hover {
 }
 
 .profile-card {
-    background: var(--bg-darker, #1a1a2e);
+    background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-md, 8px);
     padding: 0.75rem 1rem;
@@ -5273,7 +5446,7 @@ a.tech-badge-codec:hover {
 }
 
 .profile-card.profile-active {
-    border-color: var(--accent, var(--accent-amber));
+    border-color: var(--accent);
 }
 
 .profile-header {
@@ -5295,11 +5468,11 @@ a.tech-badge-codec:hover {
 }
 
 .profile-select-btn:hover {
-    color: var(--accent, var(--accent-amber));
+    color: var(--accent);
 }
 
 .profile-select-btn.selected {
-    color: var(--accent, var(--accent-amber));
+    color: var(--accent);
 }
 
 .profile-radio {
@@ -5310,7 +5483,7 @@ a.tech-badge-codec:hover {
 
 .profile-select-btn.selected .profile-radio {
     opacity: 1;
-    color: var(--accent, var(--accent-amber));
+    color: var(--accent);
 }
 
 .profile-name {
@@ -5328,13 +5501,13 @@ a.tech-badge-codec:hover {
 }
 
 .profile-badge-local {
-    background: rgba(100, 200, 100, 0.15);
+    background: color-mix(in srgb, var(--accent-emerald) 15%, transparent);
     color: var(--accent-emerald);
 }
 
 .profile-badge-remote {
-    background: rgba(100, 150, 255, 0.15);
-    color: #8ab4ff;
+    background: color-mix(in srgb, var(--accent-blue) 15%, transparent);
+    color: var(--accent-blue);
 }
 
 .profile-type-badge {
@@ -5348,12 +5521,12 @@ a.tech-badge-codec:hover {
 }
 
 .profile-type-mpv {
-    background: rgba(148, 163, 184, 0.15);
+    background: color-mix(in srgb, var(--text-muted) 15%, transparent);
     color: var(--text-secondary);
 }
 
 .profile-type-dunehd {
-    background: rgba(217, 165, 74, 0.18);
+    background: color-mix(in srgb, var(--accent-amber) 18%, transparent);
     color: var(--accent-amber);
 }
 
@@ -5363,9 +5536,9 @@ a.tech-badge-codec:hover {
     gap: 0.5rem;
     padding: 0.5rem 0.75rem;
     margin-bottom: 0.75rem;
-    background: rgba(231, 76, 60, 0.12);
-    color: #e7a39b;
-    border: 1px solid rgba(231, 76, 60, 0.3);
+    background: color-mix(in srgb, var(--accent-rose) 12%, transparent);
+    color: var(--accent-rose);
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 30%, transparent);
     border-radius: 4px;
     font-size: 0.85rem;
     font-family: var(--font-body, 'DM Sans', sans-serif);
@@ -5567,8 +5740,8 @@ a.tech-badge-codec:hover {
 }
 
 .profile-save-btn {
-    background: var(--accent, var(--accent-amber));
-    color: var(--bg-darker, #0f0f1a);
+    background: var(--accent);
+    color: var(--on-accent);
     border: none;
     padding: 0.4rem 1rem;
     border-radius: var(--radius-sm, 4px);
@@ -5600,9 +5773,9 @@ a.tech-badge-codec:hover {
     align-items: center;
     gap: 0.4rem;
     margin-top: 0.75rem;
-    background: rgba(212, 168, 83, 0.1);
-    border: 1px solid var(--accent, var(--accent-amber));
-    color: var(--accent, var(--accent-amber));
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    border: 1px solid var(--accent);
+    color: var(--accent);
     padding: 0.6rem 1rem;
     border-radius: var(--radius-md, 8px);
     cursor: pointer;
@@ -5614,8 +5787,8 @@ a.tech-badge-codec:hover {
 }
 
 .profile-add-toggle:hover {
-    background: var(--accent, var(--accent-amber));
-    color: var(--bg-darker, #1a1a2e);
+    background: var(--accent);
+    color: var(--on-accent);
 }
 
 .profile-add-toggle:active {
@@ -5624,7 +5797,7 @@ a.tech-badge-codec:hover {
 
 .profile-add-form {
     margin-top: 0.75rem;
-    background: var(--bg-darker, #1a1a2e);
+    background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-md, 8px);
     padding: 1rem;
@@ -5727,8 +5900,8 @@ a.tech-badge-codec:hover {
 }
 
 .maint-analyze-btn:hover {
-    border-color: var(--accent-amber);
-    background: var(--accent-amber-dim);
+    border-color: var(--accent);
+    background: var(--accent-dim);
 }
 
 /* Spinner (htmx-indicator) */
@@ -5748,7 +5921,7 @@ a.tech-badge-codec:hover {
 .maint-progress-bar-fill {
     height: 100%;
     width: 0%;
-    background: linear-gradient(90deg, var(--accent-amber), var(--accent-amber));
+    background: linear-gradient(90deg, var(--accent), var(--accent));
     border-radius: 3px;
     transition: width 0.4s ease;
     position: relative;
@@ -5758,7 +5931,7 @@ a.tech-badge-codec:hover {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tint) 15%, transparent), transparent);
     animation: maint-shimmer 1.5s ease infinite;
 }
 
@@ -5784,7 +5957,7 @@ a.tech-badge-codec:hover {
 }
 
 .maint-phase-counter {
-    color: var(--accent-amber);
+    color: var(--accent);
     font-weight: 500;
     font-variant-numeric: tabular-nums;
 }
@@ -5803,15 +5976,15 @@ a.tech-badge-codec:hover {
 }
 
 .maint-summary-ok {
-    background: rgba(78, 203, 141, 0.1);
+    background: color-mix(in srgb, var(--accent-emerald) 10%, transparent);
     color: var(--accent-emerald);
-    border: 1px solid rgba(78, 203, 141, 0.2);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 20%, transparent);
 }
 
 .maint-summary-warn {
-    background: rgba(232, 168, 73, 0.08);
+    background: color-mix(in srgb, var(--accent-amber) 8%, transparent);
     color: var(--accent-amber);
-    border: 1px solid rgba(232, 168, 73, 0.15);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 15%, transparent);
 }
 
 /* Categories */
@@ -5850,17 +6023,17 @@ a.tech-badge-codec:hover {
 }
 
 .maint-cat-badge.badge-ok {
-    background: rgba(78, 203, 141, 0.12);
+    background: color-mix(in srgb, var(--accent-emerald) 12%, transparent);
     color: var(--accent-emerald);
 }
 
 .maint-cat-badge.badge-warn {
-    background: rgba(232, 168, 73, 0.12);
+    background: color-mix(in srgb, var(--accent-amber) 12%, transparent);
     color: var(--accent-amber);
 }
 
 .maint-cat-badge.badge-error {
-    background: rgba(232, 93, 117, 0.12);
+    background: color-mix(in srgb, var(--accent-rose) 12%, transparent);
     color: var(--accent-rose);
 }
 
@@ -5917,7 +6090,7 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .maint-issue-path {
-    font-family: 'DM Sans', monospace;
+    font-family: var(--font-body);
     font-size: 0.75rem;
     color: var(--text-primary);
     background: var(--bg-surface);
@@ -6023,12 +6196,12 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .maint-cli-commands code {
-    font-family: 'DM Sans', monospace;
+    font-family: var(--font-body);
     font-size: 0.75rem;
     background: var(--bg-card);
     padding: 0.1rem 0.4rem;
     border-radius: 3px;
-    color: var(--accent-amber);
+    color: var(--accent);
 }
 
 /* Fix actions — boutons de correction maintenance */
@@ -6046,9 +6219,9 @@ details[open] > .maint-issue-toggle::before {
     align-items: center;
     gap: 0.5rem;
     padding: 0.55rem 1.2rem;
-    background: rgba(232, 168, 73, 0.1);
+    background: color-mix(in srgb, var(--accent-amber) 10%, transparent);
     color: var(--accent-amber);
-    border: 1px solid rgba(232, 168, 73, 0.3);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 30%, transparent);
     border-radius: var(--radius-sm);
     font-family: var(--font-body);
     font-size: 0.82rem;
@@ -6058,9 +6231,9 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .maint-fix-btn:hover {
-    background: rgba(232, 168, 73, 0.18);
+    background: color-mix(in srgb, var(--accent-amber) 18%, transparent);
     border-color: var(--accent-amber);
-    box-shadow: 0 0 12px rgba(232, 168, 73, 0.15);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--accent-amber) 15%, transparent);
 }
 
 .maint-fix-hint {
@@ -6086,15 +6259,15 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .maint-fix-counter.fix-success {
-    background: rgba(78, 203, 141, 0.08);
+    background: color-mix(in srgb, var(--accent-emerald) 8%, transparent);
     color: var(--accent-emerald);
-    border: 1px solid rgba(78, 203, 141, 0.15);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 15%, transparent);
 }
 
 .maint-fix-counter.fix-warn {
-    background: rgba(232, 168, 73, 0.08);
+    background: color-mix(in srgb, var(--accent-amber) 8%, transparent);
     color: var(--accent-amber);
-    border: 1px solid rgba(232, 168, 73, 0.15);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 15%, transparent);
 }
 
 .fix-counter-value {
@@ -6136,8 +6309,8 @@ details[open] > .maint-issue-toggle::before {
 .maint-fix-errors {
     margin-top: 0.75rem;
     padding: 0.5rem 0.75rem;
-    background: rgba(232, 93, 117, 0.06);
-    border: 1px solid rgba(232, 93, 117, 0.15);
+    background: color-mix(in srgb, var(--accent-rose) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 15%, transparent);
     border-radius: var(--radius-sm);
 }
 
@@ -6179,12 +6352,12 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .maint-cli-hint-compact code {
-    font-family: 'DM Sans', monospace;
+    font-family: var(--font-body);
     font-size: 0.7rem;
     background: var(--bg-card);
     padding: 0.05rem 0.3rem;
     border-radius: 3px;
-    color: var(--accent-amber);
+    color: var(--accent);
 }
 
 .maint-orphan-branches {
@@ -6205,7 +6378,7 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .maint-orphan-branch > summary:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: color-mix(in srgb, var(--tint) 3%, transparent);
 }
 
 .maint-orphan-branch[open] > summary {
@@ -6222,7 +6395,7 @@ details[open] > .maint-issue-toggle::before {
     gap: 0.3rem;
     padding: 0.25rem 0.6rem;
     font-size: 0.7rem;
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     color: var(--text-secondary);
     background: transparent;
     border: 1px solid var(--border-subtle);
@@ -6231,9 +6404,9 @@ details[open] > .maint-issue-toggle::before {
     transition: color 0.2s, background-color 0.2s, border-color 0.2s, box-shadow 0.2s, opacity 0.2s;
 }
 .reassociate-btn:hover {
-    color: var(--accent-amber);
-    border-color: var(--accent-amber);
-    background: rgba(245, 197, 24, 0.08);
+    color: var(--accent);
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--brand-imdb) 8%, transparent);
 }
 
 .reassociate-overlay {
@@ -6273,7 +6446,7 @@ details[open] > .maint-issue-toggle::before {
     border-bottom: 1px solid var(--border-subtle);
 }
 .reassociate-title {
-    font-family: 'Instrument Serif', serif;
+    font-family: var(--font-display);
     font-size: 1.2rem;
     color: var(--text-primary);
     margin: 0;
@@ -6304,7 +6477,7 @@ details[open] > .maint-issue-toggle::before {
     flex: 1;
     padding: 0.6rem 0.8rem;
     font-size: 0.9rem;
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     background: var(--bg-card);
     border: 1px solid var(--border-subtle);
     border-radius: 6px;
@@ -6313,7 +6486,7 @@ details[open] > .maint-issue-toggle::before {
     transition: border-color 0.2s;
 }
 .reassociate-search-input:focus {
-    border-color: var(--accent-amber);
+    border-color: var(--accent);
 }
 .reassociate-local-info {
     margin-top: 0.5rem;
@@ -6328,7 +6501,7 @@ details[open] > .maint-issue-toggle::before {
 .reassociate-tab {
     padding: 0.4rem 0.8rem;
     font-size: 0.8rem;
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     background: transparent;
     border: 1px solid var(--border-subtle);
     border-radius: 6px;
@@ -6341,14 +6514,14 @@ details[open] > .maint-issue-toggle::before {
     border-color: var(--text-secondary);
 }
 .reassociate-tab.active {
-    background: var(--accent-amber);
+    background: var(--accent);
     color: var(--bg-base);
-    border-color: var(--accent-amber);
+    border-color: var(--accent);
 }
 .reassociate-select {
     padding: 0.6rem 0.5rem;
     font-size: 0.85rem;
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     background: var(--bg-card);
     border: 1px solid var(--border-subtle);
     border-radius: 6px;
@@ -6357,11 +6530,11 @@ details[open] > .maint-issue-toggle::before {
     min-width: 5rem;
 }
 .reassociate-select:focus {
-    border-color: var(--accent-amber);
+    border-color: var(--accent);
 }
 .reassociate-id-btn {
     padding: 0.6rem 0.7rem;
-    background: var(--accent-amber);
+    background: var(--accent);
     color: var(--bg-base);
     border: none;
     border-radius: 6px;
@@ -6384,7 +6557,7 @@ details[open] > .maint-issue-toggle::before {
     width: 16px;
     height: 16px;
     border: 2px solid var(--border-subtle);
-    border-top-color: var(--accent-amber);
+    border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
 }
@@ -6419,11 +6592,11 @@ details[open] > .maint-issue-toggle::before {
     transition: border-color 0.2s;
 }
 .reassociate-card:hover {
-    border-color: var(--accent-amber);
+    border-color: var(--accent);
 }
 .reassociate-current {
     border-color: var(--accent-green, var(--accent-emerald));
-    background: rgba(74, 222, 128, 0.05);
+    background: color-mix(in srgb, var(--accent-emerald) 5%, transparent);
 }
 
 .reassociate-card-poster {
@@ -6457,7 +6630,7 @@ details[open] > .maint-issue-toggle::before {
     gap: 0.2rem;
 }
 .reassociate-card-title {
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-weight: 600;
     font-size: 0.9rem;
     color: var(--text-primary);
@@ -6505,18 +6678,18 @@ details[open] > .maint-issue-toggle::before {
 }
 .reassociate-duration-match {
     color: var(--accent-emerald);
-    background: rgba(34, 197, 94, 0.12);
-    border: 1px solid rgba(34, 197, 94, 0.3);
+    background: color-mix(in srgb, var(--accent-emerald) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 30%, transparent);
 }
 .reassociate-duration-warn {
     color: var(--accent-amber);
-    background: rgba(245, 158, 11, 0.12);
-    border: 1px solid rgba(245, 158, 11, 0.3);
+    background: color-mix(in srgb, var(--accent-amber) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 30%, transparent);
 }
 .reassociate-duration-danger {
     color: var(--accent-rose);
-    background: rgba(239, 68, 68, 0.12);
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    background: color-mix(in srgb, var(--accent-rose) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 30%, transparent);
 }
 
 /* Indicateur saisons series */
@@ -6540,10 +6713,10 @@ details[open] > .maint-issue-toggle::before {
 .reassociate-select-btn {
     padding: 0.3rem 0.7rem;
     font-size: 0.75rem;
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-weight: 500;
     color: var(--bg-main);
-    background: var(--accent-amber);
+    background: var(--accent);
     border: none;
     border-radius: 4px;
     cursor: pointer;
@@ -6602,7 +6775,7 @@ details[open] > .maint-issue-toggle::before {
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-secondary);
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 0.8125rem;
     font-weight: 500;
     cursor: pointer;
@@ -6614,19 +6787,19 @@ details[open] > .maint-issue-toggle::before {
 }
 .reassociate-confirm-ok {
     padding: 0.55rem 1.1rem;
-    border: 1px solid rgba(232, 168, 56, 0.3);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
     border-radius: var(--radius-sm);
-    background: rgba(232, 168, 56, 0.1);
-    color: var(--accent-warm);
-    font-family: 'DM Sans', sans-serif;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--accent);
+    font-family: var(--font-body);
     font-size: 0.8125rem;
     font-weight: 600;
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
 }
 .reassociate-confirm-ok:hover {
-    background: rgba(232, 168, 56, 0.2);
-    border-color: rgba(232, 168, 56, 0.5);
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 /* ── Video Player (mpv) ── */
@@ -6639,7 +6812,7 @@ details[open] > .maint-issue-toggle::before {
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-secondary);
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 0.75rem;
     cursor: pointer;
     transition: background 0.15s, color 0.15s;
@@ -6662,17 +6835,17 @@ details[open] > .maint-issue-toggle::before {
     text-decoration: none;
 }
 .lib-episode-play-btn:hover {
-    color: var(--accent-warm);
+    color: var(--accent);
 }
 .play-launched {
     font-size: 0.75rem;
-    color: var(--accent-warm);
-    font-family: 'DM Sans', sans-serif;
+    color: var(--accent);
+    font-family: var(--font-body);
 }
 .play-error {
     font-size: 0.75rem;
     color: var(--accent-rose);
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
 }
 
 /* --- Sélecteur de profil lecteur (popover) --- */
@@ -6742,7 +6915,7 @@ details[open] > .maint-issue-toggle::before {
     border-radius: calc(var(--radius) - 2px);
     background: transparent;
     color: var(--text-secondary);
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     font-size: 0.78rem;
     cursor: pointer;
     transition: background 0.12s, color 0.12s;
@@ -6750,11 +6923,11 @@ details[open] > .maint-issue-toggle::before {
     white-space: nowrap;
 }
 .play-profile-option:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--tint) 6%, transparent);
     color: var(--text-primary);
 }
 .play-profile-option.default {
-    color: var(--accent-warm);
+    color: var(--accent);
 }
 .play-profile-option.default:hover {
     color: var(--text-primary);
@@ -6774,9 +6947,9 @@ details[open] > .maint-issue-toggle::before {
     opacity: 1;
 }
 .play-profile-option.play-profile-focus {
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--tint) 6%, transparent);
     color: var(--text-primary);
-    box-shadow: inset 0 0 0 1px rgba(232, 168, 73, 0.5);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 .play-profile-option.play-profile-focus .play-profile-icon {
     opacity: 1;
@@ -6872,7 +7045,7 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .quality-title {
-    font-family: 'Instrument Serif', serif;
+    font-family: var(--font-display);
     font-size: 1.8rem;
     display: flex;
     align-items: center;
@@ -6881,7 +7054,7 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .quality-title svg {
-    color: var(--accent-amber);
+    color: var(--accent);
 }
 
 .quality-subtitle {
@@ -6900,7 +7073,7 @@ details[open] > .maint-issue-toggle::before {
 .quality-filter-btn {
     padding: 0.4rem 1rem;
     border-radius: 6px;
-    border: 1px solid #374151;
+    border: 1px solid var(--border);
     background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
@@ -6914,9 +7087,9 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .quality-filter-btn.active {
-    background: var(--accent-amber);
-    border-color: var(--accent-amber);
-    color: #1a1a2e;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
     font-weight: 500;
 }
 
@@ -6924,15 +7097,15 @@ details[open] > .maint-issue-toggle::before {
 .quality-progress {
     margin-bottom: 1.5rem;
     padding: 1rem;
-    background: #1e1e32;
-    border: 1px solid #2a2a40;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 8px;
 }
 
 .quality-progress-bar-container {
     width: 100%;
     height: 6px;
-    background: #374151;
+    background: var(--border);
     border-radius: 3px;
     overflow: hidden;
     margin-bottom: 0.5rem;
@@ -6940,7 +7113,7 @@ details[open] > .maint-issue-toggle::before {
 
 .quality-progress-bar {
     height: 100%;
-    background: linear-gradient(90deg, var(--accent-amber), #f97316);
+    background: linear-gradient(90deg, var(--accent), #f97316);
     border-radius: 3px;
     transition: width 0.3s ease;
 }
@@ -6955,7 +7128,7 @@ details[open] > .maint-issue-toggle::before {
 
 #quality-progress-pct {
     font-weight: 600;
-    color: var(--accent-amber);
+    color: var(--accent);
 }
 
 /* Résumé */
@@ -6965,14 +7138,14 @@ details[open] > .maint-issue-toggle::before {
     gap: 1rem;
     margin-bottom: 1.5rem;
     padding: 0.8rem 1rem;
-    background: rgba(245, 158, 11, 0.08);
-    border: 1px solid rgba(245, 158, 11, 0.2);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
     border-radius: 8px;
 }
 
 .quality-count {
     font-weight: 600;
-    color: var(--accent-amber);
+    color: var(--accent);
     font-size: 1rem;
 }
 
@@ -6991,15 +7164,15 @@ details[open] > .maint-issue-toggle::before {
 .quality-card {
     display: flex;
     gap: 1rem;
-    background: #1e1e32;
-    border: 1px solid #2a2a40;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 10px;
     overflow: hidden;
     transition: border-color 0.15s ease;
 }
 
 .quality-card:hover {
-    border-color: #f59e0b40;
+    border-color: color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 /* Poster */
@@ -7022,7 +7195,7 @@ details[open] > .maint-issue-toggle::before {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #16162a;
+    background: var(--bg-surface);
     color: var(--text-muted);
 }
 
@@ -7049,22 +7222,22 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .quality-score.score-medium {
-    background: rgba(245, 158, 11, 0.15);
+    background: color-mix(in srgb, var(--accent-amber) 15%, transparent);
     color: var(--accent-amber);
 }
 
 .quality-score.score-low {
-    background: rgba(239, 68, 68, 0.15);
+    background: color-mix(in srgb, var(--accent-rose) 15%, transparent);
     color: var(--accent-rose);
 }
 
 .quality-score.score-critical {
-    background: rgba(239, 68, 68, 0.25);
-    color: #fca5a5;
+    background: color-mix(in srgb, var(--accent-rose) 25%, transparent);
+    color: var(--accent-rose);
 }
 
 .quality-card-title {
-    font-family: 'Instrument Serif', serif;
+    font-family: var(--font-display);
     font-size: 1.1rem;
     color: var(--text-primary);
     margin: 0;
@@ -7078,7 +7251,7 @@ details[open] > .maint-issue-toggle::before {
 .quality-card-parsed {
     font-size: 0.8rem;
     color: var(--text-secondary);
-    background: rgba(99, 102, 241, 0.08);
+    background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
     padding: 0.3rem 0.5rem;
     border-radius: 4px;
     display: inline-flex;
@@ -7092,7 +7265,7 @@ details[open] > .maint-issue-toggle::before {
 
 .quality-parsed-value {
     color: var(--accent-blue);
-    font-family: 'DM Sans', monospace;
+    font-family: var(--font-body);
 }
 
 /* Raisons */
@@ -7129,8 +7302,8 @@ details[open] > .maint-issue-toggle::before {
     padding: 0.3rem 0.7rem;
     font-size: 0.8rem;
     color: var(--accent-blue);
-    background: rgba(96, 165, 250, 0.08);
-    border: 1px solid rgba(96, 165, 250, 0.2);
+    background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-blue) 20%, transparent);
     border-radius: 6px;
     text-decoration: none;
     transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
@@ -7138,8 +7311,8 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .quality-card-action:hover {
-    background: rgba(96, 165, 250, 0.15);
-    border-color: rgba(96, 165, 250, 0.4);
+    background: color-mix(in srgb, var(--accent-blue) 15%, transparent);
+    border-color: color-mix(in srgb, var(--accent-blue) 40%, transparent);
 }
 
 .quality-card-actions {
@@ -7160,8 +7333,8 @@ details[open] > .maint-issue-toggle::before {
     padding: 0.3rem 0.7rem;
     font-size: 0.8rem;
     color: var(--accent-emerald);
-    background: rgba(52, 211, 153, 0.08);
-    border: 1px solid rgba(52, 211, 153, 0.2);
+    background: color-mix(in srgb, var(--accent-emerald) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 20%, transparent);
     border-radius: 6px;
     cursor: pointer;
     text-decoration: none;
@@ -7169,8 +7342,8 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .quality-card-confirm:hover {
-    background: rgba(52, 211, 153, 0.15);
-    border-color: rgba(52, 211, 153, 0.4);
+    background: color-mix(in srgb, var(--accent-emerald) 15%, transparent);
+    border-color: color-mix(in srgb, var(--accent-emerald) 40%, transparent);
 }
 
 .confirm-overlay {
@@ -7184,8 +7357,8 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .confirm-dialog {
-    background: #1e1e2e;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-card);
+    border: 1px solid color-mix(in srgb, var(--tint) 10%, transparent);
     border-radius: 12px;
     padding: 1.5rem 2rem;
     max-width: 400px;
@@ -7223,22 +7396,22 @@ details[open] > .maint-issue-toggle::before {
 
 .confirm-btn-cancel {
     color: var(--text-secondary);
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.1);
+    background: color-mix(in srgb, var(--tint) 5%, transparent);
+    border-color: color-mix(in srgb, var(--tint) 10%, transparent);
 }
 
 .confirm-btn-cancel:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: color-mix(in srgb, var(--tint) 10%, transparent);
 }
 
 .confirm-btn-ok {
     color: #fff;
-    background: rgba(34, 197, 94, 0.2);
-    border-color: rgba(34, 197, 94, 0.4);
+    background: color-mix(in srgb, var(--accent-emerald) 20%, transparent);
+    border-color: color-mix(in srgb, var(--accent-emerald) 40%, transparent);
 }
 
 .confirm-btn-ok:hover {
-    background: rgba(34, 197, 94, 0.35);
+    background: color-mix(in srgb, var(--accent-emerald) 35%, transparent);
 }
 
 .quality-rescan-btn {
@@ -7249,15 +7422,15 @@ details[open] > .maint-issue-toggle::before {
     padding: 0.3rem 0.8rem;
     font-size: 0.8rem;
     color: var(--text-secondary);
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: color-mix(in srgb, var(--tint) 5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--tint) 10%, transparent);
     border-radius: 6px;
     cursor: pointer;
     transition: background 0.15s, color 0.15s;
 }
 
 .quality-rescan-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: color-mix(in srgb, var(--tint) 10%, transparent);
     color: var(--text-primary);
 }
 
@@ -7268,8 +7441,8 @@ details[open] > .maint-issue-toggle::before {
     padding: 0.3rem 0.7rem;
     font-size: 0.8rem;
     color: var(--accent-emerald);
-    background: rgba(34, 197, 94, 0.1);
-    border: 1px solid rgba(34, 197, 94, 0.3);
+    background: color-mix(in srgb, var(--accent-emerald) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 30%, transparent);
     border-radius: 6px;
     font-weight: 500;
 }
@@ -7287,7 +7460,7 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .quality-empty h3 {
-    font-family: 'Instrument Serif', serif;
+    font-family: var(--font-display);
     color: var(--text-primary);
     font-size: 1.3rem;
     margin-bottom: 0.5rem;
@@ -7520,7 +7693,7 @@ details[open] > .maint-issue-toggle::before {
     right: 0;
     width: 40%;
     height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15));
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tint) 15%, transparent));
     border-radius: 0 4px 4px 0;
 }
 
@@ -7641,14 +7814,14 @@ details[open] > .maint-issue-toggle::before {
 .qdash-suspect-cell {
     text-align: center;
     padding: 0.6rem 0.25rem;
-    background: rgba(255, 255, 255, 0.02);
+    background: color-mix(in srgb, var(--tint) 2%, transparent);
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-subtle);
 }
 
 .qdash-suspect-total {
-    border-color: rgba(232, 93, 117, 0.2);
-    background: rgba(232, 93, 117, 0.04);
+    border-color: color-mix(in srgb, var(--accent-rose) 20%, transparent);
+    background: color-mix(in srgb, var(--accent-rose) 4%, transparent);
 }
 
 .qdash-suspect-num {
@@ -7676,7 +7849,7 @@ details[open] > .maint-issue-toggle::before {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    color: var(--accent-amber);
+    color: var(--accent);
     text-decoration: none;
     font-size: 0.84rem;
     font-weight: 500;
@@ -7917,14 +8090,14 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .lib-filter-checkbox:hover {
-    border-color: var(--accent-amber);
+    border-color: var(--accent);
     color: var(--text-primary);
 }
 
 .lib-filter-checkbox:has(input:checked) {
-    border-color: var(--accent-amber);
-    color: var(--accent-amber);
-    background: var(--accent-amber-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-dim);
 }
 
 .lib-filter-checkbox input[type="checkbox"] {
@@ -7942,8 +8115,8 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .lib-filter-checkbox input[type="checkbox"]:checked {
-    background: var(--accent-amber);
-    border-color: var(--accent-amber);
+    background: var(--accent);
+    border-color: var(--accent);
 }
 
 .lib-filter-checkbox input[type="checkbox"]:checked::after {
@@ -7981,7 +8154,7 @@ details[open] > .maint-issue-toggle::before {
 /* ── Bouton suppression discret (rouge sombre) ── */
 
 .delete-mode-btn-subtle {
-    border-color: rgba(232, 93, 117, 0.55);
+    border-color: color-mix(in srgb, var(--accent-rose) 55%, transparent);
     color: var(--accent-rose);
     font-size: 0.75rem;
     padding: 0.3rem 0.55rem;
@@ -8249,13 +8422,13 @@ details[open] > .maint-issue-toggle::before {
     padding: 0.75rem 1.25rem;
     font-size: 0.875rem;
     font-weight: 500;
-    border: 1px solid var(--accent-warm);
-    color: var(--accent-warm);
+    border: 1px solid var(--accent);
+    color: var(--accent);
     background: transparent;
 }
 .suggest-play-btn:hover {
-    background: var(--accent-warm);
-    color: var(--bg-primary);
+    background: var(--accent);
+    color: var(--on-accent);
 }
 .suggest-actions .play-launched {
     font-size: 0.875rem;
@@ -8264,7 +8437,7 @@ details[open] > .maint-issue-toggle::before {
 .suggest-actions .play-error {
     font-size: 0.8rem;
     padding: 0.75rem 1.25rem;
-    color: var(--accent-warm);
+    color: var(--accent);
 }
 .suggest-actions .reassociate-empty {
     font-size: 0.8rem;
@@ -8384,7 +8557,7 @@ details[open] > .maint-issue-toggle::before {
 .delete-mode-btn.active {
     background: var(--accent-rose-dim);
     color: var(--accent-rose);
-    border-color: rgba(232, 93, 117, 0.3);
+    border-color: color-mix(in srgb, var(--accent-rose) 30%, transparent);
 }
 
 /* ── Checkboxes sur les jaquettes ── */
@@ -8414,7 +8587,7 @@ details[open] > .maint-issue-toggle::before {
     width: 26px;
     height: 26px;
     border-radius: 50%;
-    border: 2px solid rgba(255, 255, 255, 0.5);
+    border: 2px solid color-mix(in srgb, var(--tint) 50%, transparent);
     background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(4px);
     transition: background 0.15s, border-color 0.15s, transform 0.15s;
@@ -8511,12 +8684,12 @@ details[open] > .maint-issue-toggle::before {
 .delete-bar-btn-danger {
     background: var(--accent-rose-dim);
     color: var(--accent-rose);
-    border: 1px solid rgba(232, 93, 117, 0.3);
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 30%, transparent);
 }
 
 .delete-bar-btn-danger:hover {
-    background: rgba(232, 93, 117, 0.25);
-    border-color: rgba(232, 93, 117, 0.5);
+    background: color-mix(in srgb, var(--accent-rose) 25%, transparent);
+    border-color: color-mix(in srgb, var(--accent-rose) 50%, transparent);
 }
 
 .delete-bar-btn-cancel {
@@ -8592,9 +8765,9 @@ details[open] > .maint-issue-toggle::before {
     color: var(--text-muted);
     line-height: 1.5;
     padding: 0.6rem 0.8rem;
-    background: rgba(232, 93, 117, 0.06);
+    background: color-mix(in srgb, var(--accent-rose) 6%, transparent);
     border-radius: var(--radius-sm);
-    border: 1px solid rgba(232, 93, 117, 0.3);
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 30%, transparent);
     margin-bottom: 1.5rem;
 }
 
@@ -8606,12 +8779,12 @@ details[open] > .maint-issue-toggle::before {
 
 /* --- Fusion de séries --- */
 .merge-bar-btn {
-    background: var(--accent-emerald-dim, rgba(52, 211, 153, 0.12));
+    background: var(--accent-emerald-dim, color-mix(in srgb, var(--accent-emerald) 12%, transparent));
     color: var(--accent-emerald, var(--accent-emerald));
-    border: 1px solid rgba(52, 211, 153, 0.3);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 30%, transparent);
     appearance: none;
 }
-.merge-bar-btn:hover { background: rgba(52, 211, 153, 0.22); }
+.merge-bar-btn:hover { background: color-mix(in srgb, var(--accent-emerald) 22%, transparent); }
 
 .merge-overlay {
     display: none; position: fixed; inset: 0; z-index: 1000;
@@ -8639,7 +8812,7 @@ details[open] > .maint-issue-toggle::before {
 .merge-warning { color: var(--accent-rose, #e85d75); margin-top: 0.4rem; }
 .merge-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
 .merge-cancel { padding: 0.55rem 1.1rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--text-secondary); cursor: pointer; }
-.merge-apply { padding: 0.55rem 1.1rem; border: 1px solid rgba(52, 211, 153, 0.3); border-radius: var(--radius-sm); background: var(--accent-emerald-dim, rgba(52, 211, 153, 0.12)); color: var(--accent-emerald, var(--accent-emerald)); font-weight: 600; cursor: pointer; }
+.merge-apply { padding: 0.55rem 1.1rem; border: 1px solid color-mix(in srgb, var(--accent-emerald) 30%, transparent); border-radius: var(--radius-sm); background: var(--accent-emerald-dim, color-mix(in srgb, var(--accent-emerald) 12%, transparent)); color: var(--accent-emerald, var(--accent-emerald)); font-weight: 600; cursor: pointer; }
 .merge-apply:disabled, .merge-cancel:disabled { opacity: 0.6; cursor: not-allowed; }
 .merge-apply.is-loading { display: inline-flex; align-items: center; gap: 0.45rem; }
 .merge-spinner {
@@ -8683,7 +8856,7 @@ details[open] > .maint-issue-toggle::before {
     align-items: center;
     gap: 0.4rem;
     padding: 0.55rem 1.1rem;
-    border: 1px solid rgba(232, 93, 117, 0.3);
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 30%, transparent);
     border-radius: var(--radius-sm);
     background: var(--accent-rose-dim);
     color: var(--accent-rose);
@@ -8695,8 +8868,8 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .trash-empty-btn:hover {
-    background: rgba(232, 93, 117, 0.2);
-    border-color: rgba(232, 93, 117, 0.5);
+    background: color-mix(in srgb, var(--accent-rose) 20%, transparent);
+    border-color: color-mix(in srgb, var(--accent-rose) 50%, transparent);
 }
 
 .trash-list {
@@ -8781,12 +8954,12 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .trash-item-type.type-movie {
-    background: rgba(91, 141, 239, 0.12);
+    background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
     color: var(--accent-blue);
 }
 
 .trash-item-type.type-series {
-    background: rgba(78, 203, 141, 0.12);
+    background: color-mix(in srgb, var(--accent-emerald) 12%, transparent);
     color: var(--accent-emerald);
 }
 
@@ -8815,7 +8988,7 @@ details[open] > .maint-issue-toggle::before {
 .trash-restore-btn:hover {
     background: var(--accent-emerald-dim);
     color: var(--accent-emerald);
-    border-color: rgba(78, 203, 141, 0.3);
+    border-color: color-mix(in srgb, var(--accent-emerald) 30%, transparent);
 }
 
 .trash-empty-state {
@@ -8950,7 +9123,7 @@ details[open] > .maint-issue-toggle::before {
     border-radius: 100px;
     font-size: 0.6875rem;
     font-weight: 600;
-    background: rgba(91, 141, 239, 0.85);
+    background: color-mix(in srgb, var(--accent-blue) 85%, transparent);
     color: var(--on-accent);
     backdrop-filter: blur(4px);
 }
@@ -9227,7 +9400,7 @@ details[open] > .maint-issue-toggle::before {
     font-family: var(--font-body);
     font-weight: 500;
     color: var(--text-muted);
-    background: rgba(92, 90, 110, 0.1);
+    background: color-mix(in srgb, var(--text-muted) 10%, transparent);
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
     cursor: pointer;
@@ -9236,7 +9409,7 @@ details[open] > .maint-issue-toggle::before {
 
 .dup-btn-ignore:hover {
     color: var(--text-secondary);
-    background: rgba(92, 90, 110, 0.2);
+    background: color-mix(in srgb, var(--text-muted) 20%, transparent);
     border-color: var(--border);
 }
 
@@ -9274,7 +9447,7 @@ details[open] > .maint-issue-toggle::before {
 .dup-btn-play:hover {
     color: var(--accent-blue);
     background: var(--accent-blue-dim);
-    border-color: rgba(91, 141, 239, 0.2);
+    border-color: color-mix(in srgb, var(--accent-blue) 20%, transparent);
 }
 
 .dup-btn-reassoc {
@@ -9294,7 +9467,7 @@ details[open] > .maint-issue-toggle::before {
 .dup-btn-reassoc:hover {
     color: var(--accent-amber);
     background: var(--accent-amber-dim);
-    border-color: rgba(232, 168, 73, 0.2);
+    border-color: color-mix(in srgb, var(--accent-amber) 20%, transparent);
 }
 
 .dup-btn-trash {
@@ -9314,7 +9487,7 @@ details[open] > .maint-issue-toggle::before {
 .dup-btn-trash:hover {
     color: var(--accent-rose);
     background: var(--accent-rose-dim);
-    border-color: rgba(232, 93, 117, 0.2);
+    border-color: color-mix(in srgb, var(--accent-rose) 20%, transparent);
 }
 
 /* ── Delete confirmation overlay ── */
@@ -9512,11 +9685,11 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .dup-row-best {
-    background: rgba(78, 203, 141, 0.04);
+    background: color-mix(in srgb, var(--accent-emerald) 4%, transparent);
 }
 
 .dup-row-best:hover {
-    background: rgba(78, 203, 141, 0.08) !important;
+    background: color-mix(in srgb, var(--accent-emerald) 8%, transparent) !important;
 }
 
 /* ── Empty state ── */
@@ -9635,7 +9808,7 @@ details[open] > .maint-issue-toggle::before {
 .dup-btn-remove:hover {
     color: var(--accent-rose);
     background: var(--accent-rose-dim);
-    border-color: rgba(232, 93, 117, 0.2);
+    border-color: color-mix(in srgb, var(--accent-rose) 20%, transparent);
 }
 
 /* ── Doublons responsive ── */
@@ -9707,12 +9880,12 @@ details[open] > .maint-issue-toggle::before {
     background: var(--accent-rose-dim);
 }
 .input-clear-btn:active {
-    background: rgba(232, 93, 117, 0.22);
+    background: color-mix(in srgb, var(--accent-rose) 22%, transparent);
 }
 .input-clear-btn:focus-visible {
-    outline: 2px solid var(--accent-amber);
+    outline: 2px solid var(--accent);
     outline-offset: 1px;
-    color: var(--accent-amber);
+    color: var(--accent);
 }
 
 /* Quand le parent est déjà positionné (ex .lib-search-wrap) : pas de
@@ -9755,8 +9928,8 @@ details[open] > .maint-issue-toggle::before {
     font-size: 0.9rem;
     font-weight: 600;
     letter-spacing: 0.01em;
-    color: var(--bg-deep);
-    background: var(--accent-emerald);
+    color: var(--on-accent);
+    background: var(--accent);
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
     transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
@@ -9768,9 +9941,9 @@ details[open] > .maint-issue-toggle::before {
 }
 
 .lib-detail-poster-actions .play-btn:hover {
-    color: var(--bg-deep);
-    background: var(--accent-emerald);
-    box-shadow: 0 6px 20px rgba(78, 203, 141, 0.3);
+    color: var(--on-accent);
+    background: var(--accent);
+    box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 /* Bouton scindé dans la fiche détaillée : corps extensible + chevron compact */
@@ -9854,7 +10027,7 @@ details[open] > .maint-issue-toggle::before {
     gap: 0.3rem;
     padding: 0.25rem 0.6rem;
     font-size: 0.7rem;
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     color: var(--text-secondary);
     background: transparent;
     border: 1px solid var(--border-subtle);
@@ -9863,9 +10036,9 @@ details[open] > .maint-issue-toggle::before {
     transition: color 0.2s, border-color 0.2s, background 0.2s;
 }
 .edit-metadata-btn:hover {
-    color: var(--accent-amber);
-    border-color: var(--accent-amber);
-    background: var(--accent-amber-dim);
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-dim);
 }
 
 /* Bouton « Supprimer la fiche » (fiche fantôme) en accent danger rouge */
@@ -9875,7 +10048,7 @@ details[open] > .maint-issue-toggle::before {
     gap: 0.3rem;
     padding: 0.25rem 0.6rem;
     font-size: 0.7rem;
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     color: var(--text-secondary);
     background: transparent;
     border: 1px solid var(--border-subtle);
@@ -9886,7 +10059,7 @@ details[open] > .maint-issue-toggle::before {
 .phantom-delete-btn:hover {
     color: var(--accent-rose);
     border-color: var(--accent-rose);
-    background: rgba(248, 113, 113, 0.1);
+    background: color-mix(in srgb, var(--accent-rose) 10%, transparent);
 }
 
 /* Badge discret "✎ modifié" sur le poster ou inline */
@@ -9900,7 +10073,7 @@ details[open] > .maint-issue-toggle::before {
     padding: 0.15rem 0.45rem;
     color: var(--accent-amber);
     background: var(--accent-amber-dim);
-    border: 1px solid rgba(232, 168, 73, 0.28);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 28%, transparent);
     border-radius: 999px;
     line-height: 1;
 }
@@ -9910,7 +10083,7 @@ details[open] > .maint-issue-toggle::before {
     left: 0.6rem;
     z-index: 2;
     backdrop-filter: blur(8px);
-    background: rgba(232, 168, 73, 0.18);
+    background: color-mix(in srgb, var(--accent-amber) 18%, transparent);
 }
 .override-badge-inline {
     margin-left: 0.15rem;
@@ -10024,7 +10197,7 @@ details[open] > .maint-issue-toggle::before {
 .edit-section-title {
     font-family: var(--font-display);
     font-size: 1rem;
-    color: var(--accent-amber);
+    color: var(--accent);
     letter-spacing: 0.01em;
     padding-bottom: 0.35rem;
     border-bottom: 1px solid var(--border-subtle);
@@ -10084,7 +10257,7 @@ details[open] > .maint-issue-toggle::before {
     color: var(--text-primary);
 }
 .edit-radio-option input[type="radio"] {
-    accent-color: var(--accent-amber);
+    accent-color: var(--accent);
 }
 .edit-radio-danger {
     color: var(--text-muted);
@@ -10116,7 +10289,7 @@ details[open] > .maint-issue-toggle::before {
 }
 .edit-poster-input input[type="url"]:focus {
     outline: none;
-    border-color: var(--accent-amber);
+    border-color: var(--accent);
 }
 
 /* Input file cache : on expose un label stylé en bouton (charte) */
@@ -10150,12 +10323,12 @@ details[open] > .maint-issue-toggle::before {
     white-space: nowrap;
 }
 .edit-file-button:hover {
-    color: var(--accent-amber);
-    border-color: var(--accent-amber);
-    background: var(--accent-amber-dim);
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-dim);
 }
 .edit-file-hidden:focus-visible + .edit-file-button {
-    outline: 2px solid var(--accent-amber);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
 
@@ -10183,7 +10356,7 @@ details[open] > .maint-issue-toggle::before {
 }
 .edit-textarea:focus {
     outline: none;
-    border-color: var(--accent-amber);
+    border-color: var(--accent);
     background: var(--bg-surface);
 }
 
@@ -10218,7 +10391,7 @@ details[open] > .maint-issue-toggle::before {
 }
 .edit-cast-row input:focus {
     outline: none;
-    border-color: var(--accent-amber);
+    border-color: var(--accent);
 }
 
 .edit-cast-remove {
@@ -10269,7 +10442,7 @@ details[open] > .maint-issue-toggle::before {
     font-size: 0.72rem;
     color: var(--accent-amber);
     background: var(--accent-amber-dim);
-    border: 1px solid rgba(232, 168, 73, 0.3);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 30%, transparent);
     border-radius: var(--radius-sm);
     line-height: 1.4;
 }
@@ -10322,7 +10495,7 @@ details[open] > .maint-issue-toggle::before {
     padding: 0.7rem 0.9rem;
     background: var(--accent-rose-dim);
     color: var(--accent-rose);
-    border: 1px solid rgba(232, 93, 117, 0.3);
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 30%, transparent);
     border-radius: var(--radius-sm);
     font-size: 0.8rem;
 }
@@ -10330,7 +10503,7 @@ details[open] > .maint-issue-toggle::before {
     padding: 0.7rem 0.9rem;
     background: var(--accent-emerald-dim);
     color: var(--accent-emerald);
-    border: 1px solid rgba(78, 203, 141, 0.25);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 25%, transparent);
     border-radius: var(--radius-sm);
     font-size: 0.8rem;
 }
@@ -10373,7 +10546,7 @@ details[open] > .maint-issue-toggle::before {
     letter-spacing: 0.04em;
     color: var(--accent-amber);
     background: var(--accent-amber-dim);
-    border: 1px solid rgba(232, 168, 73, 0.25);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 25%, transparent);
 }
 
 .lib-card-incomplete {
@@ -10391,7 +10564,7 @@ details[open] > .maint-issue-toggle::before {
     margin: 1.5rem 0 0;
     padding: 1rem 1.1rem;
     background: var(--accent-amber-dim);
-    border: 1px solid rgba(232, 168, 73, 0.25);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 25%, transparent);
     border-radius: var(--radius-lg);
 }
 
@@ -10430,14 +10603,14 @@ details[open] > .maint-issue-toggle::before {
     font-weight: 600;
     color: var(--accent-amber);
     background: var(--accent-amber-dim);
-    border: 1px solid rgba(232, 168, 73, 0.25);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 25%, transparent);
     border-radius: 100px;
     cursor: pointer;
     transition: background 0.15s ease, color 0.15s ease;
 }
 
 .completeness-recheck-btn:hover {
-    background: rgba(232, 168, 73, 0.2);
+    background: color-mix(in srgb, var(--accent-amber) 20%, transparent);
 }
 
 .completeness-recheck-btn[disabled] {
@@ -10479,7 +10652,7 @@ details[open] > .maint-issue-toggle::before {
     letter-spacing: 0.02em;
     color: var(--accent-amber);
     background: var(--accent-amber-dim);
-    border: 1px solid rgba(232, 168, 73, 0.18);
+    border: 1px solid color-mix(in srgb, var(--accent-amber) 18%, transparent);
     border-radius: var(--radius-sm);
     padding: 0.1rem 0.4rem;
 }
@@ -10519,7 +10692,7 @@ details[open] > .maint-issue-toggle::before {
 .completeness-targets {
     margin: 0.9rem 0 0;
     padding: 0.6rem 0.75rem;
-    background: var(--bg-elevated, rgba(255, 255, 255, 0.02));
+    background: var(--bg-elevated, color-mix(in srgb, var(--tint) 2%, transparent));
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
 }
@@ -10584,7 +10757,7 @@ details[open] > .maint-issue-toggle::before {
 
 .completeness-copy-btn:hover {
     color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.04);
+    background: color-mix(in srgb, var(--tint) 4%, transparent);
 }
 
 /* Carte de résultat (page Maintenance) : surface de carte de la charte. */
@@ -10592,7 +10765,7 @@ details[open] > .maint-issue-toggle::before {
     margin-top: 1rem;
     padding: 1rem 1.1rem;
     background: var(--bg-surface);
-    border: 1px solid rgba(232, 168, 73, 0.3);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
     border-radius: var(--radius-md);
     color: var(--text-secondary);
 }
@@ -10636,11 +10809,11 @@ details[open] > .maint-issue-toggle::before {
 @keyframes share-working {
     0%, 100% {
         border-color: var(--accent-blue);
-        box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.45);
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-blue) 45%, transparent);
     }
     50% {
         border-color: #7dd3fc;
-        box-shadow: 0 0 9px 2px rgba(14, 165, 233, 0.85);
+        box-shadow: 0 0 9px 2px color-mix(in srgb, var(--accent-blue) 85%, transparent);
     }
 }
 
@@ -10705,8 +10878,8 @@ details[open] > .maint-issue-toggle::before {
     }
 
     .lib-filters.filters-open .lib-filters-mobile-toggle {
-        color: var(--accent-amber);
-        border-color: var(--accent-amber);
+        color: var(--accent);
+        border-color: var(--accent);
     }
 
     .lib-filters:not(.filters-open) .lib-filters-main > select,
