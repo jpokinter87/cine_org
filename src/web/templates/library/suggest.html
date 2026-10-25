@@ -68,13 +68,10 @@
         </div>
 
         <div class="suggest-info">
-            <div class="suggest-type-badge suggest-type-{{ result.type }}">
-                {{ "Film" if result.type == "movie" else "Série" }}
-            </div>
-
             <h2 class="suggest-result-title">{{ result.title }}</h2>
 
             <div class="suggest-meta-row">
+                <span class="suggest-type-badge suggest-type-{{ result.type }}">{{ "Film" if result.type == "movie" else "Série" }}</span>
                 {% if result.year %}
                 <span class="suggest-meta-item">{{ result.year }}</span>
                 {% endif %}

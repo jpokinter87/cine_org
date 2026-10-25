@@ -51,6 +51,7 @@ Application de gestion de vidéothèque personnelle. Scanne les téléchargement
   - [Correction des associations TMDB](#correction-des-associations-tmdb)
   - [Lecteur vidéo intégré](#lecteur-vidéo-intégré)
   - [Utilisation sur téléphone](#utilisation-sur-téléphone)
+  - [Accessibilité](#accessibilité)
   - [Traitement et validation](#traitement-et-validation)
   - [Transfert](#transfert)
   - [Qualité et doublons](#qualité-et-doublons)
@@ -1756,6 +1757,23 @@ en plein écran que si l'adresse est considérée comme sûre :
 3. Ouvrir la bibliothèque, menu ⋮ → **Ajouter à l'écran d'accueil** → **Installer**.
 
 Sans ce réglage, l'icône fonctionne aussi mais ouvre un onglet Chrome classique.
+
+### Accessibilité
+
+L'interface vise le niveau WCAG AA :
+
+- **Contraste** : tout texte, y compris secondaire et placeholders, atteint au moins 4,5:1 ;
+  les badges posés sur les jaquettes ont un fond sombre stable et aucun texte fonctionnel
+  ne descend sous 11 px.
+- **Clavier** : tout s'utilise sans souris. Les sections repliables de la configuration,
+  les groupes de l'arbre de transfert, les jaquettes agrandissables et les infobulles de
+  résultats s'activent avec **Entrée** ou **Espace** ; l'anneau de focus est ambre.
+- **Fenêtres de confirmation** : à l'ouverture, le focus entre dans la fenêtre et y reste
+  (**Tab** boucle sur ses boutons) ; **Échap** la ferme et le focus revient à l'élément
+  d'origine (`src/web/static/js/a11y.js`).
+- **Mouvement réduit** : si le système demande de réduire les animations, les apparitions
+  deviennent de simples fondus courts, sans déplacement, zoom ni reflet en boucle ; les
+  indicateurs de travail en cours sont conservés.
 
 ### Traitement et validation
 
