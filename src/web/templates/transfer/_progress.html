@@ -106,7 +106,7 @@
 
             // Score existant
             let existingPct = Math.round(d.quality_existing);
-            let existingColor = existingPct >= 70 ? '#4caf50' : existingPct >= 40 ? '#ff9800' : '#f44336';
+            let existingColor = existingPct >= 70 ? 'var(--accent-emerald)' : existingPct >= 40 ? 'var(--accent-amber)' : 'var(--accent-rose)';
             html += '<div class="conflict-quality-col' + (recommended === 'old' ? ' conflict-recommended' : '') + '">';
             if (recommended === 'old') html += '<span class="conflict-badge-recommended">Recommandé</span>';
             html += '<div class="conflict-quality-label">Existant</div>';
@@ -116,7 +116,7 @@
 
             // Score nouveau
             let newPct = Math.round(d.quality_new);
-            let newColor = newPct >= 70 ? '#4caf50' : newPct >= 40 ? '#ff9800' : '#f44336';
+            let newColor = newPct >= 70 ? 'var(--accent-emerald)' : newPct >= 40 ? 'var(--accent-amber)' : 'var(--accent-rose)';
             html += '<div class="conflict-quality-col' + (recommended === 'new' ? ' conflict-recommended' : '') + '">';
             if (recommended === 'new') html += '<span class="conflict-badge-recommended">Recommandé</span>';
             html += '<div class="conflict-quality-label">Nouveau</div>';
@@ -198,13 +198,13 @@
         html += '<h2 class="results-title">' + (isDryRun ? 'Résultats de la simulation' : 'Résultats du transfert') + '</h2>';
         html += '<div class="results-grid">';
 
-        html += '<div class="result-item result-success result-has-tooltip" onclick="toggleResultTooltip(this)">' +
+        html += '<div class="result-item result-success result-has-tooltip" role="button" tabindex="0" onclick="toggleResultTooltip(this)">' +
             '<span class="result-value">' + d.transferred + '</span>' +
             '<span class="result-label">Transféré(s)</span>' +
             tooltipHtml(d.transferred_files) + '</div>';
 
         if (d.duplicates_ignored > 0) {
-            html += '<div class="result-item result-muted result-has-tooltip" onclick="toggleResultTooltip(this)">' +
+            html += '<div class="result-item result-muted result-has-tooltip" role="button" tabindex="0" onclick="toggleResultTooltip(this)">' +
                 '<span class="result-value">' + d.duplicates_ignored + '</span>' +
                 '<span class="result-label">Doublon(s) ignoré(s)</span>' +
                 tooltipHtml(d.duplicate_files) + '</div>';
@@ -217,7 +217,7 @@
         }
 
         if (d.errors > 0) {
-            html += '<div class="result-item result-pending result-has-tooltip" onclick="toggleResultTooltip(this)">' +
+            html += '<div class="result-item result-pending result-has-tooltip" role="button" tabindex="0" onclick="toggleResultTooltip(this)">' +
                 '<span class="result-value">' + d.errors + '</span>' +
                 '<span class="result-label">Erreur(s)</span>' +
                 tooltipHtml(d.error_files) + '</div>';

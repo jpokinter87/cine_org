@@ -200,7 +200,7 @@
     <div class="lib-active-filters">
         {% if current_type != 'all' %}
         <span class="lib-filter-tag">
-            {{ 'Film' if current_type == 'movie' else 'Serie' }}
+            {{ 'Film' if current_type == 'movie' else 'Série' }}
             <a href="/library/?type=all&genre={{ current_genre or '' }}&year={{ current_year or '' }}&q={{ current_q }}&person={{ current_person }}&person_role={{ current_person_role }}&resolution={{ current_resolution }}&codec_video={{ current_codec_video }}&codec_audio={{ current_codec_audio }}&search_mode={{ current_search_mode }}&sort={{ current_sort }}&order={{ current_order }}"
                class="lib-filter-tag-remove">&times;</a>
         </span>

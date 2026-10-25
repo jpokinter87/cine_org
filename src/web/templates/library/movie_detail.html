@@ -23,7 +23,7 @@
 
     <div class="lib-detail-header">
         <div class="lib-detail-aside">
-            <div class="lib-detail-poster poster-zoomable" {% if effective_poster %}onclick="openPosterLightbox('{{ effective_poster_large or effective_poster }}')"{% endif %}>
+            <div class="lib-detail-poster poster-zoomable" {% if effective_poster %}role="button" tabindex="0" aria-label="Agrandir l'affiche" onclick="openPosterLightbox('{{ effective_poster_large or effective_poster }}')"{% endif %}>
                 {% if effective_poster %}
                 <img src="{{ effective_poster_large or effective_poster }}" alt="{{ movie.title }}">
                 <div class="poster-zoom-hint">
@@ -152,12 +152,12 @@
 
             {% if effective_overview %}
             <div class="lib-detail-synopsis">
-                <h3 class="lib-detail-section-title">
+                <h2 class="lib-detail-section-title">
                     Synopsis
                     {% if movie.overview_override %}
                     <span class="override-badge override-badge-mini" title="Synopsis modifié manuellement">✎</span>
                     {% endif %}
-                </h3>
+                </h2>
                 <p>{{ effective_overview }}</p>
             </div>
             {% endif %}
@@ -233,7 +233,7 @@
 
             {% if parts %}
             <div class="lib-detail-parts">
-                <h3 class="lib-detail-section-title">Parties</h3>
+                <h2 class="lib-detail-section-title">Parties</h2>
                 <div class="lib-episode-list">
                     {% if movie.file_path %}
                     <div class="lib-episode-row{% if movie.file_path %} lib-episode-playable{% endif %}">
