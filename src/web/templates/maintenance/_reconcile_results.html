@@ -29,7 +29,7 @@
             <ul class="maint-issue-list maint-issue-list-full">
                 {% for item in details %}
                 <li class="maint-issue-item">
-                    <span class="maint-cat-badge {% if item.type == 'film' %}badge-ok{% else %}badge-warn{% endif %}" style="font-size: 0.6rem; padding: 0.1rem 0.4rem;">{{ item.type }}</span>
+                    <span class="maint-cat-badge {% if item.type == 'film' %}badge-ok{% else %}badge-warn{% endif %}" style="font-size: 0.6875rem; padding: 0.1rem 0.4rem;">{{ item.type }}</span>
                     <code class="maint-issue-path">{{ item.file }}</code>
                     <span class="maint-fix-arrow">→</span>
                     <code class="maint-issue-path maint-fix-target">{{ item.symlink }}</code>

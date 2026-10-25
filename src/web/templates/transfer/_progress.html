@@ -106,7 +106,7 @@
 
             // Score existant
             let existingPct = Math.round(d.quality_existing);
-            let existingColor = existingPct >= 70 ? '#4caf50' : existingPct >= 40 ? '#ff9800' : '#f44336';
+            let existingColor = existingPct >= 70 ? 'var(--accent-emerald)' : existingPct >= 40 ? 'var(--accent-amber)' : 'var(--accent-rose)';
             html += '<div class="conflict-quality-col' + (recommended === 'old' ? ' conflict-recommended' : '') + '">';
             if (recommended === 'old') html += '<span class="conflict-badge-recommended">Recommandé</span>';
             html += '<div class="conflict-quality-label">Existant</div>';
@@ -116,7 +116,7 @@
 
             // Score nouveau
             let newPct = Math.round(d.quality_new);
-            let newColor = newPct >= 70 ? '#4caf50' : newPct >= 40 ? '#ff9800' : '#f44336';
+            let newColor = newPct >= 70 ? 'var(--accent-emerald)' : newPct >= 40 ? 'var(--accent-amber)' : 'var(--accent-rose)';
             html += '<div class="conflict-quality-col' + (recommended === 'new' ? ' conflict-recommended' : '') + '">';
             if (recommended === 'new') html += '<span class="conflict-badge-recommended">Recommandé</span>';
             html += '<div class="conflict-quality-label">Nouveau</div>';

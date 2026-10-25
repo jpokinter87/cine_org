@@ -295,7 +295,7 @@ function showDuplicateDialog(btn) {
         var oldPct = Math.round(qOld);
         var newPct = Math.round(qNew);
 
-        function qColor(pct) { return pct >= 70 ? '#4caf50' : pct >= 40 ? '#ff9800' : '#f44336'; }
+        function qColor(pct) { return pct >= 70 ? 'var(--accent-emerald)' : pct >= 40 ? 'var(--accent-amber)' : 'var(--accent-rose)'; }
 
         document.getElementById('dup-quality-old-bar').style.width = oldPct + '%';
         document.getElementById('dup-quality-old-bar').style.background = qColor(oldPct);

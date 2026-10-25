@@ -20,7 +20,7 @@
                 </span>
                 {% endif %}
                 <span class="lib-card-type {{ 'badge-film' if item.type == 'movie' else 'badge-series' }}">
-                    {{ 'Film' if item.type == 'movie' else 'Serie' }}
+                    {{ 'Film' if item.type == 'movie' else 'Série' }}
                 </span>
                 {% if item.type == 'series' and item.completeness_status == 'incomplete' %}
                 <span class="lib-card-incomplete" title="Série incomplète">Incomplet</span>
