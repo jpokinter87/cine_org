@@ -1,3 +1,9 @@
+## v2.26.0 (2026-11-02)
+
+### Feat
+
+- **seeding**: purge des hardlinks pilotée par Deluge
+
 ## v2.25.0 (2026-10-25)
 
 ### Feat

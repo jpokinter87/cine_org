@@ -1,6 +1,6 @@
 [project]
 name = "cine-org"
-version = "2.25.0"
+version = "2.26.0"
 description = "Application de gestion de videotheque personnelle"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,6 +23,7 @@ dependencies = [
     "uvicorn>=0.34.0",
     "jinja2>=3.1.0",
     "python-multipart>=0.0.7",
+    "deluge-client>=1.10.2",
 ]
 
 [project.optional-dependencies]

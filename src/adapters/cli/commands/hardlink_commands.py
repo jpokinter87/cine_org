@@ -45,11 +45,28 @@ def purge_hardlinks(
         console.print("\n[dim]Aucun hardlink expiré à purger.[/dim]")
         return
 
+    if not container.config().deluge_enabled:
+        console.print(
+            "\n[yellow]⚠ Intégration Deluge non configurée "
+            "(CINEORG_DELUGE_USERNAME/PASSWORD) : les liens sont supprimés sans "
+            "retirer les torrents, qui passeront en erreur dans Deluge.[/yellow]"
+        )
+
     # Purge
     result = service.purge_expired(force_all=force, dry_run=dry_run)
 
     if dry_run:
         console.print("\n[yellow]Mode dry-run — aucun fichier supprimé[/yellow]\n")
+
+    action_t = "seraient retirés" if dry_run else "retirés"
+    for name in result.removed_torrents:
+        console.print(f"  [green]✓[/green] Torrent {action_t} de Deluge : {name}")
+    for name, active in result.deferred:
+        console.print(
+            f"  [dim]… Reporté : {name} ({active} fichier(s) encore en seed)[/dim]"
+        )
+    for name, reason in result.blocked:
+        console.print(f"  [red]✗ Bloqué : {name} — {reason}[/red]")
 
     if result.freed_paths:
         table = Table(title=f"{'À purger' if dry_run else 'Purgés'}")

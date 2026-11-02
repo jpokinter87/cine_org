@@ -174,9 +174,10 @@ wheels = [
 
 [[package]]
 name = "cine-org"
-version = "2.25.0"
+version = "2.26.0"
 source = { editable = "." }
 dependencies = [
+    { name = "deluge-client" },
     { name = "dependency-injector" },
     { name = "diskcache" },
     { name = "fastapi" },
@@ -217,6 +218,7 @@ dev = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'credits'", specifier = ">=0.40.0" },
     { name = "commitizen", marker = "extra == 'dev'", specifier = ">=3.0.0" },
+    { name = "deluge-client", specifier = ">=1.10.2" },
     { name = "dependency-injector", specifier = ">=4.41.0" },
     { name = "diskcache", specifier = ">=5.6.0" },
     { name = "easyocr", marker = "extra == 'credits'", specifier = ">=1.7.0" },
@@ -413,6 +415,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/0c/59/d4ffff1dee2c8f6f2dd8f87010962e60f7b7847504d765c91ede5a466730/decli-0.6.3.tar.gz", hash = "sha256:87f9d39361adf7f16b9ca6e3b614badf7519da13092f2db3c80ca223c53c7656", size = 7564, upload-time = "2025-06-01T15:23:41.25Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d8/fa/ec878c28bc7f65b77e7e17af3522c9948a9711b9fa7fc4c5e3140a7e3578/decli-0.6.3-py3-none-any.whl", hash = "sha256:5152347c7bb8e3114ad65db719e5709b28d7f7f45bdb709f70167925e55640f3", size = 7989, upload-time = "2025-06-01T15:23:40.228Z" },
+]
+
+[[package]]
+name = "deluge-client"
+version = "1.10.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f1/53/d6672ad7b44190d578ce7520822af34e7119760df9934cad4d730b0592a2/deluge-client-1.10.2.tar.gz", hash = "sha256:3881aee3c4e0ca9dd8a56b710047b837e1d087a83e421636a074771f92a9f1b5", size = 12601, upload-time = "2024-02-17T15:15:40.249Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0a/37/167fc27ae423905d3b38824a403f32f12c6b8c5679104e47838dfb294afd/deluge_client-1.10.2-py3-none-any.whl", hash = "sha256:ea052663c0ed3a2247517d316c3784d70c83279dd9e088623fd06b164768f4f1", size = 12355, upload-time = "2024-02-17T15:15:38.561Z" },
 ]
 
 [[package]]

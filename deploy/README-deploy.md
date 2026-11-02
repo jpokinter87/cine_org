@@ -44,9 +44,19 @@ sudo systemctl start cineorg
 
 Après transfert, un hardlink est conservé dans `downloads/` pour maintenir le
 partage BitTorrent (le fichier physique vit dans `storage/`). Ces hardlinks sont
-suivis en base avec une expiration (`hardlink_retention_days`, **60 jours** par
+suivis en base avec une expiration (`hardlink_retention_days`, **90 jours** par
 défaut) et purgés par la commande `cineorg purge-hardlinks`. Le timer systemd
 `cineorg-purge.timer` automatise cette rotation **chaque jour**.
+
+Pour que la purge **retire aussi les torrents de Deluge** (sans quoi Deluge les passe en
+erreur et peut les re-télécharger), ajouter au `.env` les identifiants RPC du démon
+(ligne `localclient` de `~/.config/deluge/auth`) :
+
+```bash
+CINEORG_DELUGE_USERNAME=localclient
+CINEORG_DELUGE_PASSWORD=<mot de passe>
+# CINEORG_DELUGE_HOST=127.0.0.1  CINEORG_DELUGE_PORT=58846 (défauts)
+```
 
 ```bash
 # Copier le service oneshot + son timer

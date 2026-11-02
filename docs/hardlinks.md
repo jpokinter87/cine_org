@@ -100,91 +100,21 @@ Méthodes principales :
 
 **Algorithme `purge_expired`** :
 
-1. Query DB : `expires_at < now` (ou tous si `force_all`).
-2. Pour chaque entrée :
+1. Query DB : entrées `expires_at < now` (ou toutes si `force_all`).
+2. **Sans client BitTorrent** (`CINEORG_DELUGE_*` vides) — pour chaque entrée :
    - `download_path.unlink()` — décrémente `st_nlink` (le fichier dans `storage/` n'est pas touché).
-   - Si le dossier ne contient plus aucun fichier vidéo, supprime les résidus non-vidéo (`.nfo`, etc.) qui empêcheraient le `rmdir`, comptés dans `PurgeResult.residuals_removed`.
-   - Remonte et supprime les dossiers parents vides jusqu'à `downloads_dir`.
+   - Si le dossier ne contient plus aucun fichier vidéo, supprime les résidus non-vidéo (`.nfo`, etc.), comptés dans `PurgeResult.residuals_removed`, puis remonte et supprime les dossiers parents vides jusqu'à `downloads_dir`.
    - Supprime l'entrée DB.
-3. Collecte les erreurs (permissions, fichier absent, etc.) dans `PurgeResult.errors`.
-4. En `dry_run`, aucune modification filesystem — seul le plan est retourné.
+3. **Avec Deluge** (`ITorrentClient`, adaptateur `src/adapters/torrent/deluge_client.py`) :
+   - liste les torrents (`core.get_torrents_status`) ; chemin d'un fichier = `save_path / files[i].path` ;
+   - entrée sans torrent correspondant (torrent déjà retiré à la main) → étape 2 ;
+   - torrent dont un fichier suivi n'a pas expiré → **reporté** (`PurgeResult.deferred`) ;
+   - torrent contenant une vidéo présente sans autre lien (`nlink < 2`) → **bloqué** (`PurgeResult.blocked`) : on ne détruit jamais une copie unique (le nombre de liens fait foi, pas `storage_path`, qu'une ré-association peut rendre obsolète) ;
+   - sinon `core.remove_torrent(id, True)` : Deluge supprime le torrent et ses données (vidéos, `.nfo`, dossier), puis les entrées DB sont supprimées (`PurgeResult.removed_torrents`) ;
+   - Deluge injoignable → **aucune purge** (erreur dans `PurgeResult.errors`), les entrées restent pour le passage suivant.
+4. En `dry_run`, aucune modification filesystem, Deluge ni DB — seul le plan est retourné.
 
-Le fichier physique dans `storage/` reste intact. Si le client BitTorrent était encore en train de seeder, il perd le fichier à ce moment-là (attendu après la période de rétention).
-
-## Filtre scanner
-
-**Fichier** : `src/services/scanner.py` — `ScannerService._list_video_files_fallback()`.
-
-Le scanner ignore les fichiers déjà hardlinkés pour éviter de les retraiter :
-
-```python
-for path in candidates:
-    if path.is_symlink():
-        continue
-    stat = path.stat()
-    if stat.st_nlink > 1:
-        continue                          # Hardlink seeding actif → skip
-    if stat.st_size < self.min_size_bytes:
-        continue
-    if path.suffix.lower() not in VIDEO_EXTENSIONS:
-        continue
-    if any(pat in path.name.lower() for pat in IGNORED_PATTERNS):
-        continue
-    yield path
-```
-
-**Combinaison critique** : un seul `stat()` par fichier, avec test `st_nlink > 1` avant `st_size` (moins coûteux). Évite d'ouvrir les fichiers pour les patterns.
-
-## Configuration
-
-**Fichier** : `src/config.py`.
-
-| Variable d'environnement | Défaut | Rôle |
-|--------------------------|-------:|------|
-| `CINEORG_HARDLINK_RETENTION_DAYS` | `60` | Durée de vie d'un hardlink avant purge (minimum 1) |
-
-Pour désactiver le seeding, il suffit de mettre `downloads/` et `storage/` sur des volumes différents — les hardlinks échoueront silencieusement.
-
-## Commande CLI
-
-**Fichier** : `src/adapters/cli/commands/hardlink_commands.py`.
-
-```bash
-# Purger les hardlinks expirés
-uv run cineorg purge-hardlinks
-
-# Simulation (aucune modification)
-uv run cineorg purge-hardlinks --dry-run
-
-# Forcer la purge de tous les hardlinks (ignore expires_at)
-uv run cineorg purge-hardlinks --force
-```
-
-Affichage : table Rich des fichiers supprimés, liste d'erreurs, résumé final (count total / libéré / erreurs). Il n'y a **pas d'endpoint web** — la gestion est CLI + timer.
-
-## Installation du timer systemd
-
-Deux fichiers dans `deploy/` :
-
-- `deploy/cineorg-purge.service` — `Type=oneshot`, exécute `uv run cineorg purge-hardlinks`.
-- `deploy/cineorg-purge.timer` — `OnCalendar=daily` avec `RandomizedDelaySec=300` (jitter 5 min pour éviter la pointe de charge à minuit pile).
-
-Installation :
-
-```bash
-sudo cp deploy/cineorg-purge.service /etc/systemd/system/
-sudo cp deploy/cineorg-purge.timer   /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now cineorg-purge.timer
-```
-
-Vérifications :
-
-```bash
-systemctl list-timers cineorg-purge.timer     # prochaine exécution
-systemctl status cineorg-purge.service        # dernier résultat
-journalctl -u cineorg-purge.service -n 100    # logs
-```
+**Pourquoi retirer le torrent** : supprimer seulement le lien laisse le torrent actif ; Deluge le passe en erreur et, si l'on relance la « Vérification », **re-télécharge** le fichier — copie neuve (`nlink = 1`) que le scanner prend pour un nouveau fichier, reproposée à chaque traitement (constaté le 2026-11-02 : 28 fichiers, 92,8 Go).
 
 ## Diagnostic
 
@@ -196,7 +126,7 @@ journalctl -u cineorg-purge.service -n 100    # logs
 
 **Un fichier est re-scanné alors qu'il a été transféré** :
 
-- Vérifier `stat -c %h fichier` : si `nlink = 1`, le hardlink n'a pas été créé (cross-device, purge prématurée, suppression manuelle).
+- Vérifier `stat -c %h fichier` : si `nlink = 1`, le hardlink n'a pas été créé (cross-device, suppression manuelle), ou le fichier a été **re-téléchargé par Deluge** après une purge sans intégration (chercher `Hardlink purgé : <nom>` dans les logs). Remède : retirer le torrent de Deluge avec ses données.
 - Requête DB : `SELECT * FROM hardlinkmodel WHERE download_path = '…'` pour voir si l'entrée existe.
 
 **Dossiers vides résiduels dans `downloads/`** :
