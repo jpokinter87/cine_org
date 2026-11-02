@@ -141,6 +141,30 @@ def _trash_source(
     return dest
 
 
+def _clear_settled_pendings(container, settled: list[dict]) -> None:
+    """
+    Retire de la file de validation les éléments réglés par le transfert.
+
+    Supprime la PendingValidation puis son VideoFile (même ordre que le
+    nettoyage du dry-run CLI), pour que la page Transfert ne les reprenne pas.
+    """
+    pending_repo = container.pending_validation_repository()
+    video_file_repo = container.video_file_repository()
+    seen: set[str] = set()
+    for transfer in settled:
+        pending = transfer.get("pending")
+        if pending is None or not pending.id or pending.id in seen:
+            continue
+        seen.add(pending.id)
+        try:
+            pending_repo.delete(pending.id)
+            video_file = getattr(pending, "video_file", None)
+            if video_file is not None and video_file.id:
+                video_file_repo.delete(video_file.id)
+        except Exception as e:
+            logger.warning("Retrait de la file échoué pour %s : %s", pending.id, e)
+
+
 def _maybe_trash_source(transfer: dict, choice: str, settings, dry_run: bool) -> None:
     """Déplace la source en corbeille si le choix est « keep_old_trash »."""
     if choice != "keep_old_trash" or dry_run:
@@ -673,6 +697,12 @@ async def _run_web_transfer(
                     "symlink": symlink_rel,
                 }
             )
+            # Élément courant de la boucle : réglé, à retirer de la file
+            settled.append(transfer)
+
+        # Éléments réglés (transférés, doublon identique, ancien conservé) :
+        # retirés de la file en fin de transfert. Erreurs et conflits passés y restent.
+        settled: list[dict] = []
 
         # Suivi des répertoires déjà déplacés vers sandbox (éviter de move N fois)
         _moved_to_sandbox: set[str] = set()
@@ -698,6 +728,7 @@ async def _run_web_transfer(
                 if pre_resolution in ("keep_old", "keep_old_trash"):
                     progress.conflicts_resolved += 1
                     _maybe_trash_source(transfer, pre_resolution, settings, dry_run)
+                    settled.append(transfer)
                     suffix = (
                         " + source en corbeille"
                         if pre_resolution == "keep_old_trash"
@@ -905,6 +936,7 @@ async def _run_web_transfer(
                 if choice in ("keep_old", "keep_old_trash"):
                     progress.conflicts_resolved += 1
                     _maybe_trash_source(transfer, choice, settings, dry_run)
+                    settled.append(transfer)
                     suffix = (
                         " + source en corbeille"
                         if choice == "keep_old_trash"
@@ -1005,6 +1037,7 @@ async def _run_web_transfer(
                 if conflict.conflict_type == ConflictType.DUPLICATE:
                     progress.duplicates_ignored += 1
                     progress.duplicate_files.append(display_name)
+                    settled.append(transfer)
                     progress.message = (
                         f"[Simulation] Doublon : {display_name}"
                         if dry_run
@@ -1235,6 +1268,8 @@ async def _run_web_transfer(
                     )
                 finally:
                     session.close()
+
+            _clear_settled_pendings(container, settled)
 
         progress.message = "Simulation terminée" if dry_run else "Transfert terminé"
         progress.complete = True
