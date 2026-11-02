@@ -1,3 +1,9 @@
+## v2.27.0 (2026-11-02)
+
+### Fix
+
+- **transfer**: retirer de la file les éléments réglés après transfert
+
 ## v2.26.0 (2026-11-02)
 
 ### Feat

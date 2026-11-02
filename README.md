@@ -1836,6 +1836,7 @@ La page **Transfert** (`/transfer`) gère le déplacement des fichiers validés 
 - Création des symlinks dans `video/`.
 - Création des hardlinks de seeding dans `downloads/`.
 - Gestion des **conflits** (doublons détectés) via dialogue overlay avec cascade série et aide à la décision par scoring qualité.
+- **File vidée après transfert** : les éléments réglés (transférés, doublon identique déjà en place, « garder l'ancien ») sortent de la file de validation ; seuls les échecs et les conflits passés y restent pour être repris. Rouvrir la page ne repropose donc pas des fichiers déjà en bibliothèque.
 
 La progression s'affiche en temps réel via SSE (préparation du batch et exécution du transfert).
 
