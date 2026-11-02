@@ -32,10 +32,10 @@ fichier lui-même. Le torrent ne passe plus en erreur, le fichier ne revient plu
    **tous** ses fichiers vidéo suivis dans `hardlinks` ont expiré. Les entrées expirées d'un
    torrent non encore retirable restent en base (reportées).
 3. **Jamais de perte de copie unique.** Un torrent est bloqué (non retiré, signalé) s'il
-   contient un fichier vidéo présent sur disque qui n'a pas d'autre copie :
-   - fichier non suivi dans `hardlinks` avec `nlink == 1` ;
-   - fichier suivi dont la cible `storage_path` est absente ou n'a pas le même inode
-     (cas Spider-Noir : version storage écartée après coup).
+   contient un fichier vidéo présent sur disque **sans aucun autre lien** (`nlink < 2`) :
+   fichier jamais transféré, ou cible storage supprimée après coup (cas Spider-Noir).
+   Le nombre de liens fait foi, pas `storage_path` : une ré-association renomme le fichier
+   storage sans mettre l'entrée à jour (constaté sur The Boss, ré-associé en 2026).
 4. **Deluge injoignable → aucune purge** pendant ce passage (erreur reportée, entrées
    conservées) : on ne retombe pas sur l'ancien `unlink`, qui casserait les torrents.
 5. **Entrée expirée sans torrent** (torrent déjà retiré à la main) : comportement actuel

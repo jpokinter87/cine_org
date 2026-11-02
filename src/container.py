@@ -15,6 +15,7 @@ from .adapters.funnel import FunnelController
 from .adapters.file_system import FileSystemAdapter
 from .adapters.parsing.guessit_parser import GuessitFilenameParser
 from .adapters.parsing.mediainfo_extractor import MediaInfoExtractor
+from .adapters.torrent.deluge_client import build_torrent_client
 from .config import Settings
 from .infrastructure.persistence.database import init_db, get_session
 from .infrastructure.persistence.repositories import (
@@ -212,8 +213,13 @@ class Container(containers.DeclarativeContainer):
     # Note: sandbox_dir, storage_dir, downloads_dir passés via config
     sandbox_service = providers.Factory(SandboxService)
 
+    # Client BitTorrent (Deluge) : None si CINEORG_DELUGE_* non renseignés
+    torrent_client = providers.Factory(build_torrent_client, settings=config)
+
     # Service de hardlinks seeding - purge et rotation
-    hardlink_service = providers.Factory(HardlinkService, settings=config)
+    hardlink_service = providers.Factory(
+        HardlinkService, settings=config, torrent_client=torrent_client
+    )
 
     # Service de workflow - Factory pour nouvelle instance a chaque execution
     # Orchestre le workflow complet de traitement des videos

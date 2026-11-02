@@ -135,7 +135,9 @@ EOF
 | `CINEORG_MIN_FILE_SIZE_MB` | `100` | Taille minimum en MB |
 | `CINEORG_MATCH_SCORE_THRESHOLD` | `85` | Seuil de validation auto (%) |
 | `CINEORG_MAX_FILES_PER_SUBDIR` | `50` | Max fichiers par sous-dossier |
-| `CINEORG_HARDLINK_RETENTION_DAYS` | `60` | TTL des hardlinks de seeding (jours) |
+| `CINEORG_HARDLINK_RETENTION_DAYS` | `90` | TTL des hardlinks de seeding (jours) |
+| `CINEORG_DELUGE_HOST` / `CINEORG_DELUGE_PORT` | `127.0.0.1` / `58846` | Démon Deluge (port RPC local, pas le port de forwarding VPN) |
+| `CINEORG_DELUGE_USERNAME` / `CINEORG_DELUGE_PASSWORD` | (vide) | Identifiants RPC Deluge (`~/.config/deluge/auth`) ; active le retrait des torrents à la purge |
 | `CINEORG_SANDBOX_DIR` | `{storage}/.sandbox` | Sandbox orphelins (même volume que storage) |
 | `CINEORG_JELLYFIN_DIR` | `/media/Serveur/JellyfinLib` | Répertoire de l'arbre Jellyfin (symlinks + NFO) |
 | `CINEORG_LOG_LEVEL` | `INFO` | Niveau de log (DEBUG, INFO, WARNING, ERROR) |
@@ -530,7 +532,8 @@ Le bouton de transfert reste **grisé** tant que tous les conflits ne sont pas t
 
 Pour préserver le seeding BitTorrent après transfert, CineOrg crée un **hardlink** dans `downloads/` pointant vers le nouveau fichier dans `storage/`. Le client torrent voit toujours le fichier à son chemin d'origine, sans doubler l'occupation disque.
 
-- **TTL configurable** via `CINEORG_HARDLINK_RETENTION_DAYS` (défaut : 60 jours).
+- **TTL configurable** via `CINEORG_HARDLINK_RETENTION_DAYS` (défaut : 90 jours).
+- **Intégration Deluge** (si `CINEORG_DELUGE_USERNAME`/`PASSWORD` sont renseignés) : à expiration, le torrent est **retiré de Deluge avec ses données** au lieu d'effacer le seul lien — sinon Deluge passe le torrent en erreur et, à la « Vérification », re-télécharge le fichier, qui revient alors à chaque traitement.
 - **Cross-device** géré : si `downloads/` et `storage/` sont sur des volumes différents, la création échoue silencieusement sans interrompre le transfert.
 - **Purge quotidienne** via un timer systemd (fichiers dans `deploy/`).
 - **Re-scan évité** : le scanner ignore les fichiers avec `st_nlink > 1`.
@@ -1080,7 +1083,7 @@ Le state store est un journal SQLite local (par défaut `<plan>.json.state.sqlit
 
 ### Purge des hardlinks
 
-La commande `purge-hardlinks` supprime les hardlinks de seeding expirés (TTL `CINEORG_HARDLINK_RETENTION_DAYS`, défaut 60 jours). Elle est généralement déclenchée automatiquement par un timer systemd, mais peut être lancée manuellement :
+La commande `purge-hardlinks` supprime les hardlinks de seeding expirés (TTL `CINEORG_HARDLINK_RETENTION_DAYS`, défaut 90 jours). Elle est généralement déclenchée automatiquement par un timer systemd, mais peut être lancée manuellement :
 
 ```bash
 # Purger les hardlinks expirés
@@ -1093,7 +1096,10 @@ uv run cineorg purge-hardlinks --dry-run
 uv run cineorg purge-hardlinks --force
 ```
 
-Les fichiers physiques dans `storage/` ne sont **jamais** touchés. Seul le hardlink dans `downloads/` est supprimé, et les dossiers parents vides sont nettoyés ascendant jusqu'à `downloads_dir`.
+Les fichiers physiques dans `storage/` ne sont **jamais** touchés.
+
+- **Avec Deluge** : un torrent est retiré (avec ses données dans `downloads/`) seulement quand **tous** ses fichiers suivis ont expiré — un pack de saison reste en seed jusqu'à l'expiration de son dernier épisode (« Reporté »). Un torrent contenant une vidéo sans autre copie (`nlink = 1`) n'est jamais retiré (« Bloqué »). Si Deluge est injoignable, rien n'est purgé ce jour-là.
+- **Sans Deluge**, ou pour un torrent déjà retiré à la main : seul le hardlink dans `downloads/` est supprimé, et les dossiers parents vides sont nettoyés ascendant jusqu'à `downloads_dir`.
 
 **Installation du timer systemd** (purge quotidienne automatique) :
 

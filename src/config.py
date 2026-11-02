@@ -63,7 +63,18 @@ class Settings(BaseSettings):
     sandbox_dir: Optional[Path] = Field(default=None)
 
     # Hardlinks seeding (durée de rétention des hardlinks dans downloads/)
-    hardlink_retention_days: int = Field(default=60, ge=1)
+    hardlink_retention_days: int = Field(default=90, ge=1)
+
+    # Deluge (retrait des torrents à l'expiration du seeding ; actif si identifiants)
+    deluge_host: str = Field(default="127.0.0.1")
+    deluge_port: int = Field(default=58846)
+    deluge_username: Optional[str] = Field(default=None)
+    deluge_password: Optional[str] = Field(default=None)
+
+    @property
+    def deluge_enabled(self) -> bool:
+        """Vrai si les identifiants Deluge sont renseignés."""
+        return bool(self.deluge_username and self.deluge_password)
 
     @property
     def resolved_sandbox_dir(self) -> Path:
